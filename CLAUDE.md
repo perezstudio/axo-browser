@@ -28,7 +28,9 @@ The full plan, architecture, and reasoning behind every decision are in `docs/PL
 - No linters or formatters are configured yet.
 - Open `Axo.xcworkspace`, not the project. The workspace lists the app project and every local package, which Xcode needs to run the package test targets. The `Axo` scheme uses the `Axo.xctestplan` test plan, which covers the app's unit and UI tests and every package's tests. Add new test targets to that plan.
 - The app target links only `AxoUI`; other packages come in through it or get linked when the app needs them directly.
-- `AxoUI` uses `.defaultIsolation(MainActor.self)`. Other packages use the Swift 6 default (nonisolated).
+- `AxoUI` uses `.defaultIsolation(MainActor.self)`. Other packages use the Swift 6 default (nonisolated); AxoWeb marks its types `@MainActor` explicitly.
+- SwiftUI has its own `Tab` type. In files that import SwiftUI, write `AxoCore.Tab` for Axo's tab record.
+- AxoWeb tests load local HTML files in real `WKWebView`s with `.nonPersistent()` data stores. Never load network URLs in tests.
 
 ## Dependencies
 
