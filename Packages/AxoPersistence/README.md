@@ -13,7 +13,13 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
   - `AppDatabase.makeInMemory()` creates an empty, migrated in-memory database for tests and previews.
   - `writer` exposes the GRDB `DatabaseWriter` for reads, writes, and `ValueObservation`.
 
-Foreign keys are enforced. Schema changes are new, versioned migrations registered in `AppDatabase.migrator`. Never edit a migration that has shipped.
+## Schema
+
+| Migration | Tables |
+| --- | --- |
+| `v1-profiles-spaces-tabs` | `profile`, `space` (→ profile, cascade), `tab` (→ space, cascade) |
+
+Record types for these tables live in AxoCore. Foreign keys are enforced. Schema changes are new, versioned migrations registered in `AppDatabase.migrator`. Never edit a migration that has shipped.
 
 ## Testing
 

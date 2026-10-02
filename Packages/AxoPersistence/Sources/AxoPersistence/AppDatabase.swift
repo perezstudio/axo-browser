@@ -44,6 +44,35 @@ public final class AppDatabase: Sendable {
         // Rebuild the schema when a migration's definition changes during development.
         migrator.eraseDatabaseOnSchemaChange = true
         #endif
+
+        // Profiles, Spaces, and tabs. Every ID is a UUID stored as a 16-byte blob (GRDB's
+        // default), and ordering uses fractional `sortKey` strings compared bytewise.
+        migrator.registerMigration("v1-profiles-spaces-tabs") { db in
+            try db.create(table: "profile") { t in
+                t.primaryKey("id", .blob)
+                t.column("name", .text).notNull()
+            }
+            try db.create(table: "space") { t in
+                t.primaryKey("id", .blob)
+                t.column("profileID", .blob).notNull()
+                    .references("profile", onDelete: .cascade)
+                t.column("name", .text).notNull()
+                t.column("sortKey", .text).notNull()
+            }
+            try db.create(index: "space_on_profileID_sortKey", on: "space", columns: ["profileID", "sortKey"])
+            try db.create(table: "tab") { t in
+                t.primaryKey("id", .blob)
+                t.column("spaceID", .blob).notNull()
+                    .references("space", onDelete: .cascade)
+                t.column("url", .text).notNull()
+                t.column("title", .text).notNull().defaults(to: "")
+                t.column("sortKey", .text).notNull()
+                t.column("isPinned", .boolean).notNull().defaults(to: false)
+                t.column("archivedAt", .datetime)
+            }
+            try db.create(index: "tab_on_spaceID_sortKey", on: "tab", columns: ["spaceID", "sortKey"])
+        }
+
         return migrator
     }
 

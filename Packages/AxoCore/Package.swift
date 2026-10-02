@@ -10,12 +10,14 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "../AxoPersistence"),
+        .package(url: "https://github.com/groue/GRDB.swift", from: "7.11.1"),
     ],
     targets: [
         .target(
             name: "AxoCore",
             dependencies: [
                 "AxoPersistence",
+                .product(name: "GRDB", package: "GRDB.swift"),
             ]
         ),
         .testTarget(
