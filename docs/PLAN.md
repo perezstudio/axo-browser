@@ -245,6 +245,12 @@ The free core stays genuinely complete; a free version that feels like a trial w
 
 Each milestone should be usable as a daily driver before the next one starts.
 
+**Milestone 0: Project foundation**
+
+- [x] Remove the SwiftData template; macOS-only target at 15.4 with Swift 6, sandbox off, shared scheme, `.gitignore`
+- [ ] Choose a license and add `LICENSE`
+- [ ] Create the local Swift packages with test targets and wire them into the app
+
 **Milestone 1: Core browser (MVP)**
 
 - [ ] Single window, vertical sidebar, tab list, navigation (back, forward, reload, address bar)
@@ -301,7 +307,7 @@ Track five metrics every release and compare against Safari, Chrome, and Arc; pu
 
 | Metric | Target |
 | --- | --- |
-| Cold launch time | To set after Milestone 1 baseline |
+| Cold launch time | To set after Milestone 1 baseline (empty shell: about 0.46 s, `testLaunchPerformance`, October 2026) |
 | Idle window memory | To set after Milestone 1 baseline |
 | Memory per hibernated tab | To set after Milestone 1 baseline |
 | Energy impact, 20 tabs open | To set after Milestone 1 baseline |

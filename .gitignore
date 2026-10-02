@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+
+# Xcode
+xcuserdata/
+DerivedData/
+*.xcuserstate
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Secrets and signing (never commit these; see CLAUDE.md hard rule 8)
+*.p12
+*.mobileprovision
+*.provisionprofile
+Secrets.xcconfig

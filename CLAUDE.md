@@ -18,6 +18,15 @@ The full plan, architecture, and reasoning behind every decision are in `docs/PL
 - Sync: CloudKit via `CKSyncEngine`.
 - Distribution: notarized DMG with Sparkle updates. Not the Mac App Store.
 
+## Project setup
+
+- The Xcode project targets macOS only for now (`SUPPORTED_PLATFORMS = macosx`). iPhone and iPad targets come in Milestone 7.
+- The app target uses Swift 6 language mode with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` and approachable concurrency, so app code is main-actor isolated unless marked otherwise. Packages set their own isolation.
+- App Sandbox is off and Hardened Runtime is on, because Axo ships directly rather than through the Mac App Store (see `docs/PLAN.md`).
+- No entitlements file yet. Add one when a capability needs it, such as iCloud for AxoSync.
+- The `Axo` scheme is shared (`Axo.xcodeproj/xcshareddata`). `xcuserdata/` is gitignored, so scheme changes must go in the shared scheme.
+- No linters or formatters are configured yet.
+
 ## Package layout
 
 The app is split into local Swift packages. Respect the dependency direction; AxoCore depends on nothing above it.
