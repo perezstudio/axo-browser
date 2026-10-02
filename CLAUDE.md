@@ -13,7 +13,7 @@ The full plan, architecture, and reasoning behind every decision are in `docs/PL
 - Swift 6 with strict concurrency enabled. No `@unchecked Sendable` or `nonisolated(unsafe)` without a comment explaining why it is safe.
 - SwiftUI for browser chrome (windows, sidebar, command bar, settings).
 - AppKit `WKWebView` for web content, hosted via `NSViewRepresentable`.
-- Minimum deployment target: macOS 15.4 (first release with public `WKWebExtension`).
+- Minimum deployment target: macOS 27, the latest release, to keep things simple and avoid availability checks. (`WKWebExtension` has been public since macOS 15.4.)
 - Storage: SQLite through GRDB, with GRDBQuery for SwiftUI. One database for everything.
 - Sync: CloudKit via `CKSyncEngine`.
 - Distribution: notarized DMG with Sparkle updates. Not the Mac App Store.
@@ -54,7 +54,7 @@ These come from deliberate decisions in `docs/PLAN.md`. Do not change them witho
 6. **One `WKWebsiteDataStore(forIdentifier:)` per profile.** Never share data stores between profiles.
 7. **Schema changes go through `DatabaseMigrator`** as new, versioned migrations. Never edit a migration that has shipped.
 8. **No secrets or signing configuration in the repo.** The codebase will be open sourced by the end of 2028.
-9. **Keep dependencies minimal and license-compatible** with MPL-2.0 (the likely project license). Ask before adding any new dependency.
+9. **Keep dependencies minimal and license-compatible** with MPL-2.0 (the likely project license; the final license is still TBD). Ask before adding any new dependency.
 
 ## Conventions
 
