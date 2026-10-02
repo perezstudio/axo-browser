@@ -7,12 +7,5 @@
 
 import Testing
 
-struct AxoTests {
-
-    @Test func example() async throws {
-        // Write your test here and use APIs like `#expect(...)` to check expected conditions.
-        // Swift Testing Documentation
-        // https://developer.apple.com/documentation/testing
-    }
-
-}
+/// Unit tests for the app target. Most logic lives in the local packages and is tested there.
+struct AxoTests {}

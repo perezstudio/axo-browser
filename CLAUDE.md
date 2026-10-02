@@ -13,18 +13,41 @@ The full plan, architecture, and reasoning behind every decision are in `docs/PL
 - Swift 6 with strict concurrency enabled. No `@unchecked Sendable` or `nonisolated(unsafe)` without a comment explaining why it is safe.
 - SwiftUI for browser chrome (windows, sidebar, command bar, settings).
 - AppKit `WKWebView` for web content, hosted via `NSViewRepresentable`.
-- Minimum deployment target: macOS 15.4 (first release with public `WKWebExtension`).
+- Minimum deployment target: macOS 27, the latest release, to keep things simple and avoid availability checks. (`WKWebExtension` has been public since macOS 15.4.)
 - Storage: SQLite through GRDB, with GRDBQuery for SwiftUI. One database for everything.
 - Sync: CloudKit via `CKSyncEngine`.
 - Distribution: notarized DMG with Sparkle updates. Not the Mac App Store.
 
+## Project setup
+
+- The Xcode project targets macOS only for now (`SUPPORTED_PLATFORMS = macosx`). iPhone and iPad targets come in Milestone 7.
+- The app target uses Swift 6 language mode with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` and approachable concurrency, so app code is main-actor isolated unless marked otherwise. Packages set their own isolation.
+- App Sandbox is off and Hardened Runtime is on, because Axo ships directly rather than through the Mac App Store (see `docs/PLAN.md`).
+- No entitlements file yet. Add one when a capability needs it, such as iCloud for AxoSync.
+- The `Axo` scheme is shared (`Axo.xcodeproj/xcshareddata`). `xcuserdata/` is gitignored, so scheme changes must go in the shared scheme.
+- No linters or formatters are configured yet.
+- Open `Axo.xcworkspace`, not the project. The workspace lists the app project and every local package, which Xcode needs to run the package test targets. The `Axo` scheme uses the `Axo.xctestplan` test plan, which covers the app's unit and UI tests and every package's tests. Add new test targets to that plan.
+- The app target links only `AxoUI`; other packages come in through it or get linked when the app needs them directly.
+- `AxoUI` uses `.defaultIsolation(MainActor.self)`. Other packages use the Swift 6 default (nonisolated).
+
+## Dependencies
+
+Approved third-party dependencies (all MIT-licensed). Ask before adding anything else.
+
+| Package | Version | Used by |
+| --- | --- | --- |
+| [GRDB.swift](https://github.com/groue/GRDB.swift) | 7.11.1+ | AxoPersistence |
+| [GRDBQuery](https://github.com/groue/GRDBQuery) | 0.11.0+ | AxoUI |
+
+The lockfile is `Axo.xcworkspace/xcshareddata/swiftpm/Package.resolved`. Per-package `Package.resolved` files are gitignored.
+
 ## Package layout
 
-The app is split into local Swift packages. Respect the dependency direction; AxoCore depends on nothing above it.
+The app is split into local Swift packages in `Packages/`. Respect the dependency direction; AxoCore depends on nothing above it. Each package has its own `Package.swift`, `README.md`, and test target (`<Name>Tests`, except AxoUI's, which is `AxoUIPackageTests` so it doesn't clash with the app's `AxoUITests`).
 
 | Package | Owns | Depends on |
 | --- | --- | --- |
-| AxoUI | SwiftUI chrome, windows, sidebar, command bar, settings, mascot | AxoCore, AxoWeb |
+| AxoUI | SwiftUI chrome, windows, sidebar, command bar, settings, mascot | AxoCore, AxoWeb, GRDBQuery |
 | AxoCore | Profiles, Spaces, folders, tabs, windows, TabStore | AxoPersistence |
 | AxoWeb | Web view pool, `NSViewRepresentable` host, delegates, downloads, permissions, hibernation | AxoCore |
 | AxoExtensions | `WKWebExtensionController`, CRX install, tab and window adapters | AxoCore, AxoWeb |
@@ -45,7 +68,7 @@ These come from deliberate decisions in `docs/PLAN.md`. Do not change them witho
 6. **One `WKWebsiteDataStore(forIdentifier:)` per profile.** Never share data stores between profiles.
 7. **Schema changes go through `DatabaseMigrator`** as new, versioned migrations. Never edit a migration that has shipped.
 8. **No secrets or signing configuration in the repo.** The codebase will be open sourced by the end of 2028.
-9. **Keep dependencies minimal and license-compatible** with MPL-2.0 (the likely project license). Ask before adding any new dependency.
+9. **Keep dependencies minimal and license-compatible** with MPL-2.0 (the likely project license; the final license is still TBD). Ask before adding any new dependency.
 
 ## Conventions
 
@@ -77,15 +100,17 @@ Update docs in the same change as the code they describe. Docs that no longer ma
 - Doc comments (`///`): on every public and package-level type and function, kept in sync when signatures or behavior change.
 - User-facing copy, such as settings, onboarding, and permission text: follow "Brand and copy" below.
 
-### Build after every change
+### Build once the change is complete
 
-After any code change, build to confirm it compiles, and fix every error and new warning before moving on:
+Don't build after every edit. Finish the whole change (code, tests, and docs), then build and verify once:
 
 ```bash
-xcodebuild -project Axo.xcodeproj -scheme Axo -destination 'platform=macOS' build
+xcodebuild -workspace Axo.xcworkspace -scheme Axo -destination 'platform=macOS' build
 ```
 
-When you change a local package, also run `swift build` in that package's directory.
+Fix every error and new warning, then rebuild until it is clean. An earlier build is fine when you need compiler feedback to continue, such as checking an unfamiliar API, but it isn't required.
+
+When you change a local package, `swift test` in that package's directory covers its build, so a separate `swift build` isn't needed.
 
 ### Tests and checks before calling a change done
 
@@ -94,9 +119,10 @@ Never say a change is done, fixed, or working until all of these pass:
 1. The build above succeeds with no new warnings.
 2. The full test suite passes:
    ```bash
-   xcodebuild -project Axo.xcodeproj -scheme Axo -destination 'platform=macOS' test
+   xcodebuild -workspace Axo.xcworkspace -scheme Axo -destination 'platform=macOS' test
    ```
    When you change a local package, also run `swift test` in that package's directory.
+   The `xcodebuild test` run builds as well, so step 1's build and this run can happen back to back.
 3. Any linters or formatters set up for the repo pass.
 4. The docs touched by the change are updated, as described above. When you report the change, say which docs you updated, or why none needed updating.
 

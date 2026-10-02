@@ -1,0 +1,21 @@
+# macOS
+.DS_Store
+
+# Xcode
+xcuserdata/
+DerivedData/
+*.xcuserstate
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Secrets and signing (never commit these; see CLAUDE.md hard rule 8)
+*.p12
+*.mobileprovision
+*.provisionprofile
+Secrets.xcconfig
+
+# The workspace's Package.resolved is the one lockfile we commit.
+Packages/*/Package.resolved
+Axo.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/

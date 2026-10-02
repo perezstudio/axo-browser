@@ -32,7 +32,7 @@ Pink stays an accent inside the browser UI so it never competes with the pages p
 
 ## Technical foundations
 
-Axo targets macOS 15.4 and later, the first release with public `WKWebExtension` support.
+Axo targets macOS 27 and later. `WKWebExtension` has been public since macOS 15.4, but targeting the latest release keeps the code simple, with no availability checks, and gives access to the newest APIs.
 
 | Area | Choice |
 | --- | --- |
@@ -42,7 +42,7 @@ Axo targets macOS 15.4 and later, the first release with public `WKWebExtension`
 | Storage | SQLite through GRDB, one database for everything |
 | Sync | CloudKit via `CKSyncEngine` |
 | Distribution | Notarized DMG outside the Mac App Store, Sparkle for updates |
-| License | Pick now (MPL-2.0 is the likely fit) so every dependency stays compatible with the 2028 release |
+| License | TBD (MPL-2.0 is the likely fit); dependencies must stay compatible with it for the 2028 release |
 
 ## Architecture
 
@@ -245,6 +245,12 @@ The free core stays genuinely complete; a free version that feels like a trial w
 
 Each milestone should be usable as a daily driver before the next one starts.
 
+**Milestone 0: Project foundation**
+
+- [x] Remove the SwiftData template; macOS-only target at macOS 27 with Swift 6, sandbox off, shared scheme, `.gitignore`
+- [ ] Choose a license and add `LICENSE` (TBD for now)
+- [x] Create the local Swift packages with test targets and wire them into the app (workspace, shared test plan, GRDB and GRDBQuery)
+
 **Milestone 1: Core browser (MVP)**
 
 - [ ] Single window, vertical sidebar, tab list, navigation (back, forward, reload, address bar)
@@ -301,7 +307,7 @@ Track five metrics every release and compare against Safari, Chrome, and Arc; pu
 
 | Metric | Target |
 | --- | --- |
-| Cold launch time | To set after Milestone 1 baseline |
+| Cold launch time | To set after Milestone 1 baseline (empty shell: about 0.46 s, `testLaunchPerformance`, October 2026) |
 | Idle window memory | To set after Milestone 1 baseline |
 | Memory per hibernated tab | To set after Milestone 1 baseline |
 | Energy impact, 20 tabs open | To set after Milestone 1 baseline |
@@ -338,14 +344,14 @@ This runs alongside development, not after it, because code nobody can see does 
 | GRDB/SQLite as the only database | FTS5 search, write-heavy history, Swift 6 concurrency, and sync control in one store |
 | CloudKit via `CKSyncEngine` | Native, no servers, explicit conflict handling |
 | Direct distribution, no Mac App Store | Private inspector API, default browser, and native messaging are simpler outside the sandbox |
-| macOS 15.4 minimum | First release with public `WKWebExtension` |
+| macOS 27 minimum | Keeps the code simple with no availability checks; `WKWebExtension` is public since 15.4 |
 | Solid head symbol for logo and app icon | One mark everywhere; holds up down to 16 px |
 | Nunito with SF Pro | Rounded display type that echoes the symbol, system font keeps the app native |
 
 Open questions:
 
 - [ ] Final license and which packages to release first
-- [ ] Raise the minimum target to the latest macOS for newer APIs?
+- [x] Raise the minimum target to the latest macOS for newer APIs? (Yes: macOS 27, October 2026)
 - [ ] Sponsorship setup and a possible supporter tier
 - [x] Mascot design and visual identity (settled, see Brand)
 - [ ] Trademark, domain, and App Store name checks for Axo
