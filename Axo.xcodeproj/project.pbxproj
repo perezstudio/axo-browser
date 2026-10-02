@@ -6,6 +6,10 @@
 	objectVersion = 110;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		11D4C12130705F800027735E /* AxoUI in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C12030705F800027735E /* AxoUI */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		11D4C07330705F800027735E /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -51,6 +55,7 @@
 		11D4C05E30705F7E0027735E /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				11D4C12130705F800027735E /* AxoUI in Frameworks */,
 			);
 		};
 		11D4C06F30705F800027735E /* Frameworks */ = {
@@ -103,6 +108,9 @@
 				11D4C06330705F7E0027735E /* Axo */,
 			);
 			name = Axo;
+			packageProductDependencies = (
+				11D4C12030705F800027735E /* AxoUI */,
+			);
 			productName = Axo;
 			productReference = 11D4C06130705F7E0027735E /* Axo.app */;
 			productType = "com.apple.product-type.application";
@@ -181,6 +189,16 @@
 			);
 			mainGroup = 11D4C05830705F7E0027735E;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				11D4C10030705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoUI" */,
+				11D4C10130705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoCore" */,
+				11D4C10230705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoWeb" */,
+				11D4C10330705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoExtensions" */,
+				11D4C10430705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoInspector" */,
+				11D4C10530705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoPersistence" */,
+				11D4C10630705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoSync" */,
+				11D4C10730705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoIntegration" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 11D4C06230705F7E0027735E /* Products */;
 			projectDirPath = "";
@@ -541,6 +559,49 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		11D4C10130705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/AxoCore;
+		};
+		11D4C10330705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoExtensions" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/AxoExtensions;
+		};
+		11D4C10430705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoInspector" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/AxoInspector;
+		};
+		11D4C10730705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoIntegration" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/AxoIntegration;
+		};
+		11D4C10530705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoPersistence" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/AxoPersistence;
+		};
+		11D4C10630705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoSync" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/AxoSync;
+		};
+		11D4C10030705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoUI" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/AxoUI;
+		};
+		11D4C10230705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoWeb" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/AxoWeb;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		11D4C12030705F800027735E /* AxoUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 11D4C10030705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoUI" */;
+			productName = AxoUI;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 11D4C05930705F7E0027735E /* Project object */;
 	validationLevel = 1;

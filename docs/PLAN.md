@@ -249,7 +249,7 @@ Each milestone should be usable as a daily driver before the next one starts.
 
 - [x] Remove the SwiftData template; macOS-only target at macOS 27 with Swift 6, sandbox off, shared scheme, `.gitignore`
 - [ ] Choose a license and add `LICENSE` (TBD for now)
-- [ ] Create the local Swift packages with test targets and wire them into the app
+- [x] Create the local Swift packages with test targets and wire them into the app (workspace, shared test plan, GRDB and GRDBQuery)
 
 **Milestone 1: Core browser (MVP)**
 

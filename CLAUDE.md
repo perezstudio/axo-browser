@@ -26,14 +26,28 @@ The full plan, architecture, and reasoning behind every decision are in `docs/PL
 - No entitlements file yet. Add one when a capability needs it, such as iCloud for AxoSync.
 - The `Axo` scheme is shared (`Axo.xcodeproj/xcshareddata`). `xcuserdata/` is gitignored, so scheme changes must go in the shared scheme.
 - No linters or formatters are configured yet.
+- Open `Axo.xcworkspace`, not the project. The workspace lists the app project and every local package, which Xcode needs to run the package test targets. The `Axo` scheme uses the `Axo.xctestplan` test plan, which covers the app's unit and UI tests and every package's tests. Add new test targets to that plan.
+- The app target links only `AxoUI`; other packages come in through it or get linked when the app needs them directly.
+- `AxoUI` uses `.defaultIsolation(MainActor.self)`. Other packages use the Swift 6 default (nonisolated).
+
+## Dependencies
+
+Approved third-party dependencies (all MIT-licensed). Ask before adding anything else.
+
+| Package | Version | Used by |
+| --- | --- | --- |
+| [GRDB.swift](https://github.com/groue/GRDB.swift) | 7.11.1+ | AxoPersistence |
+| [GRDBQuery](https://github.com/groue/GRDBQuery) | 0.11.0+ | AxoUI |
+
+The lockfile is `Axo.xcworkspace/xcshareddata/swiftpm/Package.resolved`. Per-package `Package.resolved` files are gitignored.
 
 ## Package layout
 
-The app is split into local Swift packages. Respect the dependency direction; AxoCore depends on nothing above it.
+The app is split into local Swift packages in `Packages/`. Respect the dependency direction; AxoCore depends on nothing above it. Each package has its own `Package.swift`, `README.md`, and test target (`<Name>Tests`, except AxoUI's, which is `AxoUIPackageTests` so it doesn't clash with the app's `AxoUITests`).
 
 | Package | Owns | Depends on |
 | --- | --- | --- |
-| AxoUI | SwiftUI chrome, windows, sidebar, command bar, settings, mascot | AxoCore, AxoWeb |
+| AxoUI | SwiftUI chrome, windows, sidebar, command bar, settings, mascot | AxoCore, AxoWeb, GRDBQuery |
 | AxoCore | Profiles, Spaces, folders, tabs, windows, TabStore | AxoPersistence |
 | AxoWeb | Web view pool, `NSViewRepresentable` host, delegates, downloads, permissions, hibernation | AxoCore |
 | AxoExtensions | `WKWebExtensionController`, CRX install, tab and window adapters | AxoCore, AxoWeb |
@@ -91,7 +105,7 @@ Update docs in the same change as the code they describe. Docs that no longer ma
 After any code change, build to confirm it compiles, and fix every error and new warning before moving on:
 
 ```bash
-xcodebuild -project Axo.xcodeproj -scheme Axo -destination 'platform=macOS' build
+xcodebuild -workspace Axo.xcworkspace -scheme Axo -destination 'platform=macOS' build
 ```
 
 When you change a local package, also run `swift build` in that package's directory.
@@ -103,7 +117,7 @@ Never say a change is done, fixed, or working until all of these pass:
 1. The build above succeeds with no new warnings.
 2. The full test suite passes:
    ```bash
-   xcodebuild -project Axo.xcodeproj -scheme Axo -destination 'platform=macOS' test
+   xcodebuild -workspace Axo.xcworkspace -scheme Axo -destination 'platform=macOS' test
    ```
    When you change a local package, also run `swift test` in that package's directory.
 3. Any linters or formatters set up for the repo pass.

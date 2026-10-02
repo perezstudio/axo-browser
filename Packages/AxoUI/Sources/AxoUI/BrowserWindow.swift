@@ -1,17 +1,13 @@
-//
-//  BrowserWindow.swift
-//  Axo
-//
-//  Created by Kevin Perez on 10/2/26.
-//
-
 import SwiftUI
 
 /// The root view of a browser window: the sidebar on the left and web content on the right.
 ///
-/// This is a placeholder shell until AxoUI and the web view pool exist (Milestone 1).
-struct BrowserWindow: View {
-    var body: some View {
+/// This is a placeholder shell until the web view pool exists (Milestone 1).
+public struct BrowserWindow: View {
+    /// Creates an empty browser window.
+    public init() {}
+
+    public var body: some View {
         NavigationSplitView {
             List {
                 Section("Tabs") {}

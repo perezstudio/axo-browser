@@ -5,6 +5,7 @@
 //  Created by Kevin Perez on 10/2/26.
 //
 
+import AxoUI
 import SwiftUI
 
 @main

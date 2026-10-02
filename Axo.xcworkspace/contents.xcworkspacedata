@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workspace
+   version = "1.0">
+   <FileRef
+      location = "group:Axo.xcodeproj">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/AxoUI">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/AxoCore">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/AxoWeb">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/AxoExtensions">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/AxoInspector">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/AxoPersistence">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/AxoSync">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/AxoIntegration">
+   </FileRef>
+</Workspace>

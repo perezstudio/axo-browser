@@ -15,3 +15,7 @@ DerivedData/
 *.mobileprovision
 *.provisionprofile
 Secrets.xcconfig
+
+# The workspace's Package.resolved is the one lockfile we commit.
+Packages/*/Package.resolved
+Axo.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
