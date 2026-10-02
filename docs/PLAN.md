@@ -93,7 +93,8 @@ struct Tab: Codable, FetchableRecord, PersistableRecord, Identifiable {
 }
 ```
 
-- **Fractional sort keys:** each item's `sortKey` sorts between its neighbors, so a move updates one row and concurrent reorders on two devices rarely collide during sync.
+- **Fractional sort keys:** each item's `sortKey` sorts between its neighbors, so a move updates one row and concurrent reorders on two devices rarely collide during sync. `SortKey` in AxoCore uses keys with an integer part plus a base-62 fraction, so appending or prepending only grows keys logarithmically. When two rows share a key after a merge, order them by ID.
+- **Schema as built:** the first migration (`v1-profiles-spaces-tabs`) creates `profile`, `space`, and `tab`. UUIDs are stored as 16-byte blobs, and deleting a profile or Space cascades to its children. `folderID` arrives with folders in Milestone 2 as a new migration.
 - **Runtime separation:** the web view pool in AxoWeb maps tab IDs to live `WKWebView`s. Persisted tabs store only URL, title, order, and archive state, which keeps hibernation and extension adapters clean.
 - **Hibernation:** an idle tab keeps its URL, title, favicon, snapshot, and `interactionState`, so it restores instantly with history.
 

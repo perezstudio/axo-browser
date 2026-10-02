@@ -36,7 +36,7 @@ Approved third-party dependencies (all MIT-licensed). Ask before adding anything
 
 | Package | Version | Used by |
 | --- | --- | --- |
-| [GRDB.swift](https://github.com/groue/GRDB.swift) | 7.11.1+ | AxoPersistence |
+| [GRDB.swift](https://github.com/groue/GRDB.swift) | 7.11.1+ | AxoPersistence (database, migrations), AxoCore (record types) |
 | [GRDBQuery](https://github.com/groue/GRDBQuery) | 0.11.0+ | AxoUI |
 
 The lockfile is `Axo.xcworkspace/xcshareddata/swiftpm/Package.resolved`. Per-package `Package.resolved` files are gitignored.
@@ -48,7 +48,7 @@ The app is split into local Swift packages in `Packages/`. Respect the dependenc
 | Package | Owns | Depends on |
 | --- | --- | --- |
 | AxoUI | SwiftUI chrome, windows, sidebar, command bar, settings, mascot | AxoCore, AxoWeb, GRDBQuery |
-| AxoCore | Profiles, Spaces, folders, tabs, windows, TabStore | AxoPersistence |
+| AxoCore | Profiles, Spaces, folders, tabs, windows, TabStore | AxoPersistence, GRDB |
 | AxoWeb | Web view pool, `NSViewRepresentable` host, delegates, downloads, permissions, hibernation | AxoCore |
 | AxoExtensions | `WKWebExtensionController`, CRX install, tab and window adapters | AxoCore, AxoWeb |
 | AxoInspector | All private Web Inspector API | AxoWeb |
