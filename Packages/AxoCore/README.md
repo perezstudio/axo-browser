@@ -11,10 +11,11 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
 - **Records:** `Profile`, `Space`, and `Tab` are plain `Codable` GRDB records. They hold persisted state only, never live web views.
 - **`SortKey`:** fractional sort keys. `SortKey.between(lower, upper)` returns a key strictly between two neighbors (`nil` means the start or end of the list), so a move updates a single row. Order by `(sortKey, id)` so duplicate keys after a sync merge stay stable.
 - **`TabStore`:** the async API over the sidebar model.
+  - `TabStore.openOnDisk(at:)` and `TabStore.makeInMemory()` open the database, so callers above AxoCore never import AxoPersistence.
   - `bootstrap()` returns the first Space, creating a default profile and Space on first launch.
   - `openTab(url:title:in:at:)`, `moveTab(id:to:)`, `updateTab(id:url:title:)`, and `closeTab(id:)` write off the main actor.
   - `TabPosition` is `.start`, `.end`, or `.after(tabID)`.
-  - `TabStore.tabsRequest(in:)` is the request to observe with `ValueObservation` or GRDBQuery.
+  - `observeTabs(in:)` streams a Space's tab list after every change. `TabStore.tabsRequest(in:)` is the same query for GRDBQuery.
 
 ## Testing
 

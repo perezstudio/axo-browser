@@ -31,6 +31,9 @@ The full plan, architecture, and reasoning behind every decision are in `docs/PL
 - `AxoUI` uses `.defaultIsolation(MainActor.self)`. Other packages use the Swift 6 default (nonisolated); AxoWeb marks its types `@MainActor` explicitly.
 - SwiftUI has its own `Tab` type. In files that import SwiftUI, write `AxoCore.Tab` for Axo's tab record.
 - AxoWeb tests load local HTML files in real `WKWebView`s with `.nonPersistent()` data stores. Never load network URLs in tests.
+- UI tests launch the app with the `AXO_UI_TESTING=1` environment variable (in-memory database, non-persistent website data) and the `-ApplePersistenceIgnoreState YES` argument (no restored window state). Pages come from `data:` URLs. Reuse the `launchApp()` helper in `AxoUITests`.
+- Put text fields that menu commands need to focus in the main view hierarchy, not in toolbar items. `@FocusState` didn't move focus into a toolbar-hosted `TextField`, which is why the address field lives at the top of the sidebar.
+- The app's database lives at `~/Library/Application Support/Axo/Axo.sqlite`.
 
 ## Dependencies
 
