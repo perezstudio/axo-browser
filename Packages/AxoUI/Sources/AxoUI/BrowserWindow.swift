@@ -42,6 +42,7 @@ public struct BrowserWindow: View {
         if let tab = model.selectedTab, let space = model.space {
             WebViewHost(tab: tab, profileID: space.profileID, pool: model.pool)
                 .accessibilityIdentifier("webContent")
+                .overlay(alignment: .top) { RestoringSnapshot(page: model.selectedPage) }
                 .overlay(alignment: .top) { LoadingBar(page: model.selectedPage) }
         } else {
             ContentUnavailableView {
@@ -53,6 +54,25 @@ public struct BrowserWindow: View {
                     .accessibilityIdentifier("emptyStateNewTabButton")
             }
             .accessibilityIdentifier("emptyState")
+        }
+    }
+}
+
+/// The picture of a page taken when its tab hibernated, shown until the page reloads, so waking
+/// a tab feels instant.
+private struct RestoringSnapshot: View {
+    let page: WebTabState?
+
+    var body: some View {
+        if let snapshot = page?.restoringSnapshot {
+            Image(nsImage: snapshot)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .background(.background)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+                .transition(.opacity)
         }
     }
 }

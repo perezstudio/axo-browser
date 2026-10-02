@@ -37,10 +37,10 @@ struct AddressField: View {
                 if !isFocused { text = currentAddress }
             }
             .onChange(of: isFocused) {
-                if !isFocused, model.isComposingNewTab {
-                    model.cancelNewTab()
-                    text = currentAddress
-                }
+                // Leaving the field shows the page's real URL again, replacing whatever was typed.
+                guard !isFocused else { return }
+                if model.isComposingNewTab { model.cancelNewTab() }
+                text = currentAddress
             }
             .onAppear { text = currentAddress }
     }

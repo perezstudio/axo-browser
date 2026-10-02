@@ -57,6 +57,12 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["First"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["No Tab Open"].exists)
 
+        // After submitting, the field shows the loaded URL (which percent-encodes the markup),
+        // not the raw text that was typed.
+        let address = app.textFields["addressField"]
+        expectation(for: NSPredicate(format: "value CONTAINS '%3Ctitle%3E'"), evaluatedWith: address)
+        waitForExpectations(timeout: 5)
+
         // ⌘L edits the selected tab's address; the tab navigates in place.
         app.typeKey("l", modifierFlags: .command)
         app.typeText(page("Second") + "\n")

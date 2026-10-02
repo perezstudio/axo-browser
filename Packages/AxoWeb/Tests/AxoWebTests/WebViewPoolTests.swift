@@ -134,7 +134,7 @@ struct WebViewPoolTests {
         pool.load(try pages.page("second"), in: tab.id)
         try await waitForPage("second", tab: tab, pool: pool)
 
-        pool.hibernate(tab.id)
+        await pool.hibernate(tab.id)
         #expect(!pool.isLive(tab.id))
         #expect(pool.isHibernated(tab.id))
         #expect(original.navigationDelegate == nil)
@@ -146,19 +146,19 @@ struct WebViewPoolTests {
         #expect(pool.state(for: tab.id)?.canGoBack == true)
     }
 
-    @Test func visibleTabsNeverHibernate() throws {
+    @Test func visibleTabsNeverHibernate() async throws {
         let pool = WebViewPool.forTesting()
         let tab = Tab.testTab(url: try pages.page("one"))
         _ = pool.webView(for: tab, profileID: profileID)
         pool.beginShowing(tab.id)
 
-        pool.hibernate(tab.id)
+        await pool.hibernate(tab.id)
 
         #expect(pool.isLive(tab.id))
         #expect(!pool.isHibernated(tab.id))
     }
 
-    @Test func idleHiddenTabsHibernateAfterTheTimeout() throws {
+    @Test func idleHiddenTabsHibernateAfterTheTimeout() async throws {
         let clock = TestClock()
         let pool = WebViewPool.forTesting(clock: clock, timeout: 60)
         let visible = Tab.testTab(url: try pages.page("visible"))
@@ -172,18 +172,18 @@ struct WebViewPoolTests {
         _ = pool.webView(for: recent, profileID: profileID)
 
         clock.advance(by: 29)
-        #expect(pool.hibernateIdleTabs().isEmpty)
+        #expect(await pool.hibernateIdleTabs().isEmpty)
 
         clock.advance(by: 1)
-        #expect(pool.hibernateIdleTabs() == [idle.id])
+        #expect(await pool.hibernateIdleTabs() == [idle.id])
         #expect(pool.liveTabIDs == [visible.id, recent.id])
 
         clock.advance(by: 60)
-        #expect(pool.hibernateIdleTabs() == [recent.id])
+        #expect(await pool.hibernateIdleTabs() == [recent.id])
         #expect(pool.liveTabIDs == [visible.id])
     }
 
-    @Test func idleTimerStartsWhenATabIsHidden() throws {
+    @Test func idleTimerStartsWhenATabIsHidden() async throws {
         let clock = TestClock()
         let pool = WebViewPool.forTesting(clock: clock, timeout: 60)
         let tab = Tab.testTab(url: try pages.page("one"))
@@ -193,10 +193,10 @@ struct WebViewPoolTests {
         clock.advance(by: 600)
         pool.endShowing(tab.id)
         clock.advance(by: 59)
-        #expect(pool.hibernateIdleTabs().isEmpty)
+        #expect(await pool.hibernateIdleTabs().isEmpty)
 
         clock.advance(by: 1)
-        #expect(pool.hibernateIdleTabs() == [tab.id])
+        #expect(await pool.hibernateIdleTabs() == [tab.id])
     }
 
     @Test func visibilityIsCountedAcrossHosts() throws {
@@ -226,13 +226,13 @@ struct WebViewPoolTests {
         try await waitUntil("timer hibernation") { pool.isHibernated(tab.id) }
     }
 
-    @Test func discardForgetsLiveAndHibernatedTabs() throws {
+    @Test func discardForgetsLiveAndHibernatedTabs() async throws {
         let pool = WebViewPool.forTesting()
         let live = Tab.testTab(url: try pages.page("live"))
         let sleeping = Tab.testTab(url: try pages.page("sleeping"))
         _ = pool.webView(for: live, profileID: profileID)
         _ = pool.webView(for: sleeping, profileID: profileID)
-        pool.hibernate(sleeping.id)
+        await pool.hibernate(sleeping.id)
 
         pool.discard(live.id)
         pool.discard(sleeping.id)

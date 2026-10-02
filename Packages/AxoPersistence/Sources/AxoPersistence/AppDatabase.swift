@@ -73,6 +73,16 @@ public final class AppDatabase: Sendable {
             try db.create(index: "tab_on_spaceID_sortKey", on: "tab", columns: ["spaceID", "sortKey"])
         }
 
+        // Site icons, keyed by host so every tab on a site shares one icon. Stored as small
+        // normalized PNGs, so the sidebar can show them without network access after a relaunch.
+        migrator.registerMigration("v2-favicons") { db in
+            try db.create(table: "favicon") { t in
+                t.primaryKey("host", .text)
+                t.column("data", .blob).notNull()
+                t.column("updatedAt", .datetime).notNull()
+            }
+        }
+
         return migrator
     }
 

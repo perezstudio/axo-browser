@@ -100,3 +100,27 @@ extension Space {
         public static let sortKey = Column(CodingKeys.sortKey)
     }
 }
+
+/// A site's icon, shared by every tab on that host.
+public struct Favicon: Codable, Hashable, Sendable, FetchableRecord, PersistableRecord {
+    public static let databaseTableName = "favicon"
+
+    /// The lowercased host the icon belongs to, such as `www.apple.com`.
+    public var host: String
+    /// The icon as PNG data, normalized by AxoWeb.
+    public var data: Data
+    /// When the icon was last fetched.
+    public var updatedAt: Date
+
+    /// Creates a favicon record.
+    public init(host: String, data: Data, updatedAt: Date = Date()) {
+        self.host = host.lowercased()
+        self.data = data
+        self.updatedAt = updatedAt
+    }
+
+    /// The key used to look up a page's icon: its lowercased host, or `nil` if it has none.
+    public static func key(for url: URL) -> String? {
+        url.host()?.lowercased()
+    }
+}

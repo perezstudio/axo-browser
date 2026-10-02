@@ -255,7 +255,7 @@ Each milestone should be usable as a daily driver before the next one starts.
 **Milestone 1: Core browser (MVP)**
 
 - [x] Single window, vertical sidebar, tab list, navigation (back, forward, reload, address bar). The address field sits at the top of the sidebar, like Arc.
-- [ ] Tab model with web view pool and hibernation (tab model, `TabStore`, `WebViewPool`, timeout hibernation with history restore, and UI wiring are done; snapshots and favicons remain)
+- [x] Tab model with web view pool and hibernation, including snapshots shown while a tab wakes and favicons stored per host. Snapshots are in memory only for now.
 - [ ] Downloads, find in page, basic permission prompts, printing
 - [ ] Keyboard shortcuts for all core actions (⌘T, ⌘L, ⌘W, ⌘R, ⌘[, ⌘] are done; find, print, and the rest come with their features)
 

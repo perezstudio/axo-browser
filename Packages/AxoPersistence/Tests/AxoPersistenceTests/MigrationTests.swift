@@ -67,4 +67,20 @@ struct MigrationTests {
             #expect(row["archivedAt"] as Date? == nil)
         }
     }
+
+    @Test func v2CreatesTheFaviconTableKeyedByHost() throws {
+        let database = try AppDatabase.makeInMemory()
+        try database.writer.write { db in
+            #expect(try db.columns(in: "favicon").map(\.name) == ["host", "data", "updatedAt"])
+            #expect(try db.primaryKey("favicon").columns == ["host"])
+            try db.execute(
+                sql: "INSERT INTO favicon (host, data, updatedAt) VALUES ('example.com', x'00', CURRENT_TIMESTAMP)"
+            )
+            #expect(throws: DatabaseError.self) {
+                try db.execute(
+                    sql: "INSERT INTO favicon (host, data, updatedAt) VALUES ('example.com', x'01', CURRENT_TIMESTAMP)"
+                )
+            }
+        }
+    }
 }

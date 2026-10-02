@@ -35,6 +35,10 @@ public final class WebViewPool {
     /// Called when a live tab's URL or title changes, so the app can persist it with `TabStore`.
     public var onPageChange: ((Tab.ID, URL, String) -> Void)?
 
+    /// Called with a page's icon as a normalized 64 px PNG after it loads, so the app can save it
+    /// for the page's host. The URL is the page the icon belongs to.
+    public var onFaviconChange: ((Tab.ID, URL, Data) -> Void)?
+
     /// Called when a page asks to open a link in a new tab or window (for example
     /// `target="_blank"` or `window.open`). The second argument is the tab that asked.
     public var onOpenInNewTab: ((URL, Tab.ID) -> Void)?
@@ -45,6 +49,8 @@ public final class WebViewPool {
     private var live: [Tab.ID: LiveTab] = [:]
     private var hibernated: [Tab.ID: HibernatedTab] = [:]
     private var visibleCounts: [Tab.ID: Int] = [:]
+    /// Normalized icons by icon URL, so tabs on the same site don't refetch them.
+    private var faviconCache: [URL: Data] = [:]
     private var hibernationTask: Task<Void, Never>?
 
     /// Creates a pool.
@@ -91,9 +97,11 @@ public final class WebViewPool {
         let liveTab = LiveTab(tabID: tab.id, profileID: profileID, webView: webView, lastUsed: now())
         liveTab.delegate.onOpenInNewTab = { [weak self] url in self?.onOpenInNewTab?(url, tab.id) }
         liveTab.onPageChange = { [weak self] url, title in self?.onPageChange?(tab.id, url, title) }
+        liveTab.onLoadFinished = { [weak self] in self?.loadFavicon(for: tab.id) }
         live[tab.id] = liveTab
 
         if let saved = hibernated.removeValue(forKey: tab.id), let interactionState = saved.interactionState {
+            liveTab.state.restoringSnapshot = saved.snapshot.flatMap(NSImage.init(data:))
             webView.interactionState = interactionState
         } else {
             Self.load(tab.url, in: webView)
@@ -119,6 +127,12 @@ public final class WebViewPool {
     /// Whether the tab's web view was discarded and its history saved for later.
     public func isHibernated(_ tabID: Tab.ID) -> Bool {
         hibernated[tabID] != nil
+    }
+
+    /// The JPEG snapshot taken when the tab hibernated, or `nil` if it isn't hibernated or
+    /// WebKit couldn't capture one.
+    public func snapshot(for tabID: Tab.ID) -> Data? {
+        hibernated[tabID]?.snapshot
     }
 
     /// The IDs of every tab with a live web view.
@@ -189,28 +203,38 @@ public final class WebViewPool {
         visibleCounts[tabID] != nil
     }
 
-    /// Discards the tab's web view and keeps its history so it can wake later.
+    /// Snapshots the page, then discards the tab's web view and keeps its history so it can
+    /// wake later.
     ///
-    /// Does nothing if the tab isn't live or is visible.
-    public func hibernate(_ tabID: Tab.ID) {
-        guard !isVisible(tabID), let liveTab = live.removeValue(forKey: tabID) else { return }
-        hibernated[tabID] = HibernatedTab(interactionState: liveTab.webView.interactionState)
+    /// Does nothing if the tab isn't live or is visible. If the tab is shown, closed, or
+    /// hibernated again while the snapshot is taken, the web view is kept.
+    ///
+    /// - Returns: Whether the tab hibernated.
+    @discardableResult
+    public func hibernate(_ tabID: Tab.ID) async -> Bool {
+        guard !isVisible(tabID), let liveTab = live[tabID] else { return false }
+        let snapshot = await PageSnapshot.capture(liveTab.webView)
+        guard live[tabID] === liveTab, !isVisible(tabID) else { return false }
+        live[tabID] = nil
+        hibernated[tabID] = HibernatedTab(interactionState: liveTab.webView.interactionState, snapshot: snapshot)
         liveTab.tearDown()
+        return true
     }
 
     /// Hibernates every hidden tab that has been idle longer than the timeout.
     ///
     /// - Returns: The IDs of the tabs that hibernated.
     @discardableResult
-    public func hibernateIdleTabs() -> Set<Tab.ID> {
+    public func hibernateIdleTabs() async -> Set<Tab.ID> {
         let cutoff = now().addingTimeInterval(-configuration.hibernationTimeout)
         let idle = live.values
             .filter { !isVisible($0.tabID) && $0.lastUsed <= cutoff }
             .map(\.tabID)
-        for tabID in idle {
-            hibernate(tabID)
+        var hibernatedIDs: Set<Tab.ID> = []
+        for tabID in idle where await hibernate(tabID) {
+            hibernatedIDs.insert(tabID)
         }
-        return Set(idle)
+        return hibernatedIDs
     }
 
     /// Starts checking for idle tabs every ``Configuration/hibernationCheckInterval``.
@@ -223,7 +247,7 @@ public final class WebViewPool {
             while !Task.isCancelled {
                 try? await Task.sleep(for: interval)
                 guard !Task.isCancelled, let self else { return }
-                self.hibernateIdleTabs()
+                await self.hibernateIdleTabs()
             }
         }
     }
@@ -240,6 +264,27 @@ public final class WebViewPool {
         hibernated[tabID] = nil
         visibleCounts[tabID] = nil
         live.removeValue(forKey: tabID)?.tearDown()
+    }
+
+    // MARK: Favicons
+
+    /// Finds, fetches, and reports the icon of the tab's current page.
+    private func loadFavicon(for tabID: Tab.ID) {
+        guard let liveTab = live[tabID], let pageURL = liveTab.webView.url else { return }
+        Task { [weak self] in
+            let candidates = await FaviconLoader.candidates(in: liveTab.webView)
+            guard let self, let iconURL = FaviconLoader.bestIconURL(from: candidates, pageURL: pageURL) else { return }
+            let icon: Data
+            if let cached = self.faviconCache[iconURL] {
+                icon = cached
+            } else {
+                guard let downloaded = await FaviconLoader.download(iconURL),
+                      let normalized = FaviconLoader.normalize(downloaded) else { return }
+                self.faviconCache[iconURL] = normalized
+                icon = normalized
+            }
+            self.onFaviconChange?(tabID, pageURL, icon)
+        }
     }
 
     // MARK: Profiles
@@ -259,4 +304,6 @@ public final class WebViewPool {
 private struct HibernatedTab {
     /// The web view's opaque back and forward state.
     var interactionState: Any?
+    /// A JPEG of the page when it hibernated.
+    var snapshot: Data?
 }
