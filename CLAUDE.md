@@ -100,15 +100,17 @@ Update docs in the same change as the code they describe. Docs that no longer ma
 - Doc comments (`///`): on every public and package-level type and function, kept in sync when signatures or behavior change.
 - User-facing copy, such as settings, onboarding, and permission text: follow "Brand and copy" below.
 
-### Build after every change
+### Build once the change is complete
 
-After any code change, build to confirm it compiles, and fix every error and new warning before moving on:
+Don't build after every edit. Finish the whole change (code, tests, and docs), then build and verify once:
 
 ```bash
 xcodebuild -workspace Axo.xcworkspace -scheme Axo -destination 'platform=macOS' build
 ```
 
-When you change a local package, also run `swift build` in that package's directory.
+Fix every error and new warning, then rebuild until it is clean. An earlier build is fine when you need compiler feedback to continue, such as checking an unfamiliar API, but it isn't required.
+
+When you change a local package, `swift test` in that package's directory covers its build, so a separate `swift build` isn't needed.
 
 ### Tests and checks before calling a change done
 
@@ -120,6 +122,7 @@ Never say a change is done, fixed, or working until all of these pass:
    xcodebuild -workspace Axo.xcworkspace -scheme Axo -destination 'platform=macOS' test
    ```
    When you change a local package, also run `swift test` in that package's directory.
+   The `xcodebuild test` run builds as well, so step 1's build and this run can happen back to back.
 3. Any linters or formatters set up for the repo pass.
 4. The docs touched by the change are updated, as described above. When you report the change, say which docs you updated, or why none needed updating.
 
