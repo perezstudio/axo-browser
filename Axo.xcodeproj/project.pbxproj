@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		11D4C12130705F800027735E /* AxoUI in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C12030705F800027735E /* AxoUI */; };
+		11D4C12330705F800027735E /* AxoCore in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C12230705F800027735E /* AxoCore */; };
+		11D4C12530705F800027735E /* AxoWeb in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C12430705F800027735E /* AxoWeb */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -56,6 +58,8 @@
 			isa = PBXFrameworksBuildPhase;
 			files = (
 				11D4C12130705F800027735E /* AxoUI in Frameworks */,
+				11D4C12330705F800027735E /* AxoCore in Frameworks */,
+				11D4C12530705F800027735E /* AxoWeb in Frameworks */,
 			);
 		};
 		11D4C06F30705F800027735E /* Frameworks */ = {
@@ -110,6 +114,8 @@
 			name = Axo;
 			packageProductDependencies = (
 				11D4C12030705F800027735E /* AxoUI */,
+				11D4C12230705F800027735E /* AxoCore */,
+				11D4C12430705F800027735E /* AxoWeb */,
 			);
 			productName = Axo;
 			productReference = 11D4C06130705F7E0027735E /* Axo.app */;
@@ -600,6 +606,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 11D4C10030705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoUI" */;
 			productName = AxoUI;
+		};
+		11D4C12230705F800027735E /* AxoCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 11D4C10130705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoCore" */;
+			productName = AxoCore;
+		};
+		11D4C12430705F800027735E /* AxoWeb */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 11D4C10230705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoWeb" */;
+			productName = AxoWeb;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

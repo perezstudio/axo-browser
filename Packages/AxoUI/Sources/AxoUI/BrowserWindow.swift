@@ -1,30 +1,79 @@
+import AxoCore
+import AxoWeb
 import SwiftUI
 
 /// The root view of a browser window: the sidebar on the left and web content on the right.
-///
-/// This is a placeholder shell until the web view pool exists (Milestone 1).
 public struct BrowserWindow: View {
-    /// Creates an empty browser window.
-    public init() {}
+    @Bindable private var model: BrowserModel
+
+    /// Creates a window showing `model`.
+    public init(model: BrowserModel) {
+        self.model = model
+    }
 
     public var body: some View {
         NavigationSplitView {
-            List {
-                Section("Tabs") {}
-            }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 240, max: 400)
-            .accessibilityIdentifier("sidebar")
+            SidebarView(model: model)
+                .navigationSplitViewColumnWidth(min: 180, ideal: 240, max: 400)
         } detail: {
-            ContentUnavailableView(
-                "No Tab Open",
-                systemImage: "safari",
-                description: Text("Open a tab to start browsing.")
-            )
+            content
+                .toolbar { NavigationToolbar(model: model) }
+                // The sidebar's address field already shows where you are.
+                .toolbar(removing: .title)
+        }
+        .focusedSceneValue(\.browserModel, model)
+        .task { await model.start() }
+        .alert(
+            "Something went wrong",
+            isPresented: Binding(
+                get: { model.alertMessage != nil },
+                set: { if !$0 { model.alertMessage = nil } }
+            ),
+            presenting: model.alertMessage
+        ) { _ in
+            Button("OK") { model.alertMessage = nil }
+        } message: { message in
+            Text(message)
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let tab = model.selectedTab, let space = model.space {
+            WebViewHost(tab: tab, profileID: space.profileID, pool: model.pool)
+                .accessibilityIdentifier("webContent")
+                .overlay(alignment: .top) { LoadingBar(page: model.selectedPage) }
+        } else {
+            ContentUnavailableView {
+                Label("No Tab Open", systemImage: "safari")
+            } description: {
+                Text("Open a tab to start browsing.")
+            } actions: {
+                Button("New Tab") { model.beginNewTab() }
+                    .accessibilityIdentifier("emptyStateNewTabButton")
+            }
             .accessibilityIdentifier("emptyState")
         }
     }
 }
 
+/// A thin progress bar along the top of the page while it loads.
+private struct LoadingBar: View {
+    let page: WebTabState?
+
+    var body: some View {
+        if let page, page.isLoading {
+            ProgressView(value: page.estimatedProgress)
+                .progressViewStyle(.linear)
+                .controlSize(.small)
+                .accessibilityLabel("Loading")
+        }
+    }
+}
+
 #Preview {
-    BrowserWindow()
+    BrowserWindow(model: BrowserModel(
+        store: try! TabStore.makeInMemory(),
+        pool: WebViewPool(makeDataStore: { _ in .nonPersistent() })
+    ))
 }

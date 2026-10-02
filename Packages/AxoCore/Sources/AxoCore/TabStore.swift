@@ -38,6 +38,16 @@ public final class TabStore: Sendable {
         self.database = database
     }
 
+    /// Opens or creates Axo's database file at `url` and returns a store over it.
+    public static func openOnDisk(at url: URL) throws -> TabStore {
+        TabStore(database: try AppDatabase.openOnDisk(at: url))
+    }
+
+    /// Returns a store over an empty in-memory database, for tests, previews, and UI testing.
+    public static func makeInMemory() throws -> TabStore {
+        TabStore(database: try AppDatabase.makeInMemory())
+    }
+
     // MARK: Spaces
 
     /// Returns the first Space, creating a default profile and Space if none exist yet.
@@ -74,6 +84,14 @@ public final class TabStore: Sendable {
             .filter(Tab.Columns.spaceID == spaceID)
             .filter(Tab.Columns.archivedAt == nil)
             .order(Tab.Columns.sortKey, Tab.Columns.id)
+    }
+
+    /// Streams a Space's tabs that are not archived, in sidebar order: the current list first,
+    /// then a new list after every change.
+    public func observeTabs(in spaceID: Space.ID) -> AsyncValueObservation<[Tab]> {
+        ValueObservation
+            .tracking(Self.tabsRequest(in: spaceID).fetchAll)
+            .values(in: database.writer)
     }
 
     /// Returns a Space's tabs that are not archived, in sidebar order.

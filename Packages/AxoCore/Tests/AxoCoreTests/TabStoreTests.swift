@@ -169,4 +169,30 @@ struct TabStoreTests {
         try await store.openTab(url: url("one"), title: "one", in: space.id)
         #expect(try await iterator.next()?.map(\.title) == ["one"])
     }
+
+    @Test func observeTabsStreamsTheListAfterEachChange() async throws {
+        let space = try await store.bootstrap()
+        var iterator = store.observeTabs(in: space.id).makeAsyncIterator()
+
+        #expect(try await iterator.next()?.isEmpty == true)
+        let tab = try await store.openTab(url: url("one"), title: "one", in: space.id)
+        #expect(try await iterator.next()?.map(\.title) == ["one"])
+        try await store.updateTab(id: tab.id, url: url("one"), title: "renamed")
+        #expect(try await iterator.next()?.map(\.title) == ["renamed"])
+    }
+
+    @Test func openOnDiskKeepsTabsAcrossStores() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appending(path: "Axo.sqlite")
+
+        let first = try TabStore.openOnDisk(at: file)
+        let space = try await first.bootstrap()
+        try await first.openTab(url: url("kept"), title: "kept", in: space.id)
+
+        let second = try TabStore.openOnDisk(at: file)
+        #expect(try await second.bootstrap() == space)
+        #expect(try await second.tabs(in: space.id).map(\.title) == ["kept"])
+    }
 }
