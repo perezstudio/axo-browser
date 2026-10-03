@@ -279,6 +279,20 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(app.textFields["commandField"].waitForNonExistence(timeout: 5))
     }
 
+    /// A link sent from another app opens as a tab in the existing window, not a new window.
+    @MainActor
+    func testLinksFromOtherAppsOpenAsTabs() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+
+        // Port 9 on the loopback address refuses connections, so nothing leaves the machine.
+        app.open(URL(string: "http://127.0.0.1:9/from-another-app")!)
+
+        XCTAssertTrue(sidebar.staticTexts["127.0.0.1"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.windows.count, 1, "The link opens in the existing window")
+    }
+
     /// macOS window tabbing is off, so the View menu has no "Show Tab Bar".
     @MainActor
     func testWindowTabbingMenuItemsAreHidden() throws {

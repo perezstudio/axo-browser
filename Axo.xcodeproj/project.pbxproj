@@ -10,6 +10,7 @@
 		11D4C12130705F800027735E /* AxoUI in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C12030705F800027735E /* AxoUI */; };
 		11D4C12330705F800027735E /* AxoCore in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C12230705F800027735E /* AxoCore */; };
 		11D4C12530705F800027735E /* AxoWeb in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C12430705F800027735E /* AxoWeb */; };
+		11D4C12730705F800027735E /* AxoIntegration in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C12630705F800027735E /* AxoIntegration */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -35,9 +36,22 @@
 		11D4C07C30705F800027735E /* AxoUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AxoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		11D4C08230705F800027735E /* Exceptions for "Axo" folder in "Axo" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 11D4C06030705F7E0027735E /* Axo */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		11D4C06330705F7E0027735E /* Axo */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				11D4C08230705F800027735E /* Exceptions for "Axo" folder in "Axo" target */,
+			);
 			path = Axo;
 			sourceTree = "<group>";
 		};
@@ -58,6 +72,7 @@
 			isa = PBXFrameworksBuildPhase;
 			files = (
 				11D4C12130705F800027735E /* AxoUI in Frameworks */,
+				11D4C12730705F800027735E /* AxoIntegration in Frameworks */,
 				11D4C12330705F800027735E /* AxoCore in Frameworks */,
 				11D4C12530705F800027735E /* AxoWeb in Frameworks */,
 			);
@@ -114,6 +129,7 @@
 			name = Axo;
 			packageProductDependencies = (
 				11D4C12030705F800027735E /* AxoUI */,
+				11D4C12630705F800027735E /* AxoIntegration */,
 				11D4C12230705F800027735E /* AxoCore */,
 				11D4C12430705F800027735E /* AxoWeb */,
 			);
@@ -280,6 +296,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Axo/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Websites you allow can use your camera, for things like video calls.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Axo uses your local network to find printers and to open pages on devices like routers and home servers.";
 				INFOPLIST_KEY_NSLocationUsageDescription = "Websites you allow can use your location, for things like maps and directions.";
@@ -314,6 +331,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Axo/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Websites you allow can use your camera, for things like video calls.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Axo uses your local network to find printers and to open pages on devices like routers and home servers.";
 				INFOPLIST_KEY_NSLocationUsageDescription = "Websites you allow can use your location, for things like maps and directions.";
@@ -628,6 +646,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 11D4C10230705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoWeb" */;
 			productName = AxoWeb;
+		};
+		11D4C12630705F800027735E /* AxoIntegration */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 11D4C10730705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoIntegration" */;
+			productName = AxoIntegration;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

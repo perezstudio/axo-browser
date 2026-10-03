@@ -13,6 +13,18 @@ public struct BrowserCommands: Commands {
     public init() {}
 
     public var body: some Commands {
+        CommandGroup(after: .appInfo) {
+            if model?.isDefaultBrowser == true {
+                Button("Axo Is Your Default Browser") {}
+                    .disabled(true)
+            } else {
+                Button("Make Axo Your Default Browser…") {
+                    guard let model else { return }
+                    Task { await model.makeDefaultBrowser() }
+                }
+                .disabled(model?.isDefaultBrowser == nil)
+            }
+        }
         CommandGroup(replacing: .newItem) {
             Button("New Tab") { model?.beginNewTab() }
                 .keyboardShortcut("t")
