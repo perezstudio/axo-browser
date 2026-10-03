@@ -32,7 +32,14 @@ No Axo or third-party dependencies.
     - `isInspectable` is on.
     - The requested permissions and all requested match patterns are granted, as Chrome does at install. Optional permissions are not granted.
 
-Still to come in Milestone 3: the tab and window adapters, the toolbar and popups, the install prompt, permission management, and install UI.
+- **Tabs and windows for extensions (`chrome.tabs`, `chrome.windows`):** the app implements `ExtensionBrowsing` (the current profile, the window's tabs, the active tab, open, activate, and close). `ExtensionTab` and `ExtensionWindow` adapt it to `WKWebExtensionTab` and `WKWebExtensionWindow`, with one stable object per tab. Clicking a toolbar button grants `activeTab` for that tab. Only the controller of the profile the window shows sees the window.
+  - The app reports events with `tabDidOpen`, `tabDidClose`, `tabDidActivate(_:previous:)`, `tabDidChange`, and `windowDidChangeSpace`.
+  - A `WKWebExtensionControllerDelegate` opens tabs for extensions, reports the window, and shows popups.
+- **Toolbar:** `toolbarActions(for:tabID:)` returns each loaded extension's title, icon, badge, and enabled state, and is observable through `actionsRevision`. `performAction(extensionID:profileID:tabID:)` clicks the button, and `onPresentPopup` hands WebKit's ready-made `NSPopover` (`action.popupPopover`) to the app to show.
+
+Known WebKit gap: `runtime.onInstalled` doesn't fire (see `docs/webkit-gaps.md`).
+
+Still to come in Milestone 3: install UI and prompt, an extensions manager window, and permission management.
 
 ## Testing
 

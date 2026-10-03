@@ -16,6 +16,9 @@ struct NavigationToolbar: ToolbarContent {
                 .help("Go forward")
                 .accessibilityIdentifier("forwardButton")
         }
+        ToolbarItemGroup(placement: .primaryAction) {
+            ExtensionToolbarButtons(model: model)
+        }
         if !model.pool.downloads.items.isEmpty || model.isShowingDownloads {
             ToolbarItem(placement: .primaryAction) {
                 DownloadsButton(model: model)

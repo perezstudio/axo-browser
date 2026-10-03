@@ -53,6 +53,8 @@ enum AppEnvironment {
 
     /// Runs web extensions for every profile. Kept for the app's lifetime.
     static var extensionManager: ExtensionManager?
+    /// Connects the window model and the extension manager. Kept for the app's lifetime.
+    static var extensionBridge: ExtensionBridge?
 
     /// Where installed extensions live.
     static var extensionsFolder: URL {
@@ -71,7 +73,7 @@ enum AppEnvironment {
     /// Attaches extension controllers to the pool and loads every profile's enabled extensions.
     /// Loading is asynchronous, so a page that loads in the first moments after launch may run
     /// before its extensions are ready.
-    private static func startExtensions(store: TabStore, pool: WebViewPool) {
+    private static func startExtensions(store: TabStore, pool: WebViewPool) -> ExtensionManager {
         let manager = ExtensionManager(
             installer: ExtensionInstaller(root: extensionsFolder),
             store: store.extensions,
@@ -83,7 +85,13 @@ enum AppEnvironment {
             for profile in (try? await store.profiles()) ?? [] {
                 await manager.loadExtensions(for: profile.id)
             }
+            // UI tests can preinstall an unpacked extension to exercise the toolbar.
+            if isUITesting, let path = ProcessInfo.processInfo.environment["AXO_UI_TESTING_EXTENSION"],
+               let profileID = try? await store.bootstrap().profileID {
+                _ = try? await manager.installUnpacked(at: URL(fileURLWithPath: path), for: profileID)
+            }
         }
+        return manager
     }
 
     static func makeBrowserModel() -> BrowserModel {
@@ -106,8 +114,10 @@ enum AppEnvironment {
             : WebViewPool()
         do {
             let store = isUITesting ? try TabStore.makeInMemory() : try TabStore.openOnDisk(at: databaseURL)
-            startExtensions(store: store, pool: pool)
-            return BrowserModel(store: store, pool: pool, initialSpaceID: lastSpaceID)
+            let manager = startExtensions(store: store, pool: pool)
+            let model = BrowserModel(store: store, pool: pool, initialSpaceID: lastSpaceID)
+            extensionBridge = ExtensionBridge(model: model, manager: manager)
+            return model
         } catch {
             // Keep the browser usable for this session and say plainly that nothing will be saved.
             return BrowserModel(
@@ -129,5 +139,69 @@ struct SystemDefaultBrowser: DefaultBrowserSetting {
 
     func makeDefault() async throws {
         try await browser.makeDefault()
+    }
+}
+
+/// Connects the window model (AxoUI) and the extension manager (AxoExtensions), which don't
+/// depend on each other: extensions see the window's tabs, hear about tab events, and show their
+/// toolbar buttons and popups.
+@MainActor
+final class ExtensionBridge: ExtensionBrowsing, ExtensionToolbarProviding {
+    private weak var model: BrowserModel?
+    private let manager: ExtensionManager
+
+    init(model: BrowserModel, manager: ExtensionManager) {
+        self.model = model
+        self.manager = manager
+        manager.browser = self
+        manager.onPresentPopup = { [weak model] extensionID, popover in
+            model?.presentExtensionPopup(popover, extensionID: extensionID)
+        }
+        model.extensionToolbar = self
+        model.onTabEvent = { [weak manager] event in
+            guard let manager else { return }
+            switch event {
+            case .opened(let id): manager.tabDidOpen(id)
+            case .closed(let id): manager.tabDidClose(id)
+            case .activated(let id, let previous): manager.tabDidActivate(id, previous: previous)
+            case .changed(let id): manager.tabDidChange(id)
+            case .spaceChanged: manager.windowDidChangeSpace()
+            }
+        }
+    }
+
+    // MARK: ExtensionBrowsing
+
+    var currentProfileID: Profile.ID? { model?.space?.profileID }
+    var windowTabs: [AxoCore.Tab] { model?.tabs ?? [] }
+    var activeTabID: AxoCore.Tab.ID? { model?.selectedTabID }
+
+    func openTab(url: URL?, active: Bool) async -> AxoCore.Tab.ID? {
+        guard let model else { return nil }
+        let previous = model.selectedTabID
+        await model.openTab(url: url ?? URL(string: "about:blank")!)
+        let opened = model.selectedTabID
+        if !active, let previous { model.select(previous) }
+        return opened
+    }
+
+    func activateTab(_ id: AxoCore.Tab.ID) {
+        model?.select(id)
+    }
+
+    func closeTab(_ id: AxoCore.Tab.ID) async {
+        await model?.closeTab(id)
+    }
+
+    // MARK: ExtensionToolbarProviding
+
+    func toolbarItems(profileID: Profile.ID, tabID: AxoCore.Tab.ID?) -> [ExtensionToolbarItem] {
+        manager.toolbarActions(for: profileID, tabID: tabID).map {
+            ExtensionToolbarItem(id: $0.id, label: $0.label, icon: $0.icon, badge: $0.badge, isEnabled: $0.isEnabled)
+        }
+    }
+
+    func performAction(extensionID: String, profileID: Profile.ID, tabID: AxoCore.Tab.ID?) {
+        manager.performAction(extensionID: extensionID, profileID: profileID, tabID: tabID)
     }
 }
