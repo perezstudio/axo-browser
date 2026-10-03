@@ -47,7 +47,19 @@ enum AppEnvironment {
     static let uiTestingDownloadsDirectory = FileManager.default.temporaryDirectory
         .appending(path: "AxoUITests-Downloads-\(UUID().uuidString)", directoryHint: .isDirectory)
 
+    /// Where the last Space the window showed is remembered between launches.
+    static let lastSpaceKey = "lastSpaceID"
+
     static func makeBrowserModel() -> BrowserModel {
+        let model = makeModel()
+        if !isUITesting {
+            model.onSpaceChange = { UserDefaults.standard.set($0.uuidString, forKey: lastSpaceKey) }
+        }
+        return model
+    }
+
+    private static func makeModel() -> BrowserModel {
+        let lastSpaceID = isUITesting ? nil : UserDefaults.standard.string(forKey: lastSpaceKey).flatMap(UUID.init(uuidString:))
         let pool = isUITesting
             ? WebViewPool(
                 makeDataStore: { _ in .nonPersistent() },
@@ -56,7 +68,7 @@ enum AppEnvironment {
             : WebViewPool()
         do {
             let store = isUITesting ? try TabStore.makeInMemory() : try TabStore.openOnDisk(at: databaseURL)
-            return BrowserModel(store: store, pool: pool)
+            return BrowserModel(store: store, pool: pool, initialSpaceID: lastSpaceID)
         } catch {
             // Keep the browser usable for this session and say plainly that nothing will be saved.
             return BrowserModel(

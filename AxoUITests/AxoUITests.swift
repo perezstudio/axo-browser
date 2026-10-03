@@ -147,7 +147,8 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
 
         app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Ask</title><script>document.title = confirm('Delete everything?') ? 'Yes' : 'No'</script>\n")
+        // Ask after a moment, so the dialog doesn't open while the typed Return is still being delivered.
+        app.typeText("data:text/html,<title>Ask</title><script>setTimeout(() => document.title = confirm('Delete everything?') ? 'Yes' : 'No', 300)</script>\n")
 
         XCTAssertTrue(app.staticTexts["This page says"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Delete everything?"].exists)
@@ -155,6 +156,31 @@ final class AxoUITests: XCTestCase {
         dialog.buttons["Cancel"].firstMatch.click()
 
         XCTAssertTrue(sidebar.staticTexts["No"].waitForExistence(timeout: 10))
+    }
+
+    /// Create a Space from the switcher, see its tabs separately, and switch back with ⌃1.
+    @MainActor
+    func testCreatingAndSwitchingSpaces() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,<title>Home tab</title>\n")
+        XCTAssertTrue(sidebar.staticTexts["Home tab"].waitForExistence(timeout: 10))
+
+        app.buttons["newSpaceButton"].click()
+        let nameField = app.textFields["spaceNameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.click()
+        nameField.typeText("Work")
+        app.buttons["createSpaceButton"].click()
+
+        XCTAssertTrue(sidebar.staticTexts["Work"].waitForExistence(timeout: 5), "The sidebar shows the new Space")
+        XCTAssertFalse(sidebar.staticTexts["Home tab"].exists, "Each Space has its own tabs")
+        XCTAssertEqual(app.buttons.matching(identifier: "spaceButton").count, 2)
+
+        app.typeKey("1", modifierFlags: .control)
+        XCTAssertTrue(sidebar.staticTexts["Home tab"].waitForExistence(timeout: 5))
     }
 
     /// macOS window tabbing is off, so the View menu has no "Show Tab Bar".

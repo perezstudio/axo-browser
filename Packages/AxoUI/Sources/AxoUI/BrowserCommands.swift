@@ -64,6 +64,28 @@ public struct BrowserCommands: Commands {
                 .disabled(model == nil)
             Divider()
         }
+        CommandMenu("Spaces") {
+            Button("Next Space") {
+                guard let model else { return }
+                Task { await model.selectNextSpace() }
+            }
+            .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
+            .disabled((model?.spaces.count ?? 0) < 2)
+            Button("Previous Space") {
+                guard let model else { return }
+                Task { await model.selectPreviousSpace() }
+            }
+            .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
+            .disabled((model?.spaces.count ?? 0) < 2)
+            Divider()
+            ForEach(Array((model?.spaces ?? []).prefix(9).enumerated()), id: \.element.id) { index, space in
+                Button(space.name) {
+                    guard let model else { return }
+                    Task { await model.selectSpace(at: index) }
+                }
+                .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .control)
+            }
+        }
         CommandMenu("History") {
             Button("Back") { model?.goBack() }
                 .keyboardShortcut("[")

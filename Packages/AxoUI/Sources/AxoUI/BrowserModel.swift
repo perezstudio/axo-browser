@@ -11,6 +11,8 @@ import os
 /// it asks the pool for the selected tab's web view and saves page changes the pool reports.
 @Observable
 public final class BrowserModel {
+    /// Every Space, in switcher order.
+    public private(set) var spaces: [Space] = []
     /// The Space shown in the sidebar, once ``start()`` finishes.
     public private(set) var space: Space?
     /// The Space's tabs in sidebar order, kept current as the database changes.
@@ -45,16 +47,27 @@ public final class BrowserModel {
 
     @ObservationIgnored private let store: TabStore
     @ObservationIgnored private var observationTask: Task<Void, Never>?
+    @ObservationIgnored private var spacesObservationTask: Task<Void, Never>?
+    /// The tab each Space had selected, so switching back returns to it.
+    @ObservationIgnored private var selectedTabBySpace: [Space.ID: AxoCore.Tab.ID] = [:]
+    /// The Space to show at launch, if it still exists.
+    @ObservationIgnored private let initialSpaceID: Space.ID?
+    /// Called with the Space's ID whenever the window switches Spaces, so the app can reopen it.
+    @ObservationIgnored public var onSpaceChange: ((Space.ID) -> Void)?
     @ObservationIgnored private let prompts = PagePromptQueue()
     /// Hosts whose saved icon was already looked up, so each is read from the database once.
     @ObservationIgnored private var lookedUpFaviconHosts: Set<String> = []
     @ObservationIgnored private let logger = Logger(subsystem: "com.perezstudio.Axo", category: "BrowserModel")
 
     /// Creates a model. Call ``start()`` before showing it.
-    public init(store: TabStore, pool: WebViewPool, alertMessage: String? = nil) {
+    ///
+    /// - Parameter initialSpaceID: The Space to open at launch, such as the last one used. The
+    ///   first Space opens if it's `nil` or no longer exists.
+    public init(store: TabStore, pool: WebViewPool, alertMessage: String? = nil, initialSpaceID: Space.ID? = nil) {
         self.store = store
         self.pool = pool
         self.alertMessage = alertMessage
+        self.initialSpaceID = initialSpaceID
         pool.onPageChange = { [weak self] tabID, url, title in
             self?.persistPageChange(tabID: tabID, url: url, title: title)
         }
@@ -79,6 +92,7 @@ public final class BrowserModel {
 
     isolated deinit {
         observationTask?.cancel()
+        spacesObservationTask?.cancel()
     }
 
     /// The selected tab's record.
@@ -91,19 +105,138 @@ public final class BrowserModel {
         Favicon.key(for: tab.url).flatMap { favicons[$0] }
     }
 
-    /// Loads the first Space and its tabs, selects the first tab, and starts observing changes.
+    /// Loads the Spaces, opens the initial Space with its first tab selected, and starts
+    /// observing changes.
     public func start() async {
         guard space == nil else { return }
         do {
-            let space = try await store.bootstrap()
-            self.space = space
-            tabs = try await store.tabs(in: space.id)
-            select(tabs.first?.id)
-            await loadSavedFavicons()
-            observeTabs(in: space.id)
+            let first = try await store.bootstrap()
+            spaces = try await store.spaces()
+            let initial = spaces.first { $0.id == initialSpaceID } ?? first
+            try await show(initial)
+            observeSpaces()
             pool.startHibernationTimer()
         } catch {
             report(error, "Axo couldn't load your tabs.")
+        }
+    }
+
+    // MARK: Spaces
+
+    /// Switches the window to another Space, returning to the tab it had selected.
+    public func selectSpace(_ id: Space.ID) async {
+        guard id != space?.id, let target = spaces.first(where: { $0.id == id }) else { return }
+        do {
+            try await show(target)
+        } catch {
+            report(error, "Axo couldn't open that Space.")
+        }
+    }
+
+    /// Switches to the Space at `index` in the switcher, if there is one.
+    public func selectSpace(at index: Int) async {
+        guard spaces.indices.contains(index) else { return }
+        await selectSpace(spaces[index].id)
+    }
+
+    /// Switches to the next Space, wrapping around.
+    public func selectNextSpace() async {
+        await selectSpace(offsetBy: 1)
+    }
+
+    /// Switches to the previous Space, wrapping around.
+    public func selectPreviousSpace() async {
+        await selectSpace(offsetBy: -1)
+    }
+
+    private func selectSpace(offsetBy offset: Int) async {
+        guard spaces.count > 1, let index = spaces.firstIndex(where: { $0.id == space?.id }) else { return }
+        await selectSpace(at: (index + offset + spaces.count) % spaces.count)
+    }
+
+    /// Creates a Space and switches to it.
+    ///
+    /// - Parameters:
+    ///   - name: The Space's name.
+    ///   - newProfileName: A name for a new profile with its own cookies and website data, or
+    ///     `nil` to share the current Space's profile.
+    public func createSpace(name: String, newProfileName: String? = nil) async {
+        guard let current = space else { return }
+        do {
+            let profileID = if let newProfileName {
+                try await store.createProfile(name: newProfileName).id
+            } else {
+                current.profileID
+            }
+            let created = try await store.createSpace(name: name, profileID: profileID)
+            spaces = try await store.spaces()
+            try await show(created)
+        } catch {
+            report(error, "Axo couldn't create the Space.")
+        }
+    }
+
+    /// Renames a Space.
+    public func renameSpace(_ id: Space.ID, to name: String) async {
+        do {
+            try await store.renameSpace(id: id, to: name)
+            spaces = try await store.spaces()
+            if space?.id == id { space = spaces.first { $0.id == id } }
+        } catch {
+            report(error, "Axo couldn't rename the Space.")
+        }
+    }
+
+    /// Deletes a Space and closes its tabs. If it was showing, the window switches to the Space
+    /// next to it. The last Space can't be deleted.
+    public func deleteSpace(_ id: Space.ID) async {
+        guard spaces.count > 1, let index = spaces.firstIndex(where: { $0.id == id }) else { return }
+        do {
+            let closedTabs = try await store.deleteSpace(id: id)
+            for tabID in closedTabs {
+                prompts.dismissAll(from: tabID)
+                pool.discard(tabID)
+            }
+            selectedTabBySpace[id] = nil
+            spaces = try await store.spaces()
+            if space?.id == id {
+                try await show(spaces[min(index, spaces.count - 1)])
+            }
+        } catch {
+            report(error, "Axo couldn't delete the Space.")
+        }
+    }
+
+    /// The profiles a new Space could use, by name.
+    public func profiles() async -> [Profile] {
+        (try? await store.profiles()) ?? []
+    }
+
+    /// Shows `target` in the window: its tabs, its remembered selection, and live updates.
+    private func show(_ target: Space) async throws {
+        if let current = space {
+            selectedTabBySpace[current.id] = selectedTabID
+        }
+        space = target
+        tabs = try await store.tabs(in: target.id)
+        let remembered = selectedTabBySpace[target.id].flatMap { id in tabs.first { $0.id == id }?.id }
+        select(remembered ?? tabs.first?.id)
+        observeTabs(in: target.id)
+        await loadSavedFavicons()
+        onSpaceChange?(target.id)
+    }
+
+    private func observeSpaces() {
+        spacesObservationTask?.cancel()
+        let observation = store.observeSpaces()
+        spacesObservationTask = Task { [weak self] in
+            do {
+                for try await spaces in observation {
+                    self?.spaces = spaces
+                }
+            } catch {
+                self?.logger.error("Space observation failed: \(error)")
+            }
         }
     }
 
@@ -321,6 +454,8 @@ public final class BrowserModel {
         observationTask = Task { [weak self] in
             do {
                 for try await tabs in observation {
+                    // Ignore a list that arrives after the window switched to another Space.
+                    guard self?.space?.id == spaceID else { return }
                     self?.tabs = tabs
                     await self?.loadSavedFavicons()
                 }

@@ -33,7 +33,8 @@ The full plan, architecture, and reasoning behind every decision are in `docs/PL
 - AxoWeb tests load local HTML files in real `WKWebView`s with `.nonPersistent()` data stores. Never load network URLs in tests.
 - UI tests launch the app with the `AXO_UI_TESTING=1` environment variable (in-memory database, non-persistent website data, temporary downloads folder) and the `-ApplePersistenceIgnoreState YES` argument (no restored window state). Pages come from `data:` URLs. Reuse the `launchApp()` helper in `AxoUITests`.
 - Put text fields that menu commands need to focus in the main view hierarchy, not in toolbar items. `@FocusState` didn't move focus into a toolbar-hosted `TextField`, which is why the address field lives at the top of the sidebar.
-- The app's database lives at `~/Library/Application Support/Axo/Axo.sqlite`.
+- The app's database lives at `~/Library/Application Support/Axo/Axo.sqlite`. The last Space shown is remembered in `UserDefaults` under `lastSpaceID` (not in UI testing).
+- To look at the UI, attach `XCTAttachment(screenshot: app.windows.firstMatch.screenshot())` in a UI test and export it from the result bundle. It captures only Axo's window and doesn't need accessibility access. Don't screen-capture the desktop, which can include the user's other windows.
 - Printing can't be tested automatically: WebKit print operations hang when run synchronously and need a window to run modally. Test the operation's configuration and check the print sheet by hand.
 - macOS window tabbing is off (`NSWindow.allowsAutomaticWindowTabbing = false`), because Axo's tabs live in the sidebar.
 - Printing triggers macOS's Local Network prompt (printer discovery), and pages can reach local devices through WebKit's network process. `NSLocalNetworkUsageDescription` explains both. Keep it accurate if network behavior changes.
