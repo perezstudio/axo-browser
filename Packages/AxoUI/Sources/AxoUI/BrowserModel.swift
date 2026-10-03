@@ -79,6 +79,12 @@ public final class BrowserModel {
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private var archiveTask: Task<Void, Never>?
     @ObservationIgnored private var commandSearchTask: Task<Void, Never>?
+    /// Extension toolbar buttons. Set by the app.
+    @ObservationIgnored public var extensionToolbar: (any ExtensionToolbarProviding)?
+    /// Called for tab and window events extensions hear about. Set by the app.
+    @ObservationIgnored public var onTabEvent: ((TabEvent) -> Void)?
+    /// The views behind extension toolbar buttons, by extension ID, for showing popups.
+    @ObservationIgnored var extensionAnchors: [String: NSView] = [:]
     /// Checks and changes the default browser. Set by the app.
     @ObservationIgnored public var defaultBrowser: (any DefaultBrowserSetting)? {
         didSet { refreshDefaultBrowserStatus() }
@@ -246,6 +252,7 @@ public final class BrowserModel {
             for tabID in closedTabs {
                 prompts.dismissAll(from: tabID)
                 pool.discard(tabID)
+                onTabEvent?(.closed(tabID))
             }
             selectedTabBySpace[id] = nil
             spaces = try await store.spaces()
@@ -276,6 +283,7 @@ public final class BrowserModel {
         observeTabs(in: target.id)
         await loadSavedFavicons()
         onSpaceChange?(target.id)
+        onTabEvent?(.spaceChanged)
     }
 
     /// Archives idle tabs now and then every ``archiveCheckInterval``.
@@ -315,7 +323,9 @@ public final class BrowserModel {
         }
         // Both the tab being left and the one being shown were just in use.
         markActive([selectedTabID, id].compactMap { $0 })
+        let previous = selectedTabID
         selectedTabID = id
+        if previous != id { onTabEvent?(.activated(id, previous: previous)) }
         activateSelectedTab()
     }
 
@@ -358,6 +368,7 @@ public final class BrowserModel {
         do {
             let tab = try await store.openTab(url: url, in: space.id, at: position)
             tabs = try await store.tabs(in: space.id)
+            onTabEvent?(.opened(tab.id))
             select(tab.id)
         } catch {
             report(error, "Axo couldn't open a new tab.")
@@ -377,6 +388,7 @@ public final class BrowserModel {
                 try await store.resetPinnedTab(id: id)
             } else {
                 try await store.archiveTab(id: id, at: now())
+                onTabEvent?(.closed(id))
             }
             tabs = try await store.tabs(in: space.id)
         } catch {
@@ -425,6 +437,7 @@ public final class BrowserModel {
         do {
             try await store.restoreTab(id: id, at: now())
             tabs = try await store.tabs(in: space.id)
+            onTabEvent?(.opened(id))
             select(id)
         } catch {
             report(error, "Axo couldn't restore the tab.")
@@ -444,6 +457,7 @@ public final class BrowserModel {
             for id in archived {
                 prompts.dismissAll(from: id)
                 pool.discard(id)
+                onTabEvent?(.closed(id))
             }
             if let space, !archived.isEmpty {
                 tabs = try await store.tabs(in: space.id)
@@ -693,6 +707,19 @@ public final class BrowserModel {
         refreshDefaultBrowserStatus()
     }
 
+    // MARK: Extensions
+
+    /// Shows an extension's popup under its toolbar button (or the window's top edge if the
+    /// button isn't on screen).
+    public func presentExtensionPopup(_ popover: NSPopover, extensionID: String) {
+        if let anchor = extensionAnchors[extensionID], anchor.window != nil {
+            popover.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .minY)
+        } else if let content = NSApp.keyWindow?.contentView {
+            let top = NSRect(x: content.bounds.maxX - 60, y: content.bounds.maxY - 1, width: 1, height: 1)
+            popover.show(relativeTo: top, of: content, preferredEdge: .minY)
+        }
+    }
+
     // MARK: Command bar
 
     /// Opens the command bar with an empty query.
@@ -904,6 +931,7 @@ public final class BrowserModel {
             do {
                 let previous = try await store.tab(id: tabID)
                 try await store.updateTab(id: tabID, url: url, title: title)
+                onTabEvent?(.changed(tabID))
                 guard let previous,
                       let profileID = spaces.first(where: { $0.id == previous.spaceID })?.profileID else { return }
                 if previous.url != url || !hasRecordedVisit.contains(tabID) {

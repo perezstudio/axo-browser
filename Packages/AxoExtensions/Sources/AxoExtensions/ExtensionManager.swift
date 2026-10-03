@@ -17,15 +17,26 @@ import os
 public final class ExtensionManager {
     /// Load errors by extension ID, such as a folder that's gone or a manifest WebKit rejects.
     public private(set) var loadErrors: [String: String] = [:]
+    /// Changes whenever toolbar actions change (an extension loads, unloads, or updates its
+    /// icon, badge, or title), so views reading ``toolbarActions(for:tabID:)`` refresh.
+    public private(set) var actionsRevision = 0
+
+    /// The browser window extensions see. Set by the app.
+    @ObservationIgnored public weak var browser: (any ExtensionBrowsing)?
+    /// Called when an extension's toolbar button should show its popup.
+    @ObservationIgnored public var onPresentPopup: ((_ extensionID: String, _ popover: NSPopover) -> Void)?
 
     @ObservationIgnored private let installer: ExtensionInstaller
     @ObservationIgnored private let store: ExtensionStore
-    @ObservationIgnored private let pool: WebViewPool
+    @ObservationIgnored let pool: WebViewPool
     @ObservationIgnored private let persistent: Bool
     @ObservationIgnored private var controllers: [Profile.ID: WKWebExtensionController] = [:]
     @ObservationIgnored private var contexts: [Profile.ID: [String: WKWebExtensionContext]] = [:]
     @ObservationIgnored private var loadedProfiles: Set<Profile.ID> = []
     @ObservationIgnored private let logger = Logger(subsystem: "com.perezstudio.Axo", category: "Extensions")
+    @ObservationIgnored private var tabAdapters: [Tab.ID: ExtensionTab] = [:]
+    @ObservationIgnored private lazy var delegate = ControllerDelegate(manager: self)
+    @ObservationIgnored lazy var window = ExtensionWindow(manager: self)
 
     /// Creates a manager and attaches its controllers to the pool's new web views.
     ///
@@ -56,6 +67,7 @@ public final class ExtensionManager {
             : .nonPersistent()
         configuration.defaultWebsiteDataStore = pool.dataStore(for: profileID)
         let controller = WKWebExtensionController(configuration: configuration)
+        controller.delegate = delegate
         controllers[profileID] = controller
         return controller
     }
@@ -73,6 +85,103 @@ public final class ExtensionManager {
         for record in records where record.isEnabled {
             await load(record)
         }
+    }
+
+    /// Whether a controller belongs to the profile the window shows; only that one sees it.
+    func isCurrent(_ controller: WKWebExtensionController) -> Bool {
+        guard let profileID = browser?.currentProfileID else { return false }
+        return controllers[profileID] === controller
+    }
+
+    // MARK: Tabs and window
+
+    /// The stable object extensions see for a tab.
+    func tabAdapter(for id: Tab.ID) -> ExtensionTab {
+        if let adapter = tabAdapters[id] { return adapter }
+        let adapter = ExtensionTab(tabID: id, manager: self)
+        tabAdapters[id] = adapter
+        return adapter
+    }
+
+    private var currentController: WKWebExtensionController? {
+        browser?.currentProfileID.map { controller(for: $0) }
+    }
+
+    /// Tells extensions a tab opened (`chrome.tabs.onCreated`).
+    public func tabDidOpen(_ id: Tab.ID) {
+        currentController?.didOpenTab(tabAdapter(for: id))
+    }
+
+    /// Tells extensions a tab closed (`chrome.tabs.onRemoved`).
+    public func tabDidClose(_ id: Tab.ID) {
+        guard let adapter = tabAdapters.removeValue(forKey: id) else { return }
+        currentController?.didCloseTab(adapter, windowIsClosing: false)
+    }
+
+    /// Tells extensions which tab is now active (`chrome.tabs.onActivated`).
+    public func tabDidActivate(_ id: Tab.ID?, previous: Tab.ID?) {
+        guard let id else { return }
+        currentController?.didActivateTab(tabAdapter(for: id), previousActiveTab: previous.map { tabAdapter(for: $0) })
+        actionsDidChange()
+    }
+
+    /// Tells extensions a tab's page changed (`chrome.tabs.onUpdated`).
+    public func tabDidChange(_ id: Tab.ID) {
+        currentController?.didChangeTabProperties([.URL, .title, .loading], for: tabAdapter(for: id))
+    }
+
+    /// Tells extensions the window now shows another Space (and possibly another profile).
+    public func windowDidChangeSpace() {
+        currentController?.didFocusWindow(window)
+        actionsDidChange()
+    }
+
+    // MARK: Toolbar
+
+    /// A toolbar button for an extension: what its action shows for a tab.
+    public struct ToolbarAction: Identifiable, Equatable {
+        /// The extension ID.
+        public var id: String
+        /// The button's title (`action.default_title`, or the extension's name).
+        public var label: String
+        /// The icon at toolbar size.
+        public var icon: NSImage?
+        /// The badge text, or an empty string.
+        public var badge: String
+        /// Whether the button can be clicked.
+        public var isEnabled: Bool
+    }
+
+    /// The toolbar buttons for a profile's loaded extensions, for the given tab, by name.
+    public func toolbarActions(for profileID: Profile.ID, tabID: Tab.ID?) -> [ToolbarAction] {
+        _ = actionsRevision
+        let tab = tabID.map { tabAdapter(for: $0) }
+        return (contexts[profileID] ?? [:])
+            .compactMap { id, context -> ToolbarAction? in
+                guard let action = context.action(for: tab) else { return nil }
+                return ToolbarAction(
+                    id: id,
+                    label: action.label.isEmpty ? (context.webExtension.displayName ?? id) : action.label,
+                    icon: action.icon(for: CGSize(width: 16, height: 16)),
+                    badge: action.badgeText,
+                    isEnabled: action.isEnabled
+                )
+            }
+            .sorted { $0.label.localizedStandardCompare($1.label) == .orderedAscending }
+    }
+
+    /// Clicks an extension's toolbar button: shows its popup, or sends `action.onClicked`.
+    public func performAction(extensionID: String, profileID: Profile.ID, tabID: Tab.ID?) {
+        context(for: extensionID, profileID: profileID)?.performAction(for: tabID.map { tabAdapter(for: $0) })
+    }
+
+    func presentPopup(for action: WKWebExtension.Action, in context: WKWebExtensionContext) {
+        guard let popover = action.popupPopover else { return }
+        onPresentPopup?(context.uniqueIdentifier, popover)
+    }
+
+    func actionsDidChange() {
+        actionsRevision += 1
     }
 
     // MARK: Installing
@@ -172,6 +281,7 @@ public final class ExtensionManager {
             try controller(for: record.profileID).load(context)
             contexts[record.profileID, default: [:]][record.extensionID] = context
             loadErrors[record.extensionID] = nil
+            actionsDidChange()
         } catch {
             logger.error("Couldn't load extension \(record.extensionID): \(error)")
             loadErrors[record.extensionID] = error.localizedDescription
@@ -181,5 +291,6 @@ public final class ExtensionManager {
     private func unload(_ extensionID: String, profileID: Profile.ID) {
         guard let context = contexts[profileID]?.removeValue(forKey: extensionID) else { return }
         try? controller(for: profileID).unload(context)
+        actionsDidChange()
     }
 }

@@ -293,6 +293,35 @@ final class AxoUITests: XCTestCase {
         XCTAssertEqual(app.windows.count, 1, "The link opens in the existing window")
     }
 
+    /// An installed extension shows a toolbar button with its badge, and clicking it opens its
+    /// popup.
+    @MainActor
+    func testExtensionToolbarButtonOpensItsPopup() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "AxoUITestExtension-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try """
+        {"name": "Axo Helper", "version": "1.0", "manifest_version": 3, "description": "UI test extension.",
+         "action": {"default_title": "Axo Helper", "default_popup": "popup.html"},
+         "background": {"service_worker": "bg.js"}}
+        """.write(to: folder.appending(path: "manifest.json"), atomically: true, encoding: .utf8)
+        try "chrome.action.setBadgeText({ text: '3' });".write(to: folder.appending(path: "bg.js"), atomically: true, encoding: .utf8)
+        try "<!doctype html><title>Helper</title><body style='width:240px'><p>Hello from Axo Helper</p></body>"
+            .write(to: folder.appending(path: "popup.html"), atomically: true, encoding: .utf8)
+
+        let app = Self.makeApp()
+        app.launchEnvironment["AXO_UI_TESTING_EXTENSION"] = folder.path
+        app.launch()
+
+        let button = app.buttons.matching(NSPredicate(format: "identifier == 'extensionButton' AND label CONTAINS 'Axo Helper'")).firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 10))
+        expectation(for: NSPredicate(format: "label CONTAINS '3'"), evaluatedWith: button)
+        waitForExpectations(timeout: 10)
+
+        button.click()
+        XCTAssertTrue(app.popovers.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.popovers.firstMatch.staticTexts["Hello from Axo Helper"].waitForExistence(timeout: 10))
+    }
+
     /// macOS window tabbing is off, so the View menu has no "Show Tab Bar".
     @MainActor
     func testWindowTabbingMenuItemsAreHidden() throws {
