@@ -123,6 +123,7 @@ public final class WebViewPool {
 
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = dataStore(for: profileID)
+        UserAgent.apply(to: configuration)
         configurators.forEach { $0(configuration, profileID) }
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.allowsBackForwardNavigationGestures = true

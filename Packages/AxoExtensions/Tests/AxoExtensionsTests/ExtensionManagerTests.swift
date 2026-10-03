@@ -61,6 +61,13 @@ struct ExtensionManagerTests {
         #expect(manager.controller(for: UUID()) !== manager.controller(for: profileID), "Each profile has its own controller")
     }
 
+    @Test func extensionPagesUseAxosUserAgent() {
+        manager.configureExtensionWebViews = { $0.preferences.minimumFontSize = 3 }
+        let configuration = manager.controller(for: profileID).configuration.webViewConfiguration
+        #expect(configuration?.applicationNameForUserAgent == UserAgent.applicationName)
+        #expect(configuration?.preferences.minimumFontSize == 3, "The app's own configuration still applies")
+    }
+
     @Test func anInstalledExtensionsContentScriptRunsOnPages() async throws {
         let record = try await manager.installUnpacked(at: try markingExtension(), for: profileID)
 

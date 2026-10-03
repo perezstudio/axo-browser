@@ -41,5 +41,13 @@ Limitations in `WKWebView` and `WKWebExtension` that block or shape Axo features
      ```
   2. Load it into a new `WKWebExtensionController(configuration: .nonPersistent())` whose delegate records `openNewTabUsing` calls, granting the requested permissions.
   3. Only `…/startup` is requested; `…/installed-install` never is.
-- **For now:** Axo has no workaround. Extensions that only initialize in `onInstalled` may start without their defaults. Tests use top-level background code instead. Check real extensions (uBlock Origin Lite, Bitwarden) for impact in the test-targets work.
+- **For now:** Axo has no workaround. Extensions that only initialize in `onInstalled` may start without their defaults. Tests use top-level background code instead.
+- **Impact on the test targets:** small. uBlock Origin Lite doesn't use `onInstalled`; its default rulesets are turned on in its manifest. Bitwarden only uses it to open its welcome page, which doesn't appear.
 
+## `chrome.notifications` isn't supported
+
+- **Found:** October 2026, macOS 27 SDK (Xcode 27), with Bitwarden 2026.9.3.
+- **Need:** extensions show system notifications with `chrome.notifications.create` and react to clicks. Bitwarden uses them for alerts such as login requests from another device.
+- **What happens:** `WKWebExtension` has no `notifications` API, so `chrome.notifications` is undefined even when the manifest requests the `notifications` permission. Bitwarden checks for it, switches to a fallback that reports "Notification clicked is not supported.", and keeps running. That message then appears in `WKWebExtensionContext.errors`.
+- **Reproduction:** load an MV3 extension with `"permissions": ["notifications"]` whose background script runs `console.log(typeof chrome.notifications)`. It logs `undefined`.
+- **For now:** extension notifications don't appear. Axo could provide them later if WebKit adds a hook for them.
