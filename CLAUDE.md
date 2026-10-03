@@ -34,6 +34,9 @@ The full plan, architecture, and reasoning behind every decision are in `docs/PL
 - UI tests launch the app with the `AXO_UI_TESTING=1` environment variable (in-memory database, non-persistent website data, temporary downloads folder) and the `-ApplePersistenceIgnoreState YES` argument (no restored window state). Pages come from `data:` URLs. Reuse the `launchApp()` helper in `AxoUITests`.
 - Put text fields that menu commands need to focus in the main view hierarchy, not in toolbar items. `@FocusState` didn't move focus into a toolbar-hosted `TextField`, which is why the address field lives at the top of the sidebar.
 - The app's database lives at `~/Library/Application Support/Axo/Axo.sqlite`.
+- Printing can't be tested automatically: WebKit print operations hang when run synchronously and need a window to run modally. Test the operation's configuration and check the print sheet by hand.
+- macOS window tabbing is off (`NSWindow.allowsAutomaticWindowTabbing = false`), because Axo's tabs live in the sidebar.
+- Printing triggers macOS's Local Network prompt (printer discovery), and pages can reach local devices through WebKit's network process. `NSLocalNetworkUsageDescription` explains both. Keep it accurate if network behavior changes.
 
 ## Dependencies
 

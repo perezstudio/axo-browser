@@ -187,6 +187,50 @@ public final class WebViewPool {
         live[tabID]?.webView.stopLoading()
     }
 
+    // MARK: Find and print
+
+    /// Finds the next (or previous) occurrence of `text` in the tab's page, highlights it, and
+    /// scrolls to it. Matching ignores case and wraps around the page.
+    ///
+    /// - Returns: Whether a match was found. `false` if the tab isn't live or `text` is empty.
+    public func find(_ text: String, in tabID: Tab.ID, backwards: Bool = false) async -> Bool {
+        guard !text.isEmpty, let webView = live[tabID]?.webView else { return false }
+        let configuration = WKFindConfiguration()
+        configuration.backwards = backwards
+        configuration.caseSensitive = false
+        configuration.wraps = true
+        return (try? await webView.find(text, configuration: configuration).matchFound) ?? false
+    }
+
+    /// Removes the highlight a find left on the tab's page.
+    public func clearFind(in tabID: Tab.ID) async {
+        guard let webView = live[tabID]?.webView else { return }
+        // Find marks its match as the page selection. Clearing it from Axo's own content world
+        // doesn't run or expose anything to the page's scripts.
+        _ = try? await webView.callAsyncJavaScript(
+            "window.getSelection()?.removeAllRanges()",
+            contentWorld: .world(name: "AxoFind")
+        )
+    }
+
+    /// A print operation for the tab's page, titled with the page title, or `nil` if the tab
+    /// isn't live. Run it modally for the tab's window to show the print sheet.
+    public func printOperation(for tabID: Tab.ID) -> NSPrintOperation? {
+        guard let webView = live[tabID]?.webView else { return nil }
+        let printInfo = (NSPrintInfo.shared.copy() as? NSPrintInfo) ?? NSPrintInfo()
+        printInfo.horizontalPagination = .fit
+        printInfo.verticalPagination = .automatic
+        printInfo.isHorizontallyCentered = false
+        printInfo.isVerticallyCentered = false
+        let operation = webView.printOperation(with: printInfo)
+        operation.showsPrintPanel = true
+        operation.showsProgressPanel = true
+        operation.jobTitle = webView.title.flatMap { $0.isEmpty ? nil : $0 } ?? webView.url?.host() ?? "Page"
+        // WebKit's print view needs a frame, or it prints blank pages.
+        operation.view?.frame = webView.bounds
+        return operation
+    }
+
     private static func load(_ url: URL, in webView: WKWebView) {
         if url.isFileURL {
             webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())

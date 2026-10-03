@@ -256,8 +256,8 @@ Each milestone should be usable as a daily driver before the next one starts.
 
 - [x] Single window, vertical sidebar, tab list, navigation (back, forward, reload, address bar). The address field sits at the top of the sidebar, like Arc.
 - [x] Tab model with web view pool and hibernation, including snapshots shown while a tab wakes and favicons stored per host. Snapshots are in memory only for now.
-- [ ] Downloads, find in page, basic permission prompts, printing (downloads are done: `WKDownload`, quarantine, and a downloads popover)
-- [ ] Keyboard shortcuts for all core actions (⌘T, ⌘L, ⌘W, ⌘R, ⌘[, ⌘], ⌥⌘L are done; find, print, and the rest come with their features)
+- [ ] Downloads, find in page, basic permission prompts, printing (downloads, find in page, and printing are done; permission prompts remain)
+- [ ] Keyboard shortcuts for all core actions (⌘T, ⌘L, ⌘W, ⌘P, ⌘F, ⌘G, ⇧⌘G, ⌘R, ⌘[, ⌘], ⌥⌘L are done; the rest come with their features)
 
 **Milestone 2: Arc-style organization**
 
