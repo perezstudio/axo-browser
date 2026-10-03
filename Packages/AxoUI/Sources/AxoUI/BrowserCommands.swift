@@ -149,6 +149,25 @@ public struct BrowserCommands: Commands {
             .keyboardShortcut(.downArrow, modifiers: [.command, .option, .shift])
             .disabled(model?.canMoveSelectedItem(by: 1) != true)
             Divider()
+            Button("Add Split View") { model?.beginSplitWithNewTab() }
+                .keyboardShortcut("=", modifiers: [.control, .shift])
+                .disabled(model?.canAddToSplit != true)
+            Button("Remove Tab from Split View") {
+                guard let model else { return }
+                Task { await model.removeSelectedTabFromSplit() }
+            }
+            .disabled(model?.selectedSplit == nil)
+            Button("Separate Split View") {
+                guard let model else { return }
+                Task { await model.separateSelectedSplit() }
+            }
+            .disabled(model?.selectedSplit == nil)
+            Button(model?.selectedSplit?.orientation == .vertical ? "Show Panes Side by Side" : "Stack Panes") {
+                guard let model else { return }
+                Task { await model.toggleSplitOrientation() }
+            }
+            .disabled(model?.selectedSplit == nil)
+            Divider()
             Button("Rename Folder…") { model?.renameSelectedFolder() }
                 .disabled(model?.selectedFolder == nil)
             Button("Delete Folder") {

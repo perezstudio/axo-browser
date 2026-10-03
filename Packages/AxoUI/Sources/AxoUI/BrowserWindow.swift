@@ -46,7 +46,12 @@ public struct BrowserWindow: View {
 
     @ViewBuilder
     private var content: some View {
-        if let tab = model.selectedTab, let space = model.space {
+        if let split = model.selectedSplit, let space = model.space {
+            SplitPanesView(model: model, split: split, panes: model.panes(of: split.id), profileID: space.profileID)
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    if model.isFindBarVisible { FindBar(model: model) }
+                }
+        } else if let tab = model.selectedTab, let space = model.space {
             WebViewHost(tab: tab, profileID: space.profileID, pool: model.pool)
                 .accessibilityIdentifier("webContent")
                 .safeAreaInset(edge: .top, spacing: 0) {
@@ -64,6 +69,50 @@ public struct BrowserWindow: View {
                     .accessibilityIdentifier("emptyStateNewTabButton")
             }
             .accessibilityIdentifier("emptyState")
+        }
+    }
+}
+
+/// A split view's panes, side by side or stacked, with resizable dividers. The focused pane has
+/// an accent outline; clicking a pane focuses it.
+private struct SplitPanesView: View {
+    let model: BrowserModel
+    let split: TabSplit
+    let panes: [AxoCore.Tab]
+    let profileID: Profile.ID
+
+    var body: some View {
+        Group {
+            if split.orientation == .horizontal {
+                HSplitView { paneViews }
+            } else {
+                VSplitView { paneViews }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Split view")
+        .accessibilityIdentifier("splitView")
+    }
+
+    private var paneViews: some View {
+        ForEach(Array(panes.enumerated()), id: \.element.id) { index, tab in
+            let page = model.pool.state(for: tab.id)
+            WebViewHost(tab: tab, profileID: profileID, pool: model.pool)
+                .frame(minWidth: 200, minHeight: 150)
+                .overlay(alignment: .top) { RestoringSnapshot(page: page) }
+                .overlay(alignment: .top) { LoadingBar(page: page) }
+                .overlay {
+                    if tab.id == model.selectedTabID {
+                        Rectangle()
+                            .strokeBorder(.tint, lineWidth: 2)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("Pane \(index + 1) of \(panes.count), \(TabRow.displayTitle(for: tab))")
+                .accessibilityAddTraits(tab.id == model.selectedTabID ? .isSelected : [])
+                .accessibilityIdentifier("splitPane")
         }
     }
 }

@@ -182,6 +182,23 @@ public final class AppDatabase: Sendable {
                 t.primaryKey(["profileID", "origin", "kind"])
             }
         }
+        // Split views: two to four tabs shown side by side ("horizontal") or stacked
+        // ("vertical"). A tab joins a split through `tab.splitID`, and `tab.splitSortKey` orders
+        // the panes (a fractional sort key, like every other ordering). The split's tabs share
+        // their section and folder, and the split shows as one sidebar row.
+        migrator.registerMigration("v9-tab-splits") { db in
+            try db.create(table: "tabSplit") { t in
+                t.primaryKey("id", .blob)
+                t.column("spaceID", .blob).notNull()
+                    .references("space", onDelete: .cascade)
+                t.column("orientation", .text).notNull().defaults(to: "horizontal")
+            }
+            try db.alter(table: "tab") { t in
+                t.add(column: "splitID", .blob).references("tabSplit", onDelete: .setNull)
+                t.add(column: "splitSortKey", .text)
+            }
+            try db.create(index: "tab_on_splitID", on: "tab", columns: ["splitID"])
+        }
 
         return migrator
     }

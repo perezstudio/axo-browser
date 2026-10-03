@@ -20,6 +20,10 @@ public final class BrowserModel {
     public private(set) var tabs: [AxoCore.Tab] = []
     /// The Space's folders, kept current as the database changes.
     public private(set) var folders: [Folder] = []
+    /// The Space's split views, kept current as the database changes.
+    public internal(set) var splits: [TabSplit] = []
+    /// The tab the next command bar choice joins in a split view (Add Split View).
+    public internal(set) var pendingSplitAnchor: AxoCore.Tab.ID?
     /// A name the sidebar should ask for, such as a new folder's.
     public var namingRequest: NamingRequest?
     /// The tab shown in the window.
@@ -74,6 +78,9 @@ public final class BrowserModel {
     @ObservationIgnored private var observationTask: Task<Void, Never>?
     @ObservationIgnored private var spacesObservationTask: Task<Void, Never>?
     @ObservationIgnored private var foldersObservationTask: Task<Void, Never>?
+    @ObservationIgnored private var splitsObservationTask: Task<Void, Never>?
+    /// The pane each split last had focused, so selecting the split's row returns to it.
+    @ObservationIgnored var focusedPaneBySplit: [TabSplit.ID: AxoCore.Tab.ID] = [:]
     /// The tab each Space had selected, so switching back returns to it.
     @ObservationIgnored private var selectedTabBySpace: [Space.ID: AxoCore.Tab.ID] = [:]
     /// The Space to show at launch, if it still exists.
@@ -176,6 +183,7 @@ public final class BrowserModel {
         pool.onFileSelection = { [weak self] request in
             await self?.chooseFiles(for: request)
         }
+        pool.onWebViewFocus = { [weak self] tabID in self?.paneDidTakeFocus(tabID) }
         pool.onOpenInNewTab = { [weak self] url, sourceID in
             guard let self else { return }
             Task { await self.openTab(url: url, at: .after(sourceID)) }
@@ -186,6 +194,7 @@ public final class BrowserModel {
         observationTask?.cancel()
         spacesObservationTask?.cancel()
         foldersObservationTask?.cancel()
+        splitsObservationTask?.cancel()
         archiveTask?.cancel()
     }
 
@@ -323,7 +332,9 @@ public final class BrowserModel {
         space = target
         tabs = try await store.tabs(in: target.id)
         folders = try await store.folders(in: target.id)
+        splits = try await store.splits(in: target.id)
         observeFolders(in: target.id)
+        observeSplits(in: target.id)
         let remembered = selectedTabBySpace[target.id].flatMap { id in tabs.first { $0.id == id }?.id }
         select(remembered ?? tabs.first?.id)
         observeTabs(in: target.id)
@@ -373,6 +384,7 @@ public final class BrowserModel {
         selectedTabID = id
         if id != nil { selectedFolderID = nil }
         if previous != id { onTabEvent?(.activated(id, previous: previous)) }
+        rememberFocusedPane()
         activateSelectedTab()
     }
 
@@ -428,6 +440,7 @@ public final class BrowserModel {
     public func closeTab(_ id: AxoCore.Tab.ID) async {
         guard let space, let tab = tabs.first(where: { $0.id == id }) else { return }
         let visibleOrder = tabs.map(\.id)
+        let otherPanes = tab.splitID.map { splitID in tabs.filter { $0.splitID == splitID && $0.id != id }.map(\.id) } ?? []
         prompts.dismissAll(from: id)
         pool.discard(id)
         do {
@@ -444,6 +457,11 @@ public final class BrowserModel {
         }
         announce(tab.isPinned ? "Unloaded \(TabRow.displayTitle(for: tab))" : "Closed \(TabRow.displayTitle(for: tab))")
         guard selectedTabID == id else { return }
+        // Closing one pane of a split keeps the rest of the split on screen.
+        if !tab.isPinned, let pane = otherPanes.first(where: { remaining in tabs.contains { $0.id == remaining } }) {
+            select(pane)
+            return
+        }
         select(Self.neighbor(of: id, in: visibleOrder, among: tabs.map(\.id).filter { $0 != id }))
     }
 
@@ -566,7 +584,8 @@ public final class BrowserModel {
     /// The pinned section as a tree: folders (with their contents) and pinned tabs, each level
     /// in order.
     public var pinnedTree: [PinnedNode] {
-        PinnedNode.tree(folders: folders, pinnedTabs: pinnedTabs)
+        // A split shows as one row: its first tab stands for the others.
+        PinnedNode.tree(folders: folders, pinnedTabs: pinnedTabs.filter { !isSplitFollower($0) })
     }
 
     /// Creates a folder at the end of a level of the pinned section, optionally moving a tab or
@@ -637,10 +656,29 @@ public final class BrowserModel {
         }
     }
 
-    private func refreshSidebar() async throws {
+    func refreshSidebar() async throws {
         guard let space else { return }
         tabs = try await store.tabs(in: space.id)
         folders = try await store.folders(in: space.id)
+        splits = try await store.splits(in: space.id)
+    }
+
+    private func observeSplits(in spaceID: Space.ID) {
+        splitsObservationTask?.cancel()
+        let observation = store.observeSplits(in: spaceID)
+        splitsObservationTask = Task { [weak self] in
+            do {
+                for try await _ in observation {
+                    // Re-read for the same reason as tabs: never apply a stale list.
+                    guard let self, self.space?.id == spaceID else { return }
+                    let current = try await self.store.splits(in: spaceID)
+                    guard self.space?.id == spaceID else { return }
+                    self.splits = current
+                }
+            } catch {
+                self?.logger.error("Split observation failed: \(error)")
+            }
+        }
     }
 
     private func observeFolders(in spaceID: Space.ID) {
@@ -664,7 +702,7 @@ public final class BrowserModel {
     /// Moves a tab within its section after a drag in the sidebar, using `List.onMove` indices
     /// relative to that section.
     public func moveTabs(fromOffsets source: IndexSet, toOffset destination: Int, pinned: Bool) async {
-        let section = pinned ? pinnedTabs : unpinnedTabs
+        let section = (pinned ? pinnedTabs : unpinnedTabs).filter { !isSplitFollower($0) }
         guard let space, let sourceIndex = source.first, source.count == 1, section.indices.contains(sourceIndex) else { return }
         let moving = section[sourceIndex]
         var remaining = section
@@ -790,6 +828,7 @@ public final class BrowserModel {
         commandSearchTask?.cancel()
         let wasVisible = isCommandBarVisible
         isCommandBarVisible = false
+        pendingSplitAnchor = nil
         if wasVisible { focusPage() }
     }
 
@@ -832,14 +871,22 @@ public final class BrowserModel {
         let index = index ?? commandSelection
         guard commandResults.indices.contains(index) else { return }
         let result = commandResults[index]
+        // Add Split View: what's chosen joins this tab in a split.
+        let splitAnchor = pendingSplitAnchor
         hideCommandBar()
         switch result {
         case .open(let url, _, _):
             await openTab(url: url)
+            await completePendingSplit(with: selectedTabID, anchor: splitAnchor)
         case .tab(let tab):
-            select(tab.id)
+            if splitAnchor != nil {
+                await completePendingSplit(with: tab.id, anchor: splitAnchor)
+            } else {
+                select(tab.id)
+            }
         case .history(let item):
             await openTab(url: item.url)
+            await completePendingSplit(with: selectedTabID, anchor: splitAnchor)
         case .action(let action):
             await perform(action)
         }
@@ -856,6 +903,8 @@ public final class BrowserModel {
             case .importBrowserData: browserImporter != nil
             case .deleteSpace: spaces.count > 1
             case .renameFolder, .deleteFolder: selectedFolderID != nil
+            case .addSplitView: canAddToSplit
+            case .separateSplitView, .rotateSplitView: selectedSplit != nil
             default: true
             }
         }
@@ -878,6 +927,9 @@ public final class BrowserModel {
         case .deleteSpace: beginDeleteSpace()
         case .renameFolder: renameSelectedFolder()
         case .deleteFolder: await deleteSelectedFolder()
+        case .addSplitView: beginSplitWithNewTab()
+        case .separateSplitView: await separateSelectedSplit()
+        case .rotateSplitView: await toggleSplitOrientation()
         }
     }
 
@@ -1019,7 +1071,7 @@ public final class BrowserModel {
         }
     }
 
-    private func report(_ error: Error, _ message: String) {
+    func report(_ error: Error, _ message: String) {
         logger.error("\(message) \(error)")
         alertMessage = message
     }

@@ -21,7 +21,7 @@ struct CommandBarView: View {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
                         .accessibilityHidden(true)
-                    TextField("Search, enter an address, or run a command", text: Binding(
+                    TextField(model.pendingSplitAnchor == nil ? "Search, enter an address, or run a command" : "Choose a tab or enter an address to show in split view", text: Binding(
                         get: { model.commandQuery },
                         set: { model.setCommandQuery($0) }
                     ))

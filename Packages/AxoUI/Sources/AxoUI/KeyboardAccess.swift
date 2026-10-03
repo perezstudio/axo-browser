@@ -10,13 +10,14 @@ extension BrowserModel {
     /// The selected sidebar row: a folder when one is selected, otherwise the selected tab.
     public var selectedSidebarItem: PinnedItem? {
         if let selectedFolderID { return .folder(selectedFolderID) }
-        return selectedTabID.map(PinnedItem.tab)
+        // A split's row is its first tab, whichever pane is focused.
+        return selectedTabID.map { .tab(sidebarRowTab(for: $0)) }
     }
 
     /// Selects a sidebar row. Selecting a folder keeps the current tab showing.
     public func selectSidebarItem(_ item: PinnedItem?) {
         switch item {
-        case .tab(let id): select(id)
+        case .tab(let id): selectSplitRow(id)
         case .folder(let id): selectedFolderID = id
         case nil: select(nil)
         }
@@ -30,15 +31,19 @@ extension BrowserModel {
     /// The tabs in sidebar order as they appear on screen: pinned tabs (skipping those inside
     /// collapsed folders), then the others.
     public var visibleTabOrder: [AxoCore.Tab.ID] {
+        // A split's row stands for all its panes, in pane order.
+        func expanded(_ tab: AxoCore.Tab) -> [AxoCore.Tab.ID] {
+            split(of: tab.id).map { panes(of: $0.id).map(\.id) } ?? [tab.id]
+        }
         func visible(_ nodes: [PinnedNode]) -> [AxoCore.Tab.ID] {
             nodes.flatMap { node -> [AxoCore.Tab.ID] in
                 switch node {
-                case .tab(let tab): [tab.id]
+                case .tab(let tab): expanded(tab)
                 case .folder(let folder, let children): folder.isExpanded ? visible(children) : []
                 }
             }
         }
-        return visible(pinnedTree) + unpinnedTabs.map(\.id)
+        return visible(pinnedTree) + unpinnedTabs.filter { !isSplitFollower($0) }.flatMap(expanded)
     }
 
     /// Selects the next (`1`) or previous (`-1`) visible tab, wrapping around.
@@ -111,7 +116,7 @@ extension BrowserModel {
         guard let item = selectedSidebarItem else { return nil }
         let level: [PinnedItem]
         if case .tab(let id) = item, let tab = tabs.first(where: { $0.id == id }), !tab.isPinned {
-            level = unpinnedTabs.map { .tab($0.id) }
+            level = unpinnedTabs.filter { !isSplitFollower($0) }.map { .tab($0.id) }
         } else {
             level = PinnedNode.items(at: parentFolder(of: item), in: pinnedTree)
         }

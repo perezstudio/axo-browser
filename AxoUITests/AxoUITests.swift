@@ -19,6 +19,7 @@ final class AxoUITests: XCTestCase {
     private func launchApp() -> XCUIApplication {
         let app = Self.makeApp()
         app.launch()
+        Self.bringToFront(app)
         return app
     }
 
@@ -28,6 +29,16 @@ final class AxoUITests: XCTestCase {
         app.launchEnvironment["AXO_UI_TESTING"] = "1"
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
         return app
+    }
+
+    /// Waits for Axo to be the frontmost app, activating it if another app took focus during
+    /// launch. Keystrokes fail with "not foreground" otherwise.
+    @MainActor
+    static func bringToFront(_ app: XCUIApplication) {
+        if !app.wait(for: .runningForeground, timeout: 5) {
+            app.activate()
+            _ = app.wait(for: .runningForeground, timeout: 5)
+        }
     }
 
     /// A page with only a title, so tests never touch the network.
@@ -297,6 +308,47 @@ final class AxoUITests: XCTestCase {
         XCTAssertEqual(app.windows.count, 1, "The link opens in the existing window")
     }
 
+    /// Add Split View (⌃⇧=) shows a chosen tab next to the current one as one sidebar row, and
+    /// the split can be stacked and separated from the Tabs menu.
+    @MainActor
+    func testSplitView() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        for title in ["Notes", "Docs"] {
+            app.typeKey("t", modifierFlags: .command)
+            app.typeText("data:text/html,<title>\(title)</title>\n")
+            XCTAssertTrue(sidebar.staticTexts[title].waitForExistence(timeout: 10))
+        }
+
+        app.typeKey("=", modifierFlags: [.control, .shift])
+        XCTAssertTrue(app.textFields["commandField"].waitForExistence(timeout: 5))
+        app.typeText("notes")
+        let notes = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == 'commandResult' AND label CONTAINS 'Notes'")).firstMatch
+        XCTAssertTrue(notes.waitForExistence(timeout: 5))
+        notes.click()
+
+        let splitView = app.descendants(matching: .any)["splitView"]
+        XCTAssertTrue(splitView.waitForExistence(timeout: 10))
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "splitPane").count, 2)
+        let row = sidebar.descendants(matching: .any).matching(identifier: "splitRow").firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        // A static text exposes its spoken text as its value.
+        let spoken = (row.value as? String) ?? row.label
+        XCTAssertTrue(spoken.contains("Split view") && spoken.contains("Docs") && spoken.contains("Notes"), spoken)
+        XCTAssertEqual(sidebar.staticTexts.matching(identifier: "tabRow").count, 0, "The two tabs are one row")
+
+        app.menuBars.menuBarItems["Tabs"].click()
+        app.menuBars.menuItems["Stack Panes"].click()
+        app.menuBars.menuBarItems["Tabs"].click()
+        XCTAssertTrue(app.menuBars.menuItems["Show Panes Side by Side"].waitForExistence(timeout: 5))
+        app.menuBars.menuItems["Separate Split View"].click()
+
+        XCTAssertTrue(splitView.waitForNonExistence(timeout: 5))
+        XCTAssertEqual(sidebar.staticTexts.matching(identifier: "tabRow").count, 2)
+    }
+
     /// The sidebar works from the keyboard: switching tabs, pinning, reordering, and moving a
     /// tab into a folder, all through menu commands and shortcuts.
     @MainActor
@@ -418,6 +470,7 @@ final class AxoUITests: XCTestCase {
         let app = Self.makeApp()
         app.launchEnvironment["AXO_UI_TESTING_IMPORT_ROOT"] = root.path
         app.launch()
+        Self.bringToFront(app)
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
 
@@ -474,6 +527,7 @@ final class AxoUITests: XCTestCase {
         let app = Self.makeApp()
         app.launchEnvironment["AXO_UI_TESTING_EXTENSION"] = folder.path
         app.launch()
+        Self.bringToFront(app)
 
         let button = app.buttons.matching(NSPredicate(format: "identifier == 'extensionButton' AND label CONTAINS 'Axo Helper'")).firstMatch
         XCTAssertTrue(button.waitForExistence(timeout: 10))
@@ -538,6 +592,7 @@ final class AxoUITests: XCTestCase {
         let app = Self.makeApp()
         app.launchEnvironment["AXO_UI_TESTING_EXTENSION"] = folder.path
         app.launch()
+        Self.bringToFront(app)
         let button = app.buttons.matching(NSPredicate(format: "identifier == 'extensionButton' AND label CONTAINS 'Axo Helper'")).firstMatch
         XCTAssertTrue(button.waitForExistence(timeout: 10))
 

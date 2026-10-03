@@ -11,7 +11,7 @@ struct MigrationTests {
             #expect(try db.tableExists("space"))
             #expect(try db.tableExists("tab"))
             let tabColumns = try db.columns(in: "tab").map(\.name)
-            #expect(tabColumns == ["id", "spaceID", "url", "title", "sortKey", "isPinned", "archivedAt", "homeURL", "lastActiveAt", "folderID"])
+            #expect(tabColumns == ["id", "spaceID", "url", "title", "sortKey", "isPinned", "archivedAt", "homeURL", "lastActiveAt", "folderID", "splitID", "splitSortKey"])
         }
     }
 
@@ -203,6 +203,27 @@ struct MigrationTests {
 
             try db.execute(sql: "DELETE FROM profile")
             #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM sitePermission") == 0)
+        }
+    }
+
+    @Test func v9TabsJoinSplitsThatGoWithTheirSpace() throws {
+        let database = try AppDatabase.makeInMemory()
+        let (profileID, spaceID, splitID, tabID) = (UUID(), UUID(), UUID(), UUID())
+        try database.writer.write { db in
+            try db.execute(sql: "INSERT INTO profile (id, name) VALUES (?, 'Default')", arguments: [profileID])
+            try db.execute(sql: "INSERT INTO space (id, profileID, name, sortKey) VALUES (?, ?, 'Home', 'a0')", arguments: [spaceID, profileID])
+            try db.execute(sql: "INSERT INTO tabSplit (id, spaceID) VALUES (?, ?)", arguments: [splitID, spaceID])
+            #expect(try String.fetchOne(db, sql: "SELECT orientation FROM tabSplit") == "horizontal")
+            try db.execute(sql: """
+                INSERT INTO tab (id, spaceID, url, sortKey, splitID, splitSortKey) VALUES (?, ?, 'https://a.example', 'a0', ?, 'a0')
+                """, arguments: [tabID, spaceID, splitID])
+
+            // Deleting the split frees its tabs; deleting the Space removes the split.
+            try db.execute(sql: "DELETE FROM tabSplit")
+            #expect(try Row.fetchOne(db, sql: "SELECT splitID FROM tab")?["splitID"] as Data? == nil)
+            try db.execute(sql: "INSERT INTO tabSplit (id, spaceID) VALUES (?, ?)", arguments: [splitID, spaceID])
+            try db.execute(sql: "DELETE FROM space")
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM tabSplit") == 0)
         }
     }
 }
