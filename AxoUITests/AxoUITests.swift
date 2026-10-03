@@ -241,6 +241,44 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Docs"].waitForNonExistence(timeout: 5))
     }
 
+    /// ⌘T opens the command bar: typed addresses open in a new tab, and matching tabs can be
+    /// picked with the arrow keys and Return.
+    @MainActor
+    func testCommandBarOpensPagesAndSwitchesTabs() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        for title in ["Garden notes", "Recipes"] {
+            app.typeKey("t", modifierFlags: .command)
+            XCTAssertTrue(app.textFields["commandField"].waitForExistence(timeout: 5))
+            app.typeText("data:text/html,<title>\(title)</title>\n")
+            XCTAssertTrue(sidebar.staticTexts[title].waitForExistence(timeout: 10))
+            XCTAssertFalse(app.textFields["commandField"].exists, "The command bar closes after opening a page")
+        }
+
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("garden")
+        let tabRow = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == 'commandResult' AND label CONTAINS 'Garden notes'"))
+            .firstMatch
+        XCTAssertTrue(tabRow.waitForExistence(timeout: 5))
+        // The first row searches for "garden"; the matching tab is next.
+        app.typeKey(.downArrow, modifierFlags: [])
+        app.typeKey(.return, modifierFlags: [])
+
+        XCTAssertFalse(app.textFields["commandField"].waitForExistence(timeout: 2))
+        let address = app.textFields["addressField"]
+        expectation(for: NSPredicate(format: "value CONTAINS 'Garden'"), evaluatedWith: address)
+        waitForExpectations(timeout: 5)
+        XCTAssertEqual(sidebar.staticTexts.matching(identifier: "tabRow").count, 2, "Switching doesn't open a tab")
+
+        // Esc closes the command bar without doing anything.
+        app.typeKey("t", modifierFlags: .command)
+        XCTAssertTrue(app.textFields["commandField"].waitForExistence(timeout: 5))
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(app.textFields["commandField"].waitForNonExistence(timeout: 5))
+    }
+
     /// macOS window tabbing is off, so the View menu has no "Show Tab Bar".
     @MainActor
     func testWindowTabbingMenuItemsAreHidden() throws {

@@ -17,18 +17,16 @@ struct AddressField: View {
             .onSubmit {
                 let submitted = text
                 Task {
-                    // Submit before giving up focus: losing focus cancels a new tab in progress.
                     await model.submitAddress(submitted)
                     isFocused = false
                 }
             }
             .onExitCommand {
-                model.cancelNewTab()
                 isFocused = false
                 text = currentAddress
             }
             .onChange(of: model.addressFocusRequest) {
-                text = model.isComposingNewTab ? "" : currentAddress
+                text = currentAddress
                 // Select the whole address so typing replaces it, like Safari.
                 selection = TextSelection(range: text.startIndex..<text.endIndex)
                 isFocused = true
@@ -39,7 +37,6 @@ struct AddressField: View {
             .onChange(of: isFocused) {
                 // Leaving the field shows the page's real URL again, replacing whatever was typed.
                 guard !isFocused else { return }
-                if model.isComposingNewTab { model.cancelNewTab() }
                 text = currentAddress
             }
             .onAppear { text = currentAddress }

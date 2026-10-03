@@ -3,8 +3,7 @@ import SwiftUI
 
 /// The row of Spaces at the bottom of the sidebar, with a button to add one.
 struct SpaceSwitcher: View {
-    let model: BrowserModel
-    @State private var isCreatingSpace = false
+    @Bindable var model: BrowserModel
     @State private var renaming: Space?
     @State private var deleting: Space?
 
@@ -27,7 +26,7 @@ struct SpaceSwitcher: View {
             }
             .scrollIndicators(.never)
 
-            Button("New Space", systemImage: "plus") { isCreatingSpace = true }
+            Button("New Space", systemImage: "plus") { model.isCreatingSpace = true }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)
                 .help("New Space")
@@ -38,7 +37,7 @@ struct SpaceSwitcher: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Spaces")
         .accessibilityIdentifier("spaceSwitcher")
-        .sheet(isPresented: $isCreatingSpace) {
+        .sheet(isPresented: $model.isCreatingSpace) {
             NewSpaceSheet(model: model)
         }
         .sheet(item: $renaming) { space in

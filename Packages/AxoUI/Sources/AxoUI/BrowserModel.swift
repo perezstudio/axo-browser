@@ -25,8 +25,6 @@ public final class BrowserModel {
     public private(set) var selectedTabID: AxoCore.Tab.ID?
     /// The live state of the selected tab's web view.
     public private(set) var selectedPage: WebTabState?
-    /// Whether the address field is composing a new tab rather than editing the selected one.
-    public private(set) var isComposingNewTab = false
     /// Incremented to ask the address field to take focus.
     public private(set) var addressFocusRequest = 0
     /// A problem worth telling the user about, such as the database failing to open.
@@ -35,6 +33,16 @@ public final class BrowserModel {
     public var isShowingDownloads = false
     /// Whether the archived tabs list is open.
     public var isShowingArchive = false
+    /// Whether the New Space sheet is open.
+    public var isCreatingSpace = false
+    /// Whether the command bar is showing.
+    public private(set) var isCommandBarVisible = false
+    /// What's typed in the command bar.
+    public private(set) var commandQuery = ""
+    /// The command bar's rows, best first.
+    public private(set) var commandResults: [CommandResult] = []
+    /// The highlighted row.
+    public private(set) var commandSelection = 0
     /// Whether the find bar is showing above the page.
     public private(set) var isFindBarVisible = false
     /// The text to find in the selected page.
@@ -67,6 +75,12 @@ public final class BrowserModel {
     @ObservationIgnored public var archiveCheckInterval: Duration = .seconds(60 * 60)
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private var archiveTask: Task<Void, Never>?
+    @ObservationIgnored private var commandSearchTask: Task<Void, Never>?
+    /// The most recent page-change save; each new one waits for it, keeping saves in order.
+    @ObservationIgnored private var pageChangeSave: Task<Void, Never>?
+    /// Tabs whose current page was already counted as a visit since launch. A tab's first page
+    /// change counts even if its saved URL is unchanged, since that's a fresh load.
+    @ObservationIgnored private var hasRecordedVisit: Set<AxoCore.Tab.ID> = []
     @ObservationIgnored private let prompts = PagePromptQueue()
     /// Hosts whose saved icon was already looked up, so each is read from the database once.
     @ObservationIgnored private var lookedUpFaviconHosts: Set<String> = []
@@ -283,7 +297,6 @@ public final class BrowserModel {
 
     /// Shows the tab with `id`, or nothing if `id` is `nil`.
     public func select(_ id: AxoCore.Tab.ID?) {
-        isComposingNewTab = false
         if id != selectedTabID, isFindBarVisible {
             closeFindBar()
         }
@@ -305,27 +318,21 @@ public final class BrowserModel {
 
     // MARK: Tabs
 
-    /// Starts composing a new tab: the address field clears and takes focus.
+    /// Starts a new tab by opening the command bar, like Arc.
     public func beginNewTab() {
-        isComposingNewTab = true
-        focusAddressField()
+        showCommandBar()
     }
 
-    /// Asks the address field to take focus.
+    /// Asks the address field to take focus, with its address selected.
     public func focusAddressField() {
         addressFocusRequest += 1
     }
 
-    /// Stops composing a new tab without opening one.
-    public func cancelNewTab() {
-        isComposingNewTab = false
-    }
-
-    /// Handles text submitted from the address field: opens a new tab when composing one or when
-    /// no tab is selected, and otherwise loads it in the selected tab.
+    /// Handles text submitted from the address field: loads it in the selected tab, or opens a
+    /// new tab when none is selected.
     public func submitAddress(_ text: String) async {
         guard let url = AddressInput.url(from: text) else { return }
-        if isComposingNewTab || selectedTabID == nil {
+        if selectedTabID == nil {
             await openTab(url: url)
         } else if let tabID = selectedTabID {
             pool.load(url, in: tabID)
@@ -643,6 +650,96 @@ public final class BrowserModel {
         return response == .OK ? panel.urls : nil
     }
 
+    // MARK: Command bar
+
+    /// Opens the command bar with an empty query.
+    public func showCommandBar() {
+        isCommandBarVisible = true
+        commandQuery = ""
+        refreshCommandResults()
+    }
+
+    /// Closes the command bar.
+    public func hideCommandBar() {
+        commandSearchTask?.cancel()
+        isCommandBarVisible = false
+    }
+
+    /// Updates the query and its results: typed-text, tab, and action rows right away, then
+    /// history from the full-text index.
+    public func setCommandQuery(_ query: String) {
+        // A text field commits its value again on Return; that's not a new query, and treating
+        // it as one would reset the highlight before the highlighted row runs.
+        guard query != commandQuery else { return }
+        commandQuery = query
+        refreshCommandResults()
+    }
+
+    /// Recomputes the results for the current query and highlights the first one.
+    private func refreshCommandResults() {
+        let query = commandQuery
+        commandResults = CommandRanking.immediateResults(for: query, tabs: tabs, availableActions: availableActions)
+        commandSelection = 0
+        commandSearchTask?.cancel()
+        guard let profileID = space?.profileID, !query.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        let history = store.history
+        commandSearchTask = Task { [weak self] in
+            let items = (try? await history.search(query, profileID: profileID)) ?? []
+            guard let self, !Task.isCancelled, self.commandQuery == query else { return }
+            self.commandResults += CommandRanking.historyResults(items, excludingOpen: self.tabs)
+        }
+    }
+
+    /// Moves the highlight up or down, staying within the results.
+    public func moveCommandSelection(by offset: Int) {
+        guard !commandResults.isEmpty else { return }
+        commandSelection = min(max(commandSelection + offset, 0), commandResults.count - 1)
+    }
+
+    /// Runs the highlighted row (or `index`), then closes the command bar.
+    public func runCommand(at index: Int? = nil) async {
+        let index = index ?? commandSelection
+        guard commandResults.indices.contains(index) else { return }
+        let result = commandResults[index]
+        hideCommandBar()
+        switch result {
+        case .open(let url, _, _):
+            await openTab(url: url)
+        case .tab(let tab):
+            select(tab.id)
+        case .history(let item):
+            await openTab(url: item.url)
+        case .action(let action):
+            await perform(action)
+        }
+    }
+
+    /// Actions that make sense right now; for example, Pin Tab needs an unpinned selected tab.
+    var availableActions: [CommandAction] {
+        CommandAction.allCases.filter { action in
+            switch action {
+            case .pinTab: selectedTab.map { !$0.isPinned } ?? false
+            case .unpinTab: selectedTab?.isPinned ?? false
+            case .findInPage, .printPage: selectedTabID != nil
+            default: true
+            }
+        }
+    }
+
+    private func perform(_ action: CommandAction) async {
+        switch action {
+        case .newSpace: isCreatingSpace = true
+        case .newFolder: namingRequest = .newFolder(parent: nil, moving: nil)
+        case .reopenClosedTab: await reopenLastClosedTab()
+        case .showArchivedTabs: isShowingArchive = true
+        case .showDownloads: isShowingDownloads = true
+        case .pinTab: if let id = selectedTabID { await setPinned(true, tabID: id) }
+        case .unpinTab: if let id = selectedTabID { await setPinned(false, tabID: id) }
+        case .findInPage: showFindBar()
+        case .printPage: printSelectedTab()
+        }
+    }
+
     // MARK: Find and print
 
     /// Shows the find bar (or focuses it if it's already showing).
@@ -749,10 +846,26 @@ public final class BrowserModel {
         }
     }
 
+    /// Saves a page change to the tab and to the profile's history. A new URL counts as a
+    /// visit; a title for the same URL only updates the title.
+    ///
+    /// Changes are saved strictly in order. A load usually reports its URL and then its title
+    /// moments apart; saving them concurrently let both read the old URL and count two visits.
     private func persistPageChange(tabID: AxoCore.Tab.ID, url: URL, title: String) {
-        Task {
+        let previousSave = pageChangeSave
+        pageChangeSave = Task {
+            await previousSave?.value
             do {
+                let previous = try await store.tab(id: tabID)
                 try await store.updateTab(id: tabID, url: url, title: title)
+                guard let previous,
+                      let profileID = spaces.first(where: { $0.id == previous.spaceID })?.profileID else { return }
+                if previous.url != url || !hasRecordedVisit.contains(tabID) {
+                    hasRecordedVisit.insert(tabID)
+                    try await store.history.recordVisit(to: url, title: title, profileID: profileID, at: now())
+                } else {
+                    try await store.history.updateTitle(title, for: url, profileID: profileID)
+                }
             } catch TabStoreError.tabNotFound {
                 // The tab closed before its last page change was saved.
             } catch {

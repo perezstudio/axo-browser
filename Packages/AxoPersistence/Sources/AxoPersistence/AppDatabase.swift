@@ -116,6 +116,29 @@ public final class AppDatabase: Sendable {
             try db.create(index: "tab_on_folderID", on: "tab", columns: ["folderID"])
         }
 
+        // Browsing history, one row per profile and URL, with an FTS5 index over title and
+        // URL that SQLite keeps in sync through triggers. The command bar searches it on every
+        // keystroke.
+        migrator.registerMigration("v5-history") { db in
+            try db.create(table: "historyItem") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("profileID", .blob).notNull()
+                    .references("profile", onDelete: .cascade)
+                t.column("url", .text).notNull()
+                t.column("title", .text).notNull().defaults(to: "")
+                t.column("visitCount", .integer).notNull().defaults(to: 0)
+                t.column("lastVisitedAt", .datetime).notNull()
+                t.uniqueKey(["profileID", "url"])
+            }
+            try db.create(index: "historyItem_on_profileID_lastVisitedAt", on: "historyItem", columns: ["profileID", "lastVisitedAt"])
+            try db.create(virtualTable: "historyItem_ft", using: FTS5()) { t in
+                t.synchronize(withTable: "historyItem")
+                t.tokenizer = .unicode61()
+                t.column("title")
+                t.column("url")
+            }
+        }
+
         return migrator
     }
 

@@ -37,8 +37,13 @@ struct PinningAndArchiveModelTests {
         return url
     }
 
+    /// Opens tabs and waits for each page to load, so a load can't overwrite a test's later
+    /// changes to the tab.
     private func open(_ names: [String]) async throws -> [AxoCore.Tab] {
-        for name in names { await model.openTab(url: try page(name)) }
+        for name in names {
+            await model.openTab(url: try page(name))
+            try await waitUntil { model.selectedPage?.title == name && model.selectedPage?.isLoading == false }
+        }
         return model.tabs
     }
 
