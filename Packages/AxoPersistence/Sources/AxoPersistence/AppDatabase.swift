@@ -157,6 +157,16 @@ public final class AppDatabase: Sendable {
             }
         }
 
+        // Per-extension access the person chose: whether it can reach the sites it requested
+        // ("all") or only the tab where it's clicked ("click"), and the optional permissions and
+        // site patterns they approved later (a JSON array of strings).
+        migrator.registerMigration("v7-extension-access") { db in
+            try db.alter(table: "webExtension") { t in
+                t.add(column: "siteAccess", .text).notNull().defaults(to: "all")
+                t.add(column: "grantedOptional", .text).notNull().defaults(to: "[]")
+            }
+        }
+
         return migrator
     }
 

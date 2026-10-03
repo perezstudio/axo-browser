@@ -269,8 +269,8 @@ Each milestone should be usable as a daily driver before the next one starts.
 
 **Milestone 3: Extensions and developer tools**
 
-- [ ] Install Chrome extensions from CRX files and unpacked folders (developer mode). Done: verified CRX3 parsing, safe unzip, and manifest checks (`AxoCRX`), a per-profile installer, saved installs (`v6-extensions`), and one `WKWebExtensionController` per profile attached to its web views (`ExtensionManager`), so content scripts run. Next: install UI, the install prompt, and the tab and window adapters.
-- [ ] Extension toolbar, popups, permission management. The toolbar (icons, badges) and popups are done, along with the tab and window adapters for `chrome.tabs` and `chrome.windows`. Permission management and install UI are next.
+- [x] Install Chrome extensions from CRX files and unpacked folders (developer mode): verified CRX3, safe unzip, an install prompt listing what the extension can do, and one `WKWebExtensionController` per profile. Installing from the Chrome Web Store page comes later.
+- [x] Extension toolbar, popups, and permission management: toolbar buttons with badges and popups, `chrome.tabs` and `chrome.windows`, an Extensions window (on/off, site access, remove, errors), and prompts for optional permissions, which are remembered.
 - [ ] Built-in Web Inspector, docked or separate, including extension background pages
 - [ ] Test targets: 1Password or Bitwarden, and uBlock Origin Lite
 

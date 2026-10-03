@@ -23,6 +23,34 @@ public final class ExtensionManager {
 
     /// The browser window extensions see. Set by the app.
     @ObservationIgnored public weak var browser: (any ExtensionBrowsing)?
+    /// Asked when an extension requests more access after install (optional permissions or
+    /// sites). Return whether the person allowed it. Requests are denied when this is `nil`.
+    @ObservationIgnored public var onPermissionRequest: ((PermissionRequest) async -> Bool)?
+
+    /// An extension asking for more access.
+    public struct PermissionRequest: Sendable {
+        /// The extension asking.
+        public var extensionID: String
+        /// Its display name.
+        public var extensionName: String
+        /// What it wants, in plain language.
+        public var lines: [String]
+    }
+
+    /// What an extension will be able to do, for the install prompt.
+    public struct InstallSummary: Sendable, Equatable {
+        /// The extension ID.
+        public var extensionID: String
+        /// Its display name (localized names resolved by WebKit).
+        public var name: String
+        /// Its version.
+        public var version: String
+        /// What it can do, in plain language.
+        public var lines: [String]
+        /// Whether it's an unpacked developer folder.
+        public var isUnpacked: Bool
+    }
+
     /// Called when an extension's toolbar button should show its popup.
     @ObservationIgnored public var onPresentPopup: ((_ extensionID: String, _ popover: NSPopover) -> Void)?
 
@@ -200,6 +228,82 @@ public final class ExtensionManager {
         return try await register(installed, profileID: profileID)
     }
 
+    /// Verifies and saves an extension from a CRX file or unpacked folder, turned off, and
+    /// describes what it can do. Call ``confirmInstall(_:profileID:)`` once the person agrees, or
+    /// ``uninstall(_:profileID:)`` if they don't. Updating an installed extension keeps it on.
+    public func prepareInstall(from url: URL, for profileID: Profile.ID) async throws -> InstallSummary {
+        var isDirectory: ObjCBool = false
+        FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+        let installed = isDirectory.boolValue
+            ? try installer.inspectUnpacked(at: url)
+            : try installer.install(crx: try Data(contentsOf: url), for: profileID)
+        let isUpdate = try await store.record(installed.id, profileID: profileID) != nil
+        try await store.save(record(for: installed, profileID: profileID, enabled: false))
+        if !isUpdate {
+            try await store.setEnabled(false, extensionID: installed.id, profileID: profileID)
+        }
+        let webExtension = try await WKWebExtension(resourceBaseURL: installed.folder)
+        return InstallSummary(
+            extensionID: installed.id,
+            name: webExtension.displayName ?? installed.manifest.name,
+            version: webExtension.version ?? installed.manifest.version,
+            lines: Self.describe(webExtension),
+            isUnpacked: installed.isUnpacked
+        )
+    }
+
+    /// Turns on an extension the person agreed to install.
+    public func confirmInstall(_ extensionID: String, profileID: Profile.ID) async throws {
+        unload(extensionID, profileID: profileID)
+        try await setEnabled(true, extensionID: extensionID, profileID: profileID)
+    }
+
+    /// Sets which sites an extension can reach, and reloads it to apply.
+    public func setSiteAccess(_ access: WebExtensionRecord.SiteAccess, extensionID: String, profileID: Profile.ID) async throws {
+        try await store.setSiteAccess(access, extensionID: extensionID, profileID: profileID)
+        guard let record = try await store.record(extensionID, profileID: profileID), record.isEnabled else { return }
+        unload(extensionID, profileID: profileID)
+        await load(record)
+    }
+
+    /// What an extension asks for, in plain language.
+    static func describe(_ webExtension: WKWebExtension) -> [String] {
+        PermissionDescriptions.lines(
+            permissions: webExtension.requestedPermissions.map(\.rawValue),
+            matchPatterns: webExtension.allRequestedMatchPatterns.map(\.string)
+        )
+    }
+
+    /// What a loaded extension can do now, in plain language.
+    public func grantedDescription(for extensionID: String, profileID: Profile.ID) -> [String] {
+        guard let context = context(for: extensionID, profileID: profileID) else { return [] }
+        return PermissionDescriptions.lines(
+            permissions: context.grantedPermissions.keys.map(\.rawValue),
+            matchPatterns: context.grantedPermissionMatchPatterns.keys.map(\.string)
+        )
+    }
+
+    /// Asks the app about an extension's request for more access, and remembers approvals.
+    func requestAccess(
+        _ context: WKWebExtensionContext,
+        permissions: [String],
+        patterns: [String]
+    ) async -> Bool {
+        guard let profileID = profileID(of: context), let ask = onPermissionRequest else { return false }
+        let request = PermissionRequest(
+            extensionID: context.uniqueIdentifier,
+            extensionName: context.webExtension.displayName ?? context.uniqueIdentifier,
+            lines: PermissionDescriptions.lines(permissions: permissions, matchPatterns: patterns)
+        )
+        guard await ask(request) else { return false }
+        try? await store.addGrantedOptional(permissions + patterns, extensionID: context.uniqueIdentifier, profileID: profileID)
+        return true
+    }
+
+    private func profileID(of context: WKWebExtensionContext) -> Profile.ID? {
+        contexts.first { $0.value[context.uniqueIdentifier] === context }?.key
+    }
+
     /// Turns an extension on (loading it) or off (unloading it).
     public func setEnabled(_ enabled: Bool, extensionID: String, profileID: Profile.ID) async throws {
         try await store.setEnabled(enabled, extensionID: extensionID, profileID: profileID)
@@ -234,15 +338,20 @@ public final class ExtensionManager {
         try await store.extensions(for: profileID)
     }
 
-    private func register(_ installed: InstalledExtension, profileID: Profile.ID) async throws -> WebExtensionRecord {
-        try await store.save(WebExtensionRecord(
+    private func record(for installed: InstalledExtension, profileID: Profile.ID, enabled: Bool = true) -> WebExtensionRecord {
+        WebExtensionRecord(
             profileID: profileID,
             extensionID: installed.id,
             name: installed.manifest.name,
             version: installed.manifest.version,
             folderPath: installed.folder.path,
-            isUnpacked: installed.isUnpacked
-        ))
+            isUnpacked: installed.isUnpacked,
+            isEnabled: enabled
+        )
+    }
+
+    private func register(_ installed: InstalledExtension, profileID: Profile.ID) async throws -> WebExtensionRecord {
+        try await store.save(record(for: installed, profileID: profileID))
         let record = try await store.record(installed.id, profileID: profileID) ?? {
             throw ExtensionInstallError.couldNotWrite
         }()
@@ -270,13 +379,28 @@ public final class ExtensionManager {
             // Developers can inspect background pages from Safari's Develop menu until Axo's own
             // Web Inspector arrives.
             context.isInspectable = true
-            // Grant what the manifest asks for, as Chrome does at install. Optional permissions
-            // stay ungranted until the extension requests them.
+            // Grant what the manifest asks for, as Chrome does once the install prompt is
+            // accepted. With site access set to "on click", sites are only reachable through
+            // activeTab when the toolbar button is clicked. Optional permissions are granted only
+            // once the person approved them.
             for permission in webExtension.requestedPermissions {
                 context.setPermissionStatus(.grantedExplicitly, for: permission)
             }
-            for pattern in webExtension.allRequestedMatchPatterns {
-                context.setPermissionStatus(.grantedExplicitly, for: pattern)
+            if record.siteAccess == .all {
+                for pattern in webExtension.allRequestedMatchPatterns {
+                    context.setPermissionStatus(.grantedExplicitly, for: pattern)
+                }
+            } else {
+                for pattern in webExtension.allRequestedMatchPatterns {
+                    context.setPermissionStatus(.deniedExplicitly, for: pattern)
+                }
+            }
+            for approval in record.grantedOptional {
+                if let pattern = try? WKWebExtension.MatchPattern(string: approval) {
+                    context.setPermissionStatus(.grantedExplicitly, for: pattern)
+                } else {
+                    context.setPermissionStatus(.grantedExplicitly, for: WKWebExtension.Permission(rawValue: approval))
+                }
             }
             try controller(for: record.profileID).load(context)
             contexts[record.profileID, default: [:]][record.extensionID] = context

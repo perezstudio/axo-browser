@@ -146,7 +146,7 @@ struct SystemDefaultBrowser: DefaultBrowserSetting {
 /// depend on each other: extensions see the window's tabs, hear about tab events, and show their
 /// toolbar buttons and popups.
 @MainActor
-final class ExtensionBridge: ExtensionBrowsing, ExtensionToolbarProviding {
+final class ExtensionBridge: ExtensionBrowsing, ExtensionToolbarProviding, ExtensionManaging {
     private weak var model: BrowserModel?
     private let manager: ExtensionManager
 
@@ -158,6 +158,12 @@ final class ExtensionBridge: ExtensionBrowsing, ExtensionToolbarProviding {
             model?.presentExtensionPopup(popover, extensionID: extensionID)
         }
         model.extensionToolbar = self
+        model.extensionManagement = self
+        manager.onPermissionRequest = { [weak model] request in
+            await model?.askExtensionPermission(
+                ExtensionPermissionPrompt(extensionName: request.extensionName, lines: request.lines)
+            ) ?? false
+        }
         model.onTabEvent = { [weak manager] event in
             guard let manager else { return }
             switch event {
@@ -203,5 +209,48 @@ final class ExtensionBridge: ExtensionBrowsing, ExtensionToolbarProviding {
 
     func performAction(extensionID: String, profileID: Profile.ID, tabID: AxoCore.Tab.ID?) {
         manager.performAction(extensionID: extensionID, profileID: profileID, tabID: tabID)
+    }
+
+    // MARK: ExtensionManaging
+
+    func prepareInstall(from url: URL, profileID: Profile.ID) async throws -> ExtensionInstallPrompt {
+        let summary = try await manager.prepareInstall(from: url, for: profileID)
+        return ExtensionInstallPrompt(
+            id: summary.extensionID, name: summary.name, version: summary.version,
+            lines: summary.lines, isUnpacked: summary.isUnpacked
+        )
+    }
+
+    func confirmInstall(_ extensionID: String, profileID: Profile.ID) async throws {
+        try await manager.confirmInstall(extensionID, profileID: profileID)
+    }
+
+    func uninstall(_ extensionID: String, profileID: Profile.ID) async throws {
+        try await manager.uninstall(extensionID, profileID: profileID)
+    }
+
+    func installedExtensions(profileID: Profile.ID) async -> [ExtensionSummary] {
+        let records = (try? await manager.extensions(for: profileID)) ?? []
+        return records.map { record in
+            let context = manager.context(for: record.extensionID, profileID: profileID)
+            return ExtensionSummary(
+                id: record.extensionID,
+                name: context?.webExtension.displayName ?? record.name,
+                version: record.version,
+                isEnabled: record.isEnabled,
+                isUnpacked: record.isUnpacked,
+                reachesAllRequestedSites: record.siteAccess == .all,
+                lines: manager.grantedDescription(for: record.extensionID, profileID: profileID),
+                loadError: manager.loadErrors[record.extensionID]
+            )
+        }
+    }
+
+    func setEnabled(_ enabled: Bool, extensionID: String, profileID: Profile.ID) async throws {
+        try await manager.setEnabled(enabled, extensionID: extensionID, profileID: profileID)
+    }
+
+    func setReachesAllRequestedSites(_ all: Bool, extensionID: String, profileID: Profile.ID) async throws {
+        try await manager.setSiteAccess(all ? .all : .click, extensionID: extensionID, profileID: profileID)
     }
 }

@@ -79,6 +79,12 @@ public final class BrowserModel {
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private var archiveTask: Task<Void, Never>?
     @ObservationIgnored private var commandSearchTask: Task<Void, Never>?
+    /// Installs and manages extensions. Set by the app.
+    @ObservationIgnored public var extensionManagement: (any ExtensionManaging)?
+    /// An extension waiting for the person to agree to add it.
+    public internal(set) var pendingExtensionInstall: ExtensionInstallPrompt?
+    /// Whether the Extensions window is open.
+    public var isShowingExtensions = false
     /// Extension toolbar buttons. Set by the app.
     @ObservationIgnored public var extensionToolbar: (any ExtensionToolbarProviding)?
     /// Called for tab and window events extensions hear about. Set by the app.
@@ -96,7 +102,7 @@ public final class BrowserModel {
     /// Tabs whose current page was already counted as a visit since launch. A tab's first page
     /// change counts even if its saved URL is unchanged, since that's a fresh load.
     @ObservationIgnored private var hasRecordedVisit: Set<AxoCore.Tab.ID> = []
-    @ObservationIgnored private let prompts = PagePromptQueue()
+    @ObservationIgnored let prompts = PagePromptQueue()
     /// Hosts whose saved icon was already looked up, so each is read from the database once.
     @ObservationIgnored private var lookedUpFaviconHosts: Set<String> = []
     @ObservationIgnored private let logger = Logger(subsystem: "com.perezstudio.Axo", category: "BrowserModel")

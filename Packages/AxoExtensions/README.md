@@ -39,7 +39,12 @@ No Axo or third-party dependencies.
 
 Known WebKit gap: `runtime.onInstalled` doesn't fire (see `docs/webkit-gaps.md`).
 
-Still to come in Milestone 3: install UI and prompt, an extensions manager window, and permission management.
+- **Install prompt:** `prepareInstall(from:for:)` verifies and saves a `.crx` file or an unpacked folder *turned off*, and returns an `InstallSummary` describing what it can do. Then `confirmInstall` turns it on, or `uninstall` removes it if the person declines. Updating an installed extension keeps it on.
+- **Site access:** `setSiteAccess(.all / .click, …)` grants the requested sites, or denies them so the extension reaches a page only through `activeTab` when its button is clicked. The choice is saved and reapplied at load.
+- **Optional permissions:** when an extension calls `permissions.request`, the controller delegate asks `onPermissionRequest` with a `PermissionRequest` (extension name and plain-language lines). Approvals are saved (`grantedOptional`) and restored at load. `grantedDescription(for:profileID:)` describes what a loaded extension can do now.
+- **`PermissionDescriptions`** turns WebKit permission names and match patterns into plain lines ("Read and change your data on all websites", "See your open tabs and their addresses", …), with the most significant first. Quiet permissions such as `storage` and `alarms` are left out.
+
+Still to come in Milestone 3: the built-in Web Inspector, and testing with real extensions.
 
 ## Testing
 

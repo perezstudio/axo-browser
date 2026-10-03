@@ -19,6 +19,7 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
 | --- | --- |
 | `v1-profiles-spaces-tabs` | `profile`, `space` (→ profile, cascade), `tab` (→ space, cascade) |
 | `v2-favicons` | `favicon` (site icons as 64 px PNGs, keyed by host) |
+| `v7-extension-access` | adds `webExtension.siteAccess` (`all` or `click`) and `grantedOptional` (a JSON array of approved optional permissions and patterns) |
 | `v6-extensions` | `webExtension` (installed extensions per profile with folder and enabled state; → profile, cascade) |
 | `v5-history` | `historyItem` (→ profile, cascade; unique per profile and URL) and `historyItem_ft`, an FTS5 index over title and URL kept in sync by triggers |
 | `v4-folders` | `folder` (→ space, cascade; `parentID` → folder, cascade) and `tab.folderID` (→ folder, set null) |

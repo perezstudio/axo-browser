@@ -322,6 +322,72 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(app.popovers.firstMatch.staticTexts["Hello from Axo Helper"].waitForExistence(timeout: 10))
     }
 
+    /// Writes an unpacked test extension and returns its folder.
+    private func writeTestExtension(name: String) throws -> URL {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "AxoUITestExtension-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try """
+        {"name": "\(name)", "version": "1.0", "manifest_version": 3, "description": "UI test extension.",
+         "permissions": ["tabs"], "host_permissions": ["<all_urls>"],
+         "action": {"default_title": "\(name)", "default_popup": "popup.html"}}
+        """.write(to: folder.appending(path: "manifest.json"), atomically: true, encoding: .utf8)
+        try "<!doctype html><title>\(name)</title><p>\(name)</p>".write(to: folder.appending(path: "popup.html"), atomically: true, encoding: .utf8)
+        return folder
+    }
+
+    /// Install Extension… shows a prompt with what the extension can do; adding it puts its
+    /// button in the toolbar.
+    @MainActor
+    func testInstallingAnExtensionAsksFirst() throws {
+        let folder = try writeTestExtension(name: "Reading List")
+        let app = launchApp()
+        XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 5))
+
+        app.menuBars.menuBarItems["File"].click()
+        app.menuBars.menuItems["Install Extension…"].click()
+        let panel = app.sheets.firstMatch
+        XCTAssertTrue(panel.waitForExistence(timeout: 5))
+        app.typeKey("g", modifierFlags: [.command, .shift])
+        app.typeText(folder.path + "\n")
+        let install = panel.buttons["Install"]
+        XCTAssertTrue(install.waitForExistence(timeout: 5))
+        install.click()
+
+        let prompt = app.descendants(matching: .any)["extensionInstallPrompt"]
+        XCTAssertTrue(prompt.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Add “Reading List”?"].exists)
+        // The permission lines are one accessibility element, so VoiceOver reads them together.
+        let lines = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@",
+                                  "Read and change your data on all websites", "Read and change your data on all websites"))
+        XCTAssertTrue(lines.firstMatch.exists)
+        XCTAssertFalse(app.buttons.matching(identifier: "extensionButton").firstMatch.exists, "Nothing runs before agreeing")
+
+        app.buttons["confirmExtensionInstall"].click()
+        let button = app.buttons.matching(NSPredicate(format: "identifier == 'extensionButton' AND label CONTAINS 'Reading List'")).firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 10))
+    }
+
+    /// ⇧⌘E lists installed extensions; turning one off removes its toolbar button.
+    @MainActor
+    func testExtensionsWindowTurnsExtensionsOff() throws {
+        let folder = try writeTestExtension(name: "Axo Helper")
+        let app = Self.makeApp()
+        app.launchEnvironment["AXO_UI_TESTING_EXTENSION"] = folder.path
+        app.launch()
+        let button = app.buttons.matching(NSPredicate(format: "identifier == 'extensionButton' AND label CONTAINS 'Axo Helper'")).firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 10))
+
+        app.typeKey("e", modifierFlags: [.command, .shift])
+        let window = app.descendants(matching: .any)["extensionsWindow"]
+        XCTAssertTrue(window.waitForExistence(timeout: 5))
+        XCTAssertTrue(window.staticTexts["Axo Helper"].waitForExistence(timeout: 5))
+
+        // A switch-style toggle is exposed as a checkbox on macOS.
+        window.checkBoxes.firstMatch.click()
+        XCTAssertTrue(button.waitForNonExistence(timeout: 10))
+    }
+
     /// macOS window tabbing is off, so the View menu has no "Show Tab Bar".
     @MainActor
     func testWindowTabbingMenuItemsAreHidden() throws {

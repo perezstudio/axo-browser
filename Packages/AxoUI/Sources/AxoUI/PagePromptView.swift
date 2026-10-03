@@ -40,6 +40,8 @@ private struct PagePromptModifier: ViewModifier {
             "Allow “\(request.origin.displayName)” to use your \(Self.noun(for: request.kind))?"
         case .dialog(let dialog):
             dialog.origin.host.isEmpty ? "This page says" : "\(dialog.origin.displayName) says"
+        case .extensionPermission(let prompt):
+            "Allow “\(prompt.extensionName)” more access?"
         case nil:
             ""
         }
@@ -48,7 +50,7 @@ private struct PagePromptModifier: ViewModifier {
     @ViewBuilder
     private func actions(for prompt: PagePrompt) -> some View {
         switch prompt.content {
-        case .permission:
+        case .permission, .extensionPermission:
             Button("Don't Allow", role: .cancel) { model.answerPermission(.deny) }
             Button("Allow") { model.answerPermission(.allow) }
         case .dialog(let dialog):
@@ -74,6 +76,8 @@ private struct PagePromptModifier: ViewModifier {
             Text("Axo remembers your choice for this site until you quit.")
         case .dialog(let dialog):
             Text(dialog.message)
+        case .extensionPermission(let request):
+            Text("It wants to:\n" + request.lines.map { "• " + $0 }.joined(separator: "\n"))
         }
     }
 
