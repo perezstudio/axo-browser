@@ -388,6 +388,27 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(button.waitForNonExistence(timeout: 10))
     }
 
+    /// ⌥⌘I opens Axo's Web Inspector for the selected page, docked in the window.
+    @MainActor
+    func testWebInspectorOpens() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,<title>Inspect</title><h1>Inspect me</h1>\n")
+        XCTAssertTrue(sidebar.staticTexts["Inspect"].waitForExistence(timeout: 10))
+
+        app.typeKey("i", modifierFlags: [.command, .option])
+
+        // The inspector's own interface is a web page with tabs like Elements and Console.
+        let inspectorTab = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == 'Elements' OR title == 'Elements' OR value == 'Elements'"))
+            .firstMatch
+        XCTAssertTrue(inspectorTab.waitForExistence(timeout: 15))
+        let window = app.windows.firstMatch.frame
+        XCTAssertTrue(window.contains(inspectorTab.frame), "Docked inside the browser window")
+    }
+
     /// macOS window tabbing is off, so the View menu has no "Show Tab Bar".
     @MainActor
     func testWindowTabbingMenuItemsAreHidden() throws {

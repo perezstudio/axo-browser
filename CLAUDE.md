@@ -43,7 +43,8 @@ The full plan, architecture, and reasoning behind every decision are in `docs/PL
 - The app's database lives at `~/Library/Application Support/Axo/Axo.sqlite`. The last Space shown is remembered in `UserDefaults` under `lastSpaceID` (not in UI testing).
 - To look at the UI, attach `XCTAttachment(screenshot: app.windows.firstMatch.screenshot())` in a UI test and export it from the result bundle. It captures only Axo's window and doesn't need accessibility access. Don't screen-capture the desktop, which can include the user's other windows.
 - Printing can't be tested automatically: WebKit print operations hang when run synchronously and need a window to run modally. Test the operation's configuration and check the print sheet by hand.
-- Don't use ⌥ with dead-key letters (E, I, N, U, `) in shortcuts. On US layouts ⌥N, for example, starts a dead key, and ⌥⌘N never fired. New Folder uses ⌃⌘N instead.
+- Developer tools: the app adds a `WebViewPool` configurator and sets `ExtensionManager.configureExtensionWebViews` to `WebInspector.enableDeveloperTools`, so pages, popups, and background pages can be inspected. The bridge falls back to `isInspectable` (Safari's Develop menu) when the private inspector isn't available.
+- Don't use ⌥ with dead-key letters (E, I, N, U, `) in new shortcuts. On US layouts ⌥N, for example, starts a dead key, and ⌥⌘N never fired, so New Folder uses ⌃⌘N instead. ⌥⌘I (Show Web Inspector, the macOS convention) does work; its UI test proves it.
 - macOS window tabbing is off (`NSWindow.allowsAutomaticWindowTabbing = false`), because Axo's tabs live in the sidebar.
 - Printing triggers macOS's Local Network prompt (printer discovery), and pages can reach local devices through WebKit's network process. `NSLocalNetworkUsageDescription` explains both. Keep it accurate if network behavior changes.
 

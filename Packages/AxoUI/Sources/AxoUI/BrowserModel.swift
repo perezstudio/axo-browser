@@ -79,6 +79,8 @@ public final class BrowserModel {
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private var archiveTask: Task<Void, Never>?
     @ObservationIgnored private var commandSearchTask: Task<Void, Never>?
+    /// Opens the Web Inspector. Set by the app.
+    @ObservationIgnored public var developerTools: (any DeveloperToolsProviding)?
     /// Installs and manages extensions. Set by the app.
     @ObservationIgnored public var extensionManagement: (any ExtensionManaging)?
     /// An extension waiting for the person to agree to add it.

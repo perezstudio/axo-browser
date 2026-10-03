@@ -65,10 +65,13 @@ struct WebViewPoolTests {
     @Test func newWebViewsCanBeConfiguredPerProfile() throws {
         let pool = WebViewPool.forTesting()
         var configured: [Profile.ID] = []
-        pool.configureWebView = { configuration, profile in
+        var order: [String] = []
+        pool.addWebViewConfigurator { configuration, profile in
             configured.append(profile)
+            order.append("first")
             configuration.applicationNameForUserAgent = "AxoTest"
         }
+        pool.addWebViewConfigurator { _, _ in order.append("second") }
 
         let webView = pool.webView(for: .testTab(url: try pages.page("one")), profileID: profileID)
 
@@ -76,6 +79,7 @@ struct WebViewPoolTests {
         #expect(webView.configuration.applicationNameForUserAgent == "AxoTest")
         _ = pool.webView(for: .testTab(url: try pages.page("two")), profileID: profileID)
         #expect(configured.count == 2, "Every new web view is configured")
+        #expect(order == ["first", "second", "first", "second"], "Configurators run in order")
     }
 
     // MARK: Loading and state

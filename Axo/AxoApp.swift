@@ -7,6 +7,7 @@
 
 import AxoCore
 import AxoExtensions
+import AxoInspector
 import AxoIntegration
 import AxoUI
 import AxoWeb
@@ -80,6 +81,12 @@ enum AppEnvironment {
             pool: pool,
             persistent: !isUITesting
         )
+        // Developer tools (Inspect Element and the Web Inspector) for pages and for extensions'
+        // popups and background pages.
+        pool.addWebViewConfigurator { configuration, _ in
+            WebInspector.enableDeveloperTools(in: configuration)
+        }
+        manager.configureExtensionWebViews = { WebInspector.enableDeveloperTools(in: $0) }
         extensionManager = manager
         Task {
             for profile in (try? await store.profiles()) ?? [] {
@@ -146,7 +153,7 @@ struct SystemDefaultBrowser: DefaultBrowserSetting {
 /// depend on each other: extensions see the window's tabs, hear about tab events, and show their
 /// toolbar buttons and popups.
 @MainActor
-final class ExtensionBridge: ExtensionBrowsing, ExtensionToolbarProviding, ExtensionManaging {
+final class ExtensionBridge: ExtensionBrowsing, ExtensionToolbarProviding, ExtensionManaging, DeveloperToolsProviding {
     private weak var model: BrowserModel?
     private let manager: ExtensionManager
 
@@ -159,6 +166,7 @@ final class ExtensionBridge: ExtensionBrowsing, ExtensionToolbarProviding, Exten
         }
         model.extensionToolbar = self
         model.extensionManagement = self
+        model.developerTools = self
         manager.onPermissionRequest = { [weak model] request in
             await model?.askExtensionPermission(
                 ExtensionPermissionPrompt(extensionName: request.extensionName, lines: request.lines)
@@ -252,5 +260,33 @@ final class ExtensionBridge: ExtensionBrowsing, ExtensionToolbarProviding, Exten
 
     func setReachesAllRequestedSites(_ all: Bool, extensionID: String, profileID: Profile.ID) async throws {
         try await manager.setSiteAccess(all ? .all : .click, extensionID: extensionID, profileID: profileID)
+    }
+
+    func inspectBackgroundPage(_ extensionID: String, profileID: Profile.ID) async -> Bool {
+        guard let context = manager.context(for: extensionID, profileID: profileID) else { return false }
+        if WebInspector.backgroundWebView(of: context) == nil {
+            let failed: Bool = await withCheckedContinuation { continuation in
+                context.loadBackgroundContent { continuation.resume(returning: $0 != nil) }
+            }
+            if failed { return false }
+        }
+        guard let background = WebInspector.backgroundWebView(of: context) else { return false }
+        return WebInspector.show(background)
+    }
+
+    // MARK: DeveloperToolsProviding
+
+    func toggleInspector(for tabID: AxoCore.Tab.ID) -> Bool {
+        guard let webView = model?.pool.liveWebView(for: tabID) else { return true }
+        if WebInspector.toggle(webView) { return true }
+        WebInspector.allowSafariInspection(of: webView)
+        return false
+    }
+
+    func showConsole(for tabID: AxoCore.Tab.ID) -> Bool {
+        guard let webView = model?.pool.liveWebView(for: tabID) else { return true }
+        if WebInspector.showConsole(webView) { return true }
+        WebInspector.allowSafariInspection(of: webView)
+        return false
     }
 }

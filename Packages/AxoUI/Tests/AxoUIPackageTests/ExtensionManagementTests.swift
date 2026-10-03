@@ -26,6 +26,7 @@ final class FakeExtensionManagement: ExtensionManaging {
     func installedExtensions(profileID: Profile.ID) async -> [ExtensionSummary] { installed }
     func setEnabled(_ enabled: Bool, extensionID: String, profileID: Profile.ID) async throws {}
     func setReachesAllRequestedSites(_ all: Bool, extensionID: String, profileID: Profile.ID) async throws {}
+    func inspectBackgroundPage(_ extensionID: String, profileID: Profile.ID) async -> Bool { true }
 }
 
 @MainActor

@@ -116,6 +116,14 @@ public struct BrowserCommands: Commands {
                 .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .control)
             }
         }
+        CommandMenu("Develop") {
+            Button("Show Web Inspector") { model?.toggleWebInspector() }
+                .keyboardShortcut("i", modifiers: [.command, .option])
+                .disabled(model?.selectedTabID == nil || model?.developerTools == nil)
+            Button("Show JavaScript Console") { model?.showJavaScriptConsole() }
+                .keyboardShortcut("c", modifiers: [.command, .option])
+                .disabled(model?.selectedTabID == nil || model?.developerTools == nil)
+        }
         CommandMenu("History") {
             Button("Back") { model?.goBack() }
                 .keyboardShortcut("[")

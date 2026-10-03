@@ -75,6 +75,9 @@ public protocol ExtensionManaging: AnyObject {
     func setEnabled(_ enabled: Bool, extensionID: String, profileID: Profile.ID) async throws
     /// Lets an extension reach every site it asked for, or only where it's clicked.
     func setReachesAllRequestedSites(_ all: Bool, extensionID: String, profileID: Profile.ID) async throws
+    /// Opens the Web Inspector for an extension's background page, loading it first if needed.
+    /// Returns whether it could.
+    func inspectBackgroundPage(_ extensionID: String, profileID: Profile.ID) async -> Bool
 }
 
 extension BrowserModel {
@@ -264,6 +267,15 @@ private struct ExtensionRow: View {
                 Text(item.lines.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary)
             }
             HStack {
+                Button("Inspect Background Page") {
+                    guard let management = model.extensionManagement, let profileID = model.space?.profileID else { return }
+                    Task {
+                        if !(await management.inspectBackgroundPage(item.id, profileID: profileID)) {
+                            model.alertMessage = "\(item.name) has no background page to inspect, or it isn't running."
+                        }
+                    }
+                }
+                .disabled(!item.isEnabled)
                 Spacer()
                 Button("Remove", role: .destructive) {
                     change { try await $0.uninstall(item.id, profileID: $1) }
