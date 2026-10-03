@@ -82,6 +82,10 @@ final class AxoUITests: XCTestCase {
         app.typeKey("w", modifierFlags: .command)
         XCTAssertTrue(app.staticTexts["No Tab Open"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.windows.firstMatch.exists, "Closing the last tab must not close the window")
+
+        // With no tab open, ⌘W closes the window.
+        app.typeKey("w", modifierFlags: .command)
+        XCTAssertTrue(app.windows.firstMatch.waitForNonExistence(timeout: 5))
     }
 
     /// The New Tab button and a second tab: the sidebar lists both, and selecting one shows it.
@@ -133,6 +137,37 @@ final class AxoUITests: XCTestCase {
         // ⌥⌘L toggles the list.
         app.typeKey("l", modifierFlags: [.command, .option])
         XCTAssertTrue(row.waitForNonExistence(timeout: 5))
+    }
+
+    /// macOS window tabbing is off, so the View menu has no "Show Tab Bar".
+    @MainActor
+    func testWindowTabbingMenuItemsAreHidden() throws {
+        let app = launchApp()
+        XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.menuBars.menuItems["Show Tab Bar"].exists)
+    }
+
+    /// ⌘F opens the find bar, a missing word says so, and Esc closes it.
+    @MainActor
+    func testFindInPage() throws {
+        let app = launchApp()
+        XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 5))
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,<title>Pond</title><p>Axolotls live in lakes.</p>\n")
+        XCTAssertTrue(app.descendants(matching: .any)["sidebar"].staticTexts["Pond"].waitForExistence(timeout: 10))
+
+        app.typeKey("f", modifierFlags: .command)
+        let field = app.textFields["findField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        app.typeText("lakes")
+        XCTAssertFalse(app.staticTexts["findNoMatches"].waitForExistence(timeout: 2))
+
+        app.typeKey("a", modifierFlags: .command)
+        app.typeText("ocean")
+        XCTAssertTrue(app.staticTexts["findNoMatches"].waitForExistence(timeout: 5))
+
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(field.waitForNonExistence(timeout: 5))
     }
 
     @MainActor

@@ -27,6 +27,14 @@ public final class BrowserModel {
     public var alertMessage: String?
     /// Whether the downloads list is open.
     public var isShowingDownloads = false
+    /// Whether the find bar is showing above the page.
+    public private(set) var isFindBarVisible = false
+    /// The text to find in the selected page.
+    public var findText = ""
+    /// Whether the last search found nothing.
+    public private(set) var findHasNoMatches = false
+    /// Incremented to ask the find field to take focus.
+    public private(set) var findFocusRequest = 0
     /// Site icons by lowercased host, for the tabs in the sidebar.
     public private(set) var favicons: [String: NSImage] = [:]
 
@@ -91,6 +99,9 @@ public final class BrowserModel {
     /// Shows the tab with `id`, or nothing if `id` is `nil`.
     public func select(_ id: AxoCore.Tab.ID?) {
         isComposingNewTab = false
+        if id != selectedTabID, isFindBarVisible {
+            closeFindBar()
+        }
         selectedTabID = id
         activateSelectedTab()
     }
@@ -209,6 +220,53 @@ public final class BrowserModel {
         } else {
             pool.reload(selectedTabID)
         }
+    }
+
+    // MARK: Find and print
+
+    /// Shows the find bar (or focuses it if it's already showing).
+    public func showFindBar() {
+        guard selectedTabID != nil else { return }
+        isFindBarVisible = true
+        findFocusRequest += 1
+    }
+
+    /// Hides the find bar and clears its highlight from the page.
+    public func closeFindBar() {
+        isFindBarVisible = false
+        findHasNoMatches = false
+        if let selectedTabID {
+            let pool = pool
+            Task { await pool.clearFind(in: selectedTabID) }
+        }
+    }
+
+    /// Finds the next match of ``findText`` in the selected page.
+    public func findNext() async {
+        await find(backwards: false)
+    }
+
+    /// Finds the previous match of ``findText`` in the selected page.
+    public func findPrevious() async {
+        await find(backwards: true)
+    }
+
+    private func find(backwards: Bool) async {
+        guard let selectedTabID, !findText.isEmpty else {
+            findHasNoMatches = false
+            return
+        }
+        if !isFindBarVisible { showFindBar() }
+        let found = await pool.find(findText, in: selectedTabID, backwards: backwards)
+        findHasNoMatches = !found
+    }
+
+    /// Shows the print sheet for the selected page in its window.
+    public func printSelectedTab() {
+        guard let selectedTabID,
+              let operation = pool.printOperation(for: selectedTabID),
+              let window = pool.liveWebView(for: selectedTabID)?.window else { return }
+        operation.runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
     }
 
     // MARK: Persistence

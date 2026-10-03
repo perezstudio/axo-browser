@@ -16,6 +16,11 @@ import WebKit
 struct AxoApp: App {
     @State private var model = AppEnvironment.makeBrowserModel()
 
+    init() {
+        // Axo has its own tabs in the sidebar; macOS window tabs ("Show Tab Bar") would only confuse.
+        NSWindow.allowsAutomaticWindowTabbing = false
+    }
+
     var body: some Scene {
         // One browser window for Milestone 1: the commands replace File > New Window, and every
         // window shares the same model.

@@ -16,6 +16,8 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
   - When a hibernated tab wakes, its `WebTabState.restoringSnapshot` holds that picture until the restored page finishes loading.
   - `discard(_:)` forgets a closed tab.
   - `load(_:in:)`, `goBack(in:)`, `goForward(in:)`, `reload(_:)`, and `stopLoading(_:)` drive a live tab.
+  - `find(_:in:backwards:)` highlights and scrolls to the next or previous match (ignoring case, wrapping) and returns whether it found one. `clearFind(in:)` removes the highlight. WebKit's public API doesn't report match counts.
+  - `printOperation(for:)` returns an `NSPrintOperation` for the page, titled with the page title and fit to the page width. Run it with `runModal(for:…)`: a synchronous `run()` hangs, because WebKit prints asynchronously.
   - `onPageChange` reports URL and title changes so the app can persist them with `TabStore`. `onOpenInNewTab` reports links that target a new window. `onFaviconChange` reports each page's icon after it loads.
 - **Favicons:** after each load, the pool reads `<link rel="icon">` and `apple-touch-icon` candidates in an isolated content world, so page scripts can't interfere. It prefers SVG, then the smallest icon at least 64 px, and falls back to `/favicon.ico` for http(s) pages. It downloads with an ephemeral `URLSession` (no cookies, so icon fetches can't identify the user), rejects files over 512 KB, normalizes to a 64 px PNG, and caches by icon URL.
 - **Downloads:** `pool.downloads` is a `DownloadManager` (`@Observable`) holding `DownloadItem`s, newest first, with state, progress, and bytes.
@@ -30,7 +32,7 @@ AxoWeb doesn't touch the database. The app layer connects pool callbacks to `Tab
 
 ## Not yet
 
-Permission prompts, find in page, and printing are still to come in Milestone 1. Download history is in memory only, and interrupted downloads can't be resumed yet. Snapshots live in memory only, so tabs restored after a relaunch have none. A web view that was never laid out (zero size) can't be snapshotted, so it hibernates without a picture.
+Permission prompts are still to come in Milestone 1. Download history is in memory only, and interrupted downloads can't be resumed yet. Snapshots live in memory only, so tabs restored after a relaunch have none. A web view that was never laid out (zero size) can't be snapshotted, so it hibernates without a picture.
 
 ## Testing
 

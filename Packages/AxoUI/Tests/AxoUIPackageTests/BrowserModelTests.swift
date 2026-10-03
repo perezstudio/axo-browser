@@ -147,6 +147,63 @@ struct BrowserModelTests {
         #expect(model.tabs.map(\.url.lastPathComponent) == ["one.html", "target.html", "two.html"])
     }
 
+    // MARK: Find
+
+    /// Opens a tab with `body` and waits for it to load.
+    private func openLoadedTab(_ name: String, body: String) async throws {
+        let url = directory.appending(path: "\(name).html")
+        try "<!doctype html><title>\(name)</title>\(body)".write(to: url, atomically: true, encoding: .utf8)
+        await model.openTab(url: url)
+        try await waitUntil { model.selectedPage?.title == name && model.selectedPage?.isLoading == false }
+    }
+
+    @Test func theFindBarNeedsATab() {
+        model.showFindBar()
+        #expect(!model.isFindBarVisible)
+    }
+
+    @Test func findingReportsMatchesAndMisses() async throws {
+        try await openLoadedTab("Pond", body: "<p>Axolotls live in lakes.</p>")
+        model.showFindBar()
+        #expect(model.isFindBarVisible)
+
+        model.findText = "lakes"
+        await model.findNext()
+        #expect(!model.findHasNoMatches)
+
+        model.findText = "ocean"
+        await model.findPrevious()
+        #expect(model.findHasNoMatches)
+
+        model.findText = ""
+        await model.findNext()
+        #expect(!model.findHasNoMatches, "Empty text isn't a miss")
+    }
+
+    @Test func findNextOpensTheBarIfItWasClosed() async throws {
+        try await openLoadedTab("Pond", body: "<p>Axolotls live in lakes.</p>")
+        model.findText = "lakes"
+        await model.findNext()
+        #expect(model.isFindBarVisible)
+    }
+
+    @Test func closingOrSwitchingTabsHidesTheFindBar() async throws {
+        try await openLoadedTab("One", body: "<p>first</p>")
+        let first = try #require(model.selectedTabID)
+        try await openLoadedTab("Two", body: "<p>second</p>")
+        model.showFindBar()
+        model.findText = "nothing here"
+        await model.findNext()
+
+        model.select(first)
+        #expect(!model.isFindBarVisible)
+        #expect(!model.findHasNoMatches)
+
+        model.showFindBar()
+        model.closeFindBar()
+        #expect(!model.isFindBarVisible)
+    }
+
     // MARK: Favicons
 
     /// A 16 px PNG, standing in for a normalized favicon.

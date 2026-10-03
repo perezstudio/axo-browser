@@ -42,6 +42,9 @@ public struct BrowserWindow: View {
         if let tab = model.selectedTab, let space = model.space {
             WebViewHost(tab: tab, profileID: space.profileID, pool: model.pool)
                 .accessibilityIdentifier("webContent")
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    if model.isFindBarVisible { FindBar(model: model) }
+                }
                 .overlay(alignment: .top) { RestoringSnapshot(page: model.selectedPage) }
                 .overlay(alignment: .top) { LoadingBar(page: model.selectedPage) }
         } else {
