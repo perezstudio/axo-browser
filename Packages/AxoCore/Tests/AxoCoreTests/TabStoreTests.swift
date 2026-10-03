@@ -195,4 +195,24 @@ struct TabStoreTests {
         #expect(try await second.bootstrap() == space)
         #expect(try await second.tabs(in: space.id).map(\.title) == ["kept"])
     }
+
+    // MARK: Favicons
+
+    @Test func faviconsAreSavedPerHostAndReplaced() async throws {
+        let png = Data([1, 2, 3]), newer = Data([4, 5, 6])
+        try await store.saveFavicon(png, for: URL(string: "https://Example.com/a")!)
+        try await store.saveFavicon(newer, for: URL(string: "https://example.com/b")!)
+        try await store.saveFavicon(png, for: URL(string: "https://swift.org")!)
+
+        let icons = try await store.favicons(forHosts: ["example.com", "SWIFT.org", "missing.com"])
+        #expect(icons == ["example.com": newer, "swift.org": png])
+    }
+
+    @Test func urlsWithoutAHostHaveNoFavicon() async throws {
+        try await store.saveFavicon(Data([1]), for: URL(string: "about:blank")!)
+        #expect(Favicon.key(for: URL(string: "about:blank")!) == nil)
+        let count = try await database.writer.read { try Favicon.fetchCount($0) }
+        #expect(count == 0)
+        #expect(try await store.favicons(forHosts: []).isEmpty)
+    }
 }

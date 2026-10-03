@@ -1,3 +1,4 @@
+import AppKit
 import AxoCore
 import AxoWeb
 import Foundation
@@ -24,12 +25,16 @@ public final class BrowserModel {
     public private(set) var addressFocusRequest = 0
     /// A problem worth telling the user about, such as the database failing to open.
     public var alertMessage: String?
+    /// Site icons by lowercased host, for the tabs in the sidebar.
+    public private(set) var favicons: [String: NSImage] = [:]
 
     /// The web view pool that owns this window's web views.
     public let pool: WebViewPool
 
     @ObservationIgnored private let store: TabStore
     @ObservationIgnored private var observationTask: Task<Void, Never>?
+    /// Hosts whose saved icon was already looked up, so each is read from the database once.
+    @ObservationIgnored private var lookedUpFaviconHosts: Set<String> = []
     @ObservationIgnored private let logger = Logger(subsystem: "com.perezstudio.Axo", category: "BrowserModel")
 
     /// Creates a model. Call ``start()`` before showing it.
@@ -39,6 +44,9 @@ public final class BrowserModel {
         self.alertMessage = alertMessage
         pool.onPageChange = { [weak self] tabID, url, title in
             self?.persistPageChange(tabID: tabID, url: url, title: title)
+        }
+        pool.onFaviconChange = { [weak self] _, pageURL, data in
+            self?.saveFavicon(data, for: pageURL)
         }
         pool.onOpenInNewTab = { [weak self] url, sourceID in
             guard let self else { return }
@@ -55,6 +63,11 @@ public final class BrowserModel {
         tabs.first { $0.id == selectedTabID }
     }
 
+    /// The icon for a tab's site, if Axo has one.
+    public func favicon(for tab: AxoCore.Tab) -> NSImage? {
+        Favicon.key(for: tab.url).flatMap { favicons[$0] }
+    }
+
     /// Loads the first Space and its tabs, selects the first tab, and starts observing changes.
     public func start() async {
         guard space == nil else { return }
@@ -63,6 +76,7 @@ public final class BrowserModel {
             self.space = space
             tabs = try await store.tabs(in: space.id)
             select(tabs.first?.id)
+            await loadSavedFavicons()
             observeTabs(in: space.id)
             pool.startHibernationTimer()
         } catch {
@@ -204,9 +218,37 @@ public final class BrowserModel {
             do {
                 for try await tabs in observation {
                     self?.tabs = tabs
+                    await self?.loadSavedFavicons()
                 }
             } catch {
                 self?.logger.error("Tab observation failed: \(error)")
+            }
+        }
+    }
+
+    /// Reads saved icons for hosts in the sidebar that haven't been looked up yet.
+    private func loadSavedFavicons() async {
+        let hosts = Set(tabs.compactMap { Favicon.key(for: $0.url) }).subtracting(lookedUpFaviconHosts)
+        guard !hosts.isEmpty else { return }
+        lookedUpFaviconHosts.formUnion(hosts)
+        do {
+            for (host, data) in try await store.favicons(forHosts: hosts) where favicons[host] == nil {
+                favicons[host] = NSImage(data: data)
+            }
+        } catch {
+            logger.error("Couldn't load favicons: \(error)")
+        }
+    }
+
+    private func saveFavicon(_ data: Data, for pageURL: URL) {
+        guard let host = Favicon.key(for: pageURL), let image = NSImage(data: data) else { return }
+        favicons[host] = image
+        lookedUpFaviconHosts.insert(host)
+        Task {
+            do {
+                try await store.saveFavicon(data, for: pageURL)
+            } catch {
+                logger.error("Couldn't save favicon: \(error)")
             }
         }
     }

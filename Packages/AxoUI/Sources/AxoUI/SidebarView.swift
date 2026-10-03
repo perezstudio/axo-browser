@@ -9,7 +9,7 @@ struct SidebarView: View {
         List(selection: Binding(get: { model.selectedTabID }, set: { model.select($0) })) {
             Section(model.space?.name ?? "Tabs") {
                 ForEach(model.tabs) { tab in
-                    TabRow(tab: tab)
+                    TabRow(tab: tab, favicon: model.favicon(for: tab))
                         .tag(tab.id)
                         .contextMenu {
                             Button("Close Tab") {
@@ -39,14 +39,28 @@ struct SidebarView: View {
     }
 }
 
-/// One tab in the sidebar.
+/// One tab in the sidebar: the site's icon (or a globe) and the page title.
 struct TabRow: View {
     let tab: AxoCore.Tab
+    let favicon: NSImage?
 
     var body: some View {
-        Label(Self.displayTitle(for: tab), systemImage: "globe")
-            .lineLimit(1)
-            .accessibilityIdentifier("tabRow")
+        Label {
+            Text(Self.displayTitle(for: tab))
+        } icon: {
+            if let favicon {
+                Image(nsImage: favicon)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 16, height: 16)
+                    .clipShape(.rect(cornerRadius: 3))
+                    .accessibilityHidden(true)
+            } else {
+                Image(systemName: "globe")
+            }
+        }
+        .lineLimit(1)
+        .accessibilityIdentifier("tabRow")
     }
 
     /// The page title, or the host (or full URL) for pages without one.

@@ -165,6 +165,27 @@ public final class TabStore: Sendable {
         }
     }
 
+    // MARK: Favicons
+
+    /// Saves the icon for `url`'s host, replacing any older one. Does nothing for URLs without a
+    /// host, such as `about:blank`.
+    public func saveFavicon(_ data: Data, for url: URL) async throws {
+        guard let host = Favicon.key(for: url) else { return }
+        try await database.writer.write { db in
+            try Favicon(host: host, data: data).save(db)
+        }
+    }
+
+    /// Returns the saved icons for these hosts, keyed by host. Hosts without an icon are omitted.
+    public func favicons(forHosts hosts: some Collection<String>) async throws -> [String: Data] {
+        let keys = Set(hosts.map { $0.lowercased() })
+        guard !keys.isEmpty else { return [:] }
+        return try await database.writer.read { db in
+            let records = try Favicon.filter(keys: keys).fetchAll(db)
+            return Dictionary(uniqueKeysWithValues: records.map { ($0.host, $0.data) })
+        }
+    }
+
     // MARK: Ordering
 
     /// Computes a sort key for `position` among a Space's tabs, ignoring the tab being moved.

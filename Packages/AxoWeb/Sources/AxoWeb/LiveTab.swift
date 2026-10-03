@@ -12,6 +12,8 @@ final class LiveTab {
     let delegate = WebViewDelegate()
     var lastUsed: Date
     var onPageChange: ((URL, String) -> Void)?
+    /// Called when a main-frame load finishes successfully.
+    var onLoadFinished: (() -> Void)?
     private var observations: [NSKeyValueObservation] = []
 
     init(tabID: Tab.ID, profileID: Profile.ID, webView: WKWebView, lastUsed: Date) {
@@ -21,6 +23,13 @@ final class LiveTab {
         self.lastUsed = lastUsed
         webView.navigationDelegate = delegate
         webView.uiDelegate = delegate
+        delegate.onLoadFinished = { [weak self] in
+            self?.state.restoringSnapshot = nil
+            self?.onLoadFinished?()
+        }
+        delegate.onLoadFailed = { [weak self] in
+            self?.state.restoringSnapshot = nil
+        }
         observe()
     }
 
@@ -76,6 +85,20 @@ final class LiveTab {
 @MainActor
 final class WebViewDelegate: NSObject, WKNavigationDelegate, WKUIDelegate {
     var onOpenInNewTab: ((URL) -> Void)?
+    var onLoadFinished: (() -> Void)?
+    var onLoadFailed: (() -> Void)?
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        onLoadFinished?()
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        onLoadFailed?()
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        onLoadFailed?()
+    }
 
     func webView(
         _ webView: WKWebView,

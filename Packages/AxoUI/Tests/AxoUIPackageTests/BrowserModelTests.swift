@@ -1,3 +1,4 @@
+import AppKit
 import AxoCore
 import AxoWeb
 import Foundation
@@ -7,12 +8,14 @@ import Testing
 @MainActor
 struct BrowserModelTests {
     let model: BrowserModel
+    let store: TabStore
     let pool: WebViewPool
     let directory: URL
 
     init() async throws {
         pool = WebViewPool(makeDataStore: { _ in .nonPersistent() })
-        model = BrowserModel(store: try TabStore.makeInMemory(), pool: pool)
+        store = try TabStore.makeInMemory()
+        model = BrowserModel(store: store, pool: pool)
         directory = FileManager.default.temporaryDirectory
             .appending(path: "AxoUITests-\(UUID().uuidString)", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -138,11 +141,52 @@ struct BrowserModelTests {
         let target = try page("target")
 
         pool.onOpenInNewTab?(target, tabs[0].id)
-        try await waitUntil { model.tabs.count == 3 }
+        // The tab list can update (through observation) before the new tab is selected.
+        try await waitUntil { model.tabs.count == 3 && model.selectedTab?.url == target }
 
         #expect(model.tabs.map(\.url.lastPathComponent) == ["one.html", "target.html", "two.html"])
-        #expect(model.selectedTab?.url == target)
     }
+
+    // MARK: Favicons
+
+    /// A 16 px PNG, standing in for a normalized favicon.
+    private func iconData() throws -> Data {
+        let bitmap = try #require(NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: 16, pixelsHigh: 16, bitsPerSample: 8,
+            samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+            bytesPerRow: 0, bitsPerPixel: 0
+        ))
+        return try #require(bitmap.representation(using: .png, properties: [:]))
+    }
+
+    @Test func reportedFaviconsShowForEveryTabOnThatHostAndAreSaved() async throws {
+        let page = URL(string: "https://example.com/a")!
+        let sameSite = AxoCore.Tab(spaceID: UUID(), url: URL(string: "https://EXAMPLE.com/b")!, sortKey: "a0")
+        let otherSite = AxoCore.Tab(spaceID: UUID(), url: URL(string: "https://swift.org")!, sortKey: "a0")
+
+        pool.onFaviconChange?(UUID(), page, try iconData())
+
+        #expect(model.favicon(for: sameSite) != nil)
+        #expect(model.favicon(for: otherSite) == nil)
+        try await waitUntilAsync { try await !store.favicons(forHosts: ["example.com"]).isEmpty }
+    }
+
+    @Test func savedFaviconsLoadForTabsAtLaunch() async throws {
+        // A fresh model over a store that already has a tab and its site's icon.
+        let space = try await store.bootstrap()
+        let tab = try await store.openTab(url: try page("saved"), in: space.id)
+        let webTab = try await store.openTab(url: URL(string: "about:blank")!, in: space.id)
+        try await store.saveFavicon(try iconData(), for: URL(string: "https://apple.com")!)
+        try await store.updateTab(id: webTab.id, url: URL(string: "https://apple.com/mac")!, title: "Mac")
+
+        let relaunched = BrowserModel(store: store, pool: WebViewPool(makeDataStore: { _ in .nonPersistent() }))
+        await relaunched.start()
+
+        let reloaded = try #require(relaunched.tabs.first { $0.id == webTab.id })
+        #expect(relaunched.favicon(for: reloaded) != nil)
+        #expect(relaunched.favicon(for: tab) == nil)
+    }
+
 }
 
 /// Polls until `condition` is true, or fails after 10 seconds.
@@ -150,6 +194,16 @@ struct BrowserModelTests {
 func waitUntil(_ condition: () -> Bool) async throws {
     let deadline = ContinuousClock.now + .seconds(10)
     while !condition() {
+        try #require(ContinuousClock.now < deadline, "Timed out")
+        try await Task.sleep(for: .milliseconds(20))
+    }
+}
+
+/// Polls an async condition until it's true, or fails after 10 seconds.
+@MainActor
+func waitUntilAsync(_ condition: () async throws -> Bool) async throws {
+    let deadline = ContinuousClock.now + .seconds(10)
+    while try await !condition() {
         try #require(ContinuousClock.now < deadline, "Timed out")
         try await Task.sleep(for: .milliseconds(20))
     }
