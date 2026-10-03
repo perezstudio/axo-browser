@@ -1,6 +1,6 @@
 # AxoIntegration
 
-App Intents, Focus filters, Handoff, Spotlight, passkeys, Screen Time, and Translation.
+Default browser, location services, App Intents, Focus filters, Handoff, Spotlight, passkeys, Screen Time, and Translation.
 
 Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLAN.md` for the architecture.
 
@@ -9,6 +9,8 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
 ## Public API
 
 - **`DefaultBrowser`** (`@MainActor`): `isDefault` says whether Axo handles http and https links, and `makeDefault()` asks macOS to make Axo the default for both, plus HTML files. macOS confirms the change in its own dialog, so call it only when the person chooses to. The `NSWorkspace` calls are injected, and tests use fakes so they never change the real default browser.
+
+- **`LocationAuthorization`** (`@MainActor`) keeps a `CLLocationManager` for the app's lifetime. WebKit doesn't call the geolocation delegate until the app has one. `requestIfNeeded()` asks macOS for location access only while it hasn't asked before. Axo calls it after the person allows a site's location request, so the macOS prompt follows something they chose. The manager is injected (`LocationManaging`), so tests never prompt.
 
 The rest of this package (App Intents, Focus filters, Handoff, Spotlight, passkeys, Screen Time, Translation) comes in Milestone 6.
 

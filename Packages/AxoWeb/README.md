@@ -22,15 +22,17 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
   - `onPageChange` reports URL and title changes so the app can persist them with `TabStore`. `onOpenInNewTab` reports links that target a new window. `onFaviconChange` reports each page's icon after it loads.
 - **Favicons:** after each load, the pool reads `<link rel="icon">` and `apple-touch-icon` candidates in an isolated content world, so page scripts can't interfere. It prefers SVG, then the smallest icon at least 64 px, and falls back to `/favicon.ico` for http(s) pages. It downloads with an ephemeral `URLSession` (no cookies, so icon fetches can't identify the user), rejects files over 512 KB, normalizes to a 64 px PNG, and caches by icon URL.
 - **Page prompts:** the pool asks the app through async callbacks. Each request carries the asking frame's `PageOrigin` (with a `displayName` for people), and each callback has a safe default when it's `nil`.
-  - `onPermissionRequest` handles camera, microphone, both, and location. It denies by default. Answers are remembered per profile, origin, and kind until Axo quits (`rememberedPermission`, `forgetPermissionDecisions`).
+  - `onPermissionRequest` handles camera, microphone, both, and location. It denies by default. Answers are saved through `permissionStore` (a `PermissionDecisionStore`; AxoUI backs it with the database), so a saved answer is used without asking. Without a store, answers are remembered per profile, origin, and kind until Axo quits (`rememberedPermission`, `forgetPermissionDecisions`).
+  - `PageOrigin(url:)` gets the origin of an http(s) URL (a default port counts as none), and `serialized` writes it as text (`https://meet.example.com`).
   - `onJavaScriptDialog` handles `alert()`, `confirm()`, and `prompt()`. It cancels by default.
   - `onFileSelection` handles `<input type="file">`. It cancels by default.
-  - Web notifications have no public WebKit API, and the location delegate isn't called in practice. See `docs/webkit-gaps.md`.
+  - Web notifications have no public WebKit API. The location delegate is only called once the app has its own `CLLocationManager` (see AxoIntegration's `LocationAuthorization` and `docs/webkit-gaps.md`).
 - **Downloads:** `pool.downloads` is a `DownloadManager` (`@Observable`) holding `DownloadItem`s, newest first, with state, progress, and bytes.
   - **What downloads:** links with a `download` attribute, main-frame responses WebKit can't display, and responses with `Content-Disposition: attachment`. `pool.startDownload(_:in:)` downloads a URL directly.
   - **Where files go:** the folder passed to `DownloadManager(directory:)`, `~/Downloads` by default, with Finder-style unique names (`file 2.pdf`). Suggested names are sanitized so they can't escape the folder.
   - **Quarantine:** finished files get the quarantine attribute (agent "Axo", type web download, and the source URL for http(s)), so Gatekeeper checks them.
   - `cancel(_:)` stops a download and removes the partial file. `remove(_:)` and `clearInactive()` edit the list but keep files.
+- **Fullscreen:** the pool turns on `WKPreferences.isElementFullscreenEnabled`, which is off by default, so videos and pages can use the Fullscreen API. Picture in picture needs a private preference, so the app turns it on through AxoInspector's `PictureInPicture`.
 - **`UserAgent`** sets the user agent for every tab (and, through AxoExtensions, every extension page): WebKit's default plus `Version/<macOS major.minor> Safari/605.1.15`, like Safari. A plain `WKWebView` leaves that out, which breaks sites and extensions that detect the browser from it (Bitwarden's background script fails to start without it).
 - **`WebTabState`** (`@Observable`) mirrors a live tab's URL, title, loading state, progress, and back and forward availability, plus `restoringSnapshot`. Get it with `pool.state(for:)`.
 - **`WebViewHost`** is the SwiftUI view that mounts a tab's pooled web view and reports its visibility to the pool.
@@ -39,7 +41,7 @@ AxoWeb doesn't touch the database. The app layer connects pool callbacks to `Tab
 
 ## Not yet
 
-Permission answers aren't saved across launches yet (site settings come in Milestone 4). Download history is in memory only, and interrupted downloads can't be resumed yet. Snapshots live in memory only, so tabs restored after a relaunch have none. A web view that was never laid out (zero size) can't be snapshotted, so it hibernates without a picture.
+Download history is in memory only, and interrupted downloads can't be resumed yet. Snapshots live in memory only, so tabs restored after a relaunch have none. A web view that was never laid out (zero size) can't be snapshotted, so it hibernates without a picture.
 
 ## Testing
 

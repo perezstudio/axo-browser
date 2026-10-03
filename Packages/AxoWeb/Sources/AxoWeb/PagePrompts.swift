@@ -54,11 +54,37 @@ public struct PageOrigin: Hashable, Sendable {
         self.init(scheme: origin.protocol, host: origin.host, port: origin.port)
     }
 
+    /// The origin of a web page's URL, or `nil` for URLs that aren't http or https. A port that
+    /// is the scheme's default counts as no port, matching `WKSecurityOrigin`.
+    public init?(url: URL) {
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              let host = url.host(), !host.isEmpty else { return nil }
+        let defaultPort = scheme == "https" ? 443 : 80
+        let port = url.port.map { $0 == defaultPort ? 0 : $0 } ?? 0
+        self.init(scheme: scheme, host: host, port: port)
+    }
+
+    /// The origin as text, such as `https://meet.example.com` or `http://localhost:3000`, for
+    /// saving decisions.
+    public var serialized: String {
+        port == 0 ? "\(scheme)://\(host)" : "\(scheme)://\(host):\(port)"
+    }
+
     /// How to name the origin to people: its host (with a non-default port), or "This page".
     public var displayName: String {
         guard !host.isEmpty else { return "This page" }
         return port == 0 ? host : "\(host):\(port)"
     }
+}
+
+/// Saves the person's permission answers beyond this launch. The app provides one backed by the
+/// database; without one, the pool remembers answers until Axo quits.
+@MainActor
+public protocol PermissionDecisionStore: AnyObject {
+    /// The saved answer for a kind on a site in a profile, or `nil` to ask.
+    func savedDecision(for kind: PermissionKind, origin: PageOrigin, profileID: Profile.ID) async -> PermissionDecision?
+    /// Saves the person's answer.
+    func saveDecision(_ decision: PermissionDecision, for kind: PermissionKind, origin: PageOrigin, profileID: Profile.ID) async
 }
 
 /// A JavaScript `alert()`, `confirm()`, or `prompt()` from a page.

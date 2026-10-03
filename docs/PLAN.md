@@ -69,11 +69,11 @@ Arrows point from a package to what it depends on; AxoCore sits at the center.
 | AxoCore | Profiles, spaces, folders, tabs, windows, and the TabStore. Tabs reference a web view but don't require one. |
 | AxoWeb | Web view pool, `NSViewRepresentable` host, navigation and UI delegates, downloads, permissions, hibernation. One `WKWebsiteDataStore(forIdentifier:)` per profile. |
 | AxoExtensions | One `WKWebExtensionController` per profile, CRX install (verify, strip CRX3 header, unzip, load), `WKWebExtensionTab` and `WKWebExtensionWindow` adapters, `unsupportedAPIs` surfaced in the extension manager. |
-| AxoInspector | All private inspector API (`developerExtrasEnabled`, `_WKInspector`) behind one interface with runtime checks. Public `isInspectable` as fallback. |
+| AxoInspector | All private WebKit API behind runtime checks: the inspector (`developerExtrasEnabled`, `_WKInspector`, with public `isInspectable` as the fallback) and picture in picture (`_allowsPictureInPictureMediaPlayback`). |
 | AxoPersistence | The single GRDB database: sidebar model, history, bookmarks, and an FTS5 index for the command bar. `DatabasePool` for concurrent reads, `DatabaseMigrator` for schema changes, `ValueObservation` plus GRDBQuery for reactive SwiftUI. |
 | AxoSync | Maps spaces, folders, and pinned tabs to CloudKit records with `CKSyncEngine`. No servers to run. |
 | AxoImport | Reads Arc's sidebar file and Chrome's bookmarks, plus Chromium history from both, and imports them through AxoCore. |
-| AxoIntegration | App Intents, Focus filters, Handoff, Spotlight, passkeys, Screen Time, Translation. |
+| AxoIntegration | Default browser, location services, App Intents, Focus filters, Handoff, Spotlight, passkeys, Screen Time, Translation. |
 
 One database keeps storage simple to test, migrate, and sync. SwiftData and Core Data were ruled out because they lack full-text search, add overhead on write-heavy history, fit awkwardly with Swift 6 concurrency, and their built-in CloudKit sync gives no control over ordering or conflicts.
 
@@ -278,8 +278,12 @@ Each milestone should be usable as a daily driver before the next one starts.
 **Milestone 4: Switching and daily-driver polish**
 
 - [x] Import from Arc (Spaces with pinned tabs and folders, favorites, open tabs, history) and Chrome (bookmarks, history), in the new AxoImport package. Each custom Arc profile becomes an Axo profile. Chrome bookmarks become pinned tabs in an "Imported from Chrome" folder, since pinned tabs serve as bookmarks.
-- [ ] Passkeys through Apple's web browser passkey API
-- [ ] Picture in picture; camera, mic, location, and notification permissions
+- [ ] Passkeys through Apple's web browser passkey API. **Blocked** on Apple granting the managed entitlement `com.apple.developer.web-browser.public-key-credential` (see `docs/webkit-gaps.md`). Without it, Axo's web views report no platform authenticator. Once it's granted, the first slice is sign-in and creation (`navigator.credentials.get` and `create`) for platform passkeys. Autofill-style conditional mediation and security keys come after.
+- [x] Picture in picture; camera, mic, location, and notification permissions.
+  - Picture in picture works through a private preference in AxoInspector, and element fullscreen is now on.
+  - Camera, microphone, and location answers are saved per profile and site (`sitePermission` table), with a Site Settings popover beside the address field.
+  - Location works once Axo keeps a `CLLocationManager`. macOS asks the first time the person allows a site.
+  - Web notifications are still blocked: there's no public API (see `docs/webkit-gaps.md`).
 - [ ] Full VoiceOver and keyboard accessibility audit
 
 **Milestone 5: Power features**

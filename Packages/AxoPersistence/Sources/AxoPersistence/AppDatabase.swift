@@ -166,6 +166,22 @@ public final class AppDatabase: Sendable {
                 t.add(column: "grantedOptional", .text).notNull().defaults(to: "[]")
             }
         }
+        // The person's answers to sites asking for the camera, microphone, or location, per
+        // profile, so pages don't ask again after Axo restarts. `origin` is the page's origin
+        // ("https://meet.example.com", with a port when it isn't the default), `kind` is
+        // "camera", "microphone", or "location", and `decision` is "allow" or "deny". No row
+        // means Axo asks.
+        migrator.registerMigration("v8-site-permissions") { db in
+            try db.create(table: "sitePermission") { t in
+                t.column("profileID", .blob).notNull()
+                    .references("profile", onDelete: .cascade)
+                t.column("origin", .text).notNull()
+                t.column("kind", .text).notNull()
+                t.column("decision", .text).notNull()
+                t.column("updatedAt", .datetime).notNull()
+                t.primaryKey(["profileID", "origin", "kind"])
+            }
+        }
 
         return migrator
     }

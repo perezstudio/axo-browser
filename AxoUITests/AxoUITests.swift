@@ -294,6 +294,37 @@ final class AxoUITests: XCTestCase {
         XCTAssertEqual(app.windows.count, 1, "The link opens in the existing window")
     }
 
+    /// Site Settings shows the current site's camera, microphone, and location answers, which
+    /// can be changed and reset.
+    @MainActor
+    func testSiteSettingsChangeAndResetASitesPermissions() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["siteSettingsButton"].isEnabled, "No site without a web page")
+
+        // A closed loopback port: nothing loads, but the tab has a web address.
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("http://127.0.0.1:9/room\n")
+        XCTAssertTrue(sidebar.staticTexts["127.0.0.1"].waitForExistence(timeout: 10))
+
+        app.buttons["siteSettingsButton"].click()
+        let camera = app.popUpButtons["sitePermission-camera"]
+        XCTAssertTrue(camera.waitForExistence(timeout: 5))
+        XCTAssertEqual(camera.value as? String, "Ask")
+        XCTAssertTrue(app.popUpButtons["sitePermission-microphone"].exists)
+        XCTAssertTrue(app.popUpButtons["sitePermission-location"].exists)
+
+        camera.click()
+        app.menuItems["Don't Allow"].click()
+        expectation(for: NSPredicate(format: "value == %@", "Don't Allow"), evaluatedWith: camera)
+        waitForExpectations(timeout: 5)
+
+        app.buttons["resetSiteSettings"].click()
+        expectation(for: NSPredicate(format: "value == %@", "Ask"), evaluatedWith: camera)
+        waitForExpectations(timeout: 5)
+    }
+
     /// Import from Another Browser reads Arc's Spaces and Chrome's bookmarks from fixture files
     /// (never the real ones) and adds them to the sidebar.
     @MainActor

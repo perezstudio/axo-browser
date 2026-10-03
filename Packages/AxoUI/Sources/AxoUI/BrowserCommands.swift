@@ -96,6 +96,11 @@ public struct BrowserCommands: Commands {
             Button("Show Downloads") { model?.isShowingDownloads.toggle() }
                 .keyboardShortcut("l", modifiers: [.command, .option])
                 .disabled(model == nil)
+            Button("Site Settings…") {
+                guard let model else { return }
+                Task { await model.showSiteSettings() }
+            }
+            .disabled(model?.siteSettingsOrigin == nil)
             Divider()
         }
         CommandMenu("Spaces") {
