@@ -7,7 +7,8 @@ struct SidebarView: View {
     @State private var isShowingArchive = false
 
     var body: some View {
-        List(selection: Binding(get: { model.selectedTabID }, set: { model.select($0) })) {
+        // Folders are selectable too, so the keyboard can reach, open, and act on them.
+        List(selection: Binding(get: { model.selectedSidebarItem }, set: { model.selectSidebarItem($0) })) {
             if !model.pinnedTree.isEmpty {
                 Section("Pinned") {
                     PinnedLevel(model: model, nodes: model.pinnedTree, parent: nil)
@@ -32,6 +33,11 @@ struct SidebarView: View {
         }
         .sheet(item: Binding(get: { model.namingRequest }, set: { model.namingRequest = $0 })) { request in
             folderNameSheet(for: request)
+        }
+        .sheet(item: Binding(get: { model.spaceToRename }, set: { model.spaceToRename = $0 })) { space in
+            NameSheet(title: "Rename Space", initialName: space.name, confirmTitle: "Rename") { name in
+                Task { await model.renameSpace(space.id, to: name) }
+            }
         }
         .onChange(of: model.isShowingArchive) { isShowingArchive = model.isShowingArchive }
         .onChange(of: isShowingArchive) { if !isShowingArchive { model.isShowingArchive = false } }
@@ -64,8 +70,9 @@ extension SidebarView {
     private func rows(for tabs: [AxoCore.Tab], pinned: Bool) -> some View {
         ForEach(tabs) { tab in
             TabRow(tab: tab, favicon: model.favicon(for: tab))
-                .tag(tab.id)
+                .tag(PinnedItem.tab(tab.id))
                 .contextMenu { menu(for: tab) }
+                .sidebarMoveActions(model: model, item: .tab(tab.id))
         }
         .onMove { source, destination in
             Task { await model.moveTabs(fromOffsets: source, toOffset: destination, pinned: pinned) }
@@ -127,8 +134,9 @@ struct PinnedLevel: View {
             switch node {
             case .tab(let tab):
                 TabRow(tab: tab, favicon: model.favicon(for: tab))
-                    .tag(tab.id)
+                    .tag(PinnedItem.tab(tab.id))
                     .contextMenu { TabContextMenu(model: model, tab: tab) }
+                    .sidebarMoveActions(model: model, item: .tab(tab.id))
             case .folder(let folder, let children):
                 DisclosureGroup(isExpanded: Binding(
                     get: { folder.isExpanded },
@@ -139,6 +147,14 @@ struct PinnedLevel: View {
                 } label: {
                     Label(folder.name, systemImage: folder.isExpanded ? "folder" : "folder.fill")
                         .lineLimit(1)
+                        .tag(PinnedItem.folder(folder.id))
+                        // The name is the label, so the value can add the item count.
+                        .accessibilityLabel(folder.name)
+                        .accessibilityValue(children.count == 1 ? "1 item" : "\(children.count) items")
+                        .accessibilityAction(named: folder.isExpanded ? "Collapse" : "Expand") {
+                            Task { await model.setFolderExpanded(!folder.isExpanded, id: folder.id) }
+                        }
+                        .sidebarMoveActions(model: model, item: .folder(folder.id))
                         .accessibilityIdentifier("folderRow")
                         .contextMenu { FolderContextMenu(model: model, folder: folder) }
                 }
@@ -190,9 +206,30 @@ struct MoveToFolderMenu: View {
                     Task { await model.move(item, toFolder: entry.folder.id) }
                 }
                 .disabled(entry.folder.id == current || excluding.contains(entry.folder.id))
+                // The indent shows nesting on screen; VoiceOver says it in words.
+                .accessibilityLabel(parentName(of: entry.folder).map { "\(entry.folder.name), inside \($0)" } ?? entry.folder.name)
             }
             Divider()
             Button("New Folder…") { model.namingRequest = .newFolder(parent: nil, moving: item) }
+        }
+    }
+
+    private func parentName(of folder: Folder) -> String? {
+        folder.parentID.flatMap { id in model.folders.first { $0.id == id }?.name }
+    }
+}
+
+extension View {
+    /// VoiceOver actions to move a sidebar row up or down within its level, the equivalent of
+    /// dragging it. Selecting the row first makes the model's move commands act on it.
+    func sidebarMoveActions(model: BrowserModel, item: PinnedItem) -> some View {
+        accessibilityAction(named: "Move Up") {
+            model.selectSidebarItem(item)
+            Task { await model.moveSelectedItem(by: -1) }
+        }
+        .accessibilityAction(named: "Move Down") {
+            model.selectSidebarItem(item)
+            Task { await model.moveSelectedItem(by: 1) }
         }
     }
 }
@@ -218,6 +255,10 @@ struct TabRow: View {
             }
         }
         .lineLimit(1)
+        .help(Self.displayTitle(for: tab))
+        // The title is the label, so a value can add state without replacing it.
+        .accessibilityLabel(Self.displayTitle(for: tab))
+        .accessibilityValue(tab.hasLeftHome ? "Away from pinned page" : "")
         .accessibilityIdentifier("tabRow")
     }
 

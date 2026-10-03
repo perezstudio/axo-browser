@@ -4,6 +4,7 @@ import AxoWeb
 import Foundation
 import Observation
 import os
+import SwiftUI
 
 /// The state behind a browser window: the current Space, its tabs, and the selected tab.
 ///
@@ -23,6 +24,13 @@ public final class BrowserModel {
     public var namingRequest: NamingRequest?
     /// The tab shown in the window.
     public private(set) var selectedTabID: AxoCore.Tab.ID?
+    /// The folder selected in the sidebar, if a folder row is selected instead of a tab. The
+    /// selected tab keeps showing.
+    public internal(set) var selectedFolderID: Folder.ID?
+    /// A Space waiting to be renamed, which shows the Rename Space sheet.
+    public var spaceToRename: Space?
+    /// A Space waiting for the person to confirm deleting it.
+    public var spaceToDelete: Space?
     /// The live state of the selected tab's web view.
     public private(set) var selectedPage: WebTabState?
     /// Incremented to ask the address field to take focus.
@@ -118,6 +126,10 @@ public final class BrowserModel {
     @ObservationIgnored let prompts = PagePromptQueue()
     /// Hosts whose saved icon was already looked up, so each is read from the database once.
     @ObservationIgnored private var lookedUpFaviconHosts: Set<String> = []
+    /// Speaks a short message to VoiceOver users. Tests replace it to record messages.
+    @ObservationIgnored public var announce: (String) -> Void = { message in
+        AccessibilityNotification.Announcement(message).post()
+    }
     @ObservationIgnored private let logger = Logger(subsystem: "com.perezstudio.Axo", category: "BrowserModel")
 
     /// Creates a model. Call ``start()`` before showing it.
@@ -144,6 +156,13 @@ public final class BrowserModel {
         }
         prompts.onChange = { [weak self] prompt in self?.currentPrompt = prompt }
         pool.permissionStore = SitePermissionAdapter(store: store.sitePermissions)
+        pool.downloads.onEnd = { [weak self] item in
+            switch item.state {
+            case .finished: self?.announce("Downloaded \(item.filename)")
+            case .failed: self?.announce("Download failed: \(item.filename)")
+            default: break
+            }
+        }
         pool.onPermissionRequest = { [weak self] request in
             guard let self else { return .deny }
             let decision = await self.prompts.ask(request)
@@ -208,6 +227,7 @@ public final class BrowserModel {
         guard id != space?.id, let target = spaces.first(where: { $0.id == id }) else { return }
         do {
             try await show(target)
+            announce("Switched to \(target.name)")
         } catch {
             report(error, "Axo couldn't open that Space.")
         }
@@ -271,6 +291,7 @@ public final class BrowserModel {
     /// next to it. The last Space can't be deleted.
     public func deleteSpace(_ id: Space.ID) async {
         guard spaces.count > 1, let index = spaces.firstIndex(where: { $0.id == id }) else { return }
+        let name = spaces[index].name
         do {
             let closedTabs = try await store.deleteSpace(id: id)
             for tabID in closedTabs {
@@ -283,6 +304,7 @@ public final class BrowserModel {
             if space?.id == id {
                 try await show(spaces[min(index, spaces.count - 1)])
             }
+            announce("Deleted \(name)")
         } catch {
             report(error, "Axo couldn't delete the Space.")
         }
@@ -349,6 +371,7 @@ public final class BrowserModel {
         markActive([selectedTabID, id].compactMap { $0 })
         let previous = selectedTabID
         selectedTabID = id
+        if id != nil { selectedFolderID = nil }
         if previous != id { onTabEvent?(.activated(id, previous: previous)) }
         activateSelectedTab()
     }
@@ -419,6 +442,7 @@ public final class BrowserModel {
             report(error, "Axo couldn't close the tab.")
             return
         }
+        announce(tab.isPinned ? "Unloaded \(TabRow.displayTitle(for: tab))" : "Closed \(TabRow.displayTitle(for: tab))")
         guard selectedTabID == id else { return }
         select(Self.neighbor(of: id, in: visibleOrder, among: tabs.map(\.id).filter { $0 != id }))
     }
@@ -463,6 +487,7 @@ public final class BrowserModel {
             tabs = try await store.tabs(in: space.id)
             onTabEvent?(.opened(id))
             select(id)
+            if let tab = selectedTab { announce("Reopened \(TabRow.displayTitle(for: tab))") }
         } catch {
             report(error, "Axo couldn't restore the tab.")
         }
@@ -505,6 +530,9 @@ public final class BrowserModel {
         do {
             try await store.setPinned(pinned, tabID: tabID)
             tabs = try await store.tabs(in: space.id)
+            if let tab = tabs.first(where: { $0.id == tabID }) {
+                announce(pinned ? "Pinned \(TabRow.displayTitle(for: tab))" : "Unpinned \(TabRow.displayTitle(for: tab))")
+            }
         } catch {
             report(error, pinned ? "Axo couldn't pin the tab." : "Axo couldn't unpin the tab.")
         }
@@ -563,6 +591,7 @@ public final class BrowserModel {
 
     /// Deletes a folder. Its tabs and subfolders move up a level.
     public func deleteFolder(_ id: Folder.ID) async {
+        if selectedFolderID == id { selectedFolderID = nil }
         await changeFolders("Axo couldn't delete the folder.") { try await self.store.deleteFolder(id: id) }
     }
 
@@ -581,6 +610,8 @@ public final class BrowserModel {
         await changeFolders("Axo couldn't move that.") {
             try await self.store.movePinnedItem(item, into: folder, after: anchor)
         }
+        let name = folder.flatMap { id in folders.first { $0.id == id }?.name }
+        announce(name.map { "Moved to \($0)" } ?? "Moved to Pinned")
     }
 
     /// Reorders a level of the pinned section after a drag, using `List.onMove` indices.
@@ -757,7 +788,9 @@ public final class BrowserModel {
     /// Closes the command bar.
     public func hideCommandBar() {
         commandSearchTask?.cancel()
+        let wasVisible = isCommandBarVisible
         isCommandBarVisible = false
+        if wasVisible { focusPage() }
     }
 
     /// Updates the query and its results: typed-text, tab, and action rows right away, then
@@ -789,6 +822,9 @@ public final class BrowserModel {
     public func moveCommandSelection(by offset: Int) {
         guard !commandResults.isEmpty else { return }
         commandSelection = min(max(commandSelection + offset, 0), commandResults.count - 1)
+        // Focus stays in the text field, so say which row is highlighted.
+        let result = commandResults[commandSelection]
+        announce("\(result.title), \(result.hint)")
     }
 
     /// Runs the highlighted row (or `index`), then closes the command bar.
@@ -818,6 +854,8 @@ public final class BrowserModel {
             case .findInPage, .printPage: selectedTabID != nil
             case .makeDefaultBrowser: isDefaultBrowser == false
             case .importBrowserData: browserImporter != nil
+            case .deleteSpace: spaces.count > 1
+            case .renameFolder, .deleteFolder: selectedFolderID != nil
             default: true
             }
         }
@@ -826,7 +864,7 @@ public final class BrowserModel {
     private func perform(_ action: CommandAction) async {
         switch action {
         case .newSpace: isCreatingSpace = true
-        case .newFolder: namingRequest = .newFolder(parent: nil, moving: nil)
+        case .newFolder: beginNewFolder()
         case .reopenClosedTab: await reopenLastClosedTab()
         case .showArchivedTabs: isShowingArchive = true
         case .showDownloads: isShowingDownloads = true
@@ -836,6 +874,10 @@ public final class BrowserModel {
         case .printPage: printSelectedTab()
         case .makeDefaultBrowser: await makeDefaultBrowser()
         case .importBrowserData: beginImport()
+        case .renameSpace: beginRenameSpace()
+        case .deleteSpace: beginDeleteSpace()
+        case .renameFolder: renameSelectedFolder()
+        case .deleteFolder: await deleteSelectedFolder()
         }
     }
 
@@ -850,8 +892,10 @@ public final class BrowserModel {
 
     /// Hides the find bar and clears its highlight from the page.
     public func closeFindBar() {
+        let wasVisible = isFindBarVisible
         isFindBarVisible = false
         findHasNoMatches = false
+        if wasVisible { focusPage() }
         if let selectedTabID {
             let pool = pool
             Task { await pool.clearFind(in: selectedTabID) }
@@ -875,6 +919,7 @@ public final class BrowserModel {
         }
         if !isFindBarVisible { showFindBar() }
         let found = await pool.find(findText, in: selectedTabID, backwards: backwards)
+        if !found, !findHasNoMatches { announce("No matches") }
         findHasNoMatches = !found
     }
 

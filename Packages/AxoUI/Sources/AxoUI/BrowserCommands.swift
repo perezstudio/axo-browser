@@ -29,7 +29,7 @@ public struct BrowserCommands: Commands {
             Button("New Tab") { model?.beginNewTab() }
                 .keyboardShortcut("t")
                 .disabled(model == nil)
-            Button("New Folder") { model?.namingRequest = .newFolder(parent: nil, moving: nil) }
+            Button(model?.selectedFolder == nil ? "New Folder" : "New Folder Inside") { model?.beginNewFolder() }
                 // Not ⌥⌘N: ⌥N is a dead key on US layouts, so that shortcut never fires.
                 .keyboardShortcut("n", modifiers: [.command, .control])
                 .disabled(model == nil)
@@ -93,7 +93,7 @@ public struct BrowserCommands: Commands {
             Button("Show Archived Tabs") { model?.isShowingArchive = true }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
                 .disabled(model == nil)
-            Button("Show Downloads") { model?.isShowingDownloads.toggle() }
+            Button(model?.isShowingDownloads == true ? "Hide Downloads" : "Show Downloads") { model?.isShowingDownloads.toggle() }
                 .keyboardShortcut("l", modifiers: [.command, .option])
                 .disabled(model == nil)
             Button("Site Settings…") {
@@ -103,7 +103,80 @@ public struct BrowserCommands: Commands {
             .disabled(model?.siteSettingsOrigin == nil)
             Divider()
         }
+        CommandMenu("Tabs") {
+            Button("Next Tab") { model?.selectTab(offsetBy: 1) }
+                .keyboardShortcut(.downArrow, modifiers: [.command, .option])
+                .disabled(model?.tabs.isEmpty != false)
+            Button("Previous Tab") { model?.selectTab(offsetBy: -1) }
+                .keyboardShortcut(.upArrow, modifiers: [.command, .option])
+                .disabled(model?.tabs.isEmpty != false)
+            Divider()
+            Button(model?.selectedTab?.isPinned == true ? "Unpin Tab" : "Pin Tab") {
+                guard let model else { return }
+                Task { await model.togglePinSelectedTab() }
+            }
+            .keyboardShortcut("p", modifiers: [.command, .control])
+            .disabled(model?.selectedTab == nil || model?.selectedFolderID != nil)
+            Button("Go to Pinned Page") {
+                guard let model, let id = model.selectedTabID else { return }
+                Task { await model.goToPinnedHome(id) }
+            }
+            .disabled(model?.selectedTab?.hasLeftHome != true || model?.selectedFolderID != nil)
+            Button("Pin This Page Instead") {
+                guard let model, let id = model.selectedTabID else { return }
+                Task { await model.makeCurrentPagePinnedHome(id) }
+            }
+            .disabled(model?.selectedTab?.hasLeftHome != true || model?.selectedFolderID != nil)
+            if let model, let item = model.selectedSidebarItem {
+                MoveToFolderMenu(
+                    model: model,
+                    item: item,
+                    current: model.parentFolder(of: item),
+                    excluding: model.selectedFolderID.map { PinnedNode.folderAndDescendants($0, in: model.pinnedTree) } ?? []
+                )
+            }
+            Divider()
+            Button("Move Up") {
+                guard let model else { return }
+                Task { await model.moveSelectedItem(by: -1) }
+            }
+            .keyboardShortcut(.upArrow, modifiers: [.command, .option, .shift])
+            .disabled(model?.canMoveSelectedItem(by: -1) != true)
+            Button("Move Down") {
+                guard let model else { return }
+                Task { await model.moveSelectedItem(by: 1) }
+            }
+            .keyboardShortcut(.downArrow, modifiers: [.command, .option, .shift])
+            .disabled(model?.canMoveSelectedItem(by: 1) != true)
+            Divider()
+            Button("Rename Folder…") { model?.renameSelectedFolder() }
+                .disabled(model?.selectedFolder == nil)
+            Button("Delete Folder") {
+                guard let model else { return }
+                Task { await model.deleteSelectedFolder() }
+            }
+            .disabled(model?.selectedFolder == nil)
+            if let model, let profileID = model.space?.profileID,
+               let items = model.extensionToolbar?.toolbarItems(profileID: profileID, tabID: model.selectedTabID), !items.isEmpty {
+                Divider()
+                Menu("Extension Buttons") {
+                    ForEach(items) { item in
+                        Button(item.label) {
+                            model.extensionToolbar?.performAction(extensionID: item.id, profileID: profileID, tabID: model.selectedTabID)
+                        }
+                        .disabled(!item.isEnabled)
+                    }
+                }
+            }
+        }
         CommandMenu("Spaces") {
+            Button("New Space…") { model?.isCreatingSpace = true }
+                .disabled(model == nil)
+            Button("Rename Space…") { model?.beginRenameSpace() }
+                .disabled(model?.space == nil)
+            Button("Delete Space…") { model?.beginDeleteSpace() }
+                .disabled((model?.spaces.count ?? 0) < 2)
+            Divider()
             Button("Next Space") {
                 guard let model else { return }
                 Task { await model.selectNextSpace() }

@@ -36,6 +36,8 @@ struct DownloadTests {
     // MARK: Starting downloads
 
     @Test func linksWithTheDownloadAttributeSaveToTheDownloadsFolder() async throws {
+        var ended: [DownloadState] = []
+        pool.downloads.onEnd = { ended.append($0.state) }
         let tab = try await clickDownloadLink(named: "report.txt", contents: "quarterly numbers")
 
         try await waitUntil("download to finish") { pool.downloads.items.first?.state == .finished }
@@ -48,6 +50,7 @@ struct DownloadTests {
         #expect(item.fractionCompleted == 1)
         #expect(item.completedBytes == 17)
         #expect(pool.downloads.activeCount == 0)
+        #expect(ended == [.finished], "The app hears when a download ends")
     }
 
     @Test func responsesWebKitCannotShowDownloadInsteadOfNavigating() async throws {
@@ -93,6 +96,8 @@ struct DownloadTests {
         // without leaving the machine.
         let unreachable = URL(string: "http://127.0.0.1:9/file.bin")!
 
+        var ended = 0
+        pool.downloads.onEnd = { _ in ended += 1 }
         pool.startDownload(unreachable, in: tab.id)
 
         try await waitUntil("download to fail") {
@@ -100,6 +105,7 @@ struct DownloadTests {
             return false
         }
         #expect(pool.downloads.activeCount == 0)
+        #expect(ended == 1)
     }
 
     // MARK: Managing the list

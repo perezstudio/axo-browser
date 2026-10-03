@@ -129,6 +129,8 @@ public final class ImportSession: Identifiable {
     public private(set) var selectedParts: Set<ImportPart> = Set(ImportPart.allCases)
 
     @ObservationIgnored private let importer: any BrowserImporting
+    /// Tells VoiceOver users when reading or importing ends.
+    @ObservationIgnored var announce: (String) -> Void = { _ in }
     @ObservationIgnored private var previewTask: Task<Void, Never>?
 
     init(importer: any BrowserImporting) {
@@ -150,6 +152,7 @@ public final class ImportSession: Identifiable {
         } catch {
             guard sourceID == id else { return }
             phase = .unreadable(error.localizedDescription)
+            announce(error.localizedDescription)
         }
     }
 
@@ -176,9 +179,12 @@ public final class ImportSession: Identifiable {
         let parts = selectedParts
         phase = .importing
         do {
-            phase = .finished(try await importer.importData(from: sourceID, parts: parts, currentSpace: currentSpace))
+            let counts = try await importer.importData(from: sourceID, parts: parts, currentSpace: currentSpace)
+            phase = .finished(counts)
+            announce("Imported \(counts.summary)")
         } catch {
             phase = .failed(error.localizedDescription)
+            announce("Import failed. \(error.localizedDescription)")
         }
     }
 }
@@ -188,6 +194,7 @@ extension BrowserModel {
     public func beginImport() {
         guard let browserImporter else { return }
         let session = ImportSession(importer: browserImporter)
+        session.announce = { [weak self] in self?.announce($0) }
         importSession = session
         if let first = session.sources.first {
             Task { await session.selectSource(first.id) }
@@ -264,6 +271,7 @@ struct ImportSheet: View {
         switch session.phase {
         case .loading:
             ProgressView().controlSize(.small).frame(maxWidth: .infinity)
+                .accessibilityLabel("Reading the browser's data")
         case .choosing(let counts):
             if counts.parts.isEmpty {
                 Text("There's nothing to import from this browser.").foregroundStyle(.secondary)
@@ -275,6 +283,7 @@ struct ImportSheet: View {
                             set: { session.setPart(part, included: $0) }
                         ))
                         .disabled(!session.isOptional(part))
+                        .accessibilityHint(session.isOptional(part) ? "" : "Always part of an Arc import")
                         .accessibilityIdentifier("importPart-\(part.rawValue)")
                     }
                 }

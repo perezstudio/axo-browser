@@ -198,7 +198,8 @@ final class AxoUITests: XCTestCase {
         }
 
         sidebar.staticTexts["Mail"].rightClick()
-        app.menuItems["Pin Tab"].click()
+        // Scoped to the window: the Tabs menu in the menu bar also has "Pin Tab".
+        app.windows.firstMatch.menuItems["Pin Tab"].click()
         XCTAssertTrue(sidebar.staticTexts["Pinned"].waitForExistence(timeout: 5))
 
         // ⌘W on the unpinned tab archives it; ⇧⌘T brings it back.
@@ -232,8 +233,10 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Work"].waitForExistence(timeout: 5))
 
         sidebar.staticTexts["Docs"].rightClick()
-        app.menuItems["Move to Folder"].hover()
-        app.menuItems["Work"].click()
+        // The context menu is in the window; the Tabs menu in the menu bar has the same items.
+        let contextMenu = app.windows.firstMatch
+        contextMenu.menuItems["Move to Folder"].hover()
+        contextMenu.menuItems["Work"].click()
         XCTAssertTrue(sidebar.staticTexts["Pinned"].waitForExistence(timeout: 5), "Moving into a folder pins the tab")
         XCTAssertTrue(sidebar.staticTexts["Docs"].waitForExistence(timeout: 5))
 
@@ -292,6 +295,67 @@ final class AxoUITests: XCTestCase {
 
         XCTAssertTrue(sidebar.staticTexts["127.0.0.1"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.windows.count, 1, "The link opens in the existing window")
+    }
+
+    /// The sidebar works from the keyboard: switching tabs, pinning, reordering, and moving a
+    /// tab into a folder, all through menu commands and shortcuts.
+    @MainActor
+    func testSidebarWorksFromTheKeyboard() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        for title in ["Alpha", "Beta", "Gamma"] {
+            app.typeKey("t", modifierFlags: .command)
+            app.typeText("data:text/html,<title>\(title)</title>\n")
+            XCTAssertTrue(sidebar.staticTexts[title].waitForExistence(timeout: 10))
+        }
+        let address = app.textFields["addressField"]
+        func expectSelected(_ title: String) {
+            expectation(for: NSPredicate(format: "value CONTAINS %@", title), evaluatedWith: address)
+            waitForExpectations(timeout: 5)
+        }
+        func rowOrder() -> [String] {
+            sidebar.staticTexts.matching(identifier: "tabRow").allElementsBoundByIndex.map(\.label)
+        }
+
+        // ⌥⌘↑ and ⌥⌘↓ switch tabs, wrapping around.
+        app.typeKey(.upArrow, modifierFlags: [.command, .option])
+        expectSelected("Beta")
+        app.typeKey(.downArrow, modifierFlags: [.command, .option])
+        app.typeKey(.downArrow, modifierFlags: [.command, .option])
+        expectSelected("Alpha")
+
+        // ⌥⇧⌘↓ moves the selected tab down.
+        app.typeKey(.downArrow, modifierFlags: [.command, .option, .shift])
+        // Queries can't run inside an expectation's predicate, so poll.
+        let deadline = Date().addingTimeInterval(5)
+        while rowOrder() != ["Beta", "Alpha", "Gamma"], Date() < deadline { usleep(100_000) }
+        XCTAssertEqual(rowOrder(), ["Beta", "Alpha", "Gamma"])
+
+        // ⌃⌘P pins it.
+        app.typeKey("p", modifierFlags: [.command, .control])
+        XCTAssertTrue(sidebar.staticTexts["Pinned"].waitForExistence(timeout: 5))
+
+        // Tabs › Move to Folder › New Folder… moves it into a new folder.
+        app.menuBars.menuBarItems["Tabs"].click()
+        app.menuBars.menuItems["Move to Folder"].hover()
+        app.menuBars.menuItems["New Folder…"].click()
+        let nameField = app.textFields["nameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.typeText("Work\n")
+        XCTAssertTrue(sidebar.staticTexts["Work"].waitForExistence(timeout: 5))
+        XCTAssertTrue(sidebar.staticTexts["Alpha"].exists)
+
+        // Folder rows can be selected, so folder commands work from the menu bar.
+        sidebar.staticTexts["Work"].click()
+        app.menuBars.menuBarItems["Tabs"].click()
+        let rename = app.menuBars.menuItems["Rename Folder…"]
+        XCTAssertTrue(rename.isEnabled, "A selected folder enables its commands")
+        rename.click()
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.typeKey("a", modifierFlags: .command)
+        nameField.typeText("Projects\n")
+        XCTAssertTrue(sidebar.staticTexts["Projects"].waitForExistence(timeout: 5))
     }
 
     /// Site Settings shows the current site's camera, microphone, and location answers, which

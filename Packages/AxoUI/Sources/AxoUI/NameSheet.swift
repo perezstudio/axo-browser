@@ -7,6 +7,7 @@ struct NameSheet: View {
     let onSave: (String) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var name: String
+    @FocusState private var isFocused: Bool
 
     init(title: String, initialName: String, confirmTitle: String, onSave: @escaping (String) -> Void) {
         self.title = title
@@ -17,10 +18,19 @@ struct NameSheet: View {
 
     var body: some View {
         Form {
-            TextField("Name", text: $name)
-                .accessibilityIdentifier("nameField")
-                .onSubmit(save)
+            // Sheets don't show their navigation title, so the sheet names itself.
+            Section {
+                TextField("Name", text: $name)
+                    .focused($isFocused)
+                    .accessibilityIdentifier("nameField")
+                    .onSubmit(save)
+            } header: {
+                Text(title)
+                    .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
+            }
         }
+        .defaultFocus($isFocused, true)
         .formStyle(.grouped)
         .frame(width: 320)
         .toolbar {

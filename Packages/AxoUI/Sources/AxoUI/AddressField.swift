@@ -19,6 +19,7 @@ struct AddressField: View {
                 Task {
                     await model.submitAddress(submitted)
                     isFocused = false
+                    model.focusPage()
                 }
             }
             .onExitCommand {
