@@ -99,11 +99,12 @@ public final class ExtensionManager {
             ? .init(identifier: profileID)
             : .nonPersistent()
         configuration.defaultWebsiteDataStore = pool.dataStore(for: profileID)
-        if let configure = configureExtensionWebViews {
-            let webViewConfiguration = configuration.webViewConfiguration ?? WKWebViewConfiguration()
-            configure(webViewConfiguration)
-            configuration.webViewConfiguration = webViewConfiguration
-        }
+        // Extension pages report the same user agent as tabs, so extensions that detect the
+        // browser from it (such as Bitwarden) recognize Axo.
+        let webViewConfiguration = configuration.webViewConfiguration ?? WKWebViewConfiguration()
+        UserAgent.apply(to: webViewConfiguration)
+        configureExtensionWebViews?(webViewConfiguration)
+        configuration.webViewConfiguration = webViewConfiguration
         let controller = WKWebExtensionController(configuration: configuration)
         controller.delegate = delegate
         controllers[profileID] = controller

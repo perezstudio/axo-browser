@@ -39,13 +39,41 @@ No Axo or third-party dependencies.
 
 Known WebKit gap: `runtime.onInstalled` doesn't fire (see `docs/webkit-gaps.md`).
 
+- **User agent:** extension popups and background pages use AxoWeb's `UserAgent`, the same Safari-style user agent as tabs.
 - **`configureExtensionWebViews`** adjusts the configuration of web views WebKit creates for extensions (popups and background pages). The app uses it to turn on developer tools. Set it before controllers are created.
 - **Install prompt:** `prepareInstall(from:for:)` verifies and saves a `.crx` file or an unpacked folder *turned off*, and returns an `InstallSummary` describing what it can do. Then `confirmInstall` turns it on, or `uninstall` removes it if the person declines. Updating an installed extension keeps it on.
 - **Site access:** `setSiteAccess(.all / .click, …)` grants the requested sites, or denies them so the extension reaches a page only through `activeTab` when its button is clicked. The choice is saved and reapplied at load.
 - **Optional permissions:** when an extension calls `permissions.request`, the controller delegate asks `onPermissionRequest` with a `PermissionRequest` (extension name and plain-language lines). Approvals are saved (`grantedOptional`) and restored at load. `grantedDescription(for:profileID:)` describes what a loaded extension can do now.
 - **`PermissionDescriptions`** turns WebKit permission names and match patterns into plain lines ("Read and change your data on all websites", "See your open tabs and their addresses", …), with the most significant first. Quiet permissions such as `storage` and `alarms` are left out.
 
-Still to come in Milestone 3: the built-in Web Inspector, and testing with real extensions.
+## Real extensions
+
+uBlock Origin Lite and Bitwarden, the Milestone 3 test targets, install and start in Axo (October 2026: uBOL 2026.930.1227 and Bitwarden 2026.9.3, both MV3):
+
+- **uBlock Origin Lite:** loads with no errors. Its six default filter rulesets are turned on by its manifest and run as content-blocking rules. It doesn't use `runtime.onInstalled`.
+- **Bitwarden:** loads, and its background script starts. It needs the Safari-style user agent to recognize the browser. It logs one error from its own fallback for `chrome.notifications`, which WebKit doesn't provide (see `docs/webkit-gaps.md`). It only uses `runtime.onInstalled` to show a welcome page, which Axo misses. Connecting to the Bitwarden desktop app (biometric unlock) needs native messaging, which Axo doesn't support yet.
+
+`RealExtensionTests` checks this, but the `.crx` files aren't in the repo (they're GPL-licensed and large). To run it, download them into a folder:
+
+```bash
+mkdir -p ~/axo-real-extensions
+```
+
+```bash
+curl -L -o ~/axo-real-extensions/ubol.crx "https://clients2.google.com/service/update2/crx?response=redirect&prodversion=140.0&acceptformat=crx3&x=id%3Dddkjiahejlhfcafbddmgiahcphecmpfh%26uc"
+```
+
+```bash
+curl -L -o ~/axo-real-extensions/bitwarden.crx "https://clients2.google.com/service/update2/crx?response=redirect&prodversion=140.0&acceptformat=crx3&x=id%3Dnngceckbapebfimnlniiiahkandclblb%26uc"
+```
+
+Then run the suite with `AXO_REAL_EXTENSIONS` set. It's skipped otherwise.
+
+```bash
+AXO_REAL_EXTENSIONS=~/axo-real-extensions swift test --filter RealExtensionTests
+```
+
+It verifies each package's Chrome Web Store signature and ID, installs it, loads its background content (giving up after 20 seconds), and prints what WebKit reports about it.
 
 ## Testing
 

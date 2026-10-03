@@ -31,6 +31,7 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
   - **Where files go:** the folder passed to `DownloadManager(directory:)`, `~/Downloads` by default, with Finder-style unique names (`file 2.pdf`). Suggested names are sanitized so they can't escape the folder.
   - **Quarantine:** finished files get the quarantine attribute (agent "Axo", type web download, and the source URL for http(s)), so Gatekeeper checks them.
   - `cancel(_:)` stops a download and removes the partial file. `remove(_:)` and `clearInactive()` edit the list but keep files.
+- **`UserAgent`** sets the user agent for every tab (and, through AxoExtensions, every extension page): WebKit's default plus `Version/<macOS major.minor> Safari/605.1.15`, like Safari. A plain `WKWebView` leaves that out, which breaks sites and extensions that detect the browser from it (Bitwarden's background script fails to start without it).
 - **`WebTabState`** (`@Observable`) mirrors a live tab's URL, title, loading state, progress, and back and forward availability, plus `restoringSnapshot`. Get it with `pool.state(for:)`.
 - **`WebViewHost`** is the SwiftUI view that mounts a tab's pooled web view and reports its visibility to the pool.
 

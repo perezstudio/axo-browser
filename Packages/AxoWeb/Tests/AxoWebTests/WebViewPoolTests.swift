@@ -147,6 +147,18 @@ struct WebViewPoolTests {
         #expect(pool.liveTabIDs == [tab.id])
     }
 
+    @Test func pagesSeeASafariUserAgent() async throws {
+        let pool = WebViewPool.forTesting()
+        let tab = Tab.testTab(url: try pages.page("agent"))
+        let webView = pool.webView(for: tab, profileID: profileID)
+        try await waitForPage("agent", tab: tab, pool: pool)
+
+        let agent = try #require(try await webView.callAsyncJavaScript("return navigator.userAgent", contentWorld: .page) as? String)
+        let major = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+        #expect(agent.contains(" Version/\(major)."), "\(agent)")
+        #expect(agent.contains(" Safari/"), "Sites and extensions that detect Safari recognize Axo: \(agent)")
+    }
+
     // MARK: Hibernation
 
     @Test func hibernatingDiscardsTheWebViewAndWakingRestoresHistory() async throws {
