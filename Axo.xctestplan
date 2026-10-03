@@ -77,6 +77,13 @@
         "identifier": "AxoIntegrationTests",
         "name": "AxoIntegrationTests"
       }
+    },
+    {
+      "target": {
+        "containerPath": "container:Packages/AxoExtensions",
+        "identifier": "AxoCRXTests",
+        "name": "AxoCRXTests"
+      }
     }
   ],
   "version": 1

@@ -64,7 +64,7 @@ The app is split into local Swift packages in `Packages/`. Respect the dependenc
 | AxoUI | SwiftUI chrome, windows, sidebar, command bar, settings, mascot | AxoCore, AxoWeb, GRDBQuery |
 | AxoCore | Profiles, Spaces, folders, tabs, windows, TabStore | AxoPersistence, GRDB |
 | AxoWeb | Web view pool, `NSViewRepresentable` host, delegates, downloads, permissions, hibernation | AxoCore |
-| AxoExtensions | `WKWebExtensionController`, CRX install, tab and window adapters | AxoCore, AxoWeb |
+| AxoExtensions | `WKWebExtensionController`, CRX install, tab and window adapters. Its `AxoCRX` target (CRX3 verification, safe zip extraction, manifest checks) has no dependencies so it can be open sourced on its own | AxoCore, AxoWeb |
 | AxoInspector | All private Web Inspector API | AxoWeb |
 | AxoPersistence | GRDB database, migrations, FTS5 search index | GRDB |
 | AxoSync | `CKSyncEngine` mapping for Spaces, folders, pinned tabs | AxoPersistence |

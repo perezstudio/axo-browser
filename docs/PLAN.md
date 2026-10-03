@@ -269,7 +269,7 @@ Each milestone should be usable as a daily driver before the next one starts.
 
 **Milestone 3: Extensions and developer tools**
 
-- [ ] Install Chrome extensions from CRX files and unpacked folders (developer mode)
+- [ ] Install Chrome extensions from CRX files and unpacked folders (developer mode). Done: verified CRX3 parsing, safe unzip, manifest checks, and a per-profile installer that WebKit loads (`AxoCRX` and `ExtensionInstaller`). Next: controllers per profile, saved installs, and install UI.
 - [ ] Extension toolbar, popups, permission management
 - [ ] Built-in Web Inspector, docked or separate, including extension background pages
 - [ ] Test targets: 1Password or Bitwarden, and uBlock Origin Lite
