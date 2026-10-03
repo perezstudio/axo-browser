@@ -11,7 +11,7 @@ struct MigrationTests {
             #expect(try db.tableExists("space"))
             #expect(try db.tableExists("tab"))
             let tabColumns = try db.columns(in: "tab").map(\.name)
-            #expect(tabColumns == ["id", "spaceID", "url", "title", "sortKey", "isPinned", "archivedAt", "homeURL", "lastActiveAt"])
+            #expect(tabColumns == ["id", "spaceID", "url", "title", "sortKey", "isPinned", "archivedAt", "homeURL", "lastActiveAt", "folderID"])
         }
     }
 
@@ -103,6 +103,30 @@ struct MigrationTests {
             #expect(row["homeURL"] as String? == nil)
             let lastActive = try #require(row["lastActiveAt"] as Date?)
             #expect(abs(lastActive.timeIntervalSinceNow) < 60)
+        }
+    }
+
+    @Test func v4FoldersNestAndCleanUpWithTheirSpace() throws {
+        let database = try AppDatabase.makeInMemory()
+        let profileID = UUID(), spaceID = UUID(), outer = UUID(), inner = UUID(), tabID = UUID()
+        try database.writer.write { db in
+            try db.execute(sql: "INSERT INTO profile (id, name) VALUES (?, 'Default')", arguments: [profileID])
+            try db.execute(sql: "INSERT INTO space (id, profileID, name, sortKey) VALUES (?, ?, 'Home', 'a0')", arguments: [spaceID, profileID])
+            try db.execute(sql: "INSERT INTO folder (id, spaceID, name, sortKey) VALUES (?, ?, 'Outer', 'a0')", arguments: [outer, spaceID])
+            try db.execute(sql: "INSERT INTO folder (id, spaceID, parentID, name, sortKey) VALUES (?, ?, ?, 'Inner', 'a0')", arguments: [inner, spaceID, outer])
+            try db.execute(sql: "INSERT INTO tab (id, spaceID, url, sortKey, isPinned, folderID, lastActiveAt) VALUES (?, ?, 'https://a.com', 'a0', 1, ?, CURRENT_TIMESTAMP)", arguments: [tabID, spaceID, inner])
+
+            #expect(try Bool.fetchOne(db, sql: "SELECT isExpanded FROM folder WHERE id = ?", arguments: [outer]) == true)
+
+            // Deleting a folder deletes its subfolders, and their tabs lose the folder.
+            try db.execute(sql: "DELETE FROM folder WHERE id = ?", arguments: [outer])
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM folder") == 0)
+            #expect(try Row.fetchOne(db, sql: "SELECT folderID FROM tab")?["folderID"] as Data? == nil)
+
+            // Deleting the Space deletes its folders.
+            try db.execute(sql: "INSERT INTO folder (id, spaceID, name, sortKey) VALUES (?, ?, 'Again', 'a0')", arguments: [UUID(), spaceID])
+            try db.execute(sql: "DELETE FROM space WHERE id = ?", arguments: [spaceID])
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM folder") == 0)
         }
     }
 }

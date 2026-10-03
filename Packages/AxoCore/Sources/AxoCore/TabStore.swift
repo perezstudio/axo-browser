@@ -24,6 +24,12 @@ public enum TabStoreError: Error, Equatable {
     case spaceNotFound(Space.ID)
     /// The last Space can't be deleted; a window always shows one.
     case cannotDeleteLastSpace
+    /// No folder with this ID exists.
+    case folderNotFound(Folder.ID)
+    /// The folder belongs to another Space.
+    case folderInDifferentSpace(Folder.ID)
+    /// The move would put a folder inside itself.
+    case folderCycle(Folder.ID)
     /// No profile with this ID exists.
     case profileNotFound(Profile.ID)
     /// A profile can't be deleted while Spaces still use it.
@@ -224,7 +230,7 @@ public final class TabStore: Sendable {
         at position: TabPosition = .end
     ) async throws -> Tab {
         try await database.writer.write { db in
-            let sortKey = try Self.sortKey(for: position, in: spaceID, pinned: false, excluding: nil, db)
+            let sortKey = try Self.sortKey(for: position, in: spaceID, pinned: false, folder: nil, excluding: nil, db)
             let tab = Tab(spaceID: spaceID, url: url, title: title, sortKey: sortKey)
             try tab.insert(db)
             // Return the stored record: the database keeps dates to the millisecond.
@@ -240,7 +246,7 @@ public final class TabStore: Sendable {
         try await database.writer.write { db in
             guard var tab = try Tab.fetchOne(db, id: id) else { throw TabStoreError.tabNotFound(id) }
             if case .after(let anchorID) = position, anchorID == id { return }
-            tab.sortKey = try Self.sortKey(for: position, in: tab.spaceID, pinned: tab.isPinned, excluding: id, db)
+            tab.sortKey = try Self.sortKey(for: position, in: tab.spaceID, pinned: tab.isPinned, folder: tab.folderID, excluding: id, db)
             try tab.update(db)
         }
     }
@@ -269,14 +275,16 @@ public final class TabStore: Sendable {
 
     // MARK: Pinning
 
-    /// Pins or unpins a tab, moving it to the end of its new section. Pinning remembers the
-    /// current page as the tab's home URL; unpinning forgets it.
+    /// Pins or unpins a tab, moving it to the end of its new section (the top level of the
+    /// pinned section, outside any folder). Pinning remembers the current page as the tab's home
+    /// URL; unpinning forgets it.
     public func setPinned(_ pinned: Bool, tabID: Tab.ID) async throws {
         try await database.writer.write { db in
             guard var tab = try Tab.fetchOne(db, id: tabID) else { throw TabStoreError.tabNotFound(tabID) }
             guard tab.isPinned != pinned else { return }
-            tab.sortKey = try Self.sortKey(for: .end, in: tab.spaceID, pinned: pinned, excluding: tabID, db)
+            tab.sortKey = try Self.sortKey(for: .end, in: tab.spaceID, pinned: pinned, folder: nil, excluding: tabID, db)
             tab.isPinned = pinned
+            tab.folderID = nil
             tab.homeURL = pinned ? tab.url : nil
             try tab.update(db)
         }
@@ -372,7 +380,7 @@ public final class TabStore: Sendable {
         try await database.writer.write { db in
             guard var tab = try Tab.fetchOne(db, id: id) else { throw TabStoreError.tabNotFound(id) }
             guard tab.archivedAt != nil else { return tab }
-            tab.sortKey = try Self.sortKey(for: .end, in: tab.spaceID, pinned: tab.isPinned, excluding: id, db)
+            tab.sortKey = try Self.sortKey(for: .end, in: tab.spaceID, pinned: tab.isPinned, folder: tab.folderID, excluding: id, db)
             tab.archivedAt = nil
             tab.lastActiveAt = date
             try tab.update(db)
@@ -401,42 +409,230 @@ public final class TabStore: Sendable {
         }
     }
 
+    // MARK: Folders
+
+    /// A Space's folders, in no particular order. Build the tree from `parentID` and order each
+    /// level by `sortKey` together with its pinned tabs.
+    public func folders(in spaceID: Space.ID) async throws -> [Folder] {
+        try await database.writer.read { db in
+            try Folder.filter(Folder.Columns.spaceID == spaceID).order(Folder.Columns.sortKey).fetchAll(db)
+        }
+    }
+
+    /// Streams a Space's folders after every change.
+    public func observeFolders(in spaceID: Space.ID) -> AsyncValueObservation<[Folder]> {
+        ValueObservation
+            .tracking { db in try Folder.filter(Folder.Columns.spaceID == spaceID).order(Folder.Columns.sortKey).fetchAll(db) }
+            .values(in: database.writer)
+    }
+
+    /// Creates a folder at the end of a level of a Space's pinned section.
+    ///
+    /// - Parameter parent: The folder to create it in, or `nil` for the top level.
+    @discardableResult
+    public func createFolder(named name: String, in spaceID: Space.ID, parent: Folder.ID? = nil) async throws -> Folder {
+        try await database.writer.write { db in
+            guard try Space.exists(db, id: spaceID) else { throw TabStoreError.spaceNotFound(spaceID) }
+            if let parent {
+                guard let parentFolder = try Folder.fetchOne(db, id: parent) else { throw TabStoreError.folderNotFound(parent) }
+                guard parentFolder.spaceID == spaceID else { throw TabStoreError.folderInDifferentSpace(parent) }
+            }
+            let keys = try Self.pinnedLevelKeys(in: spaceID, parent: parent, excluding: nil, db)
+            let folder = Folder(spaceID: spaceID, parentID: parent, name: name, sortKey: try SortKey.between(keys.last, nil))
+            try folder.insert(db)
+            return folder
+        }
+    }
+
+    /// Renames a folder.
+    public func renameFolder(id: Folder.ID, to name: String) async throws {
+        try await updateFolder(id) { $0.name = name }
+    }
+
+    /// Expands or collapses a folder in the sidebar.
+    public func setFolderExpanded(_ expanded: Bool, id: Folder.ID) async throws {
+        try await updateFolder(id) { $0.isExpanded = expanded }
+    }
+
+    private func updateFolder(_ id: Folder.ID, _ change: @escaping @Sendable (inout Folder) -> Void) async throws {
+        try await database.writer.write { db in
+            guard var folder = try Folder.fetchOne(db, id: id) else { throw TabStoreError.folderNotFound(id) }
+            change(&folder)
+            try folder.update(db)
+        }
+    }
+
+    /// Deletes a folder. Its tabs and subfolders move up to the folder's parent, after the
+    /// items already there, in their current order. Nothing inside is deleted.
+    public func deleteFolder(id: Folder.ID) async throws {
+        try await database.writer.write { db in
+            guard let folder = try Folder.fetchOne(db, id: id) else { throw TabStoreError.folderNotFound(id) }
+            var keys = try Self.pinnedLevelKeys(in: folder.spaceID, parent: folder.parentID, excluding: .folder(id), db)
+            let tabs = try Tab.filter(Tab.Columns.folderID == id).fetchAll(db)
+            let subfolders = try Folder.filter(Folder.Columns.parentID == id).fetchAll(db)
+            let children: [(key: String, item: PinnedItem)] =
+                (tabs.map { ($0.sortKey, PinnedItem.tab($0.id)) } + subfolders.map { ($0.sortKey, PinnedItem.folder($0.id)) })
+                .sorted { $0.0 < $1.0 }
+            for child in children {
+                let key = try SortKey.between(keys.last, nil)
+                keys.append(key)
+                switch child.item {
+                case .tab(let tabID):
+                    try Tab.filter(id: tabID).updateAll(db, Tab.Columns.folderID.set(to: folder.parentID), Tab.Columns.sortKey.set(to: key))
+                case .folder(let folderID):
+                    try Folder.filter(id: folderID).updateAll(db, Folder.Columns.parentID.set(to: folder.parentID), Folder.Columns.sortKey.set(to: key))
+                }
+            }
+            try Folder.deleteOne(db, id: id)
+        }
+    }
+
+    /// Moves a pinned tab or a folder to a level of the pinned section. Moving an unpinned tab
+    /// pins it. Only the moved item's row changes.
+    ///
+    /// - Parameters:
+    ///   - item: The tab or folder to move.
+    ///   - parent: The folder to move it into, or `nil` for the top level.
+    ///   - anchor: The item to place it after, which must be at that level, or `nil` to place it
+    ///     first.
+    /// - Throws: ``TabStoreError`` if anything doesn't exist, is in another Space, the anchor is
+    ///   at another level, or a folder would end up inside itself.
+    public func movePinnedItem(_ item: PinnedItem, into parent: Folder.ID?, after anchor: PinnedItem?) async throws {
+        try await database.writer.write { db in
+            let spaceID: Space.ID
+            switch item {
+            case .tab(let id):
+                guard let tab = try Tab.fetchOne(db, id: id) else { throw TabStoreError.tabNotFound(id) }
+                spaceID = tab.spaceID
+            case .folder(let id):
+                guard let folder = try Folder.fetchOne(db, id: id) else { throw TabStoreError.folderNotFound(id) }
+                spaceID = folder.spaceID
+            }
+            if let parent {
+                guard let parentFolder = try Folder.fetchOne(db, id: parent) else { throw TabStoreError.folderNotFound(parent) }
+                guard parentFolder.spaceID == spaceID else { throw TabStoreError.folderInDifferentSpace(parent) }
+                if case .folder(let movingID) = item, try Self.folder(parent, isInside: movingID, db) {
+                    throw TabStoreError.folderCycle(movingID)
+                }
+            }
+            if anchor == item { return }
+
+            let keys = try Self.pinnedLevelKeys(in: spaceID, parent: parent, excluding: item, db)
+            let key: String
+            switch anchor {
+            case nil:
+                key = try SortKey.between(nil, keys.first)
+            case .tab(let anchorID):
+                guard let anchorTab = try Tab.fetchOne(db, id: anchorID),
+                      anchorTab.isPinned, anchorTab.folderID == parent, anchorTab.spaceID == spaceID else {
+                    throw TabStoreError.anchorInDifferentSection(anchorID)
+                }
+                key = try Self.key(after: anchorTab.sortKey, among: keys)
+            case .folder(let anchorID):
+                guard let anchorFolder = try Folder.fetchOne(db, id: anchorID),
+                      anchorFolder.parentID == parent, anchorFolder.spaceID == spaceID else {
+                    throw TabStoreError.anchorInDifferentSection(anchorID)
+                }
+                key = try Self.key(after: anchorFolder.sortKey, among: keys)
+            }
+
+            switch item {
+            case .tab(let id):
+                guard var tab = try Tab.fetchOne(db, id: id) else { return }
+                if !tab.isPinned {
+                    tab.isPinned = true
+                    tab.homeURL = tab.url
+                }
+                tab.folderID = parent
+                tab.sortKey = key
+                try tab.update(db)
+            case .folder(let id):
+                guard var folder = try Folder.fetchOne(db, id: id) else { return }
+                folder.parentID = parent
+                folder.sortKey = key
+                try folder.update(db)
+            }
+        }
+    }
+
+    /// Whether `candidate` is `ancestor` or inside it.
+    private static func folder(_ candidate: Folder.ID, isInside ancestor: Folder.ID, _ db: Database) throws -> Bool {
+        var current: Folder.ID? = candidate
+        var seen: Set<Folder.ID> = []
+        while let id = current, seen.insert(id).inserted {
+            if id == ancestor { return true }
+            current = try Folder.fetchOne(db, id: id)?.parentID
+        }
+        return false
+    }
+
     // MARK: Ordering
 
-    /// Computes a sort key for `position` among the tabs in one section (pinned or not) of a
-    /// Space, ignoring the tab being moved.
+    /// Computes a sort key for `position` within one section of a Space, ignoring the tab being
+    /// moved. For pinned tabs, the section is one level of the pinned tree (`folder`), where
+    /// folders and tabs share an order.
     private static func sortKey(
         for position: TabPosition,
         in spaceID: Space.ID,
         pinned: Bool,
+        folder: Folder.ID?,
         excluding excludedID: Tab.ID?,
         _ db: Database
     ) throws -> String {
-        var siblings = Tab
-            .filter(Tab.Columns.spaceID == spaceID)
-            .filter(Tab.Columns.isPinned == pinned)
-        if let excludedID {
-            siblings = siblings.filter(Tab.Columns.id != excludedID)
+        let keys: [String]
+        if pinned {
+            keys = try pinnedLevelKeys(in: spaceID, parent: folder, excluding: excludedID.map(PinnedItem.tab), db)
+        } else {
+            var siblings = Tab.filter(Tab.Columns.spaceID == spaceID).filter(Tab.Columns.isPinned == false)
+            if let excludedID {
+                siblings = siblings.filter(Tab.Columns.id != excludedID)
+            }
+            keys = try String.fetchAll(db, siblings.select(Tab.Columns.sortKey).order(Tab.Columns.sortKey))
         }
         switch position {
         case .start:
-            let first = try siblings.order(Tab.Columns.sortKey, Tab.Columns.id).fetchOne(db)
-            return try SortKey.between(nil, first?.sortKey)
+            return try SortKey.between(nil, keys.first)
         case .end:
-            let last = try siblings.order(Tab.Columns.sortKey.desc, Tab.Columns.id.desc).fetchOne(db)
-            return try SortKey.between(last?.sortKey, nil)
+            return try SortKey.between(keys.last, nil)
         case .after(let anchorID):
             guard let anchor = try Tab.fetchOne(db, id: anchorID) else {
                 throw TabStoreError.tabNotFound(anchorID)
             }
             guard anchor.spaceID == spaceID else { throw TabStoreError.anchorInDifferentSpace(anchorID) }
-            guard anchor.isPinned == pinned else { throw TabStoreError.anchorInDifferentSection(anchorID) }
-            // The next distinct key, so ties left by a sync merge can't produce an invalid range.
-            let next = try siblings
-                .filter(Tab.Columns.sortKey > anchor.sortKey)
-                .order(Tab.Columns.sortKey)
-                .fetchOne(db)
-            return try SortKey.between(anchor.sortKey, next?.sortKey)
+            guard anchor.isPinned == pinned, !pinned || anchor.folderID == folder else {
+                throw TabStoreError.anchorInDifferentSection(anchorID)
+            }
+            return try key(after: anchor.sortKey, among: keys)
         }
+    }
+
+    /// A key after `anchorKey` and before the next distinct key, so ties left by a sync merge
+    /// can't produce an invalid range.
+    private static func key(after anchorKey: String, among sortedKeys: [String]) throws -> String {
+        try SortKey.between(anchorKey, sortedKeys.first { $0 > anchorKey })
+    }
+
+    /// The sorted keys of the pinned tabs and folders at one level of a Space's pinned tree.
+    private static func pinnedLevelKeys(
+        in spaceID: Space.ID,
+        parent: Folder.ID?,
+        excluding excluded: PinnedItem?,
+        _ db: Database
+    ) throws -> [String] {
+        var tabs = Tab
+            .filter(Tab.Columns.spaceID == spaceID)
+            .filter(Tab.Columns.isPinned == true)
+            .filter(Tab.Columns.folderID == parent)
+        var folders = Folder
+            .filter(Folder.Columns.spaceID == spaceID)
+            .filter(Folder.Columns.parentID == parent)
+        switch excluded {
+        case .tab(let id): tabs = tabs.filter(Tab.Columns.id != id)
+        case .folder(let id): folders = folders.filter(Folder.Columns.id != id)
+        case nil: break
+        }
+        let keys = try String.fetchAll(db, tabs.select(Tab.Columns.sortKey))
+            + String.fetchAll(db, folders.select(Folder.Columns.sortKey))
+        return keys.sorted()
     }
 }

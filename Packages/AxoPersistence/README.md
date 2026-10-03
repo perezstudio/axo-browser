@@ -19,6 +19,7 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
 | --- | --- |
 | `v1-profiles-spaces-tabs` | `profile`, `space` (→ profile, cascade), `tab` (→ space, cascade) |
 | `v2-favicons` | `favicon` (site icons as 64 px PNGs, keyed by host) |
+| `v4-folders` | `folder` (→ space, cascade; `parentID` → folder, cascade) and `tab.folderID` (→ folder, set null) |
 | `v3-pinned-home-and-activity` | adds `tab.homeURL` and `tab.lastActiveAt` (existing tabs count as active at migration time), and an index on `tab.archivedAt` |
 
 Record types for these tables live in AxoCore. Foreign keys are enforced. Schema changes are new, versioned migrations registered in `AppDatabase.migrator`. Never edit a migration that has shipped.

@@ -17,6 +17,10 @@ public final class BrowserModel {
     public private(set) var space: Space?
     /// The Space's tabs in sidebar order, kept current as the database changes.
     public private(set) var tabs: [AxoCore.Tab] = []
+    /// The Space's folders, kept current as the database changes.
+    public private(set) var folders: [Folder] = []
+    /// A name the sidebar should ask for, such as a new folder's.
+    public var namingRequest: NamingRequest?
     /// The tab shown in the window.
     public private(set) var selectedTabID: AxoCore.Tab.ID?
     /// The live state of the selected tab's web view.
@@ -50,6 +54,7 @@ public final class BrowserModel {
     @ObservationIgnored private let store: TabStore
     @ObservationIgnored private var observationTask: Task<Void, Never>?
     @ObservationIgnored private var spacesObservationTask: Task<Void, Never>?
+    @ObservationIgnored private var foldersObservationTask: Task<Void, Never>?
     /// The tab each Space had selected, so switching back returns to it.
     @ObservationIgnored private var selectedTabBySpace: [Space.ID: AxoCore.Tab.ID] = [:]
     /// The Space to show at launch, if it still exists.
@@ -108,6 +113,7 @@ public final class BrowserModel {
     isolated deinit {
         observationTask?.cancel()
         spacesObservationTask?.cancel()
+        foldersObservationTask?.cancel()
         archiveTask?.cancel()
     }
 
@@ -236,6 +242,8 @@ public final class BrowserModel {
         }
         space = target
         tabs = try await store.tabs(in: target.id)
+        folders = try await store.folders(in: target.id)
+        observeFolders(in: target.id)
         let remembered = selectedTabBySpace[target.id].flatMap { id in tabs.first { $0.id == id }?.id }
         select(remembered ?? tabs.first?.id)
         observeTabs(in: target.id)
@@ -260,8 +268,10 @@ public final class BrowserModel {
         let observation = store.observeSpaces()
         spacesObservationTask = Task { [weak self] in
             do {
-                for try await spaces in observation {
-                    self?.spaces = spaces
+                for try await _ in observation {
+                    // Re-read for the same reason as tabs: never apply a stale list.
+                    guard let self else { return }
+                    self.spaces = try await self.store.spaces()
                 }
             } catch {
                 self?.logger.error("Space observation failed: \(error)")
@@ -465,6 +475,103 @@ public final class BrowserModel {
         }
     }
 
+    // MARK: Folders
+
+    /// The pinned section as a tree: folders (with their contents) and pinned tabs, each level
+    /// in order.
+    public var pinnedTree: [PinnedNode] {
+        PinnedNode.tree(folders: folders, pinnedTabs: pinnedTabs)
+    }
+
+    /// Creates a folder at the end of a level of the pinned section, optionally moving a tab or
+    /// folder into it.
+    public func createFolder(named name: String, parent: Folder.ID? = nil, moving item: PinnedItem? = nil) async {
+        guard let space else { return }
+        do {
+            let folder = try await store.createFolder(named: name, in: space.id, parent: parent)
+            if let item {
+                try await store.movePinnedItem(item, into: folder.id, after: nil)
+            }
+            try await refreshSidebar()
+        } catch {
+            report(error, "Axo couldn't create the folder.")
+        }
+    }
+
+    /// Renames a folder.
+    public func renameFolder(_ id: Folder.ID, to name: String) async {
+        await changeFolders("Axo couldn't rename the folder.") { try await self.store.renameFolder(id: id, to: name) }
+    }
+
+    /// Deletes a folder. Its tabs and subfolders move up a level.
+    public func deleteFolder(_ id: Folder.ID) async {
+        await changeFolders("Axo couldn't delete the folder.") { try await self.store.deleteFolder(id: id) }
+    }
+
+    /// Expands or collapses a folder.
+    public func setFolderExpanded(_ expanded: Bool, id: Folder.ID) async {
+        if let index = folders.firstIndex(where: { $0.id == id }) {
+            folders[index].isExpanded = expanded
+        }
+        await changeFolders("Axo couldn't update the folder.") { try await self.store.setFolderExpanded(expanded, id: id) }
+    }
+
+    /// Moves a tab or folder to the end of a folder (or the top level when `folder` is `nil`).
+    /// Moving an unpinned tab pins it.
+    public func move(_ item: PinnedItem, toFolder folder: Folder.ID?) async {
+        let anchor = PinnedNode.items(at: folder, in: pinnedTree).last { $0 != item }
+        await changeFolders("Axo couldn't move that.") {
+            try await self.store.movePinnedItem(item, into: folder, after: anchor)
+        }
+    }
+
+    /// Reorders a level of the pinned section after a drag, using `List.onMove` indices.
+    public func movePinnedItems(fromOffsets source: IndexSet, toOffset destination: Int, in parent: Folder.ID?) async {
+        let level = PinnedNode.items(at: parent, in: pinnedTree)
+        guard let sourceIndex = source.first, source.count == 1, level.indices.contains(sourceIndex) else { return }
+        var remaining = level
+        let moving = remaining.remove(at: sourceIndex)
+        let insertIndex = destination > sourceIndex ? destination - 1 : destination
+        guard insertIndex != sourceIndex else { return }
+        let anchor = insertIndex == 0 ? nil : remaining[insertIndex - 1]
+        await changeFolders("Axo couldn't move that.") {
+            try await self.store.movePinnedItem(moving, into: parent, after: anchor)
+        }
+    }
+
+    private func changeFolders(_ failure: String, _ change: @escaping () async throws -> Void) async {
+        do {
+            try await change()
+            try await refreshSidebar()
+        } catch {
+            report(error, failure)
+        }
+    }
+
+    private func refreshSidebar() async throws {
+        guard let space else { return }
+        tabs = try await store.tabs(in: space.id)
+        folders = try await store.folders(in: space.id)
+    }
+
+    private func observeFolders(in spaceID: Space.ID) {
+        foldersObservationTask?.cancel()
+        let observation = store.observeFolders(in: spaceID)
+        foldersObservationTask = Task { [weak self] in
+            do {
+                for try await _ in observation {
+                    // Re-read for the same reason as tabs: never apply a stale list.
+                    guard let self, self.space?.id == spaceID else { return }
+                    let current = try await self.store.folders(in: spaceID)
+                    guard self.space?.id == spaceID else { return }
+                    self.folders = current
+                }
+            } catch {
+                self?.logger.error("Folder observation failed: \(error)")
+            }
+        }
+    }
+
     /// Moves a tab within its section after a drag in the sidebar, using `List.onMove` indices
     /// relative to that section.
     public func moveTabs(fromOffsets source: IndexSet, toOffset destination: Int, pinned: Bool) async {
@@ -600,11 +707,14 @@ public final class BrowserModel {
         let observation = store.observeTabs(in: spaceID)
         observationTask = Task { [weak self] in
             do {
-                for try await tabs in observation {
-                    // Ignore a list that arrives after the window switched to another Space.
-                    guard self?.space?.id == spaceID else { return }
-                    self?.tabs = tabs
-                    await self?.loadSavedFavicons()
+                for try await _ in observation {
+                    // Re-read instead of using the observed list: a list observed before one of
+                    // this model's own writes can arrive after it and would undo it briefly.
+                    guard let self, self.space?.id == spaceID else { return }
+                    let current = try await self.store.tabs(in: spaceID)
+                    guard self.space?.id == spaceID else { return }
+                    self.tabs = current
+                    await self.loadSavedFavicons()
                 }
             } catch {
                 self?.logger.error("Tab observation failed: \(error)")

@@ -68,6 +68,8 @@ public struct Tab: Codable, Hashable, Identifiable, Sendable, FetchableRecord, P
     public var homeURL: URL?
     /// When the tab was last shown. Unpinned tabs archive after a period without being shown.
     public var lastActiveAt: Date
+    /// The folder a pinned tab is in, or `nil` at the top of the pinned section.
+    public var folderID: Folder.ID?
 
     /// Creates a tab.
     public init(
@@ -79,7 +81,8 @@ public struct Tab: Codable, Hashable, Identifiable, Sendable, FetchableRecord, P
         isPinned: Bool = false,
         archivedAt: Date? = nil,
         homeURL: URL? = nil,
-        lastActiveAt: Date = Date()
+        lastActiveAt: Date = Date(),
+        folderID: Folder.ID? = nil
     ) {
         self.id = id
         self.spaceID = spaceID
@@ -90,6 +93,7 @@ public struct Tab: Codable, Hashable, Identifiable, Sendable, FetchableRecord, P
         self.archivedAt = archivedAt
         self.homeURL = homeURL
         self.lastActiveAt = lastActiveAt
+        self.folderID = folderID
     }
 
     /// Whether a pinned tab has navigated away from its home page.
@@ -106,6 +110,7 @@ public struct Tab: Codable, Hashable, Identifiable, Sendable, FetchableRecord, P
         public static let archivedAt = Column(CodingKeys.archivedAt)
         public static let isPinned = Column(CodingKeys.isPinned)
         public static let lastActiveAt = Column(CodingKeys.lastActiveAt)
+        public static let folderID = Column(CodingKeys.folderID)
     }
 }
 
@@ -140,4 +145,46 @@ public struct Favicon: Codable, Hashable, Sendable, FetchableRecord, Persistable
     public static func key(for url: URL) -> String? {
         url.host()?.lowercased()
     }
+}
+
+/// A folder in a Space's pinned section. Folders can hold pinned tabs and other folders.
+public struct Folder: Codable, Hashable, Identifiable, Sendable, FetchableRecord, PersistableRecord {
+    public static let databaseTableName = "folder"
+
+    /// The folder's identifier.
+    public var id: UUID
+    /// The Space the folder belongs to.
+    public var spaceID: Space.ID
+    /// The folder containing this one, or `nil` at the top of the pinned section.
+    public var parentID: Folder.ID?
+    /// The name shown in the sidebar.
+    public var name: String
+    /// The folder's position among the folders and pinned tabs at its level. See ``SortKey``.
+    public var sortKey: String
+    /// Whether the folder shows its contents in the sidebar.
+    public var isExpanded: Bool
+
+    /// Creates a folder.
+    public init(id: UUID = UUID(), spaceID: Space.ID, parentID: Folder.ID? = nil, name: String, sortKey: String, isExpanded: Bool = true) {
+        self.id = id
+        self.spaceID = spaceID
+        self.parentID = parentID
+        self.name = name
+        self.sortKey = sortKey
+        self.isExpanded = isExpanded
+    }
+
+    /// Column names, for building queries.
+    public enum Columns {
+        public static let id = Column(CodingKeys.id)
+        public static let spaceID = Column(CodingKeys.spaceID)
+        public static let parentID = Column(CodingKeys.parentID)
+        public static let sortKey = Column(CodingKeys.sortKey)
+    }
+}
+
+/// Something in a Space's pinned section: a pinned tab or a folder.
+public enum PinnedItem: Hashable, Sendable {
+    case tab(Tab.ID)
+    case folder(Folder.ID)
 }
