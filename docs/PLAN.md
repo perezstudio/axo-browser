@@ -271,7 +271,7 @@ Each milestone should be usable as a daily driver before the next one starts.
 
 - [x] Install Chrome extensions from CRX files and unpacked folders (developer mode): verified CRX3, safe unzip, an install prompt listing what the extension can do, and one `WKWebExtensionController` per profile. Installing from the Chrome Web Store page comes later.
 - [x] Extension toolbar, popups, and permission management: toolbar buttons with badges and popups, `chrome.tabs` and `chrome.windows`, an Extensions window (on/off, site access, remove, errors), and prompts for optional permissions, which are remembered.
-- [ ] Built-in Web Inspector, docked or separate, including extension background pages
+- [x] Built-in Web Inspector, docked or separate, including extension background pages: ⌥⌘I and ⌥⌘C, Inspect Element, and Inspect Background Page. All private API is in AxoInspector behind runtime checks, with Safari's Develop menu as the fallback.
 - [ ] Test targets: 1Password or Bitwarden, and uBlock Origin Lite
 
 **Milestone 4: Switching and daily-driver polish**

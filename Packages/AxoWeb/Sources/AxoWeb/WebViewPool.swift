@@ -55,9 +55,15 @@ public final class WebViewPool {
     /// File selection is cancelled when this is `nil`.
     public var onFileSelection: ((FileSelectionRequest) async -> [URL]?)?
 
-    /// Called with each new web view's configuration and profile before the web view is
-    /// created, for example to attach the profile's web extension controller.
-    public var configureWebView: ((WKWebViewConfiguration, Profile.ID) -> Void)?
+    /// Functions that adjust each new web view's configuration, in the order added.
+    private var configurators: [(WKWebViewConfiguration, Profile.ID) -> Void] = []
+
+    /// Adds a function called with each new web view's configuration and profile before the
+    /// web view is created, for example to attach the profile's extension controller or turn on
+    /// developer tools. Configurators run in the order they were added.
+    public func addWebViewConfigurator(_ configure: @escaping (WKWebViewConfiguration, Profile.ID) -> Void) {
+        configurators.append(configure)
+    }
 
     /// Called when a page asks to open a link in a new tab or window (for example
     /// `target="_blank"` or `window.open`). The second argument is the tab that asked.
@@ -117,7 +123,7 @@ public final class WebViewPool {
 
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = dataStore(for: profileID)
-        configureWebView?(configuration, profileID)
+        configurators.forEach { $0(configuration, profileID) }
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.allowsBackForwardNavigationGestures = true
 

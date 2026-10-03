@@ -51,6 +51,11 @@ public final class ExtensionManager {
         public var isUnpacked: Bool
     }
 
+    /// Adjusts the configuration of web views WebKit creates for extensions (popups and
+    /// background pages), for example to turn on developer tools. Applies to controllers created
+    /// after it's set, so set it before loading extensions.
+    @ObservationIgnored public var configureExtensionWebViews: ((WKWebViewConfiguration) -> Void)?
+
     /// Called when an extension's toolbar button should show its popup.
     @ObservationIgnored public var onPresentPopup: ((_ extensionID: String, _ popover: NSPopover) -> Void)?
 
@@ -78,7 +83,7 @@ public final class ExtensionManager {
         self.store = store
         self.pool = pool
         self.persistent = persistent
-        pool.configureWebView = { [weak self] configuration, profileID in
+        pool.addWebViewConfigurator { [weak self] configuration, profileID in
             guard let self else { return }
             configuration.webExtensionController = self.controller(for: profileID)
         }
@@ -94,6 +99,11 @@ public final class ExtensionManager {
             ? .init(identifier: profileID)
             : .nonPersistent()
         configuration.defaultWebsiteDataStore = pool.dataStore(for: profileID)
+        if let configure = configureExtensionWebViews {
+            let webViewConfiguration = configuration.webViewConfiguration ?? WKWebViewConfiguration()
+            configure(webViewConfiguration)
+            configuration.webViewConfiguration = webViewConfiguration
+        }
         let controller = WKWebExtensionController(configuration: configuration)
         controller.delegate = delegate
         controllers[profileID] = controller

@@ -39,6 +39,7 @@ No Axo or third-party dependencies.
 
 Known WebKit gap: `runtime.onInstalled` doesn't fire (see `docs/webkit-gaps.md`).
 
+- **`configureExtensionWebViews`** adjusts the configuration of web views WebKit creates for extensions (popups and background pages). The app uses it to turn on developer tools. Set it before controllers are created.
 - **Install prompt:** `prepareInstall(from:for:)` verifies and saves a `.crx` file or an unpacked folder *turned off*, and returns an `InstallSummary` describing what it can do. Then `confirmInstall` turns it on, or `uninstall` removes it if the person declines. Updating an installed extension keeps it on.
 - **Site access:** `setSiteAccess(.all / .click, …)` grants the requested sites, or denies them so the extension reaches a page only through `activeTab` when its button is clicked. The choice is saved and reapplied at load.
 - **Optional permissions:** when an extension calls `permissions.request`, the controller delegate asks `onPermissionRequest` with a `PermissionRequest` (extension name and plain-language lines). Approvals are saved (`grantedOptional`) and restored at load. `grantedDescription(for:profileID:)` describes what a loaded extension can do now.
