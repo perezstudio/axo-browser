@@ -34,6 +34,8 @@ public enum TabStoreError: Error, Equatable {
     case profileNotFound(Profile.ID)
     /// A profile can't be deleted while Spaces still use it.
     case profileInUse(Profile.ID)
+    /// The split already has ``TabSplit/maximumPanes`` tabs.
+    case splitFull(TabSplit.ID)
 }
 
 /// Reads and writes the sidebar model: profiles, Spaces, and tabs.
@@ -248,6 +250,7 @@ public final class TabStore: Sendable {
             if case .after(let anchorID) = position, anchorID == id { return }
             tab.sortKey = try Self.sortKey(for: position, in: tab.spaceID, pinned: tab.isPinned, folder: tab.folderID, excluding: id, db)
             try tab.update(db)
+            try Self.alignSplit(containing: id, db)
         }
     }
 
@@ -269,7 +272,8 @@ public final class TabStore: Sendable {
     /// Deleting a tab that doesn't exist does nothing.
     public func deleteTab(id: Tab.ID) async throws {
         _ = try await database.writer.write { db in
-            try Tab.deleteOne(db, id: id)
+            try Self.leaveSplit(id, db)
+            return try Tab.deleteOne(db, id: id)
         }
     }
 
@@ -287,6 +291,8 @@ public final class TabStore: Sendable {
             tab.folderID = nil
             tab.homeURL = pinned ? tab.url : nil
             try tab.update(db)
+            // A split is pinned or not as a whole.
+            try Self.alignSplit(containing: tabID, db)
         }
     }
 
@@ -333,6 +339,8 @@ public final class TabStore: Sendable {
         try await database.writer.write { db in
             guard var tab = try Tab.fetchOne(db, id: id) else { throw TabStoreError.tabNotFound(id) }
             guard tab.archivedAt == nil else { return }
+            try Self.leaveSplit(id, db)
+            tab = try Tab.fetchOne(db, id: id) ?? tab
             tab.archivedAt = date
             try tab.update(db)
         }
@@ -356,6 +364,7 @@ public final class TabStore: Sendable {
                 .fetchAll(db)
                 .map(\.id)
                 .filter { !keeping.contains($0) }
+            for id in idle { try Self.leaveSplit(id, db) }
             try Tab.filter(keys: idle).updateAll(db, Tab.Columns.archivedAt.set(to: date))
             return idle
         }
@@ -546,6 +555,7 @@ public final class TabStore: Sendable {
                 tab.folderID = parent
                 tab.sortKey = key
                 try tab.update(db)
+                try Self.alignSplit(containing: id, db)
             case .folder(let id):
                 guard var folder = try Folder.fetchOne(db, id: id) else { return }
                 folder.parentID = parent

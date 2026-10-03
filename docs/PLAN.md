@@ -292,7 +292,7 @@ Each milestone should be usable as a daily driver before the next one starts.
 
 **Milestone 5: Power features**
 
-- [ ] Split view
+- [x] Split view: 2–4 tabs side by side or stacked, saved as one sidebar row (`tabSplit` table), pinnable and movable into folders like a tab. Importing Arc's split views as splits (they're flattened today) is still to do.
 - [ ] Peek overlay for links opened from pinned tabs
 - [ ] Mini window for links opened from other apps
 - [ ] Link routing rules that send links to specific Spaces

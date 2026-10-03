@@ -16,7 +16,7 @@ struct SidebarView: View {
                 .accessibilityIdentifier("pinnedSection")
             }
             Section(model.space?.name ?? "Tabs") {
-                rows(for: model.unpinnedTabs, pinned: false)
+                rows(for: model.unpinnedTabs.filter { !model.isSplitFollower($0) }, pinned: false)
             }
         }
         .sheet(isPresented: $isShowingArchive) {
@@ -69,7 +69,7 @@ extension SidebarView {
     @ViewBuilder
     private func rows(for tabs: [AxoCore.Tab], pinned: Bool) -> some View {
         ForEach(tabs) { tab in
-            TabRow(tab: tab, favicon: model.favicon(for: tab))
+            SidebarTabRow(model: model, tab: tab)
                 .tag(PinnedItem.tab(tab.id))
                 .contextMenu { menu(for: tab) }
                 .sidebarMoveActions(model: model, item: .tab(tab.id))
@@ -99,12 +99,69 @@ extension SidebarView {
     }
 }
 
+/// A sidebar row for a tab, or for a split view when the tab's split stands behind it.
+struct SidebarTabRow: View {
+    let model: BrowserModel
+    let tab: AxoCore.Tab
+
+    var body: some View {
+        if let split = model.split(of: tab.id) {
+            SplitRow(panes: model.panes(of: split.id), favicon: model.favicon(for:))
+        } else {
+            TabRow(tab: tab, favicon: model.favicon(for: tab))
+        }
+    }
+}
+
+/// One split view in the sidebar: its tabs' icons and titles in pane order.
+struct SplitRow: View {
+    let panes: [AxoCore.Tab]
+    let favicon: (AxoCore.Tab) -> NSImage?
+
+    var body: some View {
+        Label {
+            Text(panes.map(TabRow.displayTitle(for:)).joined(separator: " | "))
+        } icon: {
+            HStack(spacing: 2) {
+                ForEach(panes) { pane in
+                    if let image = favicon(pane) {
+                        Image(nsImage: image).resizable().interpolation(.high)
+                            .frame(width: 14, height: 14)
+                            .clipShape(.rect(cornerRadius: 3))
+                    } else {
+                        Image(systemName: "globe").font(.system(size: 11))
+                    }
+                }
+            }
+            .accessibilityHidden(true)
+        }
+        .lineLimit(1)
+        .help(panes.map(TabRow.displayTitle(for:)).joined(separator: "\n"))
+        .accessibilityLabel("Split view: " + panes.map(TabRow.displayTitle(for:)).formatted(.list(type: .and)))
+        .accessibilityIdentifier("splitRow")
+    }
+}
+
 /// The actions for a tab in the sidebar.
 struct TabContextMenu: View {
     let model: BrowserModel
     let tab: AxoCore.Tab
 
     var body: some View {
+        if let split = model.split(of: tab.id) {
+            Button("Separate Split View") {
+                model.selectSidebarItem(.tab(tab.id))
+                Task { await model.separateSelectedSplit() }
+            }
+            Button(split.orientation == .horizontal ? "Stack Panes" : "Show Panes Side by Side") {
+                model.selectSidebarItem(.tab(tab.id))
+                Task { await model.toggleSplitOrientation() }
+            }
+            Divider()
+        } else if model.canAddToSplit, let selected = model.selectedTabID, selected != tab.id {
+            Button("Add to Split View") { Task { await model.addToSplit(tab.id) } }
+            Divider()
+        }
         if tab.isPinned {
             Button("Go to Pinned Page") { Task { await model.goToPinnedHome(tab.id) } }
                 .disabled(!tab.hasLeftHome)
@@ -133,7 +190,7 @@ struct PinnedLevel: View {
         ForEach(nodes) { node in
             switch node {
             case .tab(let tab):
-                TabRow(tab: tab, favicon: model.favicon(for: tab))
+                SidebarTabRow(model: model, tab: tab)
                     .tag(PinnedItem.tab(tab.id))
                     .contextMenu { TabContextMenu(model: model, tab: tab) }
                     .sidebarMoveActions(model: model, item: .tab(tab.id))

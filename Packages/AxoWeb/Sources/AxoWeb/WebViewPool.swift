@@ -65,6 +65,10 @@ public final class WebViewPool {
         configurators.append(configure)
     }
 
+    /// Called when a tab's web view takes keyboard focus, for example when it's clicked. With
+    /// several web views on screen (a split view), this says which one the person is using.
+    public var onWebViewFocus: ((Tab.ID) -> Void)?
+
     /// Called when a page asks to open a link in a new tab or window (for example
     /// `target="_blank"` or `window.open`). The second argument is the tab that asked.
     public var onOpenInNewTab: ((URL, Tab.ID) -> Void)?
@@ -131,8 +135,9 @@ public final class WebViewPool {
         configuration.preferences.isElementFullscreenEnabled = true
         UserAgent.apply(to: configuration)
         configurators.forEach { $0(configuration, profileID) }
-        let webView = WKWebView(frame: .zero, configuration: configuration)
+        let webView = PooledWebView(frame: .zero, configuration: configuration)
         webView.allowsBackForwardNavigationGestures = true
+        webView.onFocus = { [weak self] in self?.onWebViewFocus?(tab.id) }
 
         let liveTab = LiveTab(tabID: tab.id, profileID: profileID, webView: webView, lastUsed: now())
         liveTab.delegate.onOpenInNewTab = { [weak self] url in self?.onOpenInNewTab?(url, tab.id) }
@@ -458,4 +463,15 @@ private struct HibernatedTab {
     var interactionState: Any?
     /// A JPEG of the page when it hibernated.
     var snapshot: Data?
+}
+
+/// The web view the pool creates for each tab. It reports when it takes keyboard focus.
+final class PooledWebView: WKWebView {
+    var onFocus: (() -> Void)?
+
+    override func becomeFirstResponder() -> Bool {
+        let became = super.becomeFirstResponder()
+        if became { onFocus?() }
+        return became
+    }
 }

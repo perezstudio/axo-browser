@@ -18,6 +18,9 @@ public enum CommandAction: String, CaseIterable, Hashable, Sendable {
     case deleteSpace
     case renameFolder
     case deleteFolder
+    case addSplitView
+    case separateSplitView
+    case rotateSplitView
 
     /// The name shown in the command bar.
     public var title: String {
@@ -37,6 +40,9 @@ public enum CommandAction: String, CaseIterable, Hashable, Sendable {
         case .deleteSpace: "Delete Space"
         case .renameFolder: "Rename Folder"
         case .deleteFolder: "Delete Folder"
+        case .addSplitView: "Add Split View"
+        case .separateSplitView: "Separate Split View"
+        case .rotateSplitView: "Rotate Split View"
         }
     }
 
@@ -58,6 +64,9 @@ public enum CommandAction: String, CaseIterable, Hashable, Sendable {
         case .deleteSpace: "trash"
         case .renameFolder: "folder.badge.gearshape"
         case .deleteFolder: "folder.badge.minus"
+        case .addSplitView: "rectangle.split.2x1"
+        case .separateSplitView: "rectangle"
+        case .rotateSplitView: "rectangle.split.1x2"
         }
     }
 }

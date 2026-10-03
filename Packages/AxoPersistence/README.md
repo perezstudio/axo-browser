@@ -19,6 +19,7 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
 | --- | --- |
 | `v1-profiles-spaces-tabs` | `profile`, `space` (→ profile, cascade), `tab` (→ space, cascade) |
 | `v2-favicons` | `favicon` (site icons as 64 px PNGs, keyed by host) |
+| `v9-tab-splits` | `tabSplit` (split views: Space and orientation; → space, cascade), plus `tab.splitID` (→ tabSplit, set null) and `tab.splitSortKey` (pane order) |
 | `v8-site-permissions` | `sitePermission` (the person's camera, microphone, and location answers per profile, origin, and kind; → profile, cascade) |
 | `v7-extension-access` | adds `webExtension.siteAccess` (`all` or `click`) and `grantedOptional` (a JSON array of approved optional permissions and patterns) |
 | `v6-extensions` | `webExtension` (installed extensions per profile with folder and enabled state; → profile, cascade) |

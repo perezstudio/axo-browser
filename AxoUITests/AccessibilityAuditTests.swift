@@ -12,6 +12,7 @@ final class AccessibilityAuditTests: XCTestCase {
         app.launchEnvironment["AXO_UI_TESTING"] = "1"
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
         app.launch()
+        AxoUITests.bringToFront(app)
         return app
     }
 
@@ -42,6 +43,8 @@ final class AccessibilityAuditTests: XCTestCase {
                 }
                 if element.elementType == .group {
                     let children = element.children(matching: .any).allElementsBoundByIndex
+                    // HSplitView's and VSplitView's host for one pane of a split view.
+                    if children.count == 1, children[0].identifier == "splitPane" { return true }
                     // The split view's sidebar column, which holds the address field.
                     if children.contains(where: { $0.identifier == "addressField" }) { return true }
                     // A List section header row, which holds only its header text.
@@ -69,6 +72,18 @@ final class AccessibilityAuditTests: XCTestCase {
         app.typeText("data:text/html,<title>Pond</title><p>Axolotls live in lakes.</p>\n")
         XCTAssertTrue(sidebar.staticTexts["Pond"].waitForExistence(timeout: 10))
         try audit(app, "page")
+
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,<title>Lake</title><p>Still water.</p>\n")
+        XCTAssertTrue(sidebar.staticTexts["Lake"].waitForExistence(timeout: 10))
+        app.typeKey("=", modifierFlags: [.control, .shift])
+        app.typeText("pond")
+        let pond = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == 'commandResult' AND label CONTAINS 'Pond'")).firstMatch
+        XCTAssertTrue(pond.waitForExistence(timeout: 5))
+        pond.click()
+        XCTAssertTrue(app.descendants(matching: .any)["splitView"].waitForExistence(timeout: 10))
+        try audit(app, "split view")
 
         app.typeKey("f", modifierFlags: .command)
         XCTAssertTrue(app.textFields["findField"].waitForExistence(timeout: 5))

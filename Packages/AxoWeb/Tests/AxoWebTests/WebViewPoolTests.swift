@@ -159,6 +159,24 @@ struct WebViewPoolTests {
         #expect(agent.contains(" Safari/"), "Sites and extensions that detect Safari recognize Axo: \(agent)")
     }
 
+    @Test func focusingAWebViewReportsItsTab() throws {
+        let pool = WebViewPool.forTesting()
+        let first = Tab.testTab(url: try pages.page("one")), second = Tab.testTab(url: try pages.page("two"))
+        var focused: [Tab.ID] = []
+        pool.onWebViewFocus = { focused.append($0) }
+
+        let window = NSWindow(contentRect: NSRect(x: -10_000, y: -10_000, width: 600, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let left = pool.webView(for: first, profileID: profileID), right = pool.webView(for: second, profileID: profileID)
+        window.contentView?.addSubview(left)
+        window.contentView?.addSubview(right)
+
+        window.makeFirstResponder(right)
+        window.makeFirstResponder(left)
+        #expect(focused == [second.id, first.id])
+    }
+
     @Test func pagesCanGoFullscreen() async throws {
         let pool = WebViewPool.forTesting()
         let tab = Tab.testTab(url: try pages.page("full"))

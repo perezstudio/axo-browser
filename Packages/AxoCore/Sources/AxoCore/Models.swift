@@ -70,6 +70,10 @@ public struct Tab: Codable, Hashable, Identifiable, Sendable, FetchableRecord, P
     public var lastActiveAt: Date
     /// The folder a pinned tab is in, or `nil` at the top of the pinned section.
     public var folderID: Folder.ID?
+    /// The split view the tab is a pane of, if any.
+    public var splitID: TabSplit.ID?
+    /// The tab's pane order within its split. See ``SortKey``.
+    public var splitSortKey: String?
 
     /// Creates a tab.
     public init(
@@ -82,7 +86,9 @@ public struct Tab: Codable, Hashable, Identifiable, Sendable, FetchableRecord, P
         archivedAt: Date? = nil,
         homeURL: URL? = nil,
         lastActiveAt: Date = Date(),
-        folderID: Folder.ID? = nil
+        folderID: Folder.ID? = nil,
+        splitID: TabSplit.ID? = nil,
+        splitSortKey: String? = nil
     ) {
         self.id = id
         self.spaceID = spaceID
@@ -94,6 +100,8 @@ public struct Tab: Codable, Hashable, Identifiable, Sendable, FetchableRecord, P
         self.homeURL = homeURL
         self.lastActiveAt = lastActiveAt
         self.folderID = folderID
+        self.splitID = splitID
+        self.splitSortKey = splitSortKey
     }
 
     /// Whether a pinned tab has navigated away from its home page.
@@ -111,6 +119,8 @@ public struct Tab: Codable, Hashable, Identifiable, Sendable, FetchableRecord, P
         public static let isPinned = Column(CodingKeys.isPinned)
         public static let lastActiveAt = Column(CodingKeys.lastActiveAt)
         public static let folderID = Column(CodingKeys.folderID)
+        public static let splitID = Column(CodingKeys.splitID)
+        public static let splitSortKey = Column(CodingKeys.splitSortKey)
     }
 }
 
