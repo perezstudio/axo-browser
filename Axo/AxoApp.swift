@@ -86,6 +86,8 @@ enum AppEnvironment {
         // popups and background pages.
         pool.addWebViewConfigurator { configuration, _ in
             WebInspector.enableDeveloperTools(in: configuration)
+            // Picture in picture for web video (private WebKit preference, in AxoInspector).
+            PictureInPicture.enable(in: configuration)
         }
         manager.configureExtensionWebViews = { WebInspector.enableDeveloperTools(in: $0) }
         extensionManager = manager
@@ -118,6 +120,8 @@ enum AppEnvironment {
             model.onSpaceChange = { UserDefaults.standard.set($0.uuidString, forKey: lastSpaceKey) }
             // Not in UI tests, so nothing in a test run can offer to change the default browser.
             model.defaultBrowser = SystemDefaultBrowser()
+            // Not in UI tests either, so a test run never shows macOS's location prompt.
+            model.locationAuthorization = SystemLocationAuthorization()
         }
         return model
     }
@@ -158,6 +162,18 @@ struct SystemDefaultBrowser: DefaultBrowserSetting {
 
     func makeDefault() async throws {
         try await browser.makeDefault()
+    }
+}
+
+/// Connects AxoIntegration's location authorization to the model. Creating it at launch keeps
+/// a `CLLocationManager` alive, which WebKit needs before it asks Axo about pages' location
+/// requests; macOS only prompts when the person first allows a site.
+@MainActor
+final class SystemLocationAuthorization: LocationAuthorizing {
+    let authorization = LocationAuthorization()
+
+    func requestIfNeeded() {
+        authorization.requestIfNeeded()
     }
 }
 

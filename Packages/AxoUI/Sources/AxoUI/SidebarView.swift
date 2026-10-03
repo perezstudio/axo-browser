@@ -41,9 +41,12 @@ struct SidebarView: View {
         }
         .safeAreaInset(edge: .top) {
             // Like Arc, the address field sits at the top of the sidebar.
-            AddressField(model: model)
-                .padding(.horizontal, 10)
-                .padding(.bottom, 6)
+            HStack(spacing: 6) {
+                AddressField(model: model)
+                SiteSettingsButton(model: model)
+            }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 6)
         }
         .toolbar {
             ToolbarItem {

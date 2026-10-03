@@ -9,6 +9,8 @@ struct WebInspectorTests {
     /// A web view in an off-screen window, since the inspector attaches to the web view's window.
     private func webViewInWindow(configuration: WKWebViewConfiguration = WKWebViewConfiguration()) -> (WKWebView, NSWindow) {
         let window = NSWindow(contentRect: NSRect(x: -10_000, y: -10_000, width: 800, height: 600), styleMask: [.titled], backing: .buffered, defer: false)
+        // Closing a window that releases itself would over-release it under ARC and crash a later test.
+        window.isReleasedWhenClosed = false
         let webView = WKWebView(frame: window.contentView!.bounds, configuration: configuration)
         window.contentView?.addSubview(webView)
         webView.loadHTMLString("<title>Inspect me</title><p>hi</p>", baseURL: nil)

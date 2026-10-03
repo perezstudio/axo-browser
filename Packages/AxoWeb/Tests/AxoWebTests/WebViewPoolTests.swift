@@ -159,6 +159,16 @@ struct WebViewPoolTests {
         #expect(agent.contains(" Safari/"), "Sites and extensions that detect Safari recognize Axo: \(agent)")
     }
 
+    @Test func pagesCanGoFullscreen() async throws {
+        let pool = WebViewPool.forTesting()
+        let tab = Tab.testTab(url: try pages.page("full"))
+        let webView = pool.webView(for: tab, profileID: profileID)
+        try await waitForPage("full", tab: tab, pool: pool)
+
+        let enabled = try await webView.callAsyncJavaScript("return document.fullscreenEnabled", contentWorld: .page) as? Bool
+        #expect(enabled == true, "The Fullscreen API is on, so videos can fill the screen")
+    }
+
     // MARK: Hibernation
 
     @Test func hibernatingDiscardsTheWebViewAndWakingRestoresHistory() async throws {

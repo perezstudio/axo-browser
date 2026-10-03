@@ -34,6 +34,8 @@ The full plan, architecture, and reasoning behind every decision are in `docs/PL
 - Every tab and extension page uses AxoWeb's `UserAgent` (a Safari-style user agent). Don't create web view configurations that skip it; extensions such as Bitwarden detect the browser from it.
 - `RealExtensionTests` (AxoExtensions) runs only with `AXO_REAL_EXTENSIONS` pointing at downloaded uBlock Origin Lite and Bitwarden `.crx` files (see the AxoExtensions README). Never commit those files; they're GPL-licensed.
 - Import reads other browsers' real data from `~/Library/Application Support` except in UI testing mode, where it reads `AXO_UI_TESTING_IMPORT_ROOT` (a folder of fixtures) or an empty folder. Never let tests read the real Arc or Chrome files.
+- The app keeps a `CLLocationManager` (`SystemLocationAuthorization`) from launch, outside UI testing, because WebKit doesn't ask Axo about pages' location requests without one. Never call `requestWhenInUseAuthorization` in tests; use `LocationManaging` fakes.
+- Test windows made with `NSWindow(contentRect:…)` must set `isReleasedWhenClosed = false` before `close()`. Otherwise ARC over-releases them and a later test in the same process crashes.
 - UI tests can preinstall an unpacked extension by setting `AXO_UI_TESTING_EXTENSION` to its folder (UI testing mode only). The app connects AxoIntegration to AxoUI through small adapters (such as `SystemDefaultBrowser`), so AxoUI doesn't depend on AxoIntegration.
 - `AxoUI` uses `.defaultIsolation(MainActor.self)`. Other packages use the Swift 6 default (nonisolated); AxoWeb marks its types `@MainActor` explicitly.
 - SwiftUI has its own `Tab` type. In files that import SwiftUI, write `AxoCore.Tab` for Axo's tab record.
@@ -46,7 +48,7 @@ The full plan, architecture, and reasoning behind every decision are in `docs/PL
 - The app's database lives at `~/Library/Application Support/Axo/Axo.sqlite`. The last Space shown is remembered in `UserDefaults` under `lastSpaceID` (not in UI testing).
 - To look at the UI, attach `XCTAttachment(screenshot: app.windows.firstMatch.screenshot())` in a UI test and export it from the result bundle. It captures only Axo's window and doesn't need accessibility access. Don't screen-capture the desktop, which can include the user's other windows.
 - Printing can't be tested automatically: WebKit print operations hang when run synchronously and need a window to run modally. Test the operation's configuration and check the print sheet by hand.
-- Developer tools: the app adds a `WebViewPool` configurator and sets `ExtensionManager.configureExtensionWebViews` to `WebInspector.enableDeveloperTools`, so pages, popups, and background pages can be inspected. The bridge falls back to `isInspectable` (Safari's Develop menu) when the private inspector isn't available.
+- Developer tools: the app adds a `WebViewPool` configurator and sets `ExtensionManager.configureExtensionWebViews` to `WebInspector.enableDeveloperTools`, so pages, popups, and background pages can be inspected. The same pool configurator turns on picture in picture (`PictureInPicture.enable`, also private API in AxoInspector). The bridge falls back to `isInspectable` (Safari's Develop menu) when the private inspector isn't available.
 - Don't use ⌥ with dead-key letters (E, I, N, U, `) in new shortcuts. On US layouts ⌥N, for example, starts a dead key, and ⌥⌘N never fired, so New Folder uses ⌃⌘N instead. ⌥⌘I (Show Web Inspector, the macOS convention) does work; its UI test proves it.
 - macOS window tabbing is off (`NSWindow.allowsAutomaticWindowTabbing = false`), because Axo's tabs live in the sidebar.
 - Printing triggers macOS's Local Network prompt (printer discovery), and pages can reach local devices through WebKit's network process. `NSLocalNetworkUsageDescription` explains both. Keep it accurate if network behavior changes.
@@ -72,7 +74,7 @@ The app is split into local Swift packages in `Packages/`. Respect the dependenc
 | AxoCore | Profiles, Spaces, folders, tabs, windows, TabStore | AxoPersistence, GRDB |
 | AxoWeb | Web view pool, `NSViewRepresentable` host, delegates, downloads, permissions, hibernation | AxoCore |
 | AxoExtensions | `WKWebExtensionController`, CRX install, tab and window adapters. Its `AxoCRX` target (CRX3 verification, safe zip extraction, manifest checks) has no dependencies so it can be open sourced on its own | AxoCore, AxoWeb |
-| AxoInspector | All private Web Inspector API | AxoWeb |
+| AxoInspector | All private WebKit API (Web Inspector, picture in picture) | AxoWeb |
 | AxoPersistence | GRDB database, migrations, FTS5 search index | GRDB |
 | AxoSync | `CKSyncEngine` mapping for Spaces, folders, pinned tabs | AxoPersistence |
 | AxoImport | Importing from Arc (sidebar JSON, Chromium history) and Chrome (bookmarks, history) | AxoCore, GRDB |

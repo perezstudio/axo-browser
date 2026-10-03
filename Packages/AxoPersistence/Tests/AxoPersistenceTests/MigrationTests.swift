@@ -187,4 +187,22 @@ struct MigrationTests {
             #expect(row["grantedOptional"] as String == "[]")
         }
     }
+
+    @Test func v8SitePermissionsAreOnePerKindAndGoWithTheirProfile() throws {
+        let database = try AppDatabase.makeInMemory()
+        let profileID = UUID()
+        try database.writer.write { db in
+            try db.execute(sql: "INSERT INTO profile (id, name) VALUES (?, 'Default')", arguments: [profileID])
+            let insert = """
+                INSERT INTO sitePermission (profileID, origin, kind, decision, updatedAt)
+                VALUES (?, 'https://meet.example.com', ?, 'allow', CURRENT_TIMESTAMP)
+                """
+            try db.execute(sql: insert, arguments: [profileID, "camera"])
+            try db.execute(sql: insert, arguments: [profileID, "microphone"])
+            #expect(throws: DatabaseError.self) { try db.execute(sql: insert, arguments: [profileID, "camera"]) }
+
+            try db.execute(sql: "DELETE FROM profile")
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM sitePermission") == 0)
+        }
+    }
 }

@@ -113,6 +113,34 @@ struct PagePromptTests {
         #expect(pool.rememberedPermission(.camera, origin: meet, profileID: profileID) == nil)
     }
 
+    @Test func aPermissionStoreKeepsAnswersInsteadOfMemory() async {
+        let store = FakePermissionStore()
+        pool.permissionStore = store
+        var asked = 0
+        pool.onPermissionRequest = { _ in asked += 1; return .deny }
+        let meet = PageOrigin(scheme: "https", host: "meet.example.com")
+
+        #expect(await pool.decidePermission(.camera, origin: meet, tabID: UUID(), profileID: profileID) == .deny)
+        #expect(store.saved[meet.serialized + "/camera"] == .deny, "The answer is saved in the store")
+        #expect(pool.rememberedPermission(.camera, origin: meet, profileID: profileID) == nil, "Not in memory")
+
+        store.saved[meet.serialized + "/camera"] = .allow
+        #expect(await pool.decidePermission(.camera, origin: meet, tabID: UUID(), profileID: profileID) == .allow)
+        #expect(asked == 1, "A saved answer is used without asking")
+
+        store.saved.removeAll()
+        _ = await pool.decidePermission(.camera, origin: meet, tabID: UUID(), profileID: profileID)
+        #expect(asked == 2, "Forgetting a saved answer asks again")
+    }
+
+    @Test func originsComeFromWebURLs() throws {
+        #expect(PageOrigin(url: URL(string: "https://Meet.Example.com/room?x=1")!)?.serialized == "https://meet.example.com")
+        #expect(PageOrigin(url: URL(string: "https://example.com:443/")!)?.serialized == "https://example.com")
+        #expect(PageOrigin(url: URL(string: "http://localhost:3000/")!)?.serialized == "http://localhost:3000")
+        #expect(PageOrigin(url: URL(string: "file:///tmp/page.html")!) == nil)
+        #expect(PageOrigin(url: URL(string: "about:blank")!) == nil)
+    }
+
     @Test func withoutAHandlerPermissionsAreDeniedAndNotRemembered() async {
         let origin = PageOrigin(scheme: "https", host: "example.com")
         #expect(await pool.decidePermission(.location, origin: origin, tabID: UUID(), profileID: profileID) == .deny)
@@ -134,5 +162,19 @@ func waitForValue(_ value: () async throws -> String?) async throws -> String {
         if let result = try await value(), !result.isEmpty { return result }
         guard ContinuousClock.now < deadline else { throw TimeoutError(description: "Timed out waiting for value") }
         try await Task.sleep(for: .milliseconds(20))
+    }
+}
+
+/// A permission store that keeps answers in a dictionary keyed by "origin/kind".
+@MainActor
+final class FakePermissionStore: PermissionDecisionStore {
+    var saved: [String: PermissionDecision] = [:]
+
+    func savedDecision(for kind: PermissionKind, origin: PageOrigin, profileID: Profile.ID) async -> PermissionDecision? {
+        saved[origin.serialized + "/" + kind.rawValue]
+    }
+
+    func saveDecision(_ decision: PermissionDecision, for kind: PermissionKind, origin: PageOrigin, profileID: Profile.ID) async {
+        saved[origin.serialized + "/" + kind.rawValue] = decision
     }
 }

@@ -62,7 +62,7 @@ public final class BrowserModel {
     /// The web view pool that owns this window's web views.
     public let pool: WebViewPool
 
-    @ObservationIgnored private let store: TabStore
+    @ObservationIgnored let store: TabStore
     @ObservationIgnored private var observationTask: Task<Void, Never>?
     @ObservationIgnored private var spacesObservationTask: Task<Void, Never>?
     @ObservationIgnored private var foldersObservationTask: Task<Void, Never>?
@@ -93,6 +93,13 @@ public final class BrowserModel {
     @ObservationIgnored public var onTabEvent: ((TabEvent) -> Void)?
     /// The views behind extension toolbar buttons, by extension ID, for showing popups.
     @ObservationIgnored var extensionAnchors: [String: NSView] = [:]
+    /// Asks macOS for location access when the person first allows a site's location request.
+    /// Set by the app.
+    @ObservationIgnored public var locationAuthorization: (any LocationAuthorizing)?
+    /// Whether the Site Settings popover is open.
+    public var isShowingSiteSettings = false
+    /// The saved permission answers for the selected page's site, while Site Settings is open.
+    public internal(set) var sitePermissions: [SitePermission.Kind: SitePermission.Decision] = [:]
     /// Reads and imports other browsers' data. Set by the app.
     @ObservationIgnored public var browserImporter: (any BrowserImporting)?
     /// The open Import sheet's state, if it's open.
@@ -136,8 +143,13 @@ public final class BrowserModel {
             self?.saveFavicon(data, for: pageURL)
         }
         prompts.onChange = { [weak self] prompt in self?.currentPrompt = prompt }
+        pool.permissionStore = SitePermissionAdapter(store: store.sitePermissions)
         pool.onPermissionRequest = { [weak self] request in
-            await self?.prompts.ask(request) ?? .deny
+            guard let self else { return .deny }
+            let decision = await self.prompts.ask(request)
+            // macOS asks about location once, after the person allows a site in Axo.
+            if request.kind == .location, decision == .allow { self.locationAuthorization?.requestIfNeeded() }
+            return decision
         }
         pool.onJavaScriptDialog = { [weak self] dialog in
             await self?.prompts.ask(dialog) ?? .cancelled

@@ -75,7 +75,11 @@ public final class WebViewPool {
     private var live: [Tab.ID: LiveTab] = [:]
     private var hibernated: [Tab.ID: HibernatedTab] = [:]
     private var visibleCounts: [Tab.ID: Int] = [:]
-    /// Permission answers for this session, by profile, origin, and kind.
+    /// Saves permission answers across launches. Set by the app. When it's `nil`, answers are
+    /// remembered in memory until Axo quits.
+    public var permissionStore: (any PermissionDecisionStore)?
+    /// Permission answers for this session, by profile, origin, and kind, when there's no
+    /// ``permissionStore``.
     private var permissionDecisions: [PermissionKey: PermissionDecision] = [:]
     /// Normalized icons by icon URL, so tabs on the same site don't refetch them.
     private var faviconCache: [URL: Data] = [:]
@@ -123,6 +127,8 @@ public final class WebViewPool {
 
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = dataStore(for: profileID)
+        // Element fullscreen (the Fullscreen API) is off by default; videos and pages expect it.
+        configuration.preferences.isElementFullscreenEnabled = true
         UserAgent.apply(to: configuration)
         configurators.forEach { $0(configuration, profileID) }
         let webView = WKWebView(frame: .zero, configuration: configuration)
@@ -378,12 +384,20 @@ public final class WebViewPool {
         profileID: Profile.ID
     ) async -> PermissionDecision {
         let key = PermissionKey(profileID: profileID, origin: origin, kind: kind)
-        if let remembered = permissionDecisions[key] {
+        if let permissionStore {
+            if let saved = await permissionStore.savedDecision(for: kind, origin: origin, profileID: profileID) {
+                return saved
+            }
+        } else if let remembered = permissionDecisions[key] {
             return remembered
         }
         guard let handler = onPermissionRequest else { return .deny }
         let decision = await handler(PermissionRequest(tabID: tabID, origin: origin, kind: kind))
-        permissionDecisions[key] = decision
+        if let permissionStore {
+            await permissionStore.saveDecision(decision, for: kind, origin: origin, profileID: profileID)
+        } else {
+            permissionDecisions[key] = decision
+        }
         return decision
     }
 

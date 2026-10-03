@@ -20,7 +20,8 @@ let package = Package(
         ),
         .testTarget(
             name: "AxoInspectorTests",
-            dependencies: ["AxoInspector"]
+            dependencies: ["AxoInspector"],
+            resources: [.copy("Resources/clip.mov")]
         ),
     ]
 )
