@@ -25,6 +25,8 @@ public final class BrowserModel {
     public private(set) var addressFocusRequest = 0
     /// A problem worth telling the user about, such as the database failing to open.
     public var alertMessage: String?
+    /// Whether the downloads list is open.
+    public var isShowingDownloads = false
     /// Site icons by lowercased host, for the tabs in the sidebar.
     public private(set) var favicons: [String: NSImage] = [:]
 

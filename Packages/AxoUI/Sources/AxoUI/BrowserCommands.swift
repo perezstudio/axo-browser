@@ -32,6 +32,9 @@ public struct BrowserCommands: Commands {
             Button("Reload Page") { model?.reloadOrStop() }
                 .keyboardShortcut("r")
                 .disabled(model?.selectedTabID == nil)
+            Button("Show Downloads") { model?.isShowingDownloads.toggle() }
+                .keyboardShortcut("l", modifiers: [.command, .option])
+                .disabled(model == nil)
             Divider()
         }
         CommandMenu("History") {

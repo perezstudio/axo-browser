@@ -45,10 +45,13 @@ struct WebViewPoolTests {
 
     @Test func eachProfileGetsItsOwnDataStoreSharedByItsTabs() throws {
         var created: [Profile.ID] = []
-        let pool = WebViewPool(makeDataStore: { id in
-            created.append(id)
-            return .nonPersistent()
-        })
+        let pool = WebViewPool(
+            makeDataStore: { id in
+                created.append(id)
+                return .nonPersistent()
+            },
+            downloads: DownloadManager(directory: pages.directory.appending(path: "Downloads"))
+        )
         let other = UUID()
         let a = pool.webView(for: .testTab(url: try pages.page("a")), profileID: profileID)
         let b = pool.webView(for: .testTab(url: try pages.page("b")), profileID: profileID)

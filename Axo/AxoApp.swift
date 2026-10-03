@@ -29,8 +29,8 @@ struct AxoApp: App {
 
 /// Builds the app's long-lived objects.
 enum AppEnvironment {
-    /// Set by UI tests: use an in-memory database and non-persistent website data, so every
-    /// launch starts empty and nothing touches the user's real data.
+    /// Set by UI tests: use an in-memory database, non-persistent website data, and a temporary
+    /// downloads folder, so every launch starts empty and nothing touches the user's real data.
     static let isUITesting = ProcessInfo.processInfo.environment["AXO_UI_TESTING"] == "1"
 
     /// Where Axo keeps its database.
@@ -38,9 +38,16 @@ enum AppEnvironment {
         URL.applicationSupportDirectory.appending(path: "Axo/Axo.sqlite")
     }
 
+    /// Where downloads go during UI tests.
+    static let uiTestingDownloadsDirectory = FileManager.default.temporaryDirectory
+        .appending(path: "AxoUITests-Downloads-\(UUID().uuidString)", directoryHint: .isDirectory)
+
     static func makeBrowserModel() -> BrowserModel {
         let pool = isUITesting
-            ? WebViewPool(makeDataStore: { _ in .nonPersistent() })
+            ? WebViewPool(
+                makeDataStore: { _ in .nonPersistent() },
+                downloads: DownloadManager(directory: uiTestingDownloadsDirectory)
+            )
             : WebViewPool()
         do {
             let store = isUITesting ? try TabStore.makeInMemory() : try TabStore.openOnDisk(at: databaseURL)

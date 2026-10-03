@@ -16,6 +16,11 @@ struct NavigationToolbar: ToolbarContent {
                 .help("Go forward")
                 .accessibilityIdentifier("forwardButton")
         }
+        if !model.pool.downloads.items.isEmpty || model.isShowingDownloads {
+            ToolbarItem(placement: .primaryAction) {
+                DownloadsButton(model: model)
+            }
+        }
         ToolbarItem(placement: .primaryAction) {
             let isLoading = model.selectedPage?.isLoading == true
             Button(isLoading ? "Stop" : "Reload", systemImage: isLoading ? "xmark" : "arrow.clockwise") {

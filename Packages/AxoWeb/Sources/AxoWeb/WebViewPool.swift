@@ -32,6 +32,9 @@ public final class WebViewPool {
     /// The pool's settings.
     public var configuration: Configuration
 
+    /// Every download started from the pool's web views.
+    public let downloads: DownloadManager
+
     /// Called when a live tab's URL or title changes, so the app can persist it with `TabStore`.
     public var onPageChange: ((Tab.ID, URL, String) -> Void)?
 
@@ -59,13 +62,17 @@ public final class WebViewPool {
     ///   - configuration: Hibernation settings.
     ///   - makeDataStore: Returns the website data store for a profile. Called once per profile.
     ///     Defaults to a persistent `WKWebsiteDataStore(forIdentifier:)` keyed by the profile ID.
+    ///   - downloads: Tracks downloads and decides where files go. Defaults to the user's
+    ///     Downloads folder.
     ///   - now: The current time. Override in tests.
     public init(
         configuration: Configuration = Configuration(),
         makeDataStore: @escaping (Profile.ID) -> WKWebsiteDataStore = { WKWebsiteDataStore(forIdentifier: $0) },
+        downloads: DownloadManager = DownloadManager(),
         now: @escaping () -> Date = Date.init
     ) {
         self.configuration = configuration
+        self.downloads = downloads
         self.makeDataStore = makeDataStore
         self.now = now
     }
@@ -96,6 +103,7 @@ public final class WebViewPool {
 
         let liveTab = LiveTab(tabID: tab.id, profileID: profileID, webView: webView, lastUsed: now())
         liveTab.delegate.onOpenInNewTab = { [weak self] url in self?.onOpenInNewTab?(url, tab.id) }
+        liveTab.delegate.onDownload = { [weak self] download in self?.downloads.track(download, sourceTabID: tab.id) }
         liveTab.onPageChange = { [weak self] url, title in self?.onPageChange?(tab.id, url, title) }
         liveTab.onLoadFinished = { [weak self] in self?.loadFavicon(for: tab.id) }
         live[tab.id] = liveTab
@@ -146,6 +154,17 @@ public final class WebViewPool {
     public func load(_ url: URL, in tabID: Tab.ID) {
         guard let webView = live[tabID]?.webView else { return }
         Self.load(url, in: webView)
+    }
+
+    /// Downloads `url` using the tab's web view (and so its profile's cookies). Does nothing if
+    /// the tab isn't live.
+    public func startDownload(_ url: URL, in tabID: Tab.ID) {
+        guard let webView = live[tabID]?.webView else { return }
+        // Track inside the completion handler: WebKit only guarantees delivering events to a
+        // delegate set there, so tracking after an `await` could miss an early failure.
+        webView.startDownload(using: URLRequest(url: url)) { [weak self] download in
+            self?.downloads.track(download, sourceTabID: tabID)
+        }
     }
 
     /// Goes back in the tab's history.

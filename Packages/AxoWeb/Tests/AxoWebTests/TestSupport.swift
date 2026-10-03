@@ -33,11 +33,18 @@ final class TestClock {
 
 @MainActor
 extension WebViewPool {
-    /// A pool with non-persistent data stores and a controllable clock.
-    static func forTesting(clock: TestClock = TestClock(), timeout: TimeInterval = 60) -> WebViewPool {
+    /// A pool with non-persistent data stores, a controllable clock, and downloads saved to a
+    /// temporary folder (never the user's Downloads folder).
+    static func forTesting(
+        clock: TestClock = TestClock(),
+        timeout: TimeInterval = 60,
+        downloadsDirectory: URL = FileManager.default.temporaryDirectory
+            .appending(path: "AxoWebTests-Downloads-\(UUID().uuidString)", directoryHint: .isDirectory)
+    ) -> WebViewPool {
         WebViewPool(
             configuration: .init(hibernationTimeout: timeout),
             makeDataStore: { _ in .nonPersistent() },
+            downloads: DownloadManager(directory: downloadsDirectory),
             now: { clock.now }
         )
     }

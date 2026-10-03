@@ -87,6 +87,41 @@ final class WebViewDelegate: NSObject, WKNavigationDelegate, WKUIDelegate {
     var onOpenInNewTab: ((URL) -> Void)?
     var onLoadFinished: (() -> Void)?
     var onLoadFailed: (() -> Void)?
+    var onDownload: ((WKDownload) -> Void)?
+
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction
+    ) async -> WKNavigationActionPolicy {
+        // Links with a `download` attribute save instead of navigating.
+        navigationAction.shouldPerformDownload ? .download : .allow
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationResponse: WKNavigationResponse
+    ) async -> WKNavigationResponsePolicy {
+        Self.shouldDownload(navigationResponse) ? .download : .allow
+    }
+
+    /// Main-frame responses download when WebKit can't display them or the server sends them
+    /// as attachments.
+    static func shouldDownload(_ navigationResponse: WKNavigationResponse) -> Bool {
+        guard navigationResponse.isForMainFrame else { return false }
+        if !navigationResponse.canShowMIMEType { return true }
+        let disposition = (navigationResponse.response as? HTTPURLResponse)?
+            .value(forHTTPHeaderField: "Content-Disposition")?
+            .lowercased()
+        return disposition?.hasPrefix("attachment") == true
+    }
+
+    func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
+        onDownload?(download)
+    }
+
+    func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
+        onDownload?(download)
+    }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         onLoadFinished?()
