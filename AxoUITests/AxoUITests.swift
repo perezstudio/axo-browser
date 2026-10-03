@@ -107,6 +107,34 @@ final class AxoUITests: XCTestCase {
         waitForExpectations(timeout: 5)
     }
 
+    /// A link with a `download` attribute saves the file, and the Downloads button and list
+    /// appear. Downloads go to a temporary folder in UI testing mode.
+    @MainActor
+    func testDownloadingAFileShowsItInTheDownloadsList() throws {
+        let app = launchApp()
+        XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["downloadsButton"].exists, "No Downloads button before any download")
+
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,<title>Files</title><a href='data:text/plain,hello' download='hello.txt'>Get hello</a>\n")
+        let link = app.links["Get hello"]
+        XCTAssertTrue(link.waitForExistence(timeout: 10))
+        link.click()
+
+        let downloadsButton = app.buttons["downloadsButton"]
+        XCTAssertTrue(downloadsButton.waitForExistence(timeout: 10))
+        downloadsButton.click()
+        // Each row is one accessibility element, so VoiceOver reads the name and status together.
+        let row = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == 'downloadRow' AND label CONTAINS 'hello.txt'"))
+            .firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+
+        // ⌥⌘L toggles the list.
+        app.typeKey("l", modifierFlags: [.command, .option])
+        XCTAssertTrue(row.waitForNonExistence(timeout: 5))
+    }
+
     @MainActor
     func testLaunchPerformance() throws {
         measure(metrics: [XCTApplicationLaunchMetric()]) {

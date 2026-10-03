@@ -18,6 +18,11 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
   - `load(_:in:)`, `goBack(in:)`, `goForward(in:)`, `reload(_:)`, and `stopLoading(_:)` drive a live tab.
   - `onPageChange` reports URL and title changes so the app can persist them with `TabStore`. `onOpenInNewTab` reports links that target a new window. `onFaviconChange` reports each page's icon after it loads.
 - **Favicons:** after each load, the pool reads `<link rel="icon">` and `apple-touch-icon` candidates in an isolated content world, so page scripts can't interfere. It prefers SVG, then the smallest icon at least 64 px, and falls back to `/favicon.ico` for http(s) pages. It downloads with an ephemeral `URLSession` (no cookies, so icon fetches can't identify the user), rejects files over 512 KB, normalizes to a 64 px PNG, and caches by icon URL.
+- **Downloads:** `pool.downloads` is a `DownloadManager` (`@Observable`) holding `DownloadItem`s, newest first, with state, progress, and bytes.
+  - **What downloads:** links with a `download` attribute, main-frame responses WebKit can't display, and responses with `Content-Disposition: attachment`. `pool.startDownload(_:in:)` downloads a URL directly.
+  - **Where files go:** the folder passed to `DownloadManager(directory:)`, `~/Downloads` by default, with Finder-style unique names (`file 2.pdf`). Suggested names are sanitized so they can't escape the folder.
+  - **Quarantine:** finished files get the quarantine attribute (agent "Axo", type web download, and the source URL for http(s)), so Gatekeeper checks them.
+  - `cancel(_:)` stops a download and removes the partial file. `remove(_:)` and `clearInactive()` edit the list but keep files.
 - **`WebTabState`** (`@Observable`) mirrors a live tab's URL, title, loading state, progress, and back and forward availability, plus `restoringSnapshot`. Get it with `pool.state(for:)`.
 - **`WebViewHost`** is the SwiftUI view that mounts a tab's pooled web view and reports its visibility to the pool.
 
@@ -25,7 +30,7 @@ AxoWeb doesn't touch the database. The app layer connects pool callbacks to `Tab
 
 ## Not yet
 
-Downloads, permission prompts, find in page, and printing are still to come in Milestone 1. Snapshots live in memory only, so tabs restored after a relaunch have none. A web view that was never laid out (zero size) can't be snapshotted, so it hibernates without a picture.
+Permission prompts, find in page, and printing are still to come in Milestone 1. Download history is in memory only, and interrupted downloads can't be resumed yet. Snapshots live in memory only, so tabs restored after a relaunch have none. A web view that was never laid out (zero size) can't be snapshotted, so it hibernates without a picture.
 
 ## Testing
 
@@ -33,4 +38,4 @@ Downloads, permission prompts, find in page, and printing are still to come in M
 swift test
 ```
 
-The tests load local HTML files with non-persistent data stores, so they never touch the network or the user's website data.
+The tests load local HTML files with non-persistent data stores and download into temporary folders, so they never touch the network, the user's website data, or `~/Downloads`. Download links in tests use `data:` URLs, because browsers ignore `download` on cross-origin links and every `file:` URL is its own origin.
