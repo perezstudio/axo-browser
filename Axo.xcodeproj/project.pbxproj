@@ -272,6 +272,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Axo/Axo.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = YPGUL25V6H;
@@ -279,7 +280,11 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Websites you allow can use your camera, for things like video calls.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Axo uses your local network to find printers and to open pages on devices like routers and home servers.";
+				INFOPLIST_KEY_NSLocationUsageDescription = "Websites you allow can use your location, for things like maps and directions.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Websites you allow can use your location, for things like maps and directions.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Websites you allow can use your microphone, for things like calls and voice notes.";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 27.0;
 				MARKETING_VERSION = 1.0;
@@ -301,6 +306,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Axo/Axo.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = YPGUL25V6H;
@@ -308,7 +314,11 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Websites you allow can use your camera, for things like video calls.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Axo uses your local network to find printers and to open pages on devices like routers and home servers.";
+				INFOPLIST_KEY_NSLocationUsageDescription = "Websites you allow can use your location, for things like maps and directions.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Websites you allow can use your location, for things like maps and directions.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Websites you allow can use your microphone, for things like calls and voice notes.";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 27.0;
 				MARKETING_VERSION = 1.0;

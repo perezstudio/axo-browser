@@ -23,7 +23,7 @@ The full plan, architecture, and reasoning behind every decision are in `docs/PL
 - The Xcode project targets macOS only for now (`SUPPORTED_PLATFORMS = macosx`). iPhone and iPad targets come in Milestone 7.
 - The app target uses Swift 6 language mode with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` and approachable concurrency, so app code is main-actor isolated unless marked otherwise. Packages set their own isolation.
 - App Sandbox is off and Hardened Runtime is on, because Axo ships directly rather than through the Mac App Store (see `docs/PLAN.md`).
-- No entitlements file yet. Add one when a capability needs it, such as iCloud for AxoSync.
+- `Axo/Axo.entitlements` holds the Hardened Runtime entitlements for camera, microphone, and location, which pages can use after the person allows them. Add others (such as iCloud for AxoSync) there. Each device has a usage description in the target's `INFOPLIST_KEY_*` build settings; keep them accurate and plain.
 - The `Axo` scheme is shared (`Axo.xcodeproj/xcshareddata`). `xcuserdata/` is gitignored, so scheme changes must go in the shared scheme.
 - No linters or formatters are configured yet.
 - Open `Axo.xcworkspace`, not the project. The workspace lists the app project and every local package, which Xcode needs to run the package test targets. The `Axo` scheme uses the `Axo.xctestplan` test plan, which covers the app's unit and UI tests and every package's tests. Add new test targets to that plan.
