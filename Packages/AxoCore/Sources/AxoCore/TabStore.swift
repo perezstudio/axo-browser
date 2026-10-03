@@ -47,7 +47,7 @@ public final class TabStore: Sendable {
     /// The name of the Space created on first launch.
     public static let defaultSpaceName = "Home"
 
-    private let database: AppDatabase
+    let database: AppDatabase
 
     /// Creates a store over `database`.
     public init(database: AppDatabase) {

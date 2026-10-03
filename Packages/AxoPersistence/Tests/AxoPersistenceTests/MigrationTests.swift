@@ -129,4 +129,29 @@ struct MigrationTests {
             #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM folder") == 0)
         }
     }
+
+    @Test func v5HistoryIsSearchableAndStaysInSync() throws {
+        let database = try AppDatabase.makeInMemory()
+        let profileID = UUID()
+        try database.writer.write { db in
+            try db.execute(sql: "INSERT INTO profile (id, name) VALUES (?, 'Default')", arguments: [profileID])
+            try db.execute(sql: """
+                INSERT INTO historyItem (profileID, url, title, visitCount, lastVisitedAt)
+                VALUES (?, 'https://swift.org/documentation', 'Swift Documentation', 1, CURRENT_TIMESTAMP)
+                """, arguments: [profileID])
+
+            func matches(_ query: String) throws -> Int {
+                try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM historyItem_ft WHERE historyItem_ft MATCH ?", arguments: [query]) ?? 0
+            }
+            #expect(try matches("docum*") == 1, "Titles are indexed")
+            #expect(try matches("swift") == 1, "URLs are indexed")
+
+            try db.execute(sql: "UPDATE historyItem SET title = 'Language Guide'")
+            #expect(try matches("guide") == 1, "Updates reach the index")
+            #expect(try matches("docum*") == 1, "The URL still matches")
+
+            try db.execute(sql: "DELETE FROM profile")
+            #expect(try matches("swift") == 0, "Deleting a profile removes its history from the index")
+        }
+    }
 }

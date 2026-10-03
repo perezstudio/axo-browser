@@ -52,16 +52,17 @@ struct BrowserModelTests {
         #expect(pool.isLive(tabs[1].id))
     }
 
-    @Test func submittingWhileComposingOpensANewTab() async throws {
+    @Test func newTabOpensTheCommandBar() async throws {
         let first = try await openTabs(["one"])[0]
         model.beginNewTab()
-        #expect(model.isComposingNewTab)
+        #expect(model.isCommandBarVisible)
 
-        await model.submitAddress(try page("two").absoluteString)
+        model.setCommandQuery(try page("two").absoluteString)
+        await model.runCommand()
 
         #expect(model.tabs.count == 2)
         #expect(model.selectedTabID != first.id)
-        #expect(!model.isComposingNewTab)
+        #expect(!model.isCommandBarVisible)
     }
 
     @Test func submittingWithATabSelectedLoadsInThatTab() async throws {
@@ -82,14 +83,6 @@ struct BrowserModelTests {
     @Test func submittingBlankTextDoesNothing() async {
         await model.submitAddress("   ")
         #expect(model.tabs.isEmpty)
-    }
-
-    @Test func cancelingANewTabKeepsTheSelection() async throws {
-        let tab = try await openTabs(["one"])[0]
-        model.beginNewTab()
-        model.cancelNewTab()
-        #expect(!model.isComposingNewTab)
-        #expect(model.selectedTabID == tab.id)
     }
 
     @Test func closingTheSelectedTabSelectsTheNextOne() async throws {

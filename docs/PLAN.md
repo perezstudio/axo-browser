@@ -264,7 +264,7 @@ Each milestone should be usable as a daily driver before the next one starts.
 - [x] Spaces, each tied to a profile with isolated data. New Spaces share the current profile unless you choose a separate one, and deleting a Space keeps its profile. Managing profiles comes with Settings.
 - [x] Pinned tabs with a home URL; unpinned tabs auto-archive after a set period (12 hours, like Arc; adjustable in Settings later). Closing an unpinned tab archives it, ⇧⌘T reopens it, and closing a pinned tab returns it to its home page.
 - [x] Sidebar folders, nested, in the Pinned section like Arc. Moving a tab into a folder pins it, and deleting a folder keeps its contents. Dragging tabs onto folders is still to come; the context menu moves them for now.
-- [ ] Command bar (Cmd+T) over tabs, history, bookmarks, and actions, backed by FTS5
+- [x] Command bar (Cmd+T) over tabs, history, bookmarks, and actions, backed by FTS5. Pinned tabs serve as bookmarks, as in Arc; there's no separate bookmark store. History is per profile and records http(s) pages.
 - [ ] Set as default browser
 
 **Milestone 3: Extensions and developer tools**
@@ -312,7 +312,7 @@ Track five metrics every release and compare against Safari, Chrome, and Arc; pu
 | Idle window memory | To set after Milestone 1 baseline |
 | Memory per hibernated tab | To set after Milestone 1 baseline |
 | Energy impact, 20 tabs open | To set after Milestone 1 baseline |
-| Command bar query latency | To set after Milestone 2 baseline |
+| Command bar query latency | History search over 50,000 pages: 4 ms median, 8 ms worst (debug build, October 2026, `searchingFiftyThousandPagesStaysFast`). Target: under 16 ms per keystroke |
 
 ## Portfolio and open source track
 

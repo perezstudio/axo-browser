@@ -9,6 +9,7 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
 ## Public API
 
 - **Records:** `Profile`, `Space`, `Tab` (with `isPinned`, `homeURL`, `lastActiveAt`, `archivedAt`, and `hasLeftHome`), and `Favicon` (a site icon keyed by lowercased host; `Favicon.key(for:)`) are plain `Codable` GRDB records. They hold persisted state only, never live web views.
+- **`HistoryStore`** (`tabStore.history`): `recordVisit(to:title:profileID:at:)` records http(s) pages only, one row per profile and URL. Also `updateTitle`, `recent`, `clear`, and `search(_:profileID:limit:)`, which matches every word as a prefix through FTS5 and ranks by relevance plus visit frequency and recency. `HistoryItem` is the record. Profiles never see each other's history.
 - **`SortKey`:** fractional sort keys. `SortKey.between(lower, upper)` returns a key strictly between two neighbors (`nil` means the start or end of the list), so a move updates a single row. Order by `(sortKey, id)` so duplicate keys after a sync merge stay stable.
 - **`TabStore`:** the async API over the sidebar model.
   - `TabStore.openOnDisk(at:)` and `TabStore.makeInMemory()` open the database, so callers above AxoCore never import AxoPersistence.

@@ -32,6 +32,8 @@ The full plan, architecture, and reasoning behind every decision are in `docs/PL
 - SwiftUI has its own `Tab` type. In files that import SwiftUI, write `AxoCore.Tab` for Axo's tab record.
 - AxoWeb tests load local HTML files in real `WKWebView`s with `.nonPersistent()` data stores. Never load network URLs in tests.
 - UI tests launch the app with the `AXO_UI_TESTING=1` environment variable (in-memory database, non-persistent website data, temporary downloads folder) and the `-ApplePersistenceIgnoreState YES` argument (no restored window state). Pages come from `data:` URLs. Reuse the `launchApp()` helper in `AxoUITests`.
+- Overlays and fields that need keyboard focus must live inside a split view column (sidebar or page), not on the `NavigationSplitView` itself or in toolbar items; focus doesn't reach those. The command bar is an overlay on the page column for this reason.
+- A `TextField` commits its value again on Return, calling its binding's setter with the same text. Setters that reset state (such as the command bar's highlight) must ignore unchanged values.
 - Put text fields that menu commands need to focus in the main view hierarchy, not in toolbar items. `@FocusState` didn't move focus into a toolbar-hosted `TextField`, which is why the address field lives at the top of the sidebar.
 - The app's database lives at `~/Library/Application Support/Axo/Axo.sqlite`. The last Space shown is remembered in `UserDefaults` under `lastSpaceID` (not in UI testing).
 - To look at the UI, attach `XCTAttachment(screenshot: app.windows.firstMatch.screenshot())` in a UI test and export it from the result bundle. It captures only Axo's window and doesn't need accessibility access. Don't screen-capture the desktop, which can include the user's other windows.

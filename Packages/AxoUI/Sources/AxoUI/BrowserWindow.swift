@@ -17,6 +17,12 @@ public struct BrowserWindow: View {
                 .navigationSplitViewColumnWidth(min: 180, ideal: 240, max: 400)
         } detail: {
             content
+                // In the page column: an overlay on the split view itself couldn't take focus.
+                .overlay {
+                    if model.isCommandBarVisible {
+                        CommandBarView(model: model)
+                    }
+                }
                 .toolbar { NavigationToolbar(model: model) }
                 // The sidebar's address field already shows where you are.
                 .toolbar(removing: .title)
