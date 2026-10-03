@@ -13,6 +13,13 @@ final class AxoUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    /// Quits Axo after each test. Otherwise the next launch quits it first, and macOS moving
+    /// focus after that quit can take focus away from the new Axo ("not foreground").
+    override func tearDown() async throws {
+        await MainActor.run { XCUIApplication().terminate() }
+        try await super.tearDown()
+    }
+
     /// Launches Axo with an in-memory database, non-persistent website data, and no restored
     /// window state, so every test starts from a clean launch.
     @MainActor
@@ -306,6 +313,39 @@ final class AxoUITests: XCTestCase {
 
         XCTAssertTrue(sidebar.staticTexts["127.0.0.1"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.windows.count, 1, "The link opens in the existing window")
+    }
+
+    /// In a pinned tab, a link to another site opens in Peek instead of leaving the pinned page.
+    /// Esc closes Peek, and Open as Tab moves its page into the sidebar.
+    @MainActor
+    func testLinksFromPinnedTabsOpenInPeek() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        // The link points at a closed loopback port, so nothing leaves the machine.
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,<title>Home</title><a href='http://127.0.0.1:9/far'>Far away</a>\n")
+        XCTAssertTrue(sidebar.staticTexts["Home"].waitForExistence(timeout: 10))
+        app.typeKey("p", modifierFlags: [.command, .control])
+        XCTAssertTrue(sidebar.staticTexts["Pinned"].waitForExistence(timeout: 5))
+
+        let link = app.webViews.firstMatch.links["Far away"]
+        XCTAssertTrue(link.waitForExistence(timeout: 10))
+        link.click()
+        let peek = app.descendants(matching: .any)["peek"]
+        XCTAssertTrue(peek.waitForExistence(timeout: 5))
+
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(peek.waitForNonExistence(timeout: 5), "Esc closes Peek")
+        // (While Peek is open it's modal, so the sidebar isn't in the accessibility tree.)
+        XCTAssertTrue(sidebar.staticTexts["Home"].waitForExistence(timeout: 5))
+        XCTAssertFalse(sidebar.staticTexts["127.0.0.1"].exists, "Peek never joined the sidebar")
+
+        link.click()
+        XCTAssertTrue(peek.waitForExistence(timeout: 5))
+        app.buttons["peekOpenAsTabButton"].click()
+        XCTAssertTrue(peek.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(sidebar.staticTexts["127.0.0.1"].waitForExistence(timeout: 5), "The page is now a tab")
     }
 
     /// Add Split View (⌃⇧=) shows a chosen tab next to the current one as one sidebar row, and

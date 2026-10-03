@@ -85,6 +85,9 @@ final class LiveTab {
 @MainActor
 final class WebViewDelegate: NSObject, WKNavigationDelegate, WKUIDelegate {
     var onOpenInNewTab: ((URL) -> Void)?
+    /// Asked when the person clicks a link in the page's main frame. Returning `true` takes the
+    /// click (the page doesn't navigate).
+    var onLinkActivated: ((URL, NSEvent.ModifierFlags) -> Bool)?
     var onLoadFinished: (() -> Void)?
     var onLoadFailed: (() -> Void)?
     var onDownload: ((WKDownload) -> Void)?
@@ -157,7 +160,14 @@ final class WebViewDelegate: NSObject, WKNavigationDelegate, WKUIDelegate {
         decidePolicyFor navigationAction: WKNavigationAction
     ) async -> WKNavigationActionPolicy {
         // Links with a `download` attribute save instead of navigating.
-        navigationAction.shouldPerformDownload ? .download : .allow
+        if navigationAction.shouldPerformDownload { return .download }
+        if navigationAction.navigationType == .linkActivated,
+           navigationAction.targetFrame?.isMainFrame == true,
+           let url = navigationAction.request.url,
+           onLinkActivated?(url, navigationAction.modifierFlags) == true {
+            return .cancel
+        }
+        return .allow
     }
 
     func webView(

@@ -22,6 +22,8 @@ public final class BrowserModel {
     public private(set) var folders: [Folder] = []
     /// The Space's split views, kept current as the database changes.
     public internal(set) var splits: [TabSplit] = []
+    /// The page open in Peek, a temporary card over the current tab, if any.
+    public internal(set) var peek: Peek?
     /// The tab the next command bar choice joins in a split view (Add Split View).
     public internal(set) var pendingSplitAnchor: AxoCore.Tab.ID?
     /// A name the sidebar should ask for, such as a new folder's.
@@ -186,7 +188,17 @@ public final class BrowserModel {
         pool.onWebViewFocus = { [weak self] tabID in self?.paneDidTakeFocus(tabID) }
         pool.onOpenInNewTab = { [weak self] url, sourceID in
             guard let self else { return }
-            Task { await self.openTab(url: url, at: .after(sourceID)) }
+            if self.peek?.tab.id == sourceID {
+                // New-window links in Peek stay in Peek.
+                self.pool.load(url, in: sourceID)
+            } else if self.tabs.first(where: { $0.id == sourceID })?.isPinned == true {
+                self.openPeek(url, from: sourceID)
+            } else {
+                Task { await self.openTab(url: url, at: .after(sourceID)) }
+            }
+        }
+        pool.onLinkClick = { [weak self] click in
+            self?.handleLinkClick(click) ?? false
         }
     }
 
@@ -377,6 +389,9 @@ public final class BrowserModel {
     public func select(_ id: AxoCore.Tab.ID?) {
         if id != selectedTabID, isFindBarVisible {
             closeFindBar()
+        }
+        if let peek, id != peek.sourceTabID {
+            closePeek()
         }
         // Both the tab being left and the one being shown were just in use.
         markActive([selectedTabID, id].compactMap { $0 })
@@ -1052,6 +1067,13 @@ public final class BrowserModel {
         pageChangeSave = Task {
             await previousSave?.value
             do {
+                if peek?.tab.id == tabID {
+                    // Peek isn't in the sidebar, but its pages are still history.
+                    if let profileID = space?.profileID {
+                        try await store.history.recordVisit(to: url, title: title, profileID: profileID, at: now())
+                    }
+                    return
+                }
                 let previous = try await store.tab(id: tabID)
                 try await store.updateTab(id: tabID, url: url, title: title)
                 onTabEvent?(.changed(tabID))

@@ -159,6 +159,42 @@ struct WebViewPoolTests {
         #expect(agent.contains(" Safari/"), "Sites and extensions that detect Safari recognize Axo: \(agent)")
     }
 
+    @Test func linkClicksCanBeTakenOver() async throws {
+        let pool = WebViewPool.forTesting()
+        let target = try pages.page("target")
+        let tab = Tab.testTab(url: try pages.page("links", body: "<a id='link' href='\(target.lastPathComponent)'>Go</a>"))
+        var clicks: [LinkClick] = []
+        var takesClicks = true
+        pool.onLinkClick = { click in
+            clicks.append(click)
+            return takesClicks
+        }
+        let webView = pool.webView(for: tab, profileID: profileID)
+        try await waitForPage("links", tab: tab, pool: pool)
+
+        _ = try await webView.callAsyncJavaScript("document.getElementById('link').click()", contentWorld: .page)
+        try await waitUntil("the click") { !clicks.isEmpty }
+        #expect(clicks.first?.tabID == tab.id)
+        #expect(clicks.first?.url.lastPathComponent == target.lastPathComponent)
+        #expect(clicks.first?.sourceURL?.lastPathComponent == "links.html")
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(pool.state(for: tab.id)?.title == "links", "A taken click doesn't navigate")
+
+        takesClicks = false
+        _ = try await webView.callAsyncJavaScript("document.getElementById('link').click()", contentWorld: .page)
+        try await waitForPage("target", tab: tab, pool: pool)
+    }
+
+    @Test(arguments: [
+        ("https://news.example.com/a", "https://www.news.example.com/b", false),
+        ("https://news.example.com/a", "https://other.example.com/", true),
+        ("data:text/html,hi", "https://example.com/", true),
+    ])
+    func linksKnowWhenTheyLeaveTheSite(from source: String, to destination: String, leaves: Bool) {
+        let click = LinkClick(tabID: UUID(), url: URL(string: destination)!, sourceURL: URL(string: source))
+        #expect(click.leavesSite == leaves)
+    }
+
     @Test func focusingAWebViewReportsItsTab() throws {
         let pool = WebViewPool.forTesting()
         let first = Tab.testTab(url: try pages.page("one")), second = Tab.testTab(url: try pages.page("two"))

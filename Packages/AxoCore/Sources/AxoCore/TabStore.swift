@@ -223,9 +223,12 @@ public final class TabStore: Sendable {
     ///   - title: The page title if already known.
     ///   - spaceID: The Space to add the tab to.
     ///   - position: Where to place the tab. Defaults to the end of the list.
+    ///   - id: The new tab's ID. Pass one to keep a page that was already showing under that ID
+    ///     (such as a Peek being promoted to a tab), so its web view carries over.
     /// - Returns: The new tab.
     @discardableResult
     public func openTab(
+        id: Tab.ID = UUID(),
         url: URL,
         title: String = "",
         in spaceID: Space.ID,
@@ -233,7 +236,7 @@ public final class TabStore: Sendable {
     ) async throws -> Tab {
         try await database.writer.write { db in
             let sortKey = try Self.sortKey(for: position, in: spaceID, pinned: false, folder: nil, excluding: nil, db)
-            let tab = Tab(spaceID: spaceID, url: url, title: title, sortKey: sortKey)
+            let tab = Tab(id: id, spaceID: spaceID, url: url, title: title, sortKey: sortKey)
             try tab.insert(db)
             // Return the stored record: the database keeps dates to the millisecond.
             return try Tab.fetchOne(db, id: tab.id) ?? tab

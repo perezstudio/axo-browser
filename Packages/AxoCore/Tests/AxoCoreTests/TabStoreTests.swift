@@ -215,4 +215,12 @@ struct TabStoreTests {
         #expect(count == 0)
         #expect(try await store.favicons(forHosts: []).isEmpty)
     }
+
+    @Test func aTabCanOpenWithAGivenID() async throws {
+        let space = try await store.bootstrap()
+        let id = UUID()
+        let tab = try await store.openTab(id: id, url: URL(string: "https://example.com")!, in: space.id)
+        #expect(tab.id == id)
+        #expect(try await store.tab(id: id) != nil)
+    }
 }
