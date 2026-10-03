@@ -24,8 +24,15 @@ No Axo or third-party dependencies.
   - `inspectUnpacked(at:)` checks a developer-mode folder, which is used in place with Chrome's path-derived ID.
   - `installedExtensions(for:)` lists installs, and `uninstall(_:for:)` removes them (it never deletes unpacked folders).
 - **`InstalledExtension.load()`** creates a `WKWebExtension`, so WebKit validates the files.
+- **`ExtensionManager`** (`@MainActor`, `@Observable`) runs extensions.
+  - **Controllers:** one `WKWebExtensionController` per profile, with persistent storage keyed by the profile ID (`persistent: false` for tests) and the profile's website data store. It attaches each controller to new web views through `WebViewPool.configureWebView`.
+  - **Lifecycle:** `install(crx:for:)`, `installUnpacked(at:for:)`, `setEnabled(_:extensionID:profileID:)`, `uninstall(_:profileID:)`, and `loadExtensions(for:)` keep the files, the database records (`ExtensionStore`), and the loaded contexts in step. `loadErrors` reports extensions that can't load.
+  - **Each context:**
+    - `uniqueIdentifier` is the Chrome extension ID (so `browser.runtime.id` matches Chrome), and `baseURL` is the stable `webkit-extension://<id>/` (so the extension's storage survives relaunches).
+    - `isInspectable` is on.
+    - The requested permissions and all requested match patterns are granted, as Chrome does at install. Optional permissions are not granted.
 
-Still to come in Milestone 3: one `WKWebExtensionController` per profile, saving which extensions are installed and enabled, the tab and window adapters, and the toolbar.
+Still to come in Milestone 3: the tab and window adapters, the toolbar and popups, the install prompt, permission management, and install UI.
 
 ## Testing
 
@@ -33,4 +40,4 @@ Still to come in Milestone 3: one `WKWebExtensionController` per profile, saving
 swift test
 ```
 
-The `AxoCRXTestSupport` target builds fixtures in code: zip archives (including malicious ones) and CRX3 files signed with freshly generated RSA keys. Its CRC-32 is independent of the code under test. It isn't a product.
+Content scripts don't run on `file:` pages, so tests serve pages from `LoopbackWebServer` (127.0.0.1 only). The `AxoExtensionsTestSupport` target builds fixtures in code: zip archives (including malicious ones) and CRX3 files signed with freshly generated RSA keys. Its CRC-32 is independent of the code under test. It isn't a product.

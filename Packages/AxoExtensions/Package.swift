@@ -16,8 +16,8 @@ let package = Package(
     ],
     targets: [
         .target(name: "AxoCRX"),
-        // Fixture builders (zip and signed CRX files) for the tests below. Not a product.
-        .target(name: "AxoCRXTestSupport", dependencies: ["AxoCRX"]),
+        // Test fixtures (zip and signed CRX builders, a loopback web server). Not a product.
+        .target(name: "AxoExtensionsTestSupport", dependencies: ["AxoCRX"]),
         .target(
             name: "AxoExtensions",
             dependencies: [
@@ -28,11 +28,11 @@ let package = Package(
         ),
         .testTarget(
             name: "AxoCRXTests",
-            dependencies: ["AxoCRX", "AxoCRXTestSupport"]
+            dependencies: ["AxoCRX", "AxoExtensionsTestSupport"]
         ),
         .testTarget(
             name: "AxoExtensionsTests",
-            dependencies: ["AxoExtensions", "AxoCRXTestSupport"]
+            dependencies: ["AxoExtensions", "AxoExtensionsTestSupport"]
         ),
     ]
 )

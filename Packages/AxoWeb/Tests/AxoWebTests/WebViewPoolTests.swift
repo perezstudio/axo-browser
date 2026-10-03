@@ -62,6 +62,22 @@ struct WebViewPoolTests {
         #expect(created == [profileID, other])
     }
 
+    @Test func newWebViewsCanBeConfiguredPerProfile() throws {
+        let pool = WebViewPool.forTesting()
+        var configured: [Profile.ID] = []
+        pool.configureWebView = { configuration, profile in
+            configured.append(profile)
+            configuration.applicationNameForUserAgent = "AxoTest"
+        }
+
+        let webView = pool.webView(for: .testTab(url: try pages.page("one")), profileID: profileID)
+
+        #expect(configured == [profileID])
+        #expect(webView.configuration.applicationNameForUserAgent == "AxoTest")
+        _ = pool.webView(for: .testTab(url: try pages.page("two")), profileID: profileID)
+        #expect(configured.count == 2, "Every new web view is configured")
+    }
+
     // MARK: Loading and state
 
     @Test func loadsTheTabURLAndReportsPageChanges() async throws {
