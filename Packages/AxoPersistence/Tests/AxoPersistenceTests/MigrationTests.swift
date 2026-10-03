@@ -11,7 +11,7 @@ struct MigrationTests {
             #expect(try db.tableExists("space"))
             #expect(try db.tableExists("tab"))
             let tabColumns = try db.columns(in: "tab").map(\.name)
-            #expect(tabColumns == ["id", "spaceID", "url", "title", "sortKey", "isPinned", "archivedAt"])
+            #expect(tabColumns == ["id", "spaceID", "url", "title", "sortKey", "isPinned", "archivedAt", "homeURL", "lastActiveAt"])
         }
     }
 
@@ -81,6 +81,28 @@ struct MigrationTests {
                     sql: "INSERT INTO favicon (host, data, updatedAt) VALUES ('example.com', x'01', CURRENT_TIMESTAMP)"
                 )
             }
+        }
+    }
+
+    @Test func v3MarksExistingTabsActiveAtMigrationTime() throws {
+        // Migrate to v2, add a tab, then run v3 and check the tab got an activity date.
+        let queue = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(queue, upTo: "v2-favicons")
+        let profileID = UUID(), spaceID = UUID()
+        try queue.write { db in
+            try db.execute(sql: "PRAGMA foreign_keys = ON")
+            try db.execute(sql: "INSERT INTO profile (id, name) VALUES (?, 'Default')", arguments: [profileID])
+            try db.execute(sql: "INSERT INTO space (id, profileID, name, sortKey) VALUES (?, ?, 'Home', 'a0')", arguments: [spaceID, profileID])
+            try db.execute(sql: "INSERT INTO tab (id, spaceID, url, sortKey) VALUES (?, ?, 'https://example.com', 'a0')", arguments: [UUID(), spaceID])
+        }
+
+        try AppDatabase.migrator.migrate(queue)
+
+        try queue.read { db in
+            let row = try #require(try Row.fetchOne(db, sql: "SELECT homeURL, lastActiveAt FROM tab"))
+            #expect(row["homeURL"] as String? == nil)
+            let lastActive = try #require(row["lastActiveAt"] as Date?)
+            #expect(abs(lastActive.timeIntervalSinceNow) < 60)
         }
     }
 }

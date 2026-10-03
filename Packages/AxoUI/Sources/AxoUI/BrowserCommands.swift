@@ -21,6 +21,12 @@ public struct BrowserCommands: Commands {
                 .keyboardShortcut("l")
                 .disabled(model == nil)
             Divider()
+            Button("Reopen Closed Tab") {
+                guard let model else { return }
+                Task { await model.reopenLastClosedTab() }
+            }
+            .keyboardShortcut("t", modifiers: [.command, .shift])
+            .disabled(model == nil)
             Button("Close Tab") {
                 // With no tab open, ⌘W closes the window instead, since this item owns ⌘W.
                 guard let model, model.selectedTabID != nil else {
@@ -59,6 +65,9 @@ public struct BrowserCommands: Commands {
             Button("Reload Page") { model?.reloadOrStop() }
                 .keyboardShortcut("r")
                 .disabled(model?.selectedTabID == nil)
+            Button("Show Archived Tabs") { model?.isShowingArchive = true }
+                .keyboardShortcut("a", modifiers: [.command, .shift])
+                .disabled(model == nil)
             Button("Show Downloads") { model?.isShowingDownloads.toggle() }
                 .keyboardShortcut("l", modifiers: [.command, .option])
                 .disabled(model == nil)

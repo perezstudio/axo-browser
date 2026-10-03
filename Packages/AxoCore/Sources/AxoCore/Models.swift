@@ -59,10 +59,15 @@ public struct Tab: Codable, Hashable, Identifiable, Sendable, FetchableRecord, P
     public var title: String
     /// The tab's position within its Space. See ``SortKey``.
     public var sortKey: String
-    /// Whether the tab is pinned. Pinned tab behavior arrives in Milestone 2.
+    /// Whether the tab is pinned. Pinned tabs sit above the others, never auto-archive, and
+    /// reset to ``homeURL`` instead of closing.
     public var isPinned: Bool
     /// When the tab was archived, or `nil` while it is in the sidebar.
     public var archivedAt: Date?
+    /// The page a pinned tab returns to when it's closed or reset. `nil` for unpinned tabs.
+    public var homeURL: URL?
+    /// When the tab was last shown. Unpinned tabs archive after a period without being shown.
+    public var lastActiveAt: Date
 
     /// Creates a tab.
     public init(
@@ -72,7 +77,9 @@ public struct Tab: Codable, Hashable, Identifiable, Sendable, FetchableRecord, P
         title: String = "",
         sortKey: String,
         isPinned: Bool = false,
-        archivedAt: Date? = nil
+        archivedAt: Date? = nil,
+        homeURL: URL? = nil,
+        lastActiveAt: Date = Date()
     ) {
         self.id = id
         self.spaceID = spaceID
@@ -81,6 +88,14 @@ public struct Tab: Codable, Hashable, Identifiable, Sendable, FetchableRecord, P
         self.sortKey = sortKey
         self.isPinned = isPinned
         self.archivedAt = archivedAt
+        self.homeURL = homeURL
+        self.lastActiveAt = lastActiveAt
+    }
+
+    /// Whether a pinned tab has navigated away from its home page.
+    public var hasLeftHome: Bool {
+        guard isPinned, let homeURL else { return false }
+        return url != homeURL
     }
 
     /// Column names, for building queries.
@@ -89,6 +104,8 @@ public struct Tab: Codable, Hashable, Identifiable, Sendable, FetchableRecord, P
         public static let spaceID = Column(CodingKeys.spaceID)
         public static let sortKey = Column(CodingKeys.sortKey)
         public static let archivedAt = Column(CodingKeys.archivedAt)
+        public static let isPinned = Column(CodingKeys.isPinned)
+        public static let lastActiveAt = Column(CodingKeys.lastActiveAt)
     }
 }
 

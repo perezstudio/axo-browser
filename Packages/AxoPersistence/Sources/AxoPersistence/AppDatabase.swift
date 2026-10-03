@@ -83,6 +83,18 @@ public final class AppDatabase: Sendable {
             }
         }
 
+        // Pinned tabs remember a home page, and every tab records when it was last shown so
+        // unpinned tabs can archive after a period of inactivity. Existing tabs count as active
+        // now, so none archive the moment this migration runs.
+        migrator.registerMigration("v3-pinned-home-and-activity") { db in
+            try db.alter(table: "tab") { t in
+                t.add(column: "homeURL", .text)
+                t.add(column: "lastActiveAt", .datetime)
+            }
+            try db.execute(sql: "UPDATE tab SET lastActiveAt = CURRENT_TIMESTAMP")
+            try db.create(index: "tab_on_archivedAt", on: "tab", columns: ["archivedAt"])
+        }
+
         return migrator
     }
 

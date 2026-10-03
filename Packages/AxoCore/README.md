@@ -8,7 +8,7 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
 
 ## Public API
 
-- **Records:** `Profile`, `Space`, `Tab`, and `Favicon` (a site icon keyed by lowercased host; `Favicon.key(for:)`) are plain `Codable` GRDB records. They hold persisted state only, never live web views.
+- **Records:** `Profile`, `Space`, `Tab` (with `isPinned`, `homeURL`, `lastActiveAt`, `archivedAt`, and `hasLeftHome`), and `Favicon` (a site icon keyed by lowercased host; `Favicon.key(for:)`) are plain `Codable` GRDB records. They hold persisted state only, never live web views.
 - **`SortKey`:** fractional sort keys. `SortKey.between(lower, upper)` returns a key strictly between two neighbors (`nil` means the start or end of the list), so a move updates a single row. Order by `(sortKey, id)` so duplicate keys after a sync merge stay stable.
 - **`TabStore`:** the async API over the sidebar model.
   - `TabStore.openOnDisk(at:)` and `TabStore.makeInMemory()` open the database, so callers above AxoCore never import AxoPersistence.
@@ -16,7 +16,9 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
   - Profiles: `profiles()`, `createProfile(name:)`, `renameProfile(id:to:)`, and `deleteProfile(id:)`, which refuses while a Space uses the profile.
   - `bootstrap()` returns the first Space, creating a default profile and Space on first launch.
   - `openTab(url:title:in:at:)`, `moveTab(id:to:)`, `updateTab(id:url:title:)`, and `closeTab(id:)` write off the main actor.
-  - `TabPosition` is `.start`, `.end`, or `.after(tabID)`.
+  - `TabPosition` is `.start`, `.end`, or `.after(tabID)`, within the tab's section. Pinned tabs come first, and each section has its own order. Anchoring across sections throws `anchorInDifferentSection`.
+  - Pinning: `setPinned(_:tabID:)` (pinning records the current page as `homeURL`), `setHomeURL(_:tabID:)`, and `resetPinnedTab(id:)`.
+  - Archiving: `archiveTab(id:at:)`, `archiveInactiveTabs(lastActiveBefore:keeping:at:)` (unpinned tabs in every Space), `archivedTabs(in:)` (newest first), `restoreTab(id:at:)`, and `markActive(id:at:)`. `deleteTab(id:)` removes a tab for good.
   - `saveFavicon(_:for:)` and `favicons(forHosts:)` store and read site icons. URLs without a host, such as `file:` and `about:` pages, have no icon.
   - `observeTabs(in:)` streams a Space's tab list after every change. `TabStore.tabsRequest(in:)` is the same query for GRDBQuery.
 

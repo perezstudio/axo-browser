@@ -183,6 +183,37 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Home tab"].waitForExistence(timeout: 5))
     }
 
+    /// Pin a tab from its context menu, close and reopen an unpinned tab, and see that closing
+    /// the pinned tab keeps it in the sidebar.
+    @MainActor
+    func testPinCloseAndReopenTabs() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        for title in ["Mail", "Article"] {
+            app.typeKey("t", modifierFlags: .command)
+            app.typeText("data:text/html,<title>\(title)</title>\n")
+            XCTAssertTrue(sidebar.staticTexts[title].waitForExistence(timeout: 10))
+        }
+
+        sidebar.staticTexts["Mail"].rightClick()
+        app.menuItems["Pin Tab"].click()
+        XCTAssertTrue(sidebar.staticTexts["Pinned"].waitForExistence(timeout: 5))
+
+        // ⌘W on the unpinned tab archives it; ⇧⌘T brings it back.
+        sidebar.staticTexts["Article"].click()
+        app.typeKey("w", modifierFlags: .command)
+        XCTAssertTrue(sidebar.staticTexts["Article"].waitForNonExistence(timeout: 5))
+        app.typeKey("t", modifierFlags: [.command, .shift])
+        XCTAssertTrue(sidebar.staticTexts["Article"].waitForExistence(timeout: 5))
+
+        // ⌘W on the pinned tab unloads it but keeps it pinned.
+        sidebar.staticTexts["Mail"].click()
+        app.typeKey("w", modifierFlags: .command)
+        XCTAssertTrue(sidebar.staticTexts["Pinned"].exists)
+        XCTAssertTrue(sidebar.staticTexts["Mail"].waitForExistence(timeout: 5))
+    }
+
     /// macOS window tabbing is off, so the View menu has no "Show Tab Bar".
     @MainActor
     func testWindowTabbingMenuItemsAreHidden() throws {
