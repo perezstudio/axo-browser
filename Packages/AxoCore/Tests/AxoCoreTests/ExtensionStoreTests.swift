@@ -40,4 +40,19 @@ struct ExtensionStoreTests {
         try await extensions.remove("a", profileID: profileID)
         #expect(try await extensions.record("a", profileID: profileID) == nil)
     }
+
+    @Test func siteAccessAndApprovalsPersistAndSurviveUpdates() async throws {
+        let extensions = store.extensions
+        try await extensions.save(record("a", name: "One"))
+        try await extensions.setSiteAccess(.click, extensionID: "a", profileID: profileID)
+        try await extensions.addGrantedOptional(["cookies", "*://*.example.com/*"], extensionID: "a", profileID: profileID)
+        try await extensions.addGrantedOptional(["cookies"], extensionID: "a", profileID: profileID)
+
+        try await extensions.save(record("a", name: "One", version: "2.0"))
+
+        let saved = try #require(try await extensions.record("a", profileID: profileID))
+        #expect(saved.version == "2.0")
+        #expect(saved.siteAccess == .click)
+        #expect(saved.grantedOptional == ["*://*.example.com/*", "cookies"])
+    }
 }

@@ -172,4 +172,19 @@ struct MigrationTests {
             #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM webExtension") == 0)
         }
     }
+
+    @Test func v7DefaultsToFullRequestedAccessAndNoExtras() throws {
+        let database = try AppDatabase.makeInMemory()
+        let profileID = UUID()
+        try database.writer.write { db in
+            try db.execute(sql: "INSERT INTO profile (id, name) VALUES (?, 'Default')", arguments: [profileID])
+            try db.execute(sql: """
+                INSERT INTO webExtension (profileID, extensionID, name, version, folderPath, installedAt)
+                VALUES (?, 'id', 'Ext', '1.0', '/tmp/x', CURRENT_TIMESTAMP)
+                """, arguments: [profileID])
+            let row = try #require(try Row.fetchOne(db, sql: "SELECT siteAccess, grantedOptional FROM webExtension"))
+            #expect(row["siteAccess"] as String == "all")
+            #expect(row["grantedOptional"] as String == "[]")
+        }
+    }
 }

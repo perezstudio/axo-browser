@@ -21,6 +21,12 @@ struct SidebarView: View {
         .sheet(isPresented: $isShowingArchive) {
             ArchivedTabsView(model: model)
         }
+        .sheet(item: Binding(get: { model.pendingExtensionInstall }, set: { if $0 == nil { Task { await model.cancelExtensionInstall() } } })) { prompt in
+            ExtensionInstallSheet(model: model, prompt: prompt)
+        }
+        .sheet(isPresented: Binding(get: { model.isShowingExtensions }, set: { model.isShowingExtensions = $0 })) {
+            ExtensionsView(model: model)
+        }
         .sheet(item: Binding(get: { model.namingRequest }, set: { model.namingRequest = $0 })) { request in
             folderNameSheet(for: request)
         }

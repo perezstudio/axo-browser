@@ -33,6 +33,8 @@ public struct BrowserCommands: Commands {
                 // Not ⌥⌘N: ⌥N is a dead key on US layouts, so that shortcut never fires.
                 .keyboardShortcut("n", modifiers: [.command, .control])
                 .disabled(model == nil)
+            Button("Install Extension…") { model?.chooseExtensionToInstall() }
+                .disabled(model?.extensionManagement == nil)
             Button("Open Location…") { model?.focusAddressField() }
                 .keyboardShortcut("l")
                 .disabled(model == nil)
@@ -81,6 +83,9 @@ public struct BrowserCommands: Commands {
             Button("Reload Page") { model?.reloadOrStop() }
                 .keyboardShortcut("r")
                 .disabled(model?.selectedTabID == nil)
+            Button("Show Extensions") { model?.isShowingExtensions = true }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .disabled(model?.extensionManagement == nil)
             Button("Show Archived Tabs") { model?.isShowingArchive = true }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
                 .disabled(model == nil)

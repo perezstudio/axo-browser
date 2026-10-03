@@ -188,6 +188,34 @@ final class ControllerDelegate: NSObject, WKWebExtensionControllerDelegate {
 
     func webExtensionController(
         _ controller: WKWebExtensionController,
+        promptForPermissions permissions: Set<WKWebExtension.Permission>,
+        in tab: (any WKWebExtensionTab)?,
+        for extensionContext: WKWebExtensionContext,
+        completionHandler: @escaping (Set<WKWebExtension.Permission>, Date?) -> Void
+    ) {
+        guard let manager else { return completionHandler([], nil) }
+        Task {
+            let allowed = await manager.requestAccess(extensionContext, permissions: permissions.map(\.rawValue), patterns: [])
+            completionHandler(allowed ? permissions : [], nil)
+        }
+    }
+
+    func webExtensionController(
+        _ controller: WKWebExtensionController,
+        promptForPermissionMatchPatterns matchPatterns: Set<WKWebExtension.MatchPattern>,
+        in tab: (any WKWebExtensionTab)?,
+        for extensionContext: WKWebExtensionContext,
+        completionHandler: @escaping (Set<WKWebExtension.MatchPattern>, Date?) -> Void
+    ) {
+        guard let manager else { return completionHandler([], nil) }
+        Task {
+            let allowed = await manager.requestAccess(extensionContext, permissions: [], patterns: matchPatterns.map(\.string))
+            completionHandler(allowed ? matchPatterns : [], nil)
+        }
+    }
+
+    func webExtensionController(
+        _ controller: WKWebExtensionController,
         didUpdate action: WKWebExtension.Action,
         forExtensionContext context: WKWebExtensionContext
     ) {

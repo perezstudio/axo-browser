@@ -22,11 +22,25 @@ public struct WebExtensionRecord: Codable, Hashable, Sendable, FetchableRecord, 
     public var isEnabled: Bool
     /// When it was installed or last updated.
     public var installedAt: Date
+    /// Which sites the extension can reach.
+    public var siteAccess: SiteAccess
+    /// Optional permissions and site patterns the person approved after install, as WebKit names
+    /// them (for example `cookies` or `*://*.example.com/*`).
+    public var grantedOptional: [String]
+
+    /// Which sites an extension can reach.
+    public enum SiteAccess: String, Codable, Sendable, CaseIterable {
+        /// Every site it asked for.
+        case all
+        /// Only the tab where the person clicks its toolbar button.
+        case click
+    }
 
     /// Creates a record.
     public init(
         profileID: Profile.ID, extensionID: String, name: String, version: String,
-        folderPath: String, isUnpacked: Bool, isEnabled: Bool = true, installedAt: Date = Date()
+        folderPath: String, isUnpacked: Bool, isEnabled: Bool = true, installedAt: Date = Date(),
+        siteAccess: SiteAccess = .all, grantedOptional: [String] = []
     ) {
         self.profileID = profileID
         self.extensionID = extensionID
@@ -36,6 +50,43 @@ public struct WebExtensionRecord: Codable, Hashable, Sendable, FetchableRecord, 
         self.isUnpacked = isUnpacked
         self.isEnabled = isEnabled
         self.installedAt = installedAt
+        self.siteAccess = siteAccess
+        self.grantedOptional = grantedOptional
+    }
+
+    // Stored as text: the access as its raw value and approvals as a JSON array.
+    enum CodingKeys: String, CodingKey {
+        case profileID, extensionID, name, version, folderPath, isUnpacked, isEnabled, installedAt, siteAccess, grantedOptional
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        profileID = try container.decode(UUID.self, forKey: .profileID)
+        extensionID = try container.decode(String.self, forKey: .extensionID)
+        name = try container.decode(String.self, forKey: .name)
+        version = try container.decode(String.self, forKey: .version)
+        folderPath = try container.decode(String.self, forKey: .folderPath)
+        isUnpacked = try container.decode(Bool.self, forKey: .isUnpacked)
+        isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
+        installedAt = try container.decode(Date.self, forKey: .installedAt)
+        siteAccess = (try? container.decode(SiteAccess.self, forKey: .siteAccess)) ?? .all
+        let approvals = (try? container.decode(String.self, forKey: .grantedOptional)) ?? "[]"
+        grantedOptional = (try? JSONDecoder().decode([String].self, from: Data(approvals.utf8))) ?? []
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(profileID, forKey: .profileID)
+        try container.encode(extensionID, forKey: .extensionID)
+        try container.encode(name, forKey: .name)
+        try container.encode(version, forKey: .version)
+        try container.encode(folderPath, forKey: .folderPath)
+        try container.encode(isUnpacked, forKey: .isUnpacked)
+        try container.encode(isEnabled, forKey: .isEnabled)
+        try container.encode(installedAt, forKey: .installedAt)
+        try container.encode(siteAccess, forKey: .siteAccess)
+        let approvals = String(decoding: try JSONEncoder().encode(grantedOptional), as: UTF8.self)
+        try container.encode(approvals, forKey: .grantedOptional)
     }
 
     /// The extension's folder.
@@ -60,14 +111,37 @@ public final class ExtensionStore: Sendable {
         self.database = database
     }
 
-    /// Saves an install or update. An update keeps the extension's enabled state.
+    /// Saves an install or update. An update keeps the extension's enabled state, site access,
+    /// and approvals.
     public func save(_ record: WebExtensionRecord) async throws {
         try await database.writer.write { db in
             var record = record
             if let existing = try Self.find(record.extensionID, profileID: record.profileID, db) {
                 record.isEnabled = existing.isEnabled
+                record.siteAccess = existing.siteAccess
+                record.grantedOptional = existing.grantedOptional
             }
             try record.save(db)
+        }
+    }
+
+    /// Sets which sites an extension can reach.
+    public func setSiteAccess(_ access: WebExtensionRecord.SiteAccess, extensionID: String, profileID: Profile.ID) async throws {
+        try await update(extensionID, profileID: profileID) { $0.siteAccess = access }
+    }
+
+    /// Records optional permissions or site patterns the person approved.
+    public func addGrantedOptional(_ approvals: [String], extensionID: String, profileID: Profile.ID) async throws {
+        try await update(extensionID, profileID: profileID) { record in
+            record.grantedOptional = Array(Set(record.grantedOptional).union(approvals)).sorted()
+        }
+    }
+
+    private func update(_ extensionID: String, profileID: Profile.ID, _ change: @escaping @Sendable (inout WebExtensionRecord) -> Void) async throws {
+        try await database.writer.write { db in
+            guard var record = try Self.find(extensionID, profileID: profileID, db) else { return }
+            change(&record)
+            try record.update(db)
         }
     }
 
