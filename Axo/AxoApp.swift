@@ -6,6 +6,7 @@
 //
 
 import AxoCore
+import AxoExtensions
 import AxoIntegration
 import AxoUI
 import AxoWeb
@@ -50,12 +51,40 @@ enum AppEnvironment {
         URL.applicationSupportDirectory.appending(path: "Axo/Axo.sqlite")
     }
 
+    /// Runs web extensions for every profile. Kept for the app's lifetime.
+    static var extensionManager: ExtensionManager?
+
+    /// Where installed extensions live.
+    static var extensionsFolder: URL {
+        isUITesting
+            ? FileManager.default.temporaryDirectory.appending(path: "AxoUITests-Extensions-\(UUID().uuidString)", directoryHint: .isDirectory)
+            : URL.applicationSupportDirectory.appending(path: "Axo/Extensions", directoryHint: .isDirectory)
+    }
+
     /// Where downloads go during UI tests.
     static let uiTestingDownloadsDirectory = FileManager.default.temporaryDirectory
         .appending(path: "AxoUITests-Downloads-\(UUID().uuidString)", directoryHint: .isDirectory)
 
     /// Where the last Space the window showed is remembered between launches.
     static let lastSpaceKey = "lastSpaceID"
+
+    /// Attaches extension controllers to the pool and loads every profile's enabled extensions.
+    /// Loading is asynchronous, so a page that loads in the first moments after launch may run
+    /// before its extensions are ready.
+    private static func startExtensions(store: TabStore, pool: WebViewPool) {
+        let manager = ExtensionManager(
+            installer: ExtensionInstaller(root: extensionsFolder),
+            store: store.extensions,
+            pool: pool,
+            persistent: !isUITesting
+        )
+        extensionManager = manager
+        Task {
+            for profile in (try? await store.profiles()) ?? [] {
+                await manager.loadExtensions(for: profile.id)
+            }
+        }
+    }
 
     static func makeBrowserModel() -> BrowserModel {
         let model = makeModel()
@@ -77,6 +106,7 @@ enum AppEnvironment {
             : WebViewPool()
         do {
             let store = isUITesting ? try TabStore.makeInMemory() : try TabStore.openOnDisk(at: databaseURL)
+            startExtensions(store: store, pool: pool)
             return BrowserModel(store: store, pool: pool, initialSpaceID: lastSpaceID)
         } catch {
             // Keep the browser usable for this session and say plainly that nothing will be saved.

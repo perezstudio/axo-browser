@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-import AxoCRXTestSupport
+import AxoExtensionsTestSupport
 @testable import AxoCRX
 
 struct ManifestTests {

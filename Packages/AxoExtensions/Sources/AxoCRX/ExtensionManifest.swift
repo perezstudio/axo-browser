@@ -9,6 +9,13 @@ public struct ExtensionManifest: Decodable, Hashable, Sendable {
     /// 2 or 3.
     public var manifestVersion: Int
 
+    /// Creates a manifest description.
+    public init(name: String, version: String, manifestVersion: Int) {
+        self.name = name
+        self.version = version
+        self.manifestVersion = manifestVersion
+    }
+
     enum CodingKeys: String, CodingKey {
         case name, version
         case manifestVersion = "manifest_version"

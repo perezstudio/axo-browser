@@ -139,6 +139,24 @@ public final class AppDatabase: Sendable {
             }
         }
 
+        // Installed web extensions, per profile. Files live on disk (Axo's extensions folder,
+        // or a developer's folder for unpacked extensions); this table records which are
+        // installed and whether each is enabled.
+        migrator.registerMigration("v6-extensions") { db in
+            try db.create(table: "webExtension") { t in
+                t.column("profileID", .blob).notNull()
+                    .references("profile", onDelete: .cascade)
+                t.column("extensionID", .text).notNull()
+                t.column("name", .text).notNull()
+                t.column("version", .text).notNull()
+                t.column("folderPath", .text).notNull()
+                t.column("isUnpacked", .boolean).notNull().defaults(to: false)
+                t.column("isEnabled", .boolean).notNull().defaults(to: true)
+                t.column("installedAt", .datetime).notNull()
+                t.primaryKey(["profileID", "extensionID"])
+            }
+        }
+
         return migrator
     }
 

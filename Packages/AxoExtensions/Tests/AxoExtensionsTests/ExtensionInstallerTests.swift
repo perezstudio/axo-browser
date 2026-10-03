@@ -1,5 +1,5 @@
 import AxoCRX
-import AxoCRXTestSupport
+import AxoExtensionsTestSupport
 import AxoCore
 import Foundation
 import Testing

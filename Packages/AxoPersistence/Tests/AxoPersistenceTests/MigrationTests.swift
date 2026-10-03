@@ -154,4 +154,22 @@ struct MigrationTests {
             #expect(try matches("swift") == 0, "Deleting a profile removes its history from the index")
         }
     }
+
+    @Test func v6ExtensionsAreUniquePerProfileAndGoWithIt() throws {
+        let database = try AppDatabase.makeInMemory()
+        let profileID = UUID()
+        try database.writer.write { db in
+            try db.execute(sql: "INSERT INTO profile (id, name) VALUES (?, 'Default')", arguments: [profileID])
+            let insert = """
+                INSERT INTO webExtension (profileID, extensionID, name, version, folderPath, installedAt)
+                VALUES (?, 'abcdefghijklmnopabcdefghijklmnop', 'Ext', '1.0', '/tmp/x', CURRENT_TIMESTAMP)
+                """
+            try db.execute(sql: insert, arguments: [profileID])
+            #expect(throws: DatabaseError.self) { try db.execute(sql: insert, arguments: [profileID]) }
+            #expect(try Bool.fetchOne(db, sql: "SELECT isEnabled FROM webExtension") == true)
+
+            try db.execute(sql: "DELETE FROM profile")
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM webExtension") == 0)
+        }
+    }
 }
