@@ -140,11 +140,11 @@ struct TabStoreTests {
         #expect(updated.sortKey == tab.sortKey)
     }
 
-    @Test func closeTabRemovesItAndIgnoresMissingTabs() async throws {
+    @Test func deleteTabRemovesItAndIgnoresMissingTabs() async throws {
         let space = try await store.bootstrap()
         let tab = try await store.openTab(url: url("one"), in: space.id)
-        try await store.closeTab(id: tab.id)
-        try await store.closeTab(id: tab.id)
+        try await store.deleteTab(id: tab.id)
+        try await store.deleteTab(id: tab.id)
         #expect(try await store.tabs(in: space.id).isEmpty)
     }
 

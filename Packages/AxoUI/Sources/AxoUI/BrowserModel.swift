@@ -29,6 +29,8 @@ public final class BrowserModel {
     public var alertMessage: String?
     /// Whether the downloads list is open.
     public var isShowingDownloads = false
+    /// Whether the archived tabs list is open.
+    public var isShowingArchive = false
     /// Whether the find bar is showing above the page.
     public private(set) var isFindBarVisible = false
     /// The text to find in the selected page.
@@ -54,6 +56,12 @@ public final class BrowserModel {
     @ObservationIgnored private let initialSpaceID: Space.ID?
     /// Called with the Space's ID whenever the window switches Spaces, so the app can reopen it.
     @ObservationIgnored public var onSpaceChange: ((Space.ID) -> Void)?
+    /// How long an unpinned tab can go unshown before it's archived. Defaults to 12 hours.
+    @ObservationIgnored public var archiveAfter: TimeInterval = 12 * 60 * 60
+    /// How often to look for idle tabs to archive while Axo runs.
+    @ObservationIgnored public var archiveCheckInterval: Duration = .seconds(60 * 60)
+    @ObservationIgnored private let now: () -> Date
+    @ObservationIgnored private var archiveTask: Task<Void, Never>?
     @ObservationIgnored private let prompts = PagePromptQueue()
     /// Hosts whose saved icon was already looked up, so each is read from the database once.
     @ObservationIgnored private var lookedUpFaviconHosts: Set<String> = []
@@ -63,9 +71,16 @@ public final class BrowserModel {
     ///
     /// - Parameter initialSpaceID: The Space to open at launch, such as the last one used. The
     ///   first Space opens if it's `nil` or no longer exists.
-    public init(store: TabStore, pool: WebViewPool, alertMessage: String? = nil, initialSpaceID: Space.ID? = nil) {
+    public init(
+        store: TabStore,
+        pool: WebViewPool,
+        alertMessage: String? = nil,
+        initialSpaceID: Space.ID? = nil,
+        now: @escaping () -> Date = Date.init
+    ) {
         self.store = store
         self.pool = pool
+        self.now = now
         self.alertMessage = alertMessage
         self.initialSpaceID = initialSpaceID
         pool.onPageChange = { [weak self] tabID, url, title in
@@ -93,6 +108,7 @@ public final class BrowserModel {
     isolated deinit {
         observationTask?.cancel()
         spacesObservationTask?.cancel()
+        archiveTask?.cancel()
     }
 
     /// The selected tab's record.
@@ -116,6 +132,7 @@ public final class BrowserModel {
             try await show(initial)
             observeSpaces()
             pool.startHibernationTimer()
+            startArchiving()
         } catch {
             report(error, "Axo couldn't load your tabs.")
         }
@@ -226,6 +243,18 @@ public final class BrowserModel {
         onSpaceChange?(target.id)
     }
 
+    /// Archives idle tabs now and then every ``archiveCheckInterval``.
+    private func startArchiving() {
+        archiveTask?.cancel()
+        let interval = archiveCheckInterval
+        archiveTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.archiveInactiveTabs()
+                try? await Task.sleep(for: interval)
+            }
+        }
+    }
+
     private func observeSpaces() {
         spacesObservationTask?.cancel()
         let observation = store.observeSpaces()
@@ -248,6 +277,8 @@ public final class BrowserModel {
         if id != selectedTabID, isFindBarVisible {
             closeFindBar()
         }
+        // Both the tab being left and the one being shown were just in use.
+        markActive([selectedTabID, id].compactMap { $0 })
         selectedTabID = id
         activateSelectedTab()
     }
@@ -303,25 +334,36 @@ public final class BrowserModel {
         }
     }
 
-    /// Closes a tab. If it was selected, the tab below it (or above, if it was last) is selected.
+    /// Closes a tab, the way Arc does: an unpinned tab is archived (⇧⌘T or the archive brings
+    /// it back), and a pinned tab stays in the sidebar but unloads and returns to its home page.
+    /// If the tab was selected, the tab below it (or above, if it was last) is selected.
     public func closeTab(_ id: AxoCore.Tab.ID) async {
-        guard let space else { return }
-        let index = tabs.firstIndex { $0.id == id }
+        guard let space, let tab = tabs.first(where: { $0.id == id }) else { return }
+        let visibleOrder = tabs.map(\.id)
         prompts.dismissAll(from: id)
         pool.discard(id)
         do {
-            try await store.closeTab(id: id)
+            if tab.isPinned {
+                try await store.resetPinnedTab(id: id)
+            } else {
+                try await store.archiveTab(id: id, at: now())
+            }
             tabs = try await store.tabs(in: space.id)
         } catch {
             report(error, "Axo couldn't close the tab.")
             return
         }
         guard selectedTabID == id else { return }
-        if let index, !tabs.isEmpty {
-            select(tabs[min(index, tabs.count - 1)].id)
-        } else {
-            select(nil)
-        }
+        select(Self.neighbor(of: id, in: visibleOrder, among: tabs.map(\.id).filter { $0 != id }))
+    }
+
+    /// The tab to select after `id` goes away: the next one in `order`, else the previous one.
+    private static func neighbor(of id: AxoCore.Tab.ID, in order: [AxoCore.Tab.ID], among remaining: [AxoCore.Tab.ID]) -> AxoCore.Tab.ID? {
+        guard let index = order.firstIndex(of: id) else { return remaining.first }
+        let candidates = Set(remaining)
+        let after = order[(index + 1)...].first { candidates.contains($0) }
+        let before = order[..<index].last { candidates.contains($0) }
+        return after ?? before
     }
 
     /// Closes the selected tab, if any.
@@ -330,11 +372,106 @@ public final class BrowserModel {
         await closeTab(selectedTabID)
     }
 
-    /// Moves tabs after a drag in the sidebar, using `List.onMove` indices.
-    public func moveTabs(fromOffsets source: IndexSet, toOffset destination: Int) async {
-        guard let space, let sourceIndex = source.first, source.count == 1 else { return }
-        let moving = tabs[sourceIndex]
-        var remaining = tabs
+    /// Brings back the most recently closed (archived) tab in this Space and selects it.
+    public func reopenLastClosedTab() async {
+        guard let space else { return }
+        do {
+            guard let last = try await store.archivedTabs(in: space.id).first else { return }
+            await restoreTab(last.id)
+        } catch {
+            report(error, "Axo couldn't reopen the tab.")
+        }
+    }
+
+    /// The Space's archived tabs, most recently archived first.
+    public func archivedTabs() async -> [AxoCore.Tab] {
+        guard let space else { return [] }
+        return (try? await store.archivedTabs(in: space.id)) ?? []
+    }
+
+    /// Puts an archived tab back in the sidebar and selects it.
+    public func restoreTab(_ id: AxoCore.Tab.ID) async {
+        guard let space else { return }
+        do {
+            try await store.restoreTab(id: id, at: now())
+            tabs = try await store.tabs(in: space.id)
+            select(id)
+        } catch {
+            report(error, "Axo couldn't restore the tab.")
+        }
+    }
+
+    /// Archives unpinned tabs, in every Space, that haven't been shown for ``archiveAfter``.
+    /// The selected tab is never archived.
+    public func archiveInactiveTabs() async {
+        do {
+            let keeping: Set<AxoCore.Tab.ID> = selectedTabID.map { [$0] } ?? []
+            let archived = try await store.archiveInactiveTabs(
+                lastActiveBefore: now().addingTimeInterval(-archiveAfter),
+                keeping: keeping,
+                at: now()
+            )
+            for id in archived {
+                prompts.dismissAll(from: id)
+                pool.discard(id)
+            }
+            if let space, !archived.isEmpty {
+                tabs = try await store.tabs(in: space.id)
+            }
+        } catch {
+            logger.error("Couldn't archive idle tabs: \(error)")
+        }
+    }
+
+    // MARK: Pinning
+
+    /// The Space's pinned tabs, in order.
+    public var pinnedTabs: [AxoCore.Tab] { tabs.filter(\.isPinned) }
+
+    /// The Space's unpinned tabs, in order.
+    public var unpinnedTabs: [AxoCore.Tab] { tabs.filter { !$0.isPinned } }
+
+    /// Pins or unpins a tab. Pinning makes its current page the tab's home page.
+    public func setPinned(_ pinned: Bool, tabID: AxoCore.Tab.ID) async {
+        guard let space else { return }
+        do {
+            try await store.setPinned(pinned, tabID: tabID)
+            tabs = try await store.tabs(in: space.id)
+        } catch {
+            report(error, pinned ? "Axo couldn't pin the tab." : "Axo couldn't unpin the tab.")
+        }
+    }
+
+    /// Takes a pinned tab back to its home page.
+    public func goToPinnedHome(_ tabID: AxoCore.Tab.ID) async {
+        guard let space else { return }
+        do {
+            guard let home = try await store.resetPinnedTab(id: tabID) else { return }
+            tabs = try await store.tabs(in: space.id)
+            pool.load(home, in: tabID)
+        } catch {
+            report(error, "Axo couldn't go to the pinned page.")
+        }
+    }
+
+    /// Makes a pinned tab's current page its new home page.
+    public func makeCurrentPagePinnedHome(_ tabID: AxoCore.Tab.ID) async {
+        guard let space, let url = tabs.first(where: { $0.id == tabID })?.url else { return }
+        do {
+            try await store.setHomeURL(url, tabID: tabID)
+            tabs = try await store.tabs(in: space.id)
+        } catch {
+            report(error, "Axo couldn't update the pinned page.")
+        }
+    }
+
+    /// Moves a tab within its section after a drag in the sidebar, using `List.onMove` indices
+    /// relative to that section.
+    public func moveTabs(fromOffsets source: IndexSet, toOffset destination: Int, pinned: Bool) async {
+        let section = pinned ? pinnedTabs : unpinnedTabs
+        guard let space, let sourceIndex = source.first, source.count == 1, section.indices.contains(sourceIndex) else { return }
+        let moving = section[sourceIndex]
+        var remaining = section
         remaining.remove(at: sourceIndex)
         let insertIndex = destination > sourceIndex ? destination - 1 : destination
         guard insertIndex != sourceIndex else { return }
@@ -447,6 +584,16 @@ public final class BrowserModel {
     }
 
     // MARK: Persistence
+
+    private func markActive(_ ids: [AxoCore.Tab.ID]) {
+        guard !ids.isEmpty else { return }
+        let date = now()
+        Task {
+            for id in ids {
+                try? await store.markActive(id: id, at: date)
+            }
+        }
+    }
 
     private func observeTabs(in spaceID: Space.ID) {
         observationTask?.cancel()

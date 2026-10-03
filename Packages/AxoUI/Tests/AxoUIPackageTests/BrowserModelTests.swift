@@ -126,7 +126,7 @@ struct BrowserModelTests {
     ])
     func draggingReordersTabs(source: Int, destination: Int, expected: [String]) async throws {
         _ = try await openTabs(["a", "b", "c"])
-        await model.moveTabs(fromOffsets: IndexSet(integer: source), toOffset: destination)
+        await model.moveTabs(fromOffsets: IndexSet(integer: source), toOffset: destination, pinned: false)
         #expect(model.tabs.map { $0.url.deletingPathExtension().lastPathComponent } == expected)
     }
 

@@ -2,13 +2,13 @@ import AxoPersistence
 import Foundation
 import GRDB
 
-/// Where to place a tab in its Space's list.
+/// Where to place a tab within its section (pinned or unpinned) of its Space's list.
 public enum TabPosition: Hashable, Sendable {
-    /// Before every other tab.
+    /// Before every other tab in the section.
     case start
-    /// After every other tab.
+    /// After every other tab in the section.
     case end
-    /// Directly after the tab with this ID.
+    /// Directly after the tab with this ID, which must be in the same section.
     case after(Tab.ID)
 }
 
@@ -18,6 +18,8 @@ public enum TabStoreError: Error, Equatable {
     case tabNotFound(Tab.ID)
     /// The tab used as a position anchor is in a different Space.
     case anchorInDifferentSpace(Tab.ID)
+    /// The tab used as a position anchor is pinned and the moving tab isn't, or the reverse.
+    case anchorInDifferentSection(Tab.ID)
     /// No Space with this ID exists.
     case spaceNotFound(Space.ID)
     /// The last Space can't be deleted; a window always shows one.
@@ -173,14 +175,15 @@ public final class TabStore: Sendable {
 
     // MARK: Tabs
 
-    /// The request for a Space's tabs that are not archived, in sidebar order.
+    /// The request for a Space's tabs that are not archived, in sidebar order: pinned tabs
+    /// first, then the others, each by sort key.
     ///
     /// Use it with `ValueObservation` or GRDBQuery to keep a view up to date.
     public static func tabsRequest(in spaceID: Space.ID) -> QueryInterfaceRequest<Tab> {
         Tab
             .filter(Tab.Columns.spaceID == spaceID)
             .filter(Tab.Columns.archivedAt == nil)
-            .order(Tab.Columns.sortKey, Tab.Columns.id)
+            .order(Tab.Columns.isPinned.desc, Tab.Columns.sortKey, Tab.Columns.id)
     }
 
     /// Streams a Space's tabs that are not archived, in sidebar order: the current list first,
@@ -205,7 +208,7 @@ public final class TabStore: Sendable {
         }
     }
 
-    /// Creates a tab for `url` in a Space.
+    /// Creates an unpinned tab for `url` in a Space.
     ///
     /// - Parameters:
     ///   - url: The page to open.
@@ -221,22 +224,23 @@ public final class TabStore: Sendable {
         at position: TabPosition = .end
     ) async throws -> Tab {
         try await database.writer.write { db in
-            let sortKey = try Self.sortKey(for: position, in: spaceID, excluding: nil, db)
+            let sortKey = try Self.sortKey(for: position, in: spaceID, pinned: false, excluding: nil, db)
             let tab = Tab(spaceID: spaceID, url: url, title: title, sortKey: sortKey)
             try tab.insert(db)
-            return tab
+            // Return the stored record: the database keeps dates to the millisecond.
+            return try Tab.fetchOne(db, id: tab.id) ?? tab
         }
     }
 
-    /// Moves a tab within its Space. Only the moved tab's row changes.
+    /// Moves a tab within its section of its Space. Only the moved tab's row changes.
     ///
     /// - Throws: ``TabStoreError`` if the tab or the anchor tab doesn't exist, or the anchor is
-    ///   in another Space.
+    ///   in another Space or section.
     public func moveTab(id: Tab.ID, to position: TabPosition) async throws {
         try await database.writer.write { db in
             guard var tab = try Tab.fetchOne(db, id: id) else { throw TabStoreError.tabNotFound(id) }
             if case .after(let anchorID) = position, anchorID == id { return }
-            tab.sortKey = try Self.sortKey(for: position, in: tab.spaceID, excluding: id, db)
+            tab.sortKey = try Self.sortKey(for: position, in: tab.spaceID, pinned: tab.isPinned, excluding: id, db)
             try tab.update(db)
         }
     }
@@ -253,12 +257,126 @@ public final class TabStore: Sendable {
         }
     }
 
-    /// Closes a tab, deleting it. Archiving closed tabs arrives in Milestone 2.
+    /// Deletes a tab for good. Closing a tab in the sidebar archives it instead; see
+    /// ``archiveTab(id:at:)``.
     ///
-    /// Closing a tab that doesn't exist does nothing.
-    public func closeTab(id: Tab.ID) async throws {
+    /// Deleting a tab that doesn't exist does nothing.
+    public func deleteTab(id: Tab.ID) async throws {
         _ = try await database.writer.write { db in
             try Tab.deleteOne(db, id: id)
+        }
+    }
+
+    // MARK: Pinning
+
+    /// Pins or unpins a tab, moving it to the end of its new section. Pinning remembers the
+    /// current page as the tab's home URL; unpinning forgets it.
+    public func setPinned(_ pinned: Bool, tabID: Tab.ID) async throws {
+        try await database.writer.write { db in
+            guard var tab = try Tab.fetchOne(db, id: tabID) else { throw TabStoreError.tabNotFound(tabID) }
+            guard tab.isPinned != pinned else { return }
+            tab.sortKey = try Self.sortKey(for: .end, in: tab.spaceID, pinned: pinned, excluding: tabID, db)
+            tab.isPinned = pinned
+            tab.homeURL = pinned ? tab.url : nil
+            try tab.update(db)
+        }
+    }
+
+    /// Makes a pinned tab's current page its home URL.
+    public func setHomeURL(_ url: URL, tabID: Tab.ID) async throws {
+        try await database.writer.write { db in
+            guard var tab = try Tab.fetchOne(db, id: tabID) else { throw TabStoreError.tabNotFound(tabID) }
+            guard tab.isPinned else { return }
+            tab.homeURL = url
+            try tab.update(db)
+        }
+    }
+
+    /// Points a pinned tab back at its home URL, for example when it's closed. The page title
+    /// updates when the page loads.
+    ///
+    /// - Returns: The home URL, or `nil` if the tab isn't pinned.
+    @discardableResult
+    public func resetPinnedTab(id: Tab.ID) async throws -> URL? {
+        try await database.writer.write { db in
+            guard var tab = try Tab.fetchOne(db, id: id) else { throw TabStoreError.tabNotFound(id) }
+            guard tab.isPinned, let homeURL = tab.homeURL else { return nil }
+            if tab.url != homeURL {
+                tab.url = homeURL
+                tab.title = ""
+                try tab.update(db)
+            }
+            return homeURL
+        }
+    }
+
+    // MARK: Activity and archiving
+
+    /// Records that a tab was shown at `date`, which delays its auto-archiving.
+    public func markActive(id: Tab.ID, at date: Date = Date()) async throws {
+        _ = try await database.writer.write { db in
+            try Tab.filter(id: id).updateAll(db, Tab.Columns.lastActiveAt.set(to: date))
+        }
+    }
+
+    /// Archives a tab: it leaves the sidebar but can be restored. Pinned tabs can be archived too
+    /// (when unpinned first is preferred); archiving an archived tab does nothing.
+    public func archiveTab(id: Tab.ID, at date: Date = Date()) async throws {
+        try await database.writer.write { db in
+            guard var tab = try Tab.fetchOne(db, id: id) else { throw TabStoreError.tabNotFound(id) }
+            guard tab.archivedAt == nil else { return }
+            tab.archivedAt = date
+            try tab.update(db)
+        }
+    }
+
+    /// Archives every unpinned tab, in every Space, that hasn't been shown since `cutoff`.
+    ///
+    /// - Parameter keeping: Tabs to leave alone even if they're idle, such as the ones on screen.
+    /// - Returns: The IDs of the tabs that were archived.
+    @discardableResult
+    public func archiveInactiveTabs(
+        lastActiveBefore cutoff: Date,
+        keeping: Set<Tab.ID> = [],
+        at date: Date = Date()
+    ) async throws -> [Tab.ID] {
+        try await database.writer.write { db in
+            let idle = try Tab
+                .filter(Tab.Columns.archivedAt == nil)
+                .filter(Tab.Columns.isPinned == false)
+                .filter(Tab.Columns.lastActiveAt < cutoff)
+                .fetchAll(db)
+                .map(\.id)
+                .filter { !keeping.contains($0) }
+            try Tab.filter(keys: idle).updateAll(db, Tab.Columns.archivedAt.set(to: date))
+            return idle
+        }
+    }
+
+    /// A Space's archived tabs, most recently archived first.
+    public func archivedTabs(in spaceID: Space.ID) async throws -> [Tab] {
+        try await database.writer.read { db in
+            try Tab
+                .filter(Tab.Columns.spaceID == spaceID)
+                .filter(Tab.Columns.archivedAt != nil)
+                .order(Tab.Columns.archivedAt.desc, Tab.Columns.id)
+                .fetchAll(db)
+        }
+    }
+
+    /// Puts an archived tab back at the end of its section and marks it active.
+    ///
+    /// - Returns: The restored tab.
+    @discardableResult
+    public func restoreTab(id: Tab.ID, at date: Date = Date()) async throws -> Tab {
+        try await database.writer.write { db in
+            guard var tab = try Tab.fetchOne(db, id: id) else { throw TabStoreError.tabNotFound(id) }
+            guard tab.archivedAt != nil else { return tab }
+            tab.sortKey = try Self.sortKey(for: .end, in: tab.spaceID, pinned: tab.isPinned, excluding: id, db)
+            tab.archivedAt = nil
+            tab.lastActiveAt = date
+            try tab.update(db)
+            return try Tab.fetchOne(db, id: id) ?? tab
         }
     }
 
@@ -285,14 +403,18 @@ public final class TabStore: Sendable {
 
     // MARK: Ordering
 
-    /// Computes a sort key for `position` among a Space's tabs, ignoring the tab being moved.
+    /// Computes a sort key for `position` among the tabs in one section (pinned or not) of a
+    /// Space, ignoring the tab being moved.
     private static func sortKey(
         for position: TabPosition,
         in spaceID: Space.ID,
+        pinned: Bool,
         excluding excludedID: Tab.ID?,
         _ db: Database
     ) throws -> String {
-        var siblings = Tab.filter(Tab.Columns.spaceID == spaceID)
+        var siblings = Tab
+            .filter(Tab.Columns.spaceID == spaceID)
+            .filter(Tab.Columns.isPinned == pinned)
         if let excludedID {
             siblings = siblings.filter(Tab.Columns.id != excludedID)
         }
@@ -308,6 +430,7 @@ public final class TabStore: Sendable {
                 throw TabStoreError.tabNotFound(anchorID)
             }
             guard anchor.spaceID == spaceID else { throw TabStoreError.anchorInDifferentSpace(anchorID) }
+            guard anchor.isPinned == pinned else { throw TabStoreError.anchorInDifferentSection(anchorID) }
             // The next distinct key, so ties left by a sync merge can't produce an invalid range.
             let next = try siblings
                 .filter(Tab.Columns.sortKey > anchor.sortKey)

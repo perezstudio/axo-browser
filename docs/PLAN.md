@@ -262,7 +262,7 @@ Each milestone should be usable as a daily driver before the next one starts.
 **Milestone 2: Arc-style organization**
 
 - [x] Spaces, each tied to a profile with isolated data. New Spaces share the current profile unless you choose a separate one, and deleting a Space keeps its profile. Managing profiles comes with Settings.
-- [ ] Pinned tabs with a home URL; unpinned tabs auto-archive after a set period
+- [x] Pinned tabs with a home URL; unpinned tabs auto-archive after a set period (12 hours, like Arc; adjustable in Settings later). Closing an unpinned tab archives it, ⇧⌘T reopens it, and closing a pinned tab returns it to its home page.
 - [ ] Sidebar folders
 - [ ] Command bar (Cmd+T) over tabs, history, bookmarks, and actions, backed by FTS5
 - [ ] Set as default browser
