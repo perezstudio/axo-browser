@@ -22,6 +22,7 @@ public struct BrowserWindow: View {
                 .toolbar(removing: .title)
         }
         .focusedSceneValue(\.browserModel, model)
+        .pagePrompts(model: model)
         .task { await model.start() }
         .alert(
             "Something went wrong",

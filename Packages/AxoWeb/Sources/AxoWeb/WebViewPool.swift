@@ -42,6 +42,19 @@ public final class WebViewPool {
     /// for the page's host. The URL is the page the icon belongs to.
     public var onFaviconChange: ((Tab.ID, URL, Data) -> Void)?
 
+    /// Asked when a page wants the camera, microphone, or location. Return the person's answer.
+    /// Requests are denied when this is `nil`. Each answer is remembered for the profile, origin,
+    /// and kind until the pool is deallocated (that is, until Axo quits).
+    public var onPermissionRequest: ((PermissionRequest) async -> PermissionDecision)?
+
+    /// Asked when a page calls `alert()`, `confirm()`, or `prompt()`. Return the person's answer.
+    /// Dialogs are cancelled when this is `nil`.
+    public var onJavaScriptDialog: ((JavaScriptDialog) async -> JavaScriptDialogResult)?
+
+    /// Asked when a page's file input wants files. Return the chosen files, or `nil` to cancel.
+    /// File selection is cancelled when this is `nil`.
+    public var onFileSelection: ((FileSelectionRequest) async -> [URL]?)?
+
     /// Called when a page asks to open a link in a new tab or window (for example
     /// `target="_blank"` or `window.open`). The second argument is the tab that asked.
     public var onOpenInNewTab: ((URL, Tab.ID) -> Void)?
@@ -52,6 +65,8 @@ public final class WebViewPool {
     private var live: [Tab.ID: LiveTab] = [:]
     private var hibernated: [Tab.ID: HibernatedTab] = [:]
     private var visibleCounts: [Tab.ID: Int] = [:]
+    /// Permission answers for this session, by profile, origin, and kind.
+    private var permissionDecisions: [PermissionKey: PermissionDecision] = [:]
     /// Normalized icons by icon URL, so tabs on the same site don't refetch them.
     private var faviconCache: [URL: Data] = [:]
     private var hibernationTask: Task<Void, Never>?
@@ -104,6 +119,17 @@ public final class WebViewPool {
         let liveTab = LiveTab(tabID: tab.id, profileID: profileID, webView: webView, lastUsed: now())
         liveTab.delegate.onOpenInNewTab = { [weak self] url in self?.onOpenInNewTab?(url, tab.id) }
         liveTab.delegate.onDownload = { [weak self] download in self?.downloads.track(download, sourceTabID: tab.id) }
+        liveTab.delegate.onPermissionRequest = { [weak self] kind, origin in
+            await self?.decidePermission(kind, origin: origin, tabID: tab.id, profileID: profileID) ?? .deny
+        }
+        liveTab.delegate.onJavaScriptDialog = { [weak self] kind, message, origin in
+            guard let handler = self?.onJavaScriptDialog else { return .cancelled }
+            return await handler(JavaScriptDialog(tabID: tab.id, origin: origin, message: message, kind: kind))
+        }
+        liveTab.delegate.onFileSelection = { [weak self] multiple, directories in
+            guard let handler = self?.onFileSelection else { return nil }
+            return await handler(FileSelectionRequest(tabID: tab.id, allowsMultipleSelection: multiple, allowsDirectories: directories))
+        }
         liveTab.onPageChange = { [weak self] url, title in self?.onPageChange?(tab.id, url, title) }
         liveTab.onLoadFinished = { [weak self] in self?.loadFavicon(for: tab.id) }
         live[tab.id] = liveTab
@@ -329,6 +355,36 @@ public final class WebViewPool {
         live.removeValue(forKey: tabID)?.tearDown()
     }
 
+    // MARK: Permissions
+
+    /// Returns the remembered answer for this profile, origin, and kind, or asks the app and
+    /// remembers its answer for the rest of the session.
+    func decidePermission(
+        _ kind: PermissionKind,
+        origin: PageOrigin,
+        tabID: Tab.ID,
+        profileID: Profile.ID
+    ) async -> PermissionDecision {
+        let key = PermissionKey(profileID: profileID, origin: origin, kind: kind)
+        if let remembered = permissionDecisions[key] {
+            return remembered
+        }
+        guard let handler = onPermissionRequest else { return .deny }
+        let decision = await handler(PermissionRequest(tabID: tabID, origin: origin, kind: kind))
+        permissionDecisions[key] = decision
+        return decision
+    }
+
+    /// The remembered answer for a profile, origin, and kind, if any.
+    public func rememberedPermission(_ kind: PermissionKind, origin: PageOrigin, profileID: Profile.ID) -> PermissionDecision? {
+        permissionDecisions[PermissionKey(profileID: profileID, origin: origin, kind: kind)]
+    }
+
+    /// Forgets every remembered permission answer, so pages ask again.
+    public func forgetPermissionDecisions() {
+        permissionDecisions.removeAll()
+    }
+
     // MARK: Favicons
 
     /// Finds, fetches, and reports the icon of the tab's current page.
@@ -361,6 +417,13 @@ public final class WebViewPool {
         dataStores[profileID] = store
         return store
     }
+}
+
+/// Identifies a remembered permission answer.
+private struct PermissionKey: Hashable {
+    var profileID: Profile.ID
+    var origin: PageOrigin
+    var kind: PermissionKind
 }
 
 /// What the pool keeps for a hibernated tab.

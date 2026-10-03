@@ -256,7 +256,7 @@ Each milestone should be usable as a daily driver before the next one starts.
 
 - [x] Single window, vertical sidebar, tab list, navigation (back, forward, reload, address bar). The address field sits at the top of the sidebar, like Arc.
 - [x] Tab model with web view pool and hibernation, including snapshots shown while a tab wakes and favicons stored per host. Snapshots are in memory only for now.
-- [ ] Downloads, find in page, basic permission prompts, printing (downloads, find in page, and printing are done; permission prompts remain)
+- [x] Downloads, find in page, basic permission prompts, printing. Camera and microphone prompts, JavaScript dialogs, and file uploads are done. Location is wired up but WebKit doesn't call its delegate, and web notifications have no public API (see `docs/webkit-gaps.md`).
 - [ ] Keyboard shortcuts for all core actions (⌘T, ⌘L, ⌘W, ⌘P, ⌘F, ⌘G, ⇧⌘G, ⌘R, ⌘[, ⌘], ⌥⌘L are done; the rest come with their features)
 
 **Milestone 2: Arc-style organization**

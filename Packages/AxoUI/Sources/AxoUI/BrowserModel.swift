@@ -35,6 +35,8 @@ public final class BrowserModel {
     public private(set) var findHasNoMatches = false
     /// Incremented to ask the find field to take focus.
     public private(set) var findFocusRequest = 0
+    /// The page question to show now (a permission request or a JavaScript dialog), if any.
+    public private(set) var currentPrompt: PagePrompt?
     /// Site icons by lowercased host, for the tabs in the sidebar.
     public private(set) var favicons: [String: NSImage] = [:]
 
@@ -43,6 +45,7 @@ public final class BrowserModel {
 
     @ObservationIgnored private let store: TabStore
     @ObservationIgnored private var observationTask: Task<Void, Never>?
+    @ObservationIgnored private let prompts = PagePromptQueue()
     /// Hosts whose saved icon was already looked up, so each is read from the database once.
     @ObservationIgnored private var lookedUpFaviconHosts: Set<String> = []
     @ObservationIgnored private let logger = Logger(subsystem: "com.perezstudio.Axo", category: "BrowserModel")
@@ -57,6 +60,16 @@ public final class BrowserModel {
         }
         pool.onFaviconChange = { [weak self] _, pageURL, data in
             self?.saveFavicon(data, for: pageURL)
+        }
+        prompts.onChange = { [weak self] prompt in self?.currentPrompt = prompt }
+        pool.onPermissionRequest = { [weak self] request in
+            await self?.prompts.ask(request) ?? .deny
+        }
+        pool.onJavaScriptDialog = { [weak self] dialog in
+            await self?.prompts.ask(dialog) ?? .cancelled
+        }
+        pool.onFileSelection = { [weak self] request in
+            await self?.chooseFiles(for: request)
         }
         pool.onOpenInNewTab = { [weak self] url, sourceID in
             guard let self else { return }
@@ -161,6 +174,7 @@ public final class BrowserModel {
     public func closeTab(_ id: AxoCore.Tab.ID) async {
         guard let space else { return }
         let index = tabs.firstIndex { $0.id == id }
+        prompts.dismissAll(from: id)
         pool.discard(id)
         do {
             try await store.closeTab(id: id)
@@ -220,6 +234,36 @@ public final class BrowserModel {
         } else {
             pool.reload(selectedTabID)
         }
+    }
+
+    // MARK: Page prompts
+
+    /// Answers the current permission request.
+    public func answerPermission(_ decision: PermissionDecision) {
+        prompts.answerCurrent(with: decision)
+    }
+
+    /// Answers the current JavaScript dialog.
+    public func answerDialog(_ result: JavaScriptDialogResult) {
+        prompts.answerCurrent(with: result)
+    }
+
+    /// Shows an Open panel for a page's file input, as a sheet on the tab's window.
+    private func chooseFiles(for request: FileSelectionRequest) async -> [URL]? {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = request.allowsMultipleSelection
+        panel.canChooseDirectories = request.allowsDirectories
+        panel.canChooseFiles = true
+        panel.prompt = "Choose"
+        let response: NSApplication.ModalResponse
+        if let window = pool.liveWebView(for: request.tabID)?.window {
+            response = await panel.beginSheetModal(for: window)
+        } else {
+            response = await withCheckedContinuation { continuation in
+                panel.begin { continuation.resume(returning: $0) }
+            }
+        }
+        return response == .OK ? panel.urls : nil
     }
 
     // MARK: Find and print

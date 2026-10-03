@@ -139,6 +139,24 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(row.waitForNonExistence(timeout: 5))
     }
 
+    /// A page's `confirm()` shows as a dialog naming the page, and the page gets the answer.
+    @MainActor
+    func testJavaScriptConfirmShowsAndReturnsTheAnswer() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,<title>Ask</title><script>document.title = confirm('Delete everything?') ? 'Yes' : 'No'</script>\n")
+
+        XCTAssertTrue(app.staticTexts["This page says"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Delete everything?"].exists)
+        let dialog = app.sheets.firstMatch.exists ? app.sheets.firstMatch : app.dialogs.firstMatch
+        dialog.buttons["Cancel"].firstMatch.click()
+
+        XCTAssertTrue(sidebar.staticTexts["No"].waitForExistence(timeout: 10))
+    }
+
     /// macOS window tabbing is off, so the View menu has no "Show Tab Bar".
     @MainActor
     func testWindowTabbingMenuItemsAreHidden() throws {

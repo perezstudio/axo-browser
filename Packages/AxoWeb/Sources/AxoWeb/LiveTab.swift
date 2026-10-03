@@ -88,6 +88,69 @@ final class WebViewDelegate: NSObject, WKNavigationDelegate, WKUIDelegate {
     var onLoadFinished: (() -> Void)?
     var onLoadFailed: (() -> Void)?
     var onDownload: ((WKDownload) -> Void)?
+    var onPermissionRequest: ((PermissionKind, PageOrigin) async -> PermissionDecision)?
+    var onJavaScriptDialog: ((JavaScriptDialog.Kind, String, PageOrigin) async -> JavaScriptDialogResult)?
+    var onFileSelection: ((Bool, Bool) async -> [URL]?)?
+
+    // MARK: Permissions
+
+    func webView(
+        _ webView: WKWebView,
+        decideMediaCapturePermissionsFor origin: WKSecurityOrigin,
+        initiatedBy frame: WKFrameInfo,
+        type: WKMediaCaptureType
+    ) async -> WKPermissionDecision {
+        let kind: PermissionKind = switch type {
+        case .camera: .camera
+        case .microphone: .microphone
+        default: .cameraAndMicrophone
+        }
+        return await decide(kind, for: origin)
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        requestGeolocationPermissionFor origin: WKSecurityOrigin,
+        initiatedBy frame: WKFrameInfo
+    ) async -> WKPermissionDecision {
+        await decide(.location, for: origin)
+    }
+
+    /// Asks the app, denying when no one is listening.
+    private func decide(_ kind: PermissionKind, for origin: WKSecurityOrigin) async -> WKPermissionDecision {
+        let decision = await onPermissionRequest?(kind, PageOrigin(origin)) ?? .deny
+        return decision == .allow ? .grant : .deny
+    }
+
+    // MARK: JavaScript dialogs and file uploads
+
+    func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo) async {
+        _ = await onJavaScriptDialog?(.alert, message, PageOrigin(frame.securityOrigin))
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo) async -> Bool {
+        let result = await onJavaScriptDialog?(.confirm, message, PageOrigin(frame.securityOrigin))
+        return result?.accepted ?? false
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptTextInputPanelWithPrompt prompt: String,
+        defaultText: String?,
+        initiatedByFrame frame: WKFrameInfo
+    ) async -> String? {
+        let result = await onJavaScriptDialog?(.prompt(defaultText: defaultText ?? ""), prompt, PageOrigin(frame.securityOrigin))
+        guard let result, result.accepted else { return nil }
+        return result.text ?? ""
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runOpenPanelWith parameters: WKOpenPanelParameters,
+        initiatedByFrame frame: WKFrameInfo
+    ) async -> [URL]? {
+        await onFileSelection?(parameters.allowsMultipleSelection, parameters.allowsDirectories) ?? nil
+    }
 
     func webView(
         _ webView: WKWebView,
