@@ -7,6 +7,7 @@
 
 import AxoCore
 import AxoExtensions
+import AxoImport
 import AxoInspector
 import AxoIntegration
 import AxoUI
@@ -101,6 +102,16 @@ enum AppEnvironment {
         return manager
     }
 
+    /// Where other browsers keep their data. UI tests never read the real folder: they use
+    /// `AXO_UI_TESTING_IMPORT_ROOT` (a folder of fixtures) or an empty folder.
+    static var otherBrowsersFolder: URL {
+        guard isUITesting else { return .applicationSupportDirectory }
+        if let path = ProcessInfo.processInfo.environment["AXO_UI_TESTING_IMPORT_ROOT"] {
+            return URL(fileURLWithPath: path, isDirectory: true)
+        }
+        return FileManager.default.temporaryDirectory.appending(path: "AxoUITests-NoBrowsers-\(UUID().uuidString)", directoryHint: .isDirectory)
+    }
+
     static func makeBrowserModel() -> BrowserModel {
         let model = makeModel()
         if !isUITesting {
@@ -124,6 +135,7 @@ enum AppEnvironment {
             let manager = startExtensions(store: store, pool: pool)
             let model = BrowserModel(store: store, pool: pool, initialSpaceID: lastSpaceID)
             extensionBridge = ExtensionBridge(model: model, manager: manager)
+            model.browserImporter = BrowserImportBridge(importer: BrowserImporter(store: store, applicationSupport: otherBrowsersFolder))
             return model
         } catch {
             // Keep the browser usable for this session and say plainly that nothing will be saved.
@@ -146,6 +158,59 @@ struct SystemDefaultBrowser: DefaultBrowserSetting {
 
     func makeDefault() async throws {
         try await browser.makeDefault()
+    }
+}
+
+/// Connects AxoImport to the window model's Import sheet.
+@MainActor
+final class BrowserImportBridge: BrowserImporting {
+    private let importer: BrowserImporter
+    /// The sources from the last ``availableSources()``, by option ID.
+    private var sources: [String: BrowserImporter.Source] = [:]
+
+    init(importer: BrowserImporter) {
+        self.importer = importer
+    }
+
+    func availableSources() -> [ImportSourceOption] {
+        let found = importer.availableSources()
+        sources = Dictionary(found.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let chromeProfiles = found.filter { if case .chrome = $0 { true } else { false } }.count
+        return found.map { source in
+            switch source {
+            case .arc:
+                ImportSourceOption(id: source.id, name: "Arc")
+            case .chrome(let profile):
+                ImportSourceOption(id: source.id, name: chromeProfiles > 1 ? "Google Chrome (\(profile.name))" : "Google Chrome")
+            }
+        }
+    }
+
+    func preview(_ sourceID: String) async throws -> ImportCounts {
+        guard let source = sources[sourceID] else { return ImportCounts() }
+        return Self.counts(try await importer.preview(source))
+    }
+
+    func importData(from sourceID: String, parts: Set<ImportPart>, currentSpace: Space) async throws -> ImportCounts {
+        guard let source = sources[sourceID] else { return ImportCounts() }
+        var chosen: BrowserImporter.Parts = []
+        for part in parts {
+            switch part {
+            case .spaces: chosen.insert(.spaces)
+            case .favorites: chosen.insert(.favorites)
+            case .openTabs: chosen.insert(.openTabs)
+            case .bookmarks: chosen.insert(.bookmarks)
+            case .history: chosen.insert(.history)
+            }
+        }
+        return Self.counts(try await importer.importData(from: source, parts: chosen, currentSpace: currentSpace))
+    }
+
+    private static func counts(_ counts: BrowserImporter.Counts) -> ImportCounts {
+        ImportCounts(
+            spaces: counts.spaces, pinnedTabs: counts.pinnedTabs, favorites: counts.favorites,
+            openTabs: counts.openTabs, bookmarks: counts.bookmarks, historyPages: counts.historyPages
+        )
     }
 }
 

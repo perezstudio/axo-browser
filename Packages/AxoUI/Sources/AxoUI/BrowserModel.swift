@@ -93,6 +93,10 @@ public final class BrowserModel {
     @ObservationIgnored public var onTabEvent: ((TabEvent) -> Void)?
     /// The views behind extension toolbar buttons, by extension ID, for showing popups.
     @ObservationIgnored var extensionAnchors: [String: NSView] = [:]
+    /// Reads and imports other browsers' data. Set by the app.
+    @ObservationIgnored public var browserImporter: (any BrowserImporting)?
+    /// The open Import sheet's state, if it's open.
+    public var importSession: ImportSession?
     /// Checks and changes the default browser. Set by the app.
     @ObservationIgnored public var defaultBrowser: (any DefaultBrowserSetting)? {
         didSet { refreshDefaultBrowserStatus() }
@@ -801,6 +805,7 @@ public final class BrowserModel {
             case .unpinTab: selectedTab?.isPinned ?? false
             case .findInPage, .printPage: selectedTabID != nil
             case .makeDefaultBrowser: isDefaultBrowser == false
+            case .importBrowserData: browserImporter != nil
             default: true
             }
         }
@@ -818,6 +823,7 @@ public final class BrowserModel {
         case .findInPage: showFindBar()
         case .printPage: printSelectedTab()
         case .makeDefaultBrowser: await makeDefaultBrowser()
+        case .importBrowserData: beginImport()
         }
     }
 

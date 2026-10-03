@@ -29,10 +29,11 @@ The full plan, architecture, and reasoning behind every decision are in `docs/PL
 - `Axo/Info.plist` holds only keys the build settings can't express (the http and https URL types and the HTML document type that make Axo eligible as the default browser). Xcode merges it into the generated Info.plist, and the target's membership exception keeps it out of the copied resources.
 - Never call `DefaultBrowser.makeDefault()` or `NSWorkspace.setDefaultApplication` in tests; it changes the user's real default browser. Tests use fakes, and UI testing mode doesn't set `defaultBrowser` at all.
 - Open `Axo.xcworkspace`, not the project. The workspace lists the app project and every local package, which Xcode needs to run the package test targets. The `Axo` scheme uses the `Axo.xctestplan` test plan, which covers the app's unit and UI tests and every package's tests. Add new test targets to that plan.
-- The app target links AxoUI, AxoCore, AxoWeb, AxoExtensions, and AxoIntegration directly. `AppEnvironment` creates the `ExtensionManager` and loads every profile's extensions at launch. `ExtensionBridge` (app target) connects `BrowserModel` and `ExtensionManager`: tabs and events for extensions, plus toolbar buttons and popups for the UI.
+- The app target links AxoUI, AxoCore, AxoWeb, AxoExtensions, AxoImport, and AxoIntegration directly. `BrowserImportBridge` (app target) connects AxoImport to AxoUI's Import sheet. `AppEnvironment` creates the `ExtensionManager` and loads every profile's extensions at launch. `ExtensionBridge` (app target) connects `BrowserModel` and `ExtensionManager`: tabs and events for extensions, plus toolbar buttons and popups for the UI.
 - An `accessibilityIdentifier` on a container also replaces its children's identifiers. Add `.accessibilityElement(children: .contain)` to containers whose children need their own identifiers. In UI tests, SwiftUI `Text` exposes its string as the element's value, not its label, and a `.switch` toggle appears as a checkbox.
 - Every tab and extension page uses AxoWeb's `UserAgent` (a Safari-style user agent). Don't create web view configurations that skip it; extensions such as Bitwarden detect the browser from it.
 - `RealExtensionTests` (AxoExtensions) runs only with `AXO_REAL_EXTENSIONS` pointing at downloaded uBlock Origin Lite and Bitwarden `.crx` files (see the AxoExtensions README). Never commit those files; they're GPL-licensed.
+- Import reads other browsers' real data from `~/Library/Application Support` except in UI testing mode, where it reads `AXO_UI_TESTING_IMPORT_ROOT` (a folder of fixtures) or an empty folder. Never let tests read the real Arc or Chrome files.
 - UI tests can preinstall an unpacked extension by setting `AXO_UI_TESTING_EXTENSION` to its folder (UI testing mode only). The app connects AxoIntegration to AxoUI through small adapters (such as `SystemDefaultBrowser`), so AxoUI doesn't depend on AxoIntegration.
 - `AxoUI` uses `.defaultIsolation(MainActor.self)`. Other packages use the Swift 6 default (nonisolated); AxoWeb marks its types `@MainActor` explicitly.
 - SwiftUI has its own `Tab` type. In files that import SwiftUI, write `AxoCore.Tab` for Axo's tab record.
@@ -56,7 +57,7 @@ Approved third-party dependencies (all MIT-licensed). Ask before adding anything
 
 | Package | Version | Used by |
 | --- | --- | --- |
-| [GRDB.swift](https://github.com/groue/GRDB.swift) | 7.11.1+ | AxoPersistence (database, migrations), AxoCore (record types) |
+| [GRDB.swift](https://github.com/groue/GRDB.swift) | 7.11.1+ | AxoPersistence (database, migrations), AxoCore (record types), AxoImport (reading Chromium history) |
 | [GRDBQuery](https://github.com/groue/GRDBQuery) | 0.11.0+ | AxoUI |
 
 The lockfile is `Axo.xcworkspace/xcshareddata/swiftpm/Package.resolved`. Per-package `Package.resolved` files are gitignored.
@@ -74,6 +75,7 @@ The app is split into local Swift packages in `Packages/`. Respect the dependenc
 | AxoInspector | All private Web Inspector API | AxoWeb |
 | AxoPersistence | GRDB database, migrations, FTS5 search index | GRDB |
 | AxoSync | `CKSyncEngine` mapping for Spaces, folders, pinned tabs | AxoPersistence |
+| AxoImport | Importing from Arc (sidebar JSON, Chromium history) and Chrome (bookmarks, history) | AxoCore, GRDB |
 | AxoIntegration | Default browser, App Intents, Focus filters, Handoff, Spotlight, passkeys, Screen Time, Translation | AxoCore |
 
 ## Hard rules

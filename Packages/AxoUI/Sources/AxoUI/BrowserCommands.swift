@@ -55,6 +55,10 @@ public struct BrowserCommands: Commands {
             }
             .keyboardShortcut("w")
         }
+        CommandGroup(replacing: .importExport) {
+            Button("Import from Another Browser…") { model?.beginImport() }
+                .disabled(model?.browserImporter == nil)
+        }
         CommandGroup(replacing: .printItem) {
             Button("Print…") { model?.printSelectedTab() }
                 .keyboardShortcut("p")

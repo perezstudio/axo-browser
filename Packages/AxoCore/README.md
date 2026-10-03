@@ -10,7 +10,7 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
 
 - **Records:** `Profile`, `Space`, `Tab` (with `isPinned`, `homeURL`, `lastActiveAt`, `archivedAt`, and `hasLeftHome`), and `Favicon` (a site icon keyed by lowercased host; `Favicon.key(for:)`) are plain `Codable` GRDB records. They hold persisted state only, never live web views.
 - **`ExtensionStore`** (`tabStore.extensions`) records the installed extensions per profile (`WebExtensionRecord`: ID, name, version, folder, unpacked, enabled, site access, and approved optional permissions). Updates keep the enabled state, site access, and approvals. Also `setSiteAccess` and `addGrantedOptional`.
-- **`HistoryStore`** (`tabStore.history`): `recordVisit(to:title:profileID:at:)` records http(s) pages only, one row per profile and URL. Also `updateTitle`, `recent`, `clear`, and `search(_:profileID:limit:)`, which matches every word as a prefix through FTS5 and ranks by relevance plus visit frequency and recency. `HistoryItem` is the record. Profiles never see each other's history.
+- **`HistoryStore`** (`tabStore.history`): `recordVisit(to:title:profileID:at:)` records http(s) pages only, one row per profile and URL. `importItems(_:profileID:)` merges another browser's history in one transaction: visit counts add up, the later visit time wins, and an imported title fills in a missing one. Also `updateTitle`, `recent`, `clear`, and `search(_:profileID:limit:)`, which matches every word as a prefix through FTS5 and ranks by relevance plus visit frequency and recency. `HistoryItem` is the record. Profiles never see each other's history.
 - **`SortKey`:** fractional sort keys. `SortKey.between(lower, upper)` returns a key strictly between two neighbors (`nil` means the start or end of the list), so a move updates a single row. Order by `(sortKey, id)` so duplicate keys after a sync merge stay stable.
 - **`TabStore`:** the async API over the sidebar model.
   - `TabStore.openOnDisk(at:)` and `TabStore.makeInMemory()` open the database, so callers above AxoCore never import AxoPersistence.
@@ -23,6 +23,7 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
   - Pinning: `setPinned(_:tabID:)` (pinning records the current page as `homeURL`), `setHomeURL(_:tabID:)`, and `resetPinnedTab(id:)`.
   - Archiving: `archiveTab(id:at:)`, `archiveInactiveTabs(lastActiveBefore:keeping:at:)` (unpinned tabs in every Space), `archivedTabs(in:)` (newest first), `restoreTab(id:at:)`, and `markActive(id:at:)`. `deleteTab(id:)` removes a tab for good.
   - `saveFavicon(_:for:)` and `favicons(forHosts:)` store and read site icons. URLs without a host, such as `file:` and `about:` pages, have no icon.
+  - Importing (`ImportedItem`, `ImportedSpace`): `importSpaces(_:at:)` adds Spaces after the existing ones with their pinned tabs (home URL = their URL), folders, and unpinned tabs (folders flattened, active as of the import), and `importPinned(_:into:at:)` adds items at the end of a Space's pinned section. Each is one transaction, so a failure adds nothing. AxoImport builds the items from other browsers' data.
   - `observeTabs(in:)` streams a Space's tab list after every change. `TabStore.tabsRequest(in:)` is the same query for GRDBQuery.
 
 ## Testing

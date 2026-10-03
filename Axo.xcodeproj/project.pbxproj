@@ -11,6 +11,7 @@
 		11D4C12330705F800027735E /* AxoCore in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C12230705F800027735E /* AxoCore */; };
 		11D4C12530705F800027735E /* AxoWeb in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C12430705F800027735E /* AxoWeb */; };
 		11D4C12730705F800027735E /* AxoIntegration in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C12630705F800027735E /* AxoIntegration */; };
+		11D4C1A330705F800027735E /* AxoImport in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C1A230705F800027735E /* AxoImport */; };
 		11D4C12930705F800027735E /* AxoExtensions in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C12830705F800027735E /* AxoExtensions */; };
 		11D4C12B30705F800027735E /* AxoInspector in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C12A30705F800027735E /* AxoInspector */; };
 /* End PBXBuildFile section */
@@ -77,6 +78,7 @@
 				11D4C12B30705F800027735E /* AxoInspector in Frameworks */,
 				11D4C12930705F800027735E /* AxoExtensions in Frameworks */,
 				11D4C12730705F800027735E /* AxoIntegration in Frameworks */,
+				11D4C1A330705F800027735E /* AxoImport in Frameworks */,
 				11D4C12330705F800027735E /* AxoCore in Frameworks */,
 				11D4C12530705F800027735E /* AxoWeb in Frameworks */,
 			);
@@ -136,6 +138,7 @@
 				11D4C12A30705F800027735E /* AxoInspector */,
 				11D4C12830705F800027735E /* AxoExtensions */,
 				11D4C12630705F800027735E /* AxoIntegration */,
+				11D4C1A230705F800027735E /* AxoImport */,
 				11D4C12230705F800027735E /* AxoCore */,
 				11D4C12430705F800027735E /* AxoWeb */,
 			);
@@ -226,6 +229,7 @@
 				11D4C10530705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoPersistence" */,
 				11D4C10630705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoSync" */,
 				11D4C10730705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoIntegration" */,
+				11D4C1A130705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoImport" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 11D4C06230705F7E0027735E /* Products */;
@@ -619,6 +623,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/AxoIntegration;
 		};
+		11D4C1A130705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoImport" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/AxoImport;
+		};
 		11D4C10530705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoPersistence" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/AxoPersistence;
@@ -657,6 +665,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 11D4C10730705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoIntegration" */;
 			productName = AxoIntegration;
+		};
+		11D4C1A230705F800027735E /* AxoImport */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 11D4C1A130705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoImport" */;
+			productName = AxoImport;
 		};
 		11D4C12830705F800027735E /* AxoExtensions */ = {
 			isa = XCSwiftPackageProductDependency;

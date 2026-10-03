@@ -80,6 +80,13 @@
     },
     {
       "target": {
+        "containerPath": "container:Packages/AxoImport",
+        "identifier": "AxoImportTests",
+        "name": "AxoImportTests"
+      }
+    },
+    {
+      "target": {
         "containerPath": "container:Packages/AxoExtensions",
         "identifier": "AxoCRXTests",
         "name": "AxoCRXTests"

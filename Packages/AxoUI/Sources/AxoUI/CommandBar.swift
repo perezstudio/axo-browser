@@ -13,6 +13,7 @@ public enum CommandAction: String, CaseIterable, Hashable, Sendable {
     case findInPage
     case printPage
     case makeDefaultBrowser
+    case importBrowserData
 
     /// The name shown in the command bar.
     public var title: String {
@@ -27,6 +28,7 @@ public enum CommandAction: String, CaseIterable, Hashable, Sendable {
         case .findInPage: "Find on Page"
         case .printPage: "Print Page"
         case .makeDefaultBrowser: "Make Axo Your Default Browser"
+        case .importBrowserData: "Import from Another Browser"
         }
     }
 
@@ -43,6 +45,7 @@ public enum CommandAction: String, CaseIterable, Hashable, Sendable {
         case .findInPage: "magnifyingglass"
         case .printPage: "printer"
         case .makeDefaultBrowser: "checkmark.seal"
+        case .importBrowserData: "square.and.arrow.down.on.square"
         }
     }
 }

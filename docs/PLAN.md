@@ -72,6 +72,7 @@ Arrows point from a package to what it depends on; AxoCore sits at the center.
 | AxoInspector | All private inspector API (`developerExtrasEnabled`, `_WKInspector`) behind one interface with runtime checks. Public `isInspectable` as fallback. |
 | AxoPersistence | The single GRDB database: sidebar model, history, bookmarks, and an FTS5 index for the command bar. `DatabasePool` for concurrent reads, `DatabaseMigrator` for schema changes, `ValueObservation` plus GRDBQuery for reactive SwiftUI. |
 | AxoSync | Maps spaces, folders, and pinned tabs to CloudKit records with `CKSyncEngine`. No servers to run. |
+| AxoImport | Reads Arc's sidebar file and Chrome's bookmarks, plus Chromium history from both, and imports them through AxoCore. |
 | AxoIntegration | App Intents, Focus filters, Handoff, Spotlight, passkeys, Screen Time, Translation. |
 
 One database keeps storage simple to test, migrate, and sync. SwiftData and Core Data were ruled out because they lack full-text search, add overhead on write-heavy history, fit awkwardly with Swift 6 concurrency, and their built-in CloudKit sync gives no control over ordering or conflicts.
@@ -276,7 +277,7 @@ Each milestone should be usable as a daily driver before the next one starts.
 
 **Milestone 4: Switching and daily-driver polish**
 
-- [ ] Import from Arc (spaces, pinned tabs) and Chrome (bookmarks, history)
+- [x] Import from Arc (Spaces with pinned tabs and folders, favorites, open tabs, history) and Chrome (bookmarks, history), in the new AxoImport package. Each custom Arc profile becomes an Axo profile. Chrome bookmarks become pinned tabs in an "Imported from Chrome" folder, since pinned tabs serve as bookmarks.
 - [ ] Passkeys through Apple's web browser passkey API
 - [ ] Picture in picture; camera, mic, location, and notification permissions
 - [ ] Full VoiceOver and keyboard accessibility audit

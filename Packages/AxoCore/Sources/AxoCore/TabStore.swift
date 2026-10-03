@@ -613,7 +613,7 @@ public final class TabStore: Sendable {
     }
 
     /// The sorted keys of the pinned tabs and folders at one level of a Space's pinned tree.
-    private static func pinnedLevelKeys(
+    static func pinnedLevelKeys(
         in spaceID: Space.ID,
         parent: Folder.ID?,
         excluding excluded: PinnedItem?,

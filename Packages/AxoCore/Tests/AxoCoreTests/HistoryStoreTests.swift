@@ -30,6 +30,27 @@ struct HistoryStoreTests {
         #expect(try await history.recent(profileID: profileID).first?.title == "The Swift Book")
     }
 
+    @Test func importedHistoryMergesWithExistingPages() async throws {
+        let known = url("https://swift.org")
+        let old = Date(timeIntervalSince1970: 1_700_000_000)
+        let recent = Date(timeIntervalSince1970: 1_800_000_000)
+        try await history.recordVisit(to: known, title: "", profileID: profileID, at: recent)
+
+        let imported = try await history.importItems([
+            HistoryItem(profileID: UUID(), url: known, title: "Swift", visitCount: 5, lastVisitedAt: old),
+            HistoryItem(profileID: UUID(), url: url("https://webkit.org"), title: "WebKit", visitCount: 2, lastVisitedAt: old),
+            HistoryItem(profileID: UUID(), url: url("chrome://settings"), title: "Settings", visitCount: 9, lastVisitedAt: old),
+        ], profileID: profileID)
+
+        #expect(imported == 2, "Only web pages are imported")
+        let items = try await history.recent(profileID: profileID)
+        #expect(items.map(\.url) == [known, url("https://webkit.org")])
+        #expect(items[0].visitCount == 6 && items[0].lastVisitedAt == recent, "Visits add up and the later time wins")
+        #expect(items[0].title == "Swift", "An imported title fills in a missing one")
+        #expect(items[1].profileID == profileID)
+        #expect(try await history.search("webkit", profileID: profileID).count == 1, "Imported pages are searchable")
+    }
+
     @Test(arguments: ["about:blank", "data:text/html,hi", "file:///tmp/page.html"])
     func onlyWebPagesAreRecorded(address: String) async throws {
         try await history.recordVisit(to: url(address), title: "x", profileID: profileID)

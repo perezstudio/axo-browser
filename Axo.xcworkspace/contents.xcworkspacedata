@@ -28,4 +28,7 @@
    <FileRef
       location = "group:Packages/AxoIntegration">
    </FileRef>
+   <FileRef
+      location = "group:Packages/AxoImport">
+   </FileRef>
 </Workspace>

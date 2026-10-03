@@ -22,6 +22,7 @@ final class AxoUITests: XCTestCase {
         return app
     }
 
+    @MainActor
     private static func makeApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["AXO_UI_TESTING"] = "1"
@@ -291,6 +292,73 @@ final class AxoUITests: XCTestCase {
 
         XCTAssertTrue(sidebar.staticTexts["127.0.0.1"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.windows.count, 1, "The link opens in the existing window")
+    }
+
+    /// Import from Another Browser reads Arc's Spaces and Chrome's bookmarks from fixture files
+    /// (never the real ones) and adds them to the sidebar.
+    @MainActor
+    func testImportingFromArcAndChrome() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "AxoUITestImport-\(UUID().uuidString)")
+        let arc = root.appending(path: "Arc")
+        let chrome = root.appending(path: "Google/Chrome/Default")
+        try FileManager.default.createDirectory(at: arc, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: chrome, withIntermediateDirectories: true)
+        // Pages point at a closed loopback port, so nothing leaves the machine even if one loads.
+        try """
+        {"sidebar": {"containers": [{"global": {}}, {
+          "topAppsContainerIDs": [{"default": true}, "top"],
+          "spaces": ["s", {"id": "s", "title": "Reading", "profile": {"default": true}, "containerIDs": ["pinned", "p", "unpinned", "u"]}],
+          "items": [
+            "top", {"id": "top", "childrenIds": ["fav"], "data": {"itemContainer": {}}},
+            "fav", {"id": "fav", "childrenIds": [], "data": {"tab": {"savedURL": "http://127.0.0.1:9/mail", "savedTitle": "Mail"}}},
+            "p", {"id": "p", "childrenIds": ["lib"], "data": {"itemContainer": {}}},
+            "lib", {"id": "lib", "childrenIds": [], "data": {"tab": {"savedURL": "http://127.0.0.1:9/library", "savedTitle": "Library"}}},
+            "u", {"id": "u", "childrenIds": [], "data": {"itemContainer": {}}}
+          ]}]}}
+        """.write(to: arc.appending(path: "StorableSidebar.json"), atomically: true, encoding: .utf8)
+        try """
+        {"roots": {"bookmark_bar": {"children": [{"type": "url", "name": "Docs", "url": "http://127.0.0.1:9/docs"}]}}}
+        """.write(to: chrome.appending(path: "Bookmarks"), atomically: true, encoding: .utf8)
+
+        let app = Self.makeApp()
+        app.launchEnvironment["AXO_UI_TESTING_IMPORT_ROOT"] = root.path
+        app.launch()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+
+        app.menuBars.menuItems["Import from Another Browser…"].click()
+        let spaces = app.checkBoxes["importPart-spaces"]
+        XCTAssertTrue(spaces.waitForExistence(timeout: 10), "Arc is chosen first and read")
+        XCTAssertTrue(app.checkBoxes["importPart-favorites"].exists)
+        app.buttons["importButton"].click()
+        let result = app.staticTexts["importResult"]
+        XCTAssertTrue(result.waitForExistence(timeout: 10))
+        XCTAssertEqual(result.value as? String, "Imported 1 Space, 1 pinned tab, and 1 favorite.")
+        app.buttons["importDoneButton"].click()
+
+        XCTAssertEqual(app.buttons.matching(identifier: "spaceButton").count, 2, "The Arc Space is added")
+        app.typeKey("2", modifierFlags: .control)
+        XCTAssertTrue(sidebar.staticTexts["Library"].waitForExistence(timeout: 5))
+        XCTAssertTrue(sidebar.staticTexts["Favorites"].exists)
+
+        // Chrome's bookmarks go into the current Space.
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("import")
+        let action = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == 'commandResult' AND label CONTAINS 'Import from Another Browser'")).firstMatch
+        XCTAssertTrue(action.waitForExistence(timeout: 5))
+        // The first row searches for "import"; the action is next.
+        app.typeKey(.downArrow, modifierFlags: [])
+        app.typeKey(.return, modifierFlags: [])
+        let picker = app.popUpButtons["importSourcePicker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        picker.click()
+        app.menuItems["Google Chrome"].click()
+        XCTAssertTrue(app.checkBoxes["importPart-bookmarks"].waitForExistence(timeout: 10))
+        app.buttons["importButton"].click()
+        XCTAssertTrue(app.staticTexts["importResult"].waitForExistence(timeout: 10))
+        app.buttons["importDoneButton"].click()
+        XCTAssertTrue(sidebar.staticTexts["Imported from Chrome"].waitForExistence(timeout: 5))
     }
 
     /// An installed extension shows a toolbar button with its badge, and clicking it opens its

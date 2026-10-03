@@ -80,6 +80,39 @@ public final class HistoryStore: Sendable {
         }
     }
 
+    /// Adds pages from another browser's history to a profile's history, in one transaction.
+    ///
+    /// Pages already in history add the imported visit count, keep the later visit time, and
+    /// take the imported title only if they have none. Only http and https pages are added.
+    ///
+    /// - Parameter items: The pages to add. Their ``HistoryItem/id`` and
+    ///   ``HistoryItem/profileID`` are ignored.
+    /// - Returns: How many pages were added or updated.
+    @discardableResult
+    public func importItems(_ items: [HistoryItem], profileID: Profile.ID) async throws -> Int {
+        let pages = items.filter { Self.records($0.url) && $0.visitCount > 0 }
+        guard !pages.isEmpty else { return 0 }
+        return try await database.writer.write { db in
+            for page in pages {
+                if var item = try HistoryItem
+                    .filter(HistoryItem.Columns.profileID == profileID)
+                    .filter(HistoryItem.Columns.url == page.url)
+                    .fetchOne(db) {
+                    item.visitCount += page.visitCount
+                    item.lastVisitedAt = max(item.lastVisitedAt, page.lastVisitedAt)
+                    if item.title.isEmpty { item.title = page.title }
+                    try item.update(db)
+                } else {
+                    var item = page
+                    item.id = nil
+                    item.profileID = profileID
+                    try item.insert(db)
+                }
+            }
+            return pages.count
+        }
+    }
+
     /// Updates the title of a page already in history, for titles that arrive after the visit.
     public func updateTitle(_ title: String, for url: URL, profileID: Profile.ID) async throws {
         guard Self.records(url), !title.isEmpty else { return }
