@@ -27,6 +27,9 @@ struct SidebarView: View {
         .sheet(isPresented: Binding(get: { model.isShowingExtensions }, set: { model.isShowingExtensions = $0 })) {
             ExtensionsView(model: model)
         }
+        .sheet(item: Binding(get: { model.importSession }, set: { model.importSession = $0 })) { session in
+            ImportSheet(model: model, session: session)
+        }
         .sheet(item: Binding(get: { model.namingRequest }, set: { model.namingRequest = $0 })) { request in
             folderNameSheet(for: request)
         }
