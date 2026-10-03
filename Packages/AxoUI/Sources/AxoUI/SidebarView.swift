@@ -23,6 +23,9 @@ struct SidebarView: View {
             }
         }
         .accessibilityIdentifier("sidebar")
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            SpaceSwitcher(model: model)
+        }
         .safeAreaInset(edge: .top) {
             // Like Arc, the address field sits at the top of the sidebar.
             AddressField(model: model)

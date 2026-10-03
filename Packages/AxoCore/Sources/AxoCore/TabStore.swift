@@ -18,6 +18,14 @@ public enum TabStoreError: Error, Equatable {
     case tabNotFound(Tab.ID)
     /// The tab used as a position anchor is in a different Space.
     case anchorInDifferentSpace(Tab.ID)
+    /// No Space with this ID exists.
+    case spaceNotFound(Space.ID)
+    /// The last Space can't be deleted; a window always shows one.
+    case cannotDeleteLastSpace
+    /// No profile with this ID exists.
+    case profileNotFound(Profile.ID)
+    /// A profile can't be deleted while Spaces still use it.
+    case profileInUse(Profile.ID)
 }
 
 /// Reads and writes the sidebar model: profiles, Spaces, and tabs.
@@ -71,6 +79,95 @@ public final class TabStore: Sendable {
     public func spaces() async throws -> [Space] {
         try await database.writer.read { db in
             try Space.order(Space.Columns.sortKey, Space.Columns.id).fetchAll(db)
+        }
+    }
+
+    /// Streams every Space in sidebar order: the current list first, then a new list after
+    /// every change.
+    public func observeSpaces() -> AsyncValueObservation<[Space]> {
+        ValueObservation
+            .tracking { db in try Space.order(Space.Columns.sortKey, Space.Columns.id).fetchAll(db) }
+            .values(in: database.writer)
+    }
+
+    /// Creates a Space after the existing ones.
+    ///
+    /// - Throws: ``TabStoreError/profileNotFound(_:)`` if the profile doesn't exist.
+    @discardableResult
+    public func createSpace(name: String, profileID: Profile.ID) async throws -> Space {
+        try await database.writer.write { db in
+            guard try Profile.exists(db, id: profileID) else { throw TabStoreError.profileNotFound(profileID) }
+            let last = try Space.order(Space.Columns.sortKey.desc, Space.Columns.id.desc).fetchOne(db)
+            let space = Space(profileID: profileID, name: name, sortKey: try SortKey.between(last?.sortKey, nil))
+            try space.insert(db)
+            return space
+        }
+    }
+
+    /// Renames a Space.
+    public func renameSpace(id: Space.ID, to name: String) async throws {
+        try await database.writer.write { db in
+            guard var space = try Space.fetchOne(db, id: id) else { throw TabStoreError.spaceNotFound(id) }
+            space.name = name
+            try space.update(db)
+        }
+    }
+
+    /// Deletes a Space and all its tabs. The Space's profile and its website data are kept.
+    ///
+    /// - Returns: The IDs of the deleted tabs, so their web views can be discarded.
+    /// - Throws: ``TabStoreError/cannotDeleteLastSpace`` for the only Space, or
+    ///   ``TabStoreError/spaceNotFound(_:)``.
+    @discardableResult
+    public func deleteSpace(id: Space.ID) async throws -> [Tab.ID] {
+        try await database.writer.write { db in
+            guard try Space.exists(db, id: id) else { throw TabStoreError.spaceNotFound(id) }
+            guard try Space.fetchCount(db) > 1 else { throw TabStoreError.cannotDeleteLastSpace }
+            let tabIDs = try Tab.filter(Tab.Columns.spaceID == id).fetchAll(db).map(\.id)
+            try Space.deleteOne(db, id: id)
+            return tabIDs
+        }
+    }
+
+    // MARK: Profiles
+
+    /// Returns every profile, by name.
+    public func profiles() async throws -> [Profile] {
+        try await database.writer.read { db in
+            try Profile.order(Column("name").collating(.localizedCaseInsensitiveCompare)).fetchAll(db)
+        }
+    }
+
+    /// Creates a profile. AxoWeb gives it its own website data store the first time a tab uses it.
+    @discardableResult
+    public func createProfile(name: String) async throws -> Profile {
+        try await database.writer.write { db in
+            let profile = Profile(name: name)
+            try profile.insert(db)
+            return profile
+        }
+    }
+
+    /// Renames a profile.
+    public func renameProfile(id: Profile.ID, to name: String) async throws {
+        try await database.writer.write { db in
+            guard var profile = try Profile.fetchOne(db, id: id) else { throw TabStoreError.profileNotFound(id) }
+            profile.name = name
+            try profile.update(db)
+        }
+    }
+
+    /// Deletes a profile that no Space uses. Removing its website data is the caller's job
+    /// (`WKWebsiteDataStore.remove(forIdentifier:)` in AxoWeb).
+    ///
+    /// - Throws: ``TabStoreError/profileInUse(_:)`` while a Space uses it.
+    public func deleteProfile(id: Profile.ID) async throws {
+        try await database.writer.write { db in
+            guard try Profile.exists(db, id: id) else { throw TabStoreError.profileNotFound(id) }
+            guard try Space.filter(Space.Columns.profileID == id).fetchCount(db) == 0 else {
+                throw TabStoreError.profileInUse(id)
+            }
+            try Profile.deleteOne(db, id: id)
         }
     }
 
