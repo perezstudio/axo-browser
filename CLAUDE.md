@@ -36,6 +36,7 @@ The full plan, architecture, and reasoning behind every decision are in `docs/PL
 - The app's database lives at `~/Library/Application Support/Axo/Axo.sqlite`. The last Space shown is remembered in `UserDefaults` under `lastSpaceID` (not in UI testing).
 - To look at the UI, attach `XCTAttachment(screenshot: app.windows.firstMatch.screenshot())` in a UI test and export it from the result bundle. It captures only Axo's window and doesn't need accessibility access. Don't screen-capture the desktop, which can include the user's other windows.
 - Printing can't be tested automatically: WebKit print operations hang when run synchronously and need a window to run modally. Test the operation's configuration and check the print sheet by hand.
+- Don't use ⌥ with dead-key letters (E, I, N, U, `) in shortcuts. On US layouts ⌥N, for example, starts a dead key, and ⌥⌘N never fired. New Folder uses ⌃⌘N instead.
 - macOS window tabbing is off (`NSWindow.allowsAutomaticWindowTabbing = false`), because Axo's tabs live in the sidebar.
 - Printing triggers macOS's Local Network prompt (printer discovery), and pages can reach local devices through WebKit's network process. `NSLocalNetworkUsageDescription` explains both. Keep it accurate if network behavior changes.
 
@@ -83,6 +84,7 @@ These come from deliberate decisions in `docs/PLAN.md`. Do not change them witho
 
 - Prefer `async`/`await` and actors over callbacks and locks. UI-facing state is `@MainActor`.
 - Database writes happen off the main actor through `DatabasePool`; reads in views use `ValueObservation` or GRDBQuery.
+- When a model both writes and observes, treat each `ValueObservation` value as a change signal and re-read current state. A value observed before the model's own write can arrive after it and briefly undo it (this made a folder test flaky).
 - Every package has a test target. See "Testing, docs, and verification" below.
 - Use SF Symbols, standard AppKit and SwiftUI controls, and system conventions. Axo should feel like Apple could have shipped it.
 - Accessibility is not optional: every control needs a label, and every feature must work with the keyboard and VoiceOver.

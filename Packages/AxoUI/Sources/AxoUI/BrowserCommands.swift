@@ -17,6 +17,10 @@ public struct BrowserCommands: Commands {
             Button("New Tab") { model?.beginNewTab() }
                 .keyboardShortcut("t")
                 .disabled(model == nil)
+            Button("New Folder") { model?.namingRequest = .newFolder(parent: nil, moving: nil) }
+                // Not ⌥⌘N: ⌥N is a dead key on US layouts, so that shortcut never fires.
+                .keyboardShortcut("n", modifiers: [.command, .control])
+                .disabled(model == nil)
             Button("Open Location…") { model?.focusAddressField() }
                 .keyboardShortcut("l")
                 .disabled(model == nil)

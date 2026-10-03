@@ -42,7 +42,9 @@ struct SpaceSwitcher: View {
             NewSpaceSheet(model: model)
         }
         .sheet(item: $renaming) { space in
-            RenameSpaceSheet(model: model, space: space)
+            NameSheet(title: "Rename Space", initialName: space.name, confirmTitle: "Rename") { name in
+                Task { await model.renameSpace(space.id, to: name) }
+            }
         }
         .confirmationDialog(
             "Delete “\(deleting?.name ?? "")”?",
@@ -126,42 +128,6 @@ struct NewSpaceSheet: View {
     }
 
     private var trimmedName: String { name.trimmed }
-}
-
-/// Renames a Space.
-struct RenameSpaceSheet: View {
-    let model: BrowserModel
-    let space: Space
-    @Environment(\.dismiss) private var dismiss
-    @State private var name: String
-
-    init(model: BrowserModel, space: Space) {
-        self.model = model
-        self.space = space
-        _name = State(initialValue: space.name)
-    }
-
-    var body: some View {
-        Form {
-            TextField("Name", text: $name)
-        }
-        .formStyle(.grouped)
-        .frame(width: 320)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") { dismiss() }
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Rename") {
-                    let newName = name.trimmed
-                    dismiss()
-                    Task { await model.renameSpace(space.id, to: newName) }
-                }
-                .disabled(name.trimmed.isEmpty)
-            }
-        }
-        .navigationTitle("Rename Space")
-    }
 }
 
 private extension String {

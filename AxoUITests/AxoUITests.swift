@@ -214,6 +214,33 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Mail"].waitForExistence(timeout: 5))
     }
 
+    /// Create a folder with ⌃⌘N, move a tab into it from the context menu, and collapse it.
+    @MainActor
+    func testFoldersHoldPinnedTabs() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,<title>Docs</title>\n")
+        XCTAssertTrue(sidebar.staticTexts["Docs"].waitForExistence(timeout: 10))
+
+        app.typeKey("n", modifierFlags: [.command, .control])
+        let nameField = app.textFields["nameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.typeText("Work\n")
+        XCTAssertTrue(sidebar.staticTexts["Work"].waitForExistence(timeout: 5))
+
+        sidebar.staticTexts["Docs"].rightClick()
+        app.menuItems["Move to Folder"].hover()
+        app.menuItems["Work"].click()
+        XCTAssertTrue(sidebar.staticTexts["Pinned"].waitForExistence(timeout: 5), "Moving into a folder pins the tab")
+        XCTAssertTrue(sidebar.staticTexts["Docs"].waitForExistence(timeout: 5))
+
+        // Collapsing the folder hides the tab inside it.
+        sidebar.disclosureTriangles.firstMatch.click()
+        XCTAssertTrue(sidebar.staticTexts["Docs"].waitForNonExistence(timeout: 5))
+    }
+
     /// macOS window tabbing is off, so the View menu has no "Show Tab Bar".
     @MainActor
     func testWindowTabbingMenuItemsAreHidden() throws {

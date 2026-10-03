@@ -95,6 +95,27 @@ public final class AppDatabase: Sendable {
             try db.create(index: "tab_on_archivedAt", on: "tab", columns: ["archivedAt"])
         }
 
+        // Folders: a tree inside a Space's pinned section. Folders and pinned tabs at the same
+        // level share one fractional order. Deleting a Space deletes its folders; deleting a
+        // folder leaves its tabs (AxoCore moves them up a level first; SET NULL is a backstop).
+        migrator.registerMigration("v4-folders") { db in
+            try db.create(table: "folder") { t in
+                t.primaryKey("id", .blob)
+                t.column("spaceID", .blob).notNull()
+                    .references("space", onDelete: .cascade)
+                t.column("parentID", .blob)
+                    .references("folder", onDelete: .cascade)
+                t.column("name", .text).notNull()
+                t.column("sortKey", .text).notNull()
+                t.column("isExpanded", .boolean).notNull().defaults(to: true)
+            }
+            try db.create(index: "folder_on_spaceID_parentID", on: "folder", columns: ["spaceID", "parentID"])
+            try db.alter(table: "tab") { t in
+                t.add(column: "folderID", .blob).references("folder", onDelete: .setNull)
+            }
+            try db.create(index: "tab_on_folderID", on: "tab", columns: ["folderID"])
+        }
+
         return migrator
     }
 

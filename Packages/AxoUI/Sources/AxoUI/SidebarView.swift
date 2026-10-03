@@ -8,9 +8,9 @@ struct SidebarView: View {
 
     var body: some View {
         List(selection: Binding(get: { model.selectedTabID }, set: { model.select($0) })) {
-            if !model.pinnedTabs.isEmpty {
+            if !model.pinnedTree.isEmpty {
                 Section("Pinned") {
-                    rows(for: model.pinnedTabs, pinned: true)
+                    PinnedLevel(model: model, nodes: model.pinnedTree, parent: nil)
                 }
                 .accessibilityIdentifier("pinnedSection")
             }
@@ -20,6 +20,9 @@ struct SidebarView: View {
         }
         .sheet(isPresented: $isShowingArchive) {
             ArchivedTabsView(model: model)
+        }
+        .sheet(item: Binding(get: { model.namingRequest }, set: { model.namingRequest = $0 })) { request in
+            folderNameSheet(for: request)
         }
         .onChange(of: model.isShowingArchive) { isShowingArchive = model.isShowingArchive }
         .onChange(of: isShowingArchive) { if !isShowingArchive { model.isShowingArchive = false } }
@@ -58,7 +61,31 @@ extension SidebarView {
     }
 
     @ViewBuilder
+    private func folderNameSheet(for request: NamingRequest) -> some View {
+        switch request {
+        case .newFolder(let parent, let moving):
+            NameSheet(title: "New Folder", initialName: "", confirmTitle: "Create") { name in
+                Task { await model.createFolder(named: name, parent: parent, moving: moving) }
+            }
+        case .renameFolder(let folder):
+            NameSheet(title: "Rename Folder", initialName: folder.name, confirmTitle: "Rename") { name in
+                Task { await model.renameFolder(folder.id, to: name) }
+            }
+        }
+    }
+
+    @ViewBuilder
     private func menu(for tab: AxoCore.Tab) -> some View {
+        TabContextMenu(model: model, tab: tab)
+    }
+}
+
+/// The actions for a tab in the sidebar.
+struct TabContextMenu: View {
+    let model: BrowserModel
+    let tab: AxoCore.Tab
+
+    var body: some View {
         if tab.isPinned {
             Button("Go to Pinned Page") { Task { await model.goToPinnedHome(tab.id) } }
                 .disabled(!tab.hasLeftHome)
@@ -71,6 +98,89 @@ extension SidebarView {
             Button("Pin Tab") { Task { await model.setPinned(true, tabID: tab.id) } }
             Divider()
             Button("Close Tab") { Task { await model.closeTab(tab.id) } }
+        }
+        Divider()
+        MoveToFolderMenu(model: model, item: .tab(tab.id), current: tab.isPinned ? tab.folderID : nil, excluding: [])
+    }
+}
+
+/// One level of the pinned section: folders (expandable) and pinned tabs, reorderable.
+struct PinnedLevel: View {
+    let model: BrowserModel
+    let nodes: [PinnedNode]
+    let parent: Folder.ID?
+
+    var body: some View {
+        ForEach(nodes) { node in
+            switch node {
+            case .tab(let tab):
+                TabRow(tab: tab, favicon: model.favicon(for: tab))
+                    .tag(tab.id)
+                    .contextMenu { TabContextMenu(model: model, tab: tab) }
+            case .folder(let folder, let children):
+                DisclosureGroup(isExpanded: Binding(
+                    get: { folder.isExpanded },
+                    set: { expanded in Task { await model.setFolderExpanded(expanded, id: folder.id) } }
+                )) {
+                    // Type-erased because the view contains itself.
+                    AnyView(PinnedLevel(model: model, nodes: children, parent: folder.id))
+                } label: {
+                    Label(folder.name, systemImage: folder.isExpanded ? "folder" : "folder.fill")
+                        .lineLimit(1)
+                        .accessibilityIdentifier("folderRow")
+                        .contextMenu { FolderContextMenu(model: model, folder: folder) }
+                }
+            }
+        }
+        .onMove { source, destination in
+            Task { await model.movePinnedItems(fromOffsets: source, toOffset: destination, in: parent) }
+        }
+    }
+}
+
+/// The actions for a folder in the sidebar.
+struct FolderContextMenu: View {
+    let model: BrowserModel
+    let folder: Folder
+
+    var body: some View {
+        Button("New Folder Inside…") { model.namingRequest = .newFolder(parent: folder.id, moving: nil) }
+        Button("Rename…") { model.namingRequest = .renameFolder(folder) }
+        MoveToFolderMenu(
+            model: model,
+            item: .folder(folder.id),
+            current: folder.parentID,
+            excluding: PinnedNode.folderAndDescendants(folder.id, in: model.pinnedTree)
+        )
+        Divider()
+        Button("Delete Folder") { Task { await model.deleteFolder(folder.id) } }
+            .help("Delete the folder and move what's inside it up a level")
+    }
+}
+
+/// "Move to Folder" with every folder (indented by depth), the top level, and a new folder.
+struct MoveToFolderMenu: View {
+    let model: BrowserModel
+    let item: PinnedItem
+    /// The folder the item is in now, if any.
+    let current: Folder.ID?
+    /// Folders the item can't move into, such as a folder itself and its subfolders.
+    let excluding: Set<Folder.ID>
+
+    var body: some View {
+        Menu("Move to Folder") {
+            if current != nil {
+                Button("Pinned (No Folder)") { Task { await model.move(item, toFolder: nil) } }
+                Divider()
+            }
+            ForEach(PinnedNode.flattenedFolders(model.pinnedTree), id: \.folder.id) { entry in
+                Button(String(repeating: "    ", count: entry.depth) + entry.folder.name) {
+                    Task { await model.move(item, toFolder: entry.folder.id) }
+                }
+                .disabled(entry.folder.id == current || excluding.contains(entry.folder.id))
+            }
+            Divider()
+            Button("New Folder…") { model.namingRequest = .newFolder(parent: nil, moving: item) }
         }
     }
 }
