@@ -64,6 +64,9 @@ public final class DownloadItem: Identifiable {
 public final class DownloadManager: NSObject, WKDownloadDelegate {
     /// Downloads, newest first.
     public private(set) var items: [DownloadItem] = []
+    /// Called when a download stops: finished, failed, or cancelled. The app uses it to tell
+    /// VoiceOver users.
+    @ObservationIgnored public var onEnd: ((DownloadItem) -> Void)?
 
     /// The folder files are saved in.
     @ObservationIgnored public let directory: URL
@@ -176,6 +179,7 @@ public final class DownloadManager: NSObject, WKDownloadDelegate {
     }
 
     private func finish(_ item: DownloadItem) {
+        defer { onEnd?(item) }
         item.progressObservations.forEach { $0.invalidate() }
         item.progressObservations = []
         if let download = item.download {

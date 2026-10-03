@@ -10,6 +10,13 @@ struct ArchivedTabsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Sheets don't show their navigation title, so the sheet names itself.
+            Text("Archived Tabs in \(model.space?.name ?? "this Space")")
+                .font(.headline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding([.horizontal, .top], 16)
+                .padding(.bottom, 8)
+                .accessibilityAddTraits(.isHeader)
             if hasLoaded && tabs.isEmpty {
                 ContentUnavailableView(
                     "No Archived Tabs",
@@ -32,6 +39,7 @@ struct ArchivedTabsView: View {
                                 dismiss()
                             }
                         }
+                        .accessibilityLabel("Restore \(TabRow.displayTitle(for: tab))")
                         .accessibilityIdentifier("restoreTabButton")
                     }
                 }
@@ -44,6 +52,7 @@ struct ArchivedTabsView: View {
                 Button("Done") { dismiss() }
             }
         }
+        .onExitCommand { dismiss() }
         .task {
             tabs = await model.archivedTabs()
             hasLoaded = true

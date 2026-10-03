@@ -18,7 +18,6 @@ struct FindBar: View {
                 .accessibilityLabel("Find on page")
                 .accessibilityIdentifier("findField")
                 .onSubmit { Task { await model.findNext() } }
-                .onExitCommand { model.closeFindBar() }
                 .onChange(of: model.findText) { Task { await model.findNext() } }
 
             if model.findHasNoMatches {
@@ -48,6 +47,10 @@ struct FindBar: View {
         .padding(.vertical, 6)
         .background(.bar)
         .overlay(alignment: .bottom) { Divider() }
+        // Esc closes the bar from the field or any of its buttons.
+        .onExitCommand { model.closeFindBar() }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Find on Page")
         .onAppear { isFocused = true }
         .onChange(of: model.findFocusRequest) { isFocused = true }
     }

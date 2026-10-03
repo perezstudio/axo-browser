@@ -14,6 +14,10 @@ public enum CommandAction: String, CaseIterable, Hashable, Sendable {
     case printPage
     case makeDefaultBrowser
     case importBrowserData
+    case renameSpace
+    case deleteSpace
+    case renameFolder
+    case deleteFolder
 
     /// The name shown in the command bar.
     public var title: String {
@@ -29,6 +33,10 @@ public enum CommandAction: String, CaseIterable, Hashable, Sendable {
         case .printPage: "Print Page"
         case .makeDefaultBrowser: "Make Axo Your Default Browser"
         case .importBrowserData: "Import from Another Browser"
+        case .renameSpace: "Rename Space"
+        case .deleteSpace: "Delete Space"
+        case .renameFolder: "Rename Folder"
+        case .deleteFolder: "Delete Folder"
         }
     }
 
@@ -46,6 +54,10 @@ public enum CommandAction: String, CaseIterable, Hashable, Sendable {
         case .printPage: "printer"
         case .makeDefaultBrowser: "checkmark.seal"
         case .importBrowserData: "square.and.arrow.down.on.square"
+        case .renameSpace: "pencil"
+        case .deleteSpace: "trash"
+        case .renameFolder: "folder.badge.gearshape"
+        case .deleteFolder: "folder.badge.minus"
         }
     }
 }
@@ -113,5 +125,27 @@ enum CommandRanking {
     static func historyResults(_ items: [HistoryItem], excludingOpen tabs: [AxoCore.Tab]) -> [CommandResult] {
         let open = Set(tabs.map(\.url))
         return items.filter { !open.contains($0.url) }.prefix(maxHistory).map(CommandResult.history)
+    }
+}
+
+extension CommandResult {
+    /// The row's title.
+    public var title: String {
+        switch self {
+        case .open(let url, let isSearch, let text): isSearch ? "Search for “\(text)”" : url.absoluteString
+        case .tab(let tab): TabRow.displayTitle(for: tab)
+        case .action(let action): action.title
+        case .history(let item): item.title.isEmpty ? (item.url.host() ?? item.url.absoluteString) : item.title
+        }
+    }
+
+    /// What Return does with the row, such as "Open" or "Switch to Tab".
+    public var hint: String {
+        switch self {
+        case .open(_, let isSearch, _): isSearch ? "Search" : "Open"
+        case .tab: "Switch to Tab"
+        case .action: "Run"
+        case .history: "Open"
+        }
     }
 }

@@ -4,8 +4,6 @@ import SwiftUI
 /// The row of Spaces at the bottom of the sidebar, with a button to add one.
 struct SpaceSwitcher: View {
     @Bindable var model: BrowserModel
-    @State private var renaming: Space?
-    @State private var deleting: Space?
 
     var body: some View {
         HStack(spacing: 6) {
@@ -16,8 +14,8 @@ struct SpaceSwitcher: View {
                             Task { await model.selectSpace(space.id) }
                         }
                         .contextMenu {
-                            Button("Rename…") { renaming = space }
-                            Button("Delete Space…", role: .destructive) { deleting = space }
+                            Button("Rename…") { model.spaceToRename = space }
+                            Button("Delete Space…", role: .destructive) { model.spaceToDelete = space }
                                 .disabled(model.spaces.count < 2)
                         }
                     }
@@ -40,15 +38,10 @@ struct SpaceSwitcher: View {
         .sheet(isPresented: $model.isCreatingSpace) {
             NewSpaceSheet(model: model)
         }
-        .sheet(item: $renaming) { space in
-            NameSheet(title: "Rename Space", initialName: space.name, confirmTitle: "Rename") { name in
-                Task { await model.renameSpace(space.id, to: name) }
-            }
-        }
         .confirmationDialog(
-            "Delete “\(deleting?.name ?? "")”?",
-            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
-            presenting: deleting
+            "Delete “\(model.spaceToDelete?.name ?? "")”?",
+            isPresented: Binding(get: { model.spaceToDelete != nil }, set: { if !$0 { model.spaceToDelete = nil } }),
+            presenting: model.spaceToDelete
         ) { space in
             Button("Delete Space", role: .destructive) {
                 Task { await model.deleteSpace(space.id) }
@@ -65,6 +58,7 @@ private struct SpaceButton: View {
     let index: Int
     let isSelected: Bool
     let action: () -> Void
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
 
     var body: some View {
         Button(action: action) {
@@ -73,11 +67,17 @@ private struct SpaceButton: View {
                 .frame(width: 22, height: 22)
                 .foregroundStyle(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
                 .background(Circle().fill(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.quaternary)))
+                // Not only color: a ring marks the current Space when the person asks for it.
+                .overlay {
+                    if isSelected && differentiateWithoutColor {
+                        Circle().strokeBorder(.primary, lineWidth: 2).padding(-3)
+                    }
+                }
         }
         .buttonStyle(.plain)
         .help(index < 9 ? "\(space.name) (⌃\(index + 1))" : space.name)
         .accessibilityLabel(space.name)
-        .accessibilityValue(isSelected ? "Selected" : "")
+        .accessibilityHint(index < 9 ? "Control-\(index + 1)" : "")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("spaceButton")
     }
@@ -90,10 +90,16 @@ struct NewSpaceSheet: View {
     @State private var name = ""
     @State private var usesNewProfile = false
     @State private var profileName = ""
+    @FocusState private var isNameFocused: Bool
 
     var body: some View {
         Form {
+            // Sheets don't show their navigation title, so the sheet names itself.
+            Text("New Space")
+                .font(.headline)
+                .accessibilityAddTraits(.isHeader)
             TextField("Name", text: $name, prompt: Text("Work"))
+                .focused($isNameFocused)
                 .accessibilityIdentifier("spaceNameField")
             Toggle("Use a separate profile", isOn: $usesNewProfile)
                 .accessibilityIdentifier("separateProfileToggle")
@@ -108,6 +114,7 @@ struct NewSpaceSheet: View {
         }
         .formStyle(.grouped)
         .frame(width: 380)
+        .defaultFocus($isNameFocused, true)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { dismiss() }

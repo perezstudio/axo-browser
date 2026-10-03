@@ -30,6 +30,7 @@ struct CommandBarView: View {
                     .focused($isFocused)
                     .autocorrectionDisabled()
                     .accessibilityLabel("Command bar")
+                    .accessibilityHint("Search, enter an address, or run a command. Use the up and down arrow keys to choose a result.")
                     .accessibilityIdentifier("commandField")
                     .onSubmit { Task { await model.runCommand() } }
                     .onExitCommand { model.hideCommandBar() }
@@ -47,6 +48,7 @@ struct CommandBarView: View {
                                     CommandRow(model: model, result: result, isSelected: index == model.commandSelection)
                                         .id(result.id)
                                         .onTapGesture { Task { await model.runCommand(at: index) } }
+                                        .accessibilityAction { Task { await model.runCommand(at: index) } }
                                 }
                             }
                             .padding(6)
@@ -66,6 +68,8 @@ struct CommandBarView: View {
             .shadow(color: .black.opacity(0.2), radius: 24, y: 10)
             .padding(.top, 90)
             .accessibilityElement(children: .contain)
+            // VoiceOver stays in the bar while it's open, like a sheet.
+            .accessibilityAddTraits(.isModal)
             .accessibilityIdentifier("commandBar")
         }
         .defaultFocus($isFocused, true)
@@ -86,13 +90,13 @@ private struct CommandRow: View {
                 .frame(width: 20, height: 20)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 1) {
-                Text(title).lineLimit(1)
+                Text(result.title).lineLimit(1)
                 if let detail {
                     Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
             Spacer(minLength: 8)
-            Text(hint)
+            Text(result.hint)
                 .font(.caption)
                 .foregroundStyle(isSelected ? .secondary : .tertiary)
         }
@@ -124,30 +128,12 @@ private struct CommandRow: View {
         }
     }
 
-    private var title: String {
-        switch result {
-        case .open(let url, let isSearch, let text): isSearch ? "Search for “\(text)”" : url.absoluteString
-        case .tab(let tab): TabRow.displayTitle(for: tab)
-        case .action(let action): action.title
-        case .history(let item): item.title.isEmpty ? (item.url.host() ?? item.url.absoluteString) : item.title
-        }
-    }
-
     private var detail: String? {
         switch result {
         case .open: nil
         case .tab(let tab): tab.url.host() ?? tab.url.absoluteString
         case .action: nil
         case .history(let item): item.url.absoluteString
-        }
-    }
-
-    private var hint: String {
-        switch result {
-        case .open(_, let isSearch, _): isSearch ? "Search" : "Open"
-        case .tab: "Switch to Tab"
-        case .action: "Run"
-        case .history: "Open"
         }
     }
 }

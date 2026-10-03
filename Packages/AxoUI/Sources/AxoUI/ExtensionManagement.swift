@@ -144,7 +144,7 @@ struct ExtensionInstallSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             Label {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Add “\(prompt.name)”?").font(.headline)
+                    Text("Add “\(prompt.name)”?").font(.headline).accessibilityAddTraits(.isHeader)
                     Text(prompt.isUnpacked ? "Version \(prompt.version), unpacked (developer mode)" : "Version \(prompt.version)")
                         .font(.callout).foregroundStyle(.secondary)
                 }
@@ -218,6 +218,7 @@ struct ExtensionsView: View {
                 Button("Done") { dismiss() }
             }
         }
+        .onExitCommand { dismiss() }
         .task(id: model.pendingExtensionInstall) { await refresh() }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("extensionsWindow")
@@ -233,6 +234,7 @@ private struct ExtensionRow: View {
     let item: ExtensionSummary
     let model: BrowserModel
     let refresh: () async -> Void
+    @State private var isConfirmingRemoval = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -249,7 +251,8 @@ private struct ExtensionRow: View {
                 ))
                 .toggleStyle(.switch)
                 .labelsHidden()
-                .accessibilityLabel("Turn \(item.name) on or off")
+                // The switch says whether it's on; the label says what it turns on.
+                .accessibilityLabel(item.name)
             }
             if let error = item.loadError {
                 Text("Couldn't load: \(error)").font(.caption).foregroundStyle(.red)
@@ -276,10 +279,17 @@ private struct ExtensionRow: View {
                     }
                 }
                 .disabled(!item.isEnabled)
+                .accessibilityLabel("Inspect \(item.name) Background Page")
                 Spacer()
-                Button("Remove", role: .destructive) {
-                    change { try await $0.uninstall(item.id, profileID: $1) }
-                }
+                Button("Remove…", role: .destructive) { isConfirmingRemoval = true }
+                    .accessibilityLabel("Remove \(item.name)")
+                    .confirmationDialog("Remove “\(item.name)”?", isPresented: $isConfirmingRemoval) {
+                        Button("Remove", role: .destructive) {
+                            change { try await $0.uninstall(item.id, profileID: $1) }
+                        }
+                    } message: {
+                        Text("It stops running in this profile.")
+                    }
             }
         }
         .padding(.vertical, 4)

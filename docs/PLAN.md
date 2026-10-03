@@ -284,7 +284,11 @@ Each milestone should be usable as a daily driver before the next one starts.
   - Camera, microphone, and location answers are saved per profile and site (`sitePermission` table), with a Site Settings popover beside the address field.
   - Location works once Axo keeps a `CLLocationManager`. macOS asks the first time the person allows a site.
   - Web notifications are still blocked: there's no public API (see `docs/webkit-gaps.md`).
-- [ ] Full VoiceOver and keyboard accessibility audit
+- [x] Full VoiceOver and keyboard accessibility audit.
+  - Every sidebar action has a menu command or shortcut (Tabs and Spaces menus), and folder rows are selectable.
+  - VoiceOver gets actions for moving rows and opening folders, and announcements for changes it couldn't otherwise follow.
+  - Focus returns to the page when overlays close.
+  - `AccessibilityAuditTests` runs Xcode's accessibility audit on every screen and fails on any issue except a short list of containers macOS creates. Contrast isn't part of the audit (see the test).
 
 **Milestone 5: Power features**
 

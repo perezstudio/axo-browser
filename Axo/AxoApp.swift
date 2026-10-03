@@ -38,7 +38,11 @@ struct AxoApp: App {
                 .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
         }
         .defaultSize(width: 1200, height: 800)
-        .commands { BrowserCommands() }
+        .commands {
+            // Show or hide the sidebar from the keyboard (View › Toggle Sidebar, ⌃⌘S).
+            SidebarCommands()
+            BrowserCommands()
+        }
     }
 }
 

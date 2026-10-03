@@ -14,6 +14,7 @@ struct DownloadsButton: View {
             Label("Downloads", systemImage: downloads.activeCount > 0 ? "arrow.down.circle.fill" : "arrow.down.circle")
         }
         .help(downloads.activeCount > 0 ? "Downloads (\(downloads.activeCount) in progress)" : "Downloads")
+        .accessibilityValue(downloads.activeCount > 0 ? "\(downloads.activeCount) in progress" : "")
         .accessibilityIdentifier("downloadsButton")
         .popover(isPresented: $model.isShowingDownloads, arrowEdge: .bottom) {
             DownloadsList(downloads: downloads)
@@ -28,7 +29,7 @@ struct DownloadsList: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Downloads").font(.headline)
+                Text("Downloads").font(.headline).accessibilityAddTraits(.isHeader)
                 Spacer()
                 Button("Clear") { downloads.clearInactive() }
                     .disabled(downloads.items.allSatisfy(\.isActive))
@@ -53,6 +54,8 @@ struct DownloadsList: View {
             }
         }
         .frame(width: 360)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Downloads")
         .accessibilityIdentifier("downloadsList")
     }
 }
@@ -87,7 +90,15 @@ struct DownloadRow: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+        // One element for VoiceOver, with the buttons as its actions.
         .accessibilityElement(children: .combine)
+        .accessibilityActions {
+            if item.isActive {
+                Button("Cancel Download") { downloads.cancel(item) }
+            } else if item.state == .finished, let destination = item.destination {
+                Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([destination]) }
+            }
+        }
         .accessibilityIdentifier("downloadRow")
     }
 
