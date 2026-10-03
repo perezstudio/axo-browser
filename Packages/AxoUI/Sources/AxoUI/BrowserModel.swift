@@ -35,6 +35,9 @@ public final class BrowserModel {
     public var isShowingArchive = false
     /// Whether the New Space sheet is open.
     public var isCreatingSpace = false
+    /// Whether Axo is the default browser, as of the last check. `nil` when there's no way to
+    /// check (no ``defaultBrowser``).
+    public private(set) var isDefaultBrowser: Bool?
     /// Whether the command bar is showing.
     public private(set) var isCommandBarVisible = false
     /// What's typed in the command bar.
@@ -76,6 +79,12 @@ public final class BrowserModel {
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private var archiveTask: Task<Void, Never>?
     @ObservationIgnored private var commandSearchTask: Task<Void, Never>?
+    /// Checks and changes the default browser. Set by the app.
+    @ObservationIgnored public var defaultBrowser: (any DefaultBrowserSetting)? {
+        didSet { refreshDefaultBrowserStatus() }
+    }
+    /// Links that arrived before the model finished starting.
+    @ObservationIgnored private var pendingExternalURLs: [URL] = []
     /// The most recent page-change save; each new one waits for it, keeping saves in order.
     @ObservationIgnored private var pageChangeSave: Task<Void, Never>?
     /// Tabs whose current page was already counted as a visit since launch. A tab's first page
@@ -150,6 +159,10 @@ public final class BrowserModel {
             spaces = try await store.spaces()
             let initial = spaces.first { $0.id == initialSpaceID } ?? first
             try await show(initial)
+            for url in pendingExternalURLs {
+                await openTab(url: url)
+            }
+            pendingExternalURLs = []
             observeSpaces()
             pool.startHibernationTimer()
             startArchiving()
@@ -650,10 +663,41 @@ public final class BrowserModel {
         return response == .OK ? panel.urls : nil
     }
 
+    // MARK: Default browser and links from other apps
+
+    /// Opens a link another app sent (as the default browser) in a new tab in the current Space.
+    /// Links that arrive during launch open once the window is ready.
+    public func openExternalURL(_ url: URL) async {
+        guard space != nil else {
+            pendingExternalURLs.append(url)
+            return
+        }
+        hideCommandBar()
+        await openTab(url: url)
+    }
+
+    /// Checks again whether Axo is the default browser.
+    public func refreshDefaultBrowserStatus() {
+        isDefaultBrowser = defaultBrowser?.isDefault
+    }
+
+    /// Asks macOS to make Axo the default browser. If the person declines in macOS's dialog,
+    /// nothing changes and nothing else is shown.
+    public func makeDefaultBrowser() async {
+        guard let defaultBrowser else { return }
+        do {
+            try await defaultBrowser.makeDefault()
+        } catch {
+            logger.info("Default browser not changed: \(error)")
+        }
+        refreshDefaultBrowserStatus()
+    }
+
     // MARK: Command bar
 
     /// Opens the command bar with an empty query.
     public func showCommandBar() {
+        refreshDefaultBrowserStatus()
         isCommandBarVisible = true
         commandQuery = ""
         refreshCommandResults()
@@ -721,6 +765,7 @@ public final class BrowserModel {
             case .pinTab: selectedTab.map { !$0.isPinned } ?? false
             case .unpinTab: selectedTab?.isPinned ?? false
             case .findInPage, .printPage: selectedTabID != nil
+            case .makeDefaultBrowser: isDefaultBrowser == false
             default: true
             }
         }
@@ -737,6 +782,7 @@ public final class BrowserModel {
         case .unpinTab: if let id = selectedTabID { await setPinned(false, tabID: id) }
         case .findInPage: showFindBar()
         case .printPage: printSelectedTab()
+        case .makeDefaultBrowser: await makeDefaultBrowser()
         }
     }
 

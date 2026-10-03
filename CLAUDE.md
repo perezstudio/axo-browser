@@ -26,8 +26,10 @@ The full plan, architecture, and reasoning behind every decision are in `docs/PL
 - `Axo/Axo.entitlements` holds the Hardened Runtime entitlements for camera, microphone, and location, which pages can use after the person allows them. Add others (such as iCloud for AxoSync) there. Each device has a usage description in the target's `INFOPLIST_KEY_*` build settings; keep them accurate and plain.
 - The `Axo` scheme is shared (`Axo.xcodeproj/xcshareddata`). `xcuserdata/` is gitignored, so scheme changes must go in the shared scheme.
 - No linters or formatters are configured yet.
+- `Axo/Info.plist` holds only keys the build settings can't express (the http and https URL types and the HTML document type that make Axo eligible as the default browser). Xcode merges it into the generated Info.plist, and the target's membership exception keeps it out of the copied resources.
+- Never call `DefaultBrowser.makeDefault()` or `NSWorkspace.setDefaultApplication` in tests; it changes the user's real default browser. Tests use fakes, and UI testing mode doesn't set `defaultBrowser` at all.
 - Open `Axo.xcworkspace`, not the project. The workspace lists the app project and every local package, which Xcode needs to run the package test targets. The `Axo` scheme uses the `Axo.xctestplan` test plan, which covers the app's unit and UI tests and every package's tests. Add new test targets to that plan.
-- The app target links only `AxoUI`; other packages come in through it or get linked when the app needs them directly.
+- The app target links AxoUI, AxoCore, AxoWeb, and AxoIntegration directly. The app connects AxoIntegration to AxoUI through small adapters (such as `SystemDefaultBrowser`), so AxoUI doesn't depend on AxoIntegration.
 - `AxoUI` uses `.defaultIsolation(MainActor.self)`. Other packages use the Swift 6 default (nonisolated); AxoWeb marks its types `@MainActor` explicitly.
 - SwiftUI has its own `Tab` type. In files that import SwiftUI, write `AxoCore.Tab` for Axo's tab record.
 - AxoWeb tests load local HTML files in real `WKWebView`s with `.nonPersistent()` data stores. Never load network URLs in tests.
@@ -66,7 +68,7 @@ The app is split into local Swift packages in `Packages/`. Respect the dependenc
 | AxoInspector | All private Web Inspector API | AxoWeb |
 | AxoPersistence | GRDB database, migrations, FTS5 search index | GRDB |
 | AxoSync | `CKSyncEngine` mapping for Spaces, folders, pinned tabs | AxoPersistence |
-| AxoIntegration | App Intents, Focus filters, Handoff, Spotlight, passkeys, Screen Time, Translation | AxoCore |
+| AxoIntegration | Default browser, App Intents, Focus filters, Handoff, Spotlight, passkeys, Screen Time, Translation | AxoCore |
 
 ## Hard rules
 

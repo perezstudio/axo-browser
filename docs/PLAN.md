@@ -265,7 +265,7 @@ Each milestone should be usable as a daily driver before the next one starts.
 - [x] Pinned tabs with a home URL; unpinned tabs auto-archive after a set period (12 hours, like Arc; adjustable in Settings later). Closing an unpinned tab archives it, ⇧⌘T reopens it, and closing a pinned tab returns it to its home page.
 - [x] Sidebar folders, nested, in the Pinned section like Arc. Moving a tab into a folder pins it, and deleting a folder keeps its contents. Dragging tabs onto folders is still to come; the context menu moves them for now.
 - [x] Command bar (Cmd+T) over tabs, history, bookmarks, and actions, backed by FTS5. Pinned tabs serve as bookmarks, as in Arc; there's no separate bookmark store. History is per profile and records http(s) pages.
-- [ ] Set as default browser
+- [x] Set as default browser. Axo registers for http, https, and HTML, offers "Make Axo Your Default Browser" in the Axo menu and command bar, and opens links from other apps as tabs in the current window.
 
 **Milestone 3: Extensions and developer tools**
 

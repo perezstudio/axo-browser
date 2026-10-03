@@ -6,6 +6,7 @@
 //
 
 import AxoCore
+import AxoIntegration
 import AxoUI
 import AxoWeb
 import Foundation
@@ -26,6 +27,12 @@ struct AxoApp: App {
         // window shares the same model.
         WindowGroup {
             BrowserWindow(model: model)
+                // Links from other apps (as the default browser) and opened HTML files become
+                // tabs in this window instead of opening another window.
+                .onOpenURL { url in
+                    Task { await model.openExternalURL(url) }
+                }
+                .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
         }
         .defaultSize(width: 1200, height: 800)
         .commands { BrowserCommands() }
@@ -54,6 +61,8 @@ enum AppEnvironment {
         let model = makeModel()
         if !isUITesting {
             model.onSpaceChange = { UserDefaults.standard.set($0.uuidString, forKey: lastSpaceKey) }
+            // Not in UI tests, so nothing in a test run can offer to change the default browser.
+            model.defaultBrowser = SystemDefaultBrowser()
         }
         return model
     }
@@ -77,5 +86,18 @@ enum AppEnvironment {
                 alertMessage: "Axo couldn't open its database, so tabs you open won't be saved. (\(error.localizedDescription))"
             )
         }
+    }
+}
+
+/// Connects AxoIntegration's default-browser check to the model. A wrapper rather than a
+/// conformance, since the app owns neither the type nor the protocol.
+@MainActor
+struct SystemDefaultBrowser: DefaultBrowserSetting {
+    let browser = DefaultBrowser()
+
+    var isDefault: Bool { browser.isDefault }
+
+    func makeDefault() async throws {
+        try await browser.makeDefault()
     }
 }
