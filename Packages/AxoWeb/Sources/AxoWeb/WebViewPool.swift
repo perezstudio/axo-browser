@@ -55,6 +55,23 @@ public final class WebViewPool {
     /// File selection is cancelled when this is `nil`.
     public var onFileSelection: ((FileSelectionRequest) async -> [URL]?)?
 
+    /// The user scripts for per-site custom CSS and JavaScript. See ``setSiteCustomizations(_:)``.
+    private var siteCustomizationScripts: [WKUserScript] = []
+
+    /// Applies per-site custom CSS and JavaScript to every web view: new ones, and live ones from
+    /// their next page load (reload a page to see changes right away). Turned-off customizations
+    /// are skipped.
+    ///
+    /// Axo adds no other user scripts, so updating live web views replaces all of theirs.
+    public func setSiteCustomizations(_ customizations: [SiteCustomization]) {
+        siteCustomizationScripts = SiteCustomizationScripts.userScripts(for: customizations)
+        for liveTab in live.values {
+            let controller = liveTab.webView.configuration.userContentController
+            controller.removeAllUserScripts()
+            siteCustomizationScripts.forEach(controller.addUserScript)
+        }
+    }
+
     /// Functions that adjust each new web view's configuration, in the order added.
     private var configurators: [(WKWebViewConfiguration, Profile.ID) -> Void] = []
 
@@ -139,6 +156,7 @@ public final class WebViewPool {
         // Element fullscreen (the Fullscreen API) is off by default; videos and pages expect it.
         configuration.preferences.isElementFullscreenEnabled = true
         UserAgent.apply(to: configuration)
+        siteCustomizationScripts.forEach(configuration.userContentController.addUserScript)
         configurators.forEach { $0(configuration, profileID) }
         let webView = PooledWebView(frame: .zero, configuration: configuration)
         webView.allowsBackForwardNavigationGestures = true

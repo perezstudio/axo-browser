@@ -75,6 +75,8 @@ public struct SettingsView: View {
         TabView {
             LinkRoutingSettings(model: model)
                 .tabItem { Label("Link Routing", systemImage: "arrow.triangle.branch") }
+            SiteCustomizationSettings(model: model)
+                .tabItem { Label("Site Customizations", systemImage: "paintbrush") }
         }
         .frame(width: 560, height: 420)
     }

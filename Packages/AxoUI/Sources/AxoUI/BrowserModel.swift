@@ -136,6 +136,11 @@ public final class BrowserModel {
     }
     /// Links that arrived before the model finished starting.
     @ObservationIgnored private var pendingExternalURLs: [(url: URL, sourceApp: String?)] = []
+    /// Per-site custom CSS and JavaScript, kept current and applied to every web view.
+    public internal(set) var siteCustomizations: [SiteCustomization] = []
+    /// The customization being edited in the window's editor sheet, if it's open.
+    public var customizationDraft: SiteCustomization?
+    @ObservationIgnored private var siteCustomizationsObservationTask: Task<Void, Never>?
     /// Link routing rules, kept current for Settings.
     public internal(set) var linkRoutes: [LinkRoute] = []
     @ObservationIgnored private var linkRoutesObservationTask: Task<Void, Never>?
@@ -223,6 +228,7 @@ public final class BrowserModel {
         observationTask?.cancel()
         spacesObservationTask?.cancel()
         linkRoutesObservationTask?.cancel()
+        siteCustomizationsObservationTask?.cancel()
         foldersObservationTask?.cancel()
         splitsObservationTask?.cancel()
         archiveTask?.cancel()
@@ -254,6 +260,7 @@ public final class BrowserModel {
             }
             observeSpaces()
             observeLinkRoutes()
+            observeSiteCustomizations()
             pool.startHibernationTimer()
             startArchiving()
         } catch {
@@ -383,6 +390,22 @@ public final class BrowserModel {
             while !Task.isCancelled {
                 await self?.archiveInactiveTabs()
                 try? await Task.sleep(for: interval)
+            }
+        }
+    }
+
+    private func observeSiteCustomizations() {
+        siteCustomizationsObservationTask?.cancel()
+        let observation = store.siteCustomizations.observe()
+        siteCustomizationsObservationTask = Task { [weak self] in
+            do {
+                for try await customizations in observation {
+                    guard let self else { return }
+                    self.siteCustomizations = customizations
+                    self.pool.setSiteCustomizations(customizations)
+                }
+            } catch {
+                self?.logger.error("Site customization observation failed: \(error)")
             }
         }
     }

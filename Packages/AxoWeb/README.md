@@ -35,6 +35,12 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
   - **Quarantine:** finished files get the quarantine attribute (agent "Axo", type web download, and the source URL for http(s)), so Gatekeeper checks them.
   - `onEnd` reports each download that stops (finished, failed, or cancelled), which the app announces to VoiceOver users.
   - `cancel(_:)` stops a download and removes the partial file. `remove(_:)` and `clearInactive()` edit the list but keep files.
+- **Site customizations:** `setSiteCustomizations(_:)` turns per-site CSS and JavaScript into WebKit user scripts for every web view. New web views get them right away; live ones get them on their next page load.
+  - **One script per site:** each customization gets its own scripts. Each script checks the page's host and steps aside for a more specific customization, so a syntax error in one site's code can't affect another.
+  - **CSS:** added at document start, in every frame, in an isolated world (`AxoSiteCustomizations`).
+  - **JavaScript:** runs at document end, in the page's world, top frame only.
+  - **Page policies:** user scripts aren't subject to a page's Content Security Policy.
+  - **Replacing scripts:** Axo adds no other user scripts, so updating live web views replaces all of theirs.
 - **Fullscreen:** the pool turns on `WKPreferences.isElementFullscreenEnabled`, which is off by default, so videos and pages can use the Fullscreen API. Picture in picture needs a private preference, so the app turns it on through AxoInspector's `PictureInPicture`.
 - **`UserAgent`** sets the user agent for every tab (and, through AxoExtensions, every extension page): WebKit's default plus `Version/<macOS major.minor> Safari/605.1.15`, like Safari. A plain `WKWebView` leaves that out, which breaks sites and extensions that detect the browser from it (Bitwarden's background script fails to start without it).
 - **`WebTabState`** (`@Observable`) mirrors a live tab's URL, title, loading state, progress, and back and forward availability, plus `restoringSnapshot`. Get it with `pool.state(for:)`.

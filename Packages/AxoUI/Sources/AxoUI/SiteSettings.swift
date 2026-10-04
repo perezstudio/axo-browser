@@ -132,6 +132,12 @@ struct SiteSettingsView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 Spacer()
+                Button("Customize…") {
+                    model.isShowingSiteSettings = false
+                    model.customizeCurrentSite()
+                }
+                .help("Add your own CSS and JavaScript to this site")
+                .accessibilityIdentifier("customizeSiteButton")
                 Button("Reset") { Task { await model.resetSiteSettings() } }
                     .disabled(model.sitePermissions.isEmpty)
                     .accessibilityIdentifier("resetSiteSettings")

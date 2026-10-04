@@ -34,6 +34,9 @@ struct SidebarView: View {
         .sheet(item: Binding(get: { model.namingRequest }, set: { model.namingRequest = $0 })) { request in
             folderNameSheet(for: request)
         }
+        .sheet(item: Binding(get: { model.customizationDraft }, set: { model.customizationDraft = $0 })) { draft in
+            CustomizeSiteSheet(model: model, customization: draft)
+        }
         .sheet(item: Binding(get: { model.spaceToRename }, set: { model.spaceToRename = $0 })) { space in
             NameSheet(title: "Rename Space", initialName: space.name, confirmTitle: "Rename") { name in
                 Task { await model.renameSpace(space.id, to: name) }

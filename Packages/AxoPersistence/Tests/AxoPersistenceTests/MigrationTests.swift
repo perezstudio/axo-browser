@@ -240,4 +240,15 @@ struct MigrationTests {
             #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM linkRoute") == 0)
         }
     }
+
+    @Test func v11SiteCustomizationsAreOnePerDomainAndOnByDefault() throws {
+        let database = try AppDatabase.makeInMemory()
+        try database.writer.write { db in
+            let insert = "INSERT INTO siteCustomization (id, domain, updatedAt) VALUES (?, 'example.com', CURRENT_TIMESTAMP)"
+            try db.execute(sql: insert, arguments: [UUID()])
+            #expect(throws: DatabaseError.self) { try db.execute(sql: insert, arguments: [UUID()]) }
+            let row = try #require(try Row.fetchOne(db, sql: "SELECT css, js, isEnabled FROM siteCustomization"))
+            #expect(row["css"] as String == "" && row["js"] as String == "" && row["isEnabled"] as Bool == true)
+        }
+    }
 }

@@ -22,6 +22,9 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
   - **Rule types:** an `app` rule matches the sending app's bundle ID. A `domain` rule matches the domain and its subdomains.
   - **Matching:** `LinkRoute.route(for:from:in:)` picks the rule. Domain rules win, and the most specific domain wins among them. `normalizedDomain(from:)` turns typed text (`https://www.GitHub.com/x`) into a domain (`github.com`).
   - **Store:** `routes()`, `observeRoutes()`, `add` (throws `LinkRouteError.duplicate`), `setSpace`, and `delete`. Deleting a Space deletes its rules.
+- **Site customizations (`SiteCustomization`, `tabStore.siteCustomizations`):** custom CSS and JavaScript for a domain and its subdomains, in every profile.
+  - **Matching:** `best(forHost:in:)` picks the enabled one with the most specific domain.
+  - **Store:** `all`, `observe`, `save` (normalizes the domain; throws `invalidDomain` or `duplicate`), `setEnabled`, and `delete`.
 - **`SitePermissionStore`** (`tabStore.sitePermissions`) saves the person's answers to sites asking for the camera, microphone, or location (`SitePermission`, with `Kind` and `Decision`), per profile and origin (such as `https://meet.example.com`). `decision`, `decisions(origin:profileID:)`, `setDecision(_:for:origin:profileID:)` (`nil` forgets, so the site asks again), and `reset(origin:profileID:)`.
 - **`SortKey`:** fractional sort keys. `SortKey.between(lower, upper)` returns a key strictly between two neighbors (`nil` means the start or end of the list), so a move updates a single row. Order by `(sortKey, id)` so duplicate keys after a sync merge stay stable.
 - **`TabStore`:** the async API over the sidebar model.

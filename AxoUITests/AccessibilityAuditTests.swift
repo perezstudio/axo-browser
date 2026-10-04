@@ -40,8 +40,13 @@ final class AccessibilityAuditTests: XCTestCase {
             // Read everything from one snapshot: querying an element that disappeared mid-audit
             // (a loading bar, say) would fail the test, while a snapshot just throws.
             guard let snapshot = try? element.snapshot() else { return true }
-            // The Touch Bar and the text input menu ("emoji & symbols") belong to macOS.
+            // The Touch Bar, the text input menu ("emoji & symbols"), and the Siri and Dictation
+            // orb belong to macOS.
             if snapshot.elementType == .touchBar || snapshot.label == "emoji & symbols" { return true }
+            func containsSiriOrb(_ s: XCUIElementSnapshot) -> Bool {
+                s.identifier == "siri" || s.children.contains(where: containsSiriOrb)
+            }
+            if containsSiriOrb(snapshot) { return true }
             // Containers SwiftUI creates and gives no way to label. VoiceOver moves straight into
             // unlabeled groups, so they don't get in the way.
             if snapshot.identifier.isEmpty, snapshot.label.isEmpty {
@@ -64,7 +69,12 @@ final class AccessibilityAuditTests: XCTestCase {
                     }
                 }
             }
-            print("AUDIT [\(screen)] \(issue.compactDescription): \(snapshot.elementType.rawValue) id=\(snapshot.identifier) label=\(snapshot.label) frame=\(snapshot.frame)")
+            func describe(_ s: XCUIElementSnapshot, depth: Int) -> String {
+                let own = "\(s.elementType.rawValue):\(s.identifier):\(s.label):\((s.value as? String) ?? "")"
+                guard depth < 3, !s.children.isEmpty else { return own }
+                return own + "[" + s.children.map { describe($0, depth: depth + 1) }.joined(separator: ", ") + "]"
+            }
+            print("AUDIT [\(screen)] \(issue.compactDescription): \(describe(snapshot, depth: 0)) frame=\(snapshot.frame)")
             return false
         }
     }
@@ -151,8 +161,19 @@ final class AccessibilityAuditTests: XCTestCase {
         XCTAssertTrue(app.buttons["miniOpenInAxoButton"].waitForExistence(timeout: 10))
         try audit(app, "mini window")
 
-        app.typeKey(",", modifierFlags: .command)
+        app.menuBars.menuItems["Settings…"].click()
+        // Settings reopens on the last pane used, so choose one.
+        let linkRouting = app.toolbars.buttons["Link Routing"]
+        XCTAssertTrue(linkRouting.waitForExistence(timeout: 5))
+        linkRouting.click()
         XCTAssertTrue(app.buttons["addDomainRouteButton"].waitForExistence(timeout: 5))
         try audit(app, "settings")
+
+        app.toolbars.buttons["Site Customizations"].click()
+        XCTAssertTrue(app.buttons["addSiteCustomizationButton"].waitForExistence(timeout: 5))
+        try audit(app, "site customizations")
+        app.buttons["addSiteCustomizationButton"].click()
+        XCTAssertTrue(app.textFields["customizationDomainField"].waitForExistence(timeout: 5))
+        try audit(app, "customization editor")
     }
 }
