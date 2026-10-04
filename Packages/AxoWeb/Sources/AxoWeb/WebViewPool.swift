@@ -65,6 +65,11 @@ public final class WebViewPool {
         configurators.append(configure)
     }
 
+    /// Asked when the person clicks a link in a tab's page (main frame only, not downloads).
+    /// Return `true` to handle the click yourself, for example to open the link in Peek; the page
+    /// then doesn't navigate. Links that target a new window go to ``onOpenInNewTab`` instead.
+    public var onLinkClick: ((LinkClick) -> Bool)?
+
     /// Called when a tab's web view takes keyboard focus, for example when it's clicked. With
     /// several web views on screen (a split view), this says which one the person is using.
     public var onWebViewFocus: ((Tab.ID) -> Void)?
@@ -141,6 +146,10 @@ public final class WebViewPool {
 
         let liveTab = LiveTab(tabID: tab.id, profileID: profileID, webView: webView, lastUsed: now())
         liveTab.delegate.onOpenInNewTab = { [weak self] url in self?.onOpenInNewTab?(url, tab.id) }
+        liveTab.delegate.onLinkActivated = { [weak self, weak webView] url, modifiers in
+            guard let self, let handler = self.onLinkClick else { return false }
+            return handler(LinkClick(tabID: tab.id, url: url, sourceURL: webView?.url, modifiers: modifiers))
+        }
         liveTab.delegate.onDownload = { [weak self] download in self?.downloads.track(download, sourceTabID: tab.id) }
         liveTab.delegate.onPermissionRequest = { [weak self] kind, origin in
             await self?.decidePermission(kind, origin: origin, tabID: tab.id, profileID: profileID) ?? .deny
@@ -473,5 +482,35 @@ final class PooledWebView: WKWebView {
         let became = super.becomeFirstResponder()
         if became { onFocus?() }
         return became
+    }
+}
+
+/// A link the person clicked in a tab's page.
+public struct LinkClick: Sendable {
+    /// The tab whose page has the link.
+    public var tabID: Tab.ID
+    /// Where the link goes.
+    public var url: URL
+    /// The page the link is on, if it has finished loading one.
+    public var sourceURL: URL?
+    /// Keys held while clicking, such as Command.
+    public var modifiers: NSEvent.ModifierFlags
+
+    /// Creates a click.
+    public init(tabID: Tab.ID, url: URL, sourceURL: URL?, modifiers: NSEvent.ModifierFlags = []) {
+        self.tabID = tabID
+        self.url = url
+        self.sourceURL = sourceURL
+        self.modifiers = modifiers
+    }
+
+    /// Whether the link leads to another site than the page it's on: a different host (ignoring
+    /// a leading "www."), or any web link from a page without a host.
+    public var leavesSite: Bool {
+        func site(_ url: URL?) -> String? {
+            guard let host = url?.host()?.lowercased(), !host.isEmpty else { return nil }
+            return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+        }
+        return site(url) != site(sourceURL)
     }
 }

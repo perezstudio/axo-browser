@@ -25,7 +25,7 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
   - Spaces: `spaces()`, `observeSpaces()`, `createSpace(name:profileID:)` (added after the others), `renameSpace(id:to:)`, and `deleteSpace(id:)`. Deleting a Space deletes its tabs, keeps its profile, and refuses to delete the last Space.
   - Profiles: `profiles()`, `createProfile(name:)`, `renameProfile(id:to:)`, and `deleteProfile(id:)`, which refuses while a Space uses the profile.
   - `bootstrap()` returns the first Space, creating a default profile and Space on first launch.
-  - `openTab(url:title:in:at:)`, `moveTab(id:to:)`, `updateTab(id:url:title:)`, and `closeTab(id:)` write off the main actor.
+  - `openTab(id:url:title:in:at:)` (pass an `id` to keep a page that was already showing, such as a promoted Peek), `moveTab(id:to:)`, `updateTab(id:url:title:)`, and `closeTab(id:)` write off the main actor.
   - `TabPosition` is `.start`, `.end`, or `.after(tabID)`, within the tab's section. Pinned tabs come first, and each section has its own order. Anchoring across sections throws `anchorInDifferentSection`.
   - Folders (`Folder` and `PinnedItem`): `folders(in:)`, `observeFolders(in:)`, `createFolder(named:in:parent:)`, `renameFolder`, `setFolderExpanded`, `deleteFolder` (its contents move up a level, in order), and `movePinnedItem(_:into:after:)`, which moves a pinned tab or folder to any level (pinning unpinned tabs) and refuses folder cycles. Folders and pinned tabs at one level share an order.
   - Pinning: `setPinned(_:tabID:)` (pinning records the current page as `homeURL`), `setHomeURL(_:tabID:)`, and `resetPinnedTab(id:)`.

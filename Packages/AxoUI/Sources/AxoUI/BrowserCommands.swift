@@ -149,6 +149,23 @@ public struct BrowserCommands: Commands {
             .keyboardShortcut(.downArrow, modifiers: [.command, .option, .shift])
             .disabled(model?.canMoveSelectedItem(by: 1) != true)
             Divider()
+            Button("Open Peek as Tab") {
+                guard let model else { return }
+                Task { await model.promotePeek() }
+            }
+            .keyboardShortcut(.return, modifiers: .command)
+            .disabled(model?.peek == nil)
+            Button("Open Peek in Split View") {
+                guard let model else { return }
+                Task { await model.promotePeek(inSplit: true) }
+            }
+            .disabled(model?.peek == nil)
+            // A menu shortcut, so Esc works even while the page in Peek has keyboard focus.
+            // Off while the command bar is open, so Esc still closes the bar first.
+            Button("Close Peek") { model?.closePeek() }
+                .keyboardShortcut(.escape, modifiers: [])
+                .disabled(model?.peek == nil || model?.isCommandBarVisible == true)
+            Divider()
             Button("Add Split View") { model?.beginSplitWithNewTab() }
                 .keyboardShortcut("=", modifiers: [.control, .shift])
                 .disabled(model?.canAddToSplit != true)

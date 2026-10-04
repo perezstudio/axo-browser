@@ -6,6 +6,11 @@ final class AccessibilityAuditTests: XCTestCase {
         continueAfterFailure = true
     }
 
+    override func tearDown() async throws {
+        await MainActor.run { XCUIApplication().terminate() }
+        try await super.tearDown()
+    }
+
     @MainActor
     private func launchApp() -> XCUIApplication {
         let app = XCUIApplication()
@@ -30,19 +35,22 @@ final class AccessibilityAuditTests: XCTestCase {
                 // Reported with no element while a text field's system field editor has focus.
                 return true
             }
+            // Read everything from one snapshot: querying an element that disappeared mid-audit
+            // (a loading bar, say) would fail the test, while a snapshot just throws.
+            guard let snapshot = try? element.snapshot() else { return true }
             // The Touch Bar and the text input menu ("emoji & symbols") belong to macOS.
-            if element.elementType == .touchBar || element.label == "emoji & symbols" { return true }
+            if snapshot.elementType == .touchBar || snapshot.label == "emoji & symbols" { return true }
             // Containers SwiftUI creates and gives no way to label. VoiceOver moves straight into
             // unlabeled groups, so they don't get in the way.
-            if element.identifier.isEmpty, element.label.isEmpty {
+            if snapshot.identifier.isEmpty, snapshot.label.isEmpty {
                 // NSPopover itself, and hosting groups that fill a window, sheet, or popover.
-                if element.elementType == .popover { return true }
-                if element.elementType == .group,
-                   containerFrames.contains(where: { $0.insetBy(dx: -1, dy: -1).contains(element.frame) && $0.width - element.frame.width < 2 }) {
+                if snapshot.elementType == .popover { return true }
+                if snapshot.elementType == .group,
+                   containerFrames.contains(where: { $0.insetBy(dx: -1, dy: -1).contains(snapshot.frame) && $0.width - snapshot.frame.width < 2 }) {
                     return true
                 }
-                if element.elementType == .group {
-                    let children = element.children(matching: .any).allElementsBoundByIndex
+                if snapshot.elementType == .group {
+                    let children = snapshot.children
                     // HSplitView's and VSplitView's host for one pane of a split view.
                     if children.count == 1, children[0].identifier == "splitPane" { return true }
                     // The split view's sidebar column, which holds the address field.
@@ -54,7 +62,7 @@ final class AccessibilityAuditTests: XCTestCase {
                     }
                 }
             }
-            print("AUDIT [\(screen)] \(issue.compactDescription): \(element.elementType.rawValue) id=\(element.identifier) label=\(element.label) frame=\(element.frame)")
+            print("AUDIT [\(screen)] \(issue.compactDescription): \(snapshot.elementType.rawValue) id=\(snapshot.identifier) label=\(snapshot.label) frame=\(snapshot.frame)")
             return false
         }
     }
@@ -120,6 +128,20 @@ final class AccessibilityAuditTests: XCTestCase {
         app.typeKey("l", modifierFlags: [.command, .option])
         sleep(1)
         try audit(app, "downloads")
+        app.typeKey(.escape, modifierFlags: [])
+
+        // Peek, from a link in a pinned tab (a closed loopback port, so nothing loads). Peek's
+        // header shows the host while loading, and the audit doesn't count a bare IP address
+        // as readable, so the link uses "localhost".
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,<title>Hub</title><a href='http://localhost:9/far'>Far away</a>\n")
+        XCTAssertTrue(sidebar.staticTexts["Hub"].waitForExistence(timeout: 10))
+        app.typeKey("p", modifierFlags: [.command, .control])
+        let link = app.webViews.firstMatch.links["Far away"]
+        XCTAssertTrue(link.waitForExistence(timeout: 10))
+        link.click()
+        XCTAssertTrue(app.descendants(matching: .any)["peek"].waitForExistence(timeout: 5))
+        try audit(app, "peek")
         app.typeKey(.escape, modifierFlags: [])
     }
 }

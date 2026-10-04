@@ -19,6 +19,11 @@ public struct BrowserWindow: View {
             content
                 // In the page column: an overlay on the split view itself couldn't take focus.
                 .overlay {
+                    if let peek = model.peek, let space = model.space {
+                        PeekOverlay(model: model, peek: peek, profileID: space.profileID)
+                    }
+                }
+                .overlay {
                     if model.isCommandBarVisible {
                         CommandBarView(model: model)
                     }
