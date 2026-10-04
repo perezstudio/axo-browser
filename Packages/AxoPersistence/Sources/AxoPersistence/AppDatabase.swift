@@ -199,6 +199,22 @@ public final class AppDatabase: Sendable {
             }
             try db.create(index: "tab_on_splitID", on: "tab", columns: ["splitID"])
         }
+        // Link routing rules: links Axo receives from other apps open in a chosen Space when
+        // they come from a given app (`kind` "app", `value` its bundle ID) or go to a given
+        // domain and its subdomains (`kind` "domain", `value` the lowercased domain).
+        // `displayName` is the app's name, for showing app rules.
+        migrator.registerMigration("v10-link-routes") { db in
+            try db.create(table: "linkRoute") { t in
+                t.primaryKey("id", .blob)
+                t.column("kind", .text).notNull()
+                t.column("value", .text).notNull()
+                t.column("displayName", .text).notNull().defaults(to: "")
+                t.column("spaceID", .blob).notNull()
+                    .references("space", onDelete: .cascade)
+                t.column("createdAt", .datetime).notNull()
+                t.uniqueKey(["kind", "value"])
+            }
+        }
 
         return migrator
     }

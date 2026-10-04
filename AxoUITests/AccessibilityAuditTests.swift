@@ -16,6 +16,8 @@ final class AccessibilityAuditTests: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["AXO_UI_TESTING"] = "1"
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
+        // For the mini window screen (a closed loopback port, so nothing loads).
+        app.launchEnvironment["AXO_UI_TESTING_EXTERNAL_URL"] = "http://localhost:9/from-another-app"
         app.launch()
         AxoUITests.bringToFront(app)
         return app
@@ -145,8 +147,12 @@ final class AccessibilityAuditTests: XCTestCase {
         app.typeKey(.escape, modifierFlags: [])
 
         // A mini window, for a link from another app (a closed loopback port, as above).
-        app.open(URL(string: "http://localhost:9/from-another-app")!)
+        AxoUITests.sendExternalLink(in: app)
         XCTAssertTrue(app.buttons["miniOpenInAxoButton"].waitForExistence(timeout: 10))
         try audit(app, "mini window")
+
+        app.typeKey(",", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["addDomainRouteButton"].waitForExistence(timeout: 5))
+        try audit(app, "settings")
     }
 }

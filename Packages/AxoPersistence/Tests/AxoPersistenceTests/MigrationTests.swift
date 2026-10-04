@@ -226,4 +226,18 @@ struct MigrationTests {
             #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM tabSplit") == 0)
         }
     }
+
+    @Test func v10LinkRoutesAreUniqueAndGoWithTheirSpace() throws {
+        let database = try AppDatabase.makeInMemory()
+        let (profileID, spaceID) = (UUID(), UUID())
+        try database.writer.write { db in
+            try db.execute(sql: "INSERT INTO profile (id, name) VALUES (?, 'Default')", arguments: [profileID])
+            try db.execute(sql: "INSERT INTO space (id, profileID, name, sortKey) VALUES (?, ?, 'Work', 'a0')", arguments: [spaceID, profileID])
+            let insert = "INSERT INTO linkRoute (id, kind, value, spaceID, createdAt) VALUES (?, 'domain', 'github.com', ?, CURRENT_TIMESTAMP)"
+            try db.execute(sql: insert, arguments: [UUID(), spaceID])
+            #expect(throws: DatabaseError.self) { try db.execute(sql: insert, arguments: [UUID(), spaceID]) }
+            try db.execute(sql: "DELETE FROM space")
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM linkRoute") == 0)
+        }
+    }
 }

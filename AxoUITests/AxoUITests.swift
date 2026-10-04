@@ -48,6 +48,26 @@ final class AxoUITests: XCTestCase {
         }
     }
 
+    /// Launches Axo set up to receive `url` as a link from another app (sent by `sourceApp`).
+    @MainActor
+    private func launchApp(externalLink url: String, sourceApp: String? = nil) -> XCUIApplication {
+        let app = Self.makeApp()
+        app.launchEnvironment["AXO_UI_TESTING_EXTERNAL_URL"] = url
+        if let sourceApp { app.launchEnvironment["AXO_UI_TESTING_SOURCE_APP"] = sourceApp }
+        app.launch()
+        Self.bringToFront(app)
+        return app
+    }
+
+    /// Sends the link set up in `launchApp(externalLink:)`, as another app would. Never use
+    /// `XCUIApplication.open` for this: it launches a new Axo outside testing mode, which would
+    /// use the person's real database.
+    @MainActor
+    static func sendExternalLink(in app: XCUIApplication) {
+        app.menuBars.menuBarItems["Testing"].click()
+        app.menuBars.menuItems["Open Link from Another App"].click()
+    }
+
     /// A page with only a title, so tests never touch the network.
     private func page(_ title: String) -> String {
         "data:text/html,<title>\(title)</title>"
@@ -301,15 +321,54 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(app.textFields["commandField"].waitForNonExistence(timeout: 5))
     }
 
+    /// Settings › Link Routing adds a domain rule, and a link to that domain from another app
+    /// opens as a tab in the rule's Space instead of a mini window.
+    @MainActor
+    func testLinkRoutingRulesSendLinksToASpace() throws {
+        // Port 9 on the loopback address refuses connections, so nothing leaves the machine.
+        let app = launchApp(externalLink: "http://127.0.0.1:9/routed")
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        app.buttons["newSpaceButton"].click()
+        let spaceName = app.textFields["spaceNameField"]
+        XCTAssertTrue(spaceName.waitForExistence(timeout: 5))
+        spaceName.typeText("Work")
+        app.buttons["createSpaceButton"].click()
+        XCTAssertTrue(sidebar.staticTexts["Work"].waitForExistence(timeout: 5))
+        app.typeKey("1", modifierFlags: .control)
+
+        app.typeKey(",", modifierFlags: .command)
+        let addDomain = app.buttons["addDomainRouteButton"]
+        XCTAssertTrue(addDomain.waitForExistence(timeout: 5))
+        addDomain.click()
+        let domain = app.textFields["routeDomainField"]
+        XCTAssertTrue(domain.waitForExistence(timeout: 5))
+        domain.typeText("127.0.0.1")
+        app.popUpButtons["routeSpacePicker"].click()
+        app.menuItems["Work"].click()
+        app.buttons["addRouteConfirmButton"].click()
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "linkRoute").firstMatch.waitForExistence(timeout: 5))
+        // Close Settings, then the browser window too (⌘W with no tab open closes it): a routed
+        // link brings the window back.
+        app.windows.matching(NSPredicate(format: "title == 'Link Routing'")).firstMatch.buttons[XCUIIdentifierCloseWindow].click()
+        app.typeKey("w", modifierFlags: .command)
+        XCTAssertTrue(sidebar.waitForNonExistence(timeout: 5))
+
+        Self.sendExternalLink(in: app)
+        XCTAssertTrue(sidebar.staticTexts["127.0.0.1"].waitForExistence(timeout: 10), "The link opens as a tab, in a window")
+        XCTAssertTrue(sidebar.staticTexts["Work"].exists, "in the Work Space")
+        XCTAssertFalse(app.buttons["miniOpenInAxoButton"].exists, "not in a mini window")
+    }
+
     /// A link sent from another app opens in a mini window, and Open in Axo makes it a tab.
     @MainActor
     func testLinksFromOtherAppsOpenInAMiniWindow() throws {
-        let app = launchApp()
+        // Port 9 on the loopback address refuses connections, so nothing leaves the machine.
+        let app = launchApp(externalLink: "http://127.0.0.1:9/from-another-app")
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
 
-        // Port 9 on the loopback address refuses connections, so nothing leaves the machine.
-        app.open(URL(string: "http://127.0.0.1:9/from-another-app")!)
+        Self.sendExternalLink(in: app)
 
         let openInAxo = app.buttons["miniOpenInAxoButton"]
         XCTAssertTrue(openInAxo.waitForExistence(timeout: 10), "The link opens in a mini window")

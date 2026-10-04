@@ -53,11 +53,6 @@ final class MiniWindowController: NSObject, NSWindowDelegate {
         guard let controller = controllers[id] else { return }
         controller.isDismissing = true
         controller.window.close()
-        // Bring the browser window forward, where the page now is.
-        let mainWindow = NSApp.windows.first { window in
-            window.isVisible && window.canBecomeMain && !controllers.values.contains { $0.window === window }
-        }
-        mainWindow?.makeKeyAndOrderFront(nil)
     }
 
     func windowWillClose(_ notification: Notification) {
