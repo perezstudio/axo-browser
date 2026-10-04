@@ -43,7 +43,7 @@ final class AccessibilityAuditTests: XCTestCase {
             // The Touch Bar, the text input menu ("emoji & symbols"), and the Siri and Dictation
             // orb belong to macOS.
             if snapshot.elementType == .touchBar || snapshot.label == "emoji & symbols" { return true }
-            func containsSiriOrb(_ s: XCUIElementSnapshot) -> Bool {
+            @MainActor func containsSiriOrb(_ s: XCUIElementSnapshot) -> Bool {
                 s.identifier == "siri" || s.children.contains(where: containsSiriOrb)
             }
             if containsSiriOrb(snapshot) { return true }
@@ -69,7 +69,7 @@ final class AccessibilityAuditTests: XCTestCase {
                     }
                 }
             }
-            func describe(_ s: XCUIElementSnapshot, depth: Int) -> String {
+            @MainActor func describe(_ s: XCUIElementSnapshot, depth: Int) -> String {
                 let own = "\(s.elementType.rawValue):\(s.identifier):\(s.label):\((s.value as? String) ?? "")"
                 guard depth < 3, !s.children.isEmpty else { return own }
                 return own + "[" + s.children.map { describe($0, depth: depth + 1) }.joined(separator: ", ") + "]"
@@ -101,7 +101,10 @@ final class AccessibilityAuditTests: XCTestCase {
         let pond = app.descendants(matching: .any)
             .matching(NSPredicate(format: "identifier == 'commandResult' AND label CONTAINS 'Pond'")).firstMatch
         XCTAssertTrue(pond.waitForExistence(timeout: 5))
-        pond.click()
+        // The first row searches for "pond"; the Pond tab is next. (Return is steadier than
+        // clicking a row that may still be moving into place.)
+        app.typeKey(.downArrow, modifierFlags: [])
+        app.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(app.descendants(matching: .any)["splitView"].waitForExistence(timeout: 10))
         try audit(app, "split view")
 

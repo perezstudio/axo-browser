@@ -300,7 +300,7 @@ Each milestone should be usable as a daily driver before the next one starts.
 
 **Milestone 6: Ecosystem integration**
 
-- [ ] Focus filters that switch Spaces automatically
+- [x] Focus filters that switch Spaces automatically: add Axo's "Show a Space" filter to a Focus. Axo shows that Space while the Focus is on and returns to the earlier Space when it ends.
 - [ ] App Intents and Shortcuts actions
 - [ ] Handoff and Spotlight indexing of pinned tabs and history
 - [ ] Screen Time web usage support

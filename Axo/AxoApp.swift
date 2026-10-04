@@ -12,6 +12,7 @@ import AxoInspector
 import AxoIntegration
 import AxoUI
 import AxoWeb
+import AppIntents
 import Foundation
 import SwiftUI
 import WebKit
@@ -165,6 +166,10 @@ enum AppEnvironment {
             let manager = startExtensions(store: store, pool: pool)
             let model = BrowserModel(store: store, pool: pool, initialSpaceID: lastSpaceID)
             extensionBridge = ExtensionBridge(model: model, manager: manager)
+            // Focus filters and other App Intents reach the store and window through this.
+            IntentBridge.current = IntentBridge(store: store) { [weak model] spaceID in
+                await model?.applyFocusSpace(spaceID)
+            }
             model.browserImporter = BrowserImportBridge(importer: BrowserImporter(store: store, applicationSupport: otherBrowsersFolder))
             return model
         } catch {
@@ -189,6 +194,11 @@ struct SystemDefaultBrowser: DefaultBrowserSetting {
     func makeDefault() async throws {
         try await browser.makeDefault()
     }
+}
+
+/// Registers the App Intents defined in AxoIntegration (Focus filters) with the app.
+struct AxoAppIntents: AppIntentsPackage {
+    static var includedPackages: [any AppIntentsPackage.Type] { [AxoIntegrationIntents.self] }
 }
 
 /// Lets the model bring the browser window back: routed links and Open in Axo add tabs, which
