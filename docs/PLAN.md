@@ -266,7 +266,7 @@ Each milestone should be usable as a daily driver before the next one starts.
 - [x] Pinned tabs with a home URL; unpinned tabs auto-archive after a set period (12 hours, like Arc; adjustable in Settings later). Closing an unpinned tab archives it, ⇧⌘T reopens it, and closing a pinned tab returns it to its home page.
 - [x] Sidebar folders, nested, in the Pinned section like Arc. Moving a tab into a folder pins it, and deleting a folder keeps its contents. Dragging tabs onto folders is still to come; the context menu moves them for now.
 - [x] Command bar (Cmd+T) over tabs, history, bookmarks, and actions, backed by FTS5. Pinned tabs serve as bookmarks, as in Arc; there's no separate bookmark store. History is per profile and records http(s) pages.
-- [x] Set as default browser. Axo registers for http, https, and HTML, offers "Make Axo Your Default Browser" in the Axo menu and command bar, and opens links from other apps as tabs in the current window.
+- [x] Set as default browser. Axo registers for http, https, and HTML, offers "Make Axo Your Default Browser" in the Axo menu and command bar, and opens links from other apps (in mini windows since Milestone 5).
 
 **Milestone 3: Extensions and developer tools**
 
@@ -294,7 +294,7 @@ Each milestone should be usable as a daily driver before the next one starts.
 
 - [x] Split view: 2–4 tabs side by side or stacked, saved as one sidebar row (`tabSplit` table), pinnable and movable into folders like a tab. Importing Arc's split views as splits (they're flattened today) is still to do.
 - [x] Peek overlay for links opened from pinned tabs: links to other sites and new-window links open in a card over the pinned tab, and can be opened as a tab or in a split view. Peek isn't saved.
-- [ ] Mini window for links opened from other apps
+- [x] Mini window for links opened from other apps: each link opens in its own small window and can move into the current Space as a tab (Open in Axo, ⌘O). It isn't saved until then.
 - [ ] Link routing rules that send links to specific Spaces
 - [ ] Per-site custom CSS and JS
 

@@ -143,5 +143,10 @@ final class AccessibilityAuditTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["peek"].waitForExistence(timeout: 5))
         try audit(app, "peek")
         app.typeKey(.escape, modifierFlags: [])
+
+        // A mini window, for a link from another app (a closed loopback port, as above).
+        app.open(URL(string: "http://localhost:9/from-another-app")!)
+        XCTAssertTrue(app.buttons["miniOpenInAxoButton"].waitForExistence(timeout: 10))
+        try audit(app, "mini window")
     }
 }

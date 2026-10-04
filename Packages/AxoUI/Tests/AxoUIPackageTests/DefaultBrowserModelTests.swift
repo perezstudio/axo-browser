@@ -69,25 +69,28 @@ struct DefaultBrowserModelTests {
         #expect(model.alertMessage == nil)
     }
 
-    @Test func linksFromOtherAppsOpenInANewTab() async throws {
+    @Test func linksFromOtherAppsOpenInAMiniWindow() async throws {
+        var presented: [MiniWindow] = []
+        model.presentMiniWindow = { presented.append($0) }
         await model.start()
         await model.openTab(url: try page("existing"))
-        model.showCommandBar()
 
         await model.openExternalURL(try page("from-mail"))
 
-        #expect(model.tabs.map { $0.url.lastPathComponent } == ["existing.html", "from-mail.html"])
-        #expect(model.selectedTab?.url.lastPathComponent == "from-mail.html")
-        #expect(!model.isCommandBarVisible)
+        #expect(model.tabs.map { $0.url.lastPathComponent } == ["existing.html"], "Not a tab until it's opened in Axo")
+        #expect(presented.map { $0.tab.url.lastPathComponent } == ["from-mail.html"])
+        #expect(model.miniWindows == presented)
     }
 
     @Test func linksThatArriveDuringLaunchOpenOnceReady() async throws {
+        var presented: [MiniWindow] = []
+        model.presentMiniWindow = { presented.append($0) }
         await model.openExternalURL(try page("early"))
-        #expect(model.tabs.isEmpty)
+        #expect(presented.isEmpty)
 
         await model.start()
 
-        #expect(model.tabs.map { $0.url.lastPathComponent } == ["early.html"])
-        #expect(model.selectedTab?.url.lastPathComponent == "early.html")
+        #expect(presented.map { $0.tab.url.lastPathComponent } == ["early.html"])
+        #expect(presented.first?.profileID == model.space?.profileID)
     }
 }
