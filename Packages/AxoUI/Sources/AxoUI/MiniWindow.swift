@@ -54,6 +54,7 @@ extension BrowserModel {
             try await refreshSidebar()
             onTabEvent?(.opened(tab.id))
             select(tab.id)
+            showBrowserWindow?()
         } catch {
             pool.discard(id)
             report(error, "Axo couldn't open the page as a tab.")

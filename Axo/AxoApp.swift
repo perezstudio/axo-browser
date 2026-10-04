@@ -28,17 +28,35 @@ struct AxoApp: App {
     var body: some Scene {
         // One browser window for Milestone 1: the commands replace File > New Window, and every
         // window shares the same model.
-        WindowGroup {
+        WindowGroup(id: AppEnvironment.browserWindowID) {
             BrowserWindow(model: model)
+                .modifier(BrowserWindowOpener(model: model))
                 // Links from other apps (as the default browser) and opened HTML files open in
                 // mini windows, not another browser window (handlesExternalEvents below).
                 .onOpenURL { url in
-                    Task { await model.openExternalURL(url) }
+                    Task { await model.openExternalURL(url, sourceApp: LinkSource.currentSourceBundleID()) }
                 }
                 .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
         }
         .defaultSize(width: 1200, height: 800)
+
+        Settings {
+            SettingsView(model: model)
+        }
         .commands {
+            if AppEnvironment.isUITesting {
+                // UI tests can't send links from another app: XCUIApplication.open hands them to a
+                // new Axo process launched outside testing mode, which would use the real
+                // database. This sends one through the same path instead.
+                CommandMenu("Testing") {
+                    Button("Open Link from Another App") {
+                        let environment = ProcessInfo.processInfo.environment
+                        guard let url = environment["AXO_UI_TESTING_EXTERNAL_URL"].flatMap(URL.init(string:)) else { return }
+                        Task { await model.openExternalURL(url, sourceApp: environment["AXO_UI_TESTING_SOURCE_APP"]) }
+                    }
+                    .keyboardShortcut("u", modifiers: [.command, .control, .option])
+                }
+            }
             // Show or hide the sidebar from the keyboard (View › Toggle Sidebar, ⌃⌘S).
             SidebarCommands()
             BrowserCommands()
@@ -56,6 +74,10 @@ enum AppEnvironment {
     static var databaseURL: URL {
         URL.applicationSupportDirectory.appending(path: "Axo/Axo.sqlite")
     }
+
+
+    /// The browser window group's ID, for reopening it.
+    static let browserWindowID = "browser"
 
     /// Runs web extensions for every profile. Kept for the app's lifetime.
     static var extensionManager: ExtensionManager?
@@ -166,6 +188,53 @@ struct SystemDefaultBrowser: DefaultBrowserSetting {
 
     func makeDefault() async throws {
         try await browser.makeDefault()
+    }
+}
+
+/// Lets the model bring the browser window back: routed links and Open in Axo add tabs, which
+/// need a window to show in, even if the person closed it.
+private struct BrowserWindowOpener: ViewModifier {
+    let model: BrowserModel
+    @Environment(\.openWindow) private var openWindow
+
+    func body(content: Content) -> some View {
+        content.onAppear {
+            model.showBrowserWindow = {
+                let browserWindows = NSApp.windows.filter {
+                    $0.identifier?.rawValue.hasPrefix(AppEnvironment.browserWindowID) == true
+                }
+                if let window = browserWindows.first(where: \.isVisible) {
+                    window.makeKeyAndOrderFront(nil)
+                } else {
+                    openWindow(id: AppEnvironment.browserWindowID)
+                }
+                NSApp.activate()
+            }
+        }
+    }
+}
+
+/// Finds the app that sent a link, so link routing rules can match by app. SwiftUI's
+/// `onOpenURL` runs while AppKit is still handling the Get URL Apple Event, so the event and its
+/// sender are available then. This was checked by hand with a small app sending a link to a
+/// running Axo; when a link launches Axo, the sender may be unknown, and only domain rules apply.
+enum LinkSource {
+    /// The bundle ID of the app that sent the Apple Event being handled now, if any.
+    static func currentSourceBundleID() -> String? {
+        NSAppleEventManager.shared().currentAppleEvent.flatMap(sourceBundleID(of:))
+    }
+
+    /// The bundle ID of the app that sent an Apple Event, if it's still running. macOS sets the
+    /// sender when the event is sent.
+    static func sourceBundleID(of event: NSAppleEventDescriptor) -> String? {
+        guard let pid = event.attributeDescriptor(forKeyword: AEKeyword(keySenderPIDAttr))?.int32Value else { return nil }
+        return bundleID(ofProcess: pid)
+    }
+
+    /// The bundle ID of a running app.
+    static func bundleID(ofProcess pid: pid_t) -> String? {
+        guard pid > 0 else { return nil }
+        return NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
     }
 }
 

@@ -28,6 +28,9 @@ public final class BrowserModel {
     public internal(set) var miniWindows: [MiniWindow] = []
     /// Shows a mini window on screen. The default makes an AppKit window; tests record instead.
     @ObservationIgnored public var presentMiniWindow: ((MiniWindow) -> Void)?
+    /// Brings the browser window forward, reopening it if it was closed, so a tab added from
+    /// outside it (a routed link, Open in Axo) is on screen. Set by the app.
+    @ObservationIgnored public var showBrowserWindow: (() -> Void)?
     /// Closes a mini window's AppKit window after its page moved to a tab.
     @ObservationIgnored public var dismissMiniWindow: ((MiniWindow.ID) -> Void)?
     /// The tab the next command bar choice joins in a split view (Add Split View).
@@ -132,7 +135,10 @@ public final class BrowserModel {
         didSet { refreshDefaultBrowserStatus() }
     }
     /// Links that arrived before the model finished starting.
-    @ObservationIgnored private var pendingExternalURLs: [URL] = []
+    @ObservationIgnored private var pendingExternalURLs: [(url: URL, sourceApp: String?)] = []
+    /// Link routing rules, kept current for Settings.
+    public internal(set) var linkRoutes: [LinkRoute] = []
+    @ObservationIgnored private var linkRoutesObservationTask: Task<Void, Never>?
     /// The most recent page-change save; each new one waits for it, keeping saves in order.
     @ObservationIgnored private var pageChangeSave: Task<Void, Never>?
     /// Tabs whose current page was already counted as a visit since launch. A tab's first page
@@ -216,6 +222,7 @@ public final class BrowserModel {
     isolated deinit {
         observationTask?.cancel()
         spacesObservationTask?.cancel()
+        linkRoutesObservationTask?.cancel()
         foldersObservationTask?.cancel()
         splitsObservationTask?.cancel()
         archiveTask?.cancel()
@@ -240,11 +247,13 @@ public final class BrowserModel {
             spaces = try await store.spaces()
             let initial = spaces.first { $0.id == initialSpaceID } ?? first
             try await show(initial)
-            for url in pendingExternalURLs {
-                openMiniWindow(url)
-            }
+            let pending = pendingExternalURLs
             pendingExternalURLs = []
+            for link in pending {
+                await openExternalURL(link.url, sourceApp: link.sourceApp)
+            }
             observeSpaces()
+            observeLinkRoutes()
             pool.startHibernationTimer()
             startArchiving()
         } catch {
@@ -374,6 +383,20 @@ public final class BrowserModel {
             while !Task.isCancelled {
                 await self?.archiveInactiveTabs()
                 try? await Task.sleep(for: interval)
+            }
+        }
+    }
+
+    private func observeLinkRoutes() {
+        linkRoutesObservationTask?.cancel()
+        let observation = store.linkRoutes.observeRoutes()
+        linkRoutesObservationTask = Task { [weak self] in
+            do {
+                for try await routes in observation {
+                    self?.linkRoutes = routes
+                }
+            } catch {
+                self?.logger.error("Link route observation failed: \(error)")
             }
         }
     }
@@ -798,11 +821,24 @@ public final class BrowserModel {
 
     // MARK: Default browser and links from other apps
 
-    /// Opens a link another app sent (as the default browser) in a mini window, which can move
-    /// into the current Space as a tab. Links that arrive during launch open once Axo is ready.
-    public func openExternalURL(_ url: URL) async {
+    /// Opens a link another app sent (as the default browser). A link routing rule for its
+    /// domain or for the app that sent it opens it as a tab in the rule's Space, switching to that
+    /// Space. Otherwise it opens in a mini window, which can move into the current Space as a tab.
+    /// Links that arrive during launch open once Axo is ready.
+    ///
+    /// - Parameter sourceApp: The bundle ID of the app that sent the link, if known.
+    public func openExternalURL(_ url: URL, sourceApp: String? = nil) async {
         guard space != nil else {
-            pendingExternalURLs.append(url)
+            pendingExternalURLs.append((url, sourceApp))
+            return
+        }
+        let routes = (try? await store.linkRoutes.routes()) ?? linkRoutes
+        if let route = LinkRoute.route(for: url, from: sourceApp, in: routes),
+           spaces.contains(where: { $0.id == route.spaceID }) {
+            hideCommandBar()
+            await selectSpace(route.spaceID)
+            await openTab(url: url)
+            showBrowserWindow?()
             return
         }
         openMiniWindow(url)

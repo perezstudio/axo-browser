@@ -295,7 +295,7 @@ Each milestone should be usable as a daily driver before the next one starts.
 - [x] Split view: 2–4 tabs side by side or stacked, saved as one sidebar row (`tabSplit` table), pinnable and movable into folders like a tab. Importing Arc's split views as splits (they're flattened today) is still to do.
 - [x] Peek overlay for links opened from pinned tabs: links to other sites and new-window links open in a card over the pinned tab, and can be opened as a tab or in a split view. Peek isn't saved.
 - [x] Mini window for links opened from other apps: each link opens in its own small window and can move into the current Space as a tab (Open in Axo, ⌘O). It isn't saved until then.
-- [ ] Link routing rules that send links to specific Spaces
+- [x] Link routing rules that send links to specific Spaces: by domain (with subdomains) or by the app that sent the link, managed in the new Settings window (⌘,). Matching links open as tabs in the rule's Space; others still open in mini windows. The sending app is only known when Axo is already running.
 - [ ] Per-site custom CSS and JS
 
 **Milestone 6: Ecosystem integration**
