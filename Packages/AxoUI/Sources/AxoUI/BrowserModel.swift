@@ -136,6 +136,8 @@ public final class BrowserModel {
     }
     /// Links that arrived before the model finished starting.
     @ObservationIgnored private var pendingExternalURLs: [(url: URL, sourceApp: String?)] = []
+    /// The Space shown before a Focus filter switched Spaces, to return to when the Focus ends.
+    @ObservationIgnored var spaceBeforeFocus: Space.ID?
     /// Per-site custom CSS and JavaScript, kept current and applied to every web view.
     public internal(set) var siteCustomizations: [SiteCustomization] = []
     /// The customization being edited in the window's editor sheet, if it's open.
