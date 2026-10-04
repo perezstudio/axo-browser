@@ -301,7 +301,7 @@ Each milestone should be usable as a daily driver before the next one starts.
 **Milestone 6: Ecosystem integration**
 
 - [x] Focus filters that switch Spaces automatically: add Axo's "Show a Space" filter to a Focus. Axo shows that Space while the Focus is on and returns to the earlier Space when it ends.
-- [ ] App Intents and Shortcuts actions
+- [x] App Intents and Shortcuts actions: Open in Axo, Show Space (for "morning tabs" kept in a Space), Find Tabs, Show Tab, Get Current Tab, and Save Tab to Space. Siri and Spotlight phrases come through an `AppShortcutsProvider`.
 - [ ] Handoff and Spotlight indexing of pinned tabs and history
 - [ ] Screen Time web usage support
 - [ ] On-device page translation and tab summaries

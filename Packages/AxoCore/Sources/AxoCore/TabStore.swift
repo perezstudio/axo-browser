@@ -216,6 +216,20 @@ public final class TabStore: Sendable {
         }
     }
 
+    /// Tabs in the sidebar of any Space whose title or address contains `text` (ignoring case),
+    /// most recently used first.
+    public func searchTabs(matching text: String, limit: Int = 20) async throws -> [Tab] {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return try await database.writer.read { db in
+            var request = Tab.filter(Tab.Columns.archivedAt == nil)
+            if !trimmed.isEmpty {
+                let pattern = "%\(trimmed)%"
+                request = request.filter(sql: "title LIKE ? OR url LIKE ?", arguments: [pattern, pattern])
+            }
+            return try request.order(Tab.Columns.lastActiveAt.desc).limit(limit).fetchAll(db)
+        }
+    }
+
     /// Creates an unpinned tab for `url` in a Space.
     ///
     /// - Parameters:
