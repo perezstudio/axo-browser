@@ -44,7 +44,7 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
 - **Fullscreen:** the pool turns on `WKPreferences.isElementFullscreenEnabled`, which is off by default, so videos and pages can use the Fullscreen API. Picture in picture needs a private preference, so the app turns it on through AxoInspector's `PictureInPicture`.
 - **`UserAgent`** sets the user agent for every tab (and, through AxoExtensions, every extension page): WebKit's default plus `Version/<macOS major.minor> Safari/605.1.15`, like Safari. A plain `WKWebView` leaves that out, which breaks sites and extensions that detect the browser from it (Bitwarden's background script fails to start without it).
 - **`WebTabState`** (`@Observable`) mirrors a live tab's URL, title, loading state, progress, and back and forward availability, plus `restoringSnapshot`. Get it with `pool.state(for:)`.
-- **`WebViewHost`** is the SwiftUI view that mounts a tab's pooled web view and reports its visibility to the pool.
+- **`WebViewHost`** is the SwiftUI view that mounts a tab's pooled web view and reports its visibility to the pool. `WebViewContainer` sizes the web view with its autoresizing mask, not Auto Layout, because the docked Web Inspector shrinks the web view's frame to make room. Constraints would stretch the page back over it.
 
 AxoWeb doesn't touch the database. The app layer connects pool callbacks to `TabStore`.
 

@@ -68,6 +68,27 @@ final class AxoUITests: XCTestCase {
         app.menuBars.menuItems["Open Link from Another App"].click()
     }
 
+    /// The fraction of sampled pixels in `region` (screen points) of a window screenshot that
+    /// differ clearly from the region's most common color: 0 for a blank area.
+    static func fractionOfDistinctPixels(in image: NSImage, region: CGRect, window: CGRect) throws -> Double {
+        let bitmap = try XCTUnwrap(image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)))
+        let scale = Double(bitmap.pixelsWide) / window.width
+        // Screen points are top-down here, as are bitmap rows.
+        let left = Int((region.minX - window.minX) * scale), top = Int((region.minY - window.minY) * scale)
+        let width = Int(region.width * scale), height = Int(region.height * scale)
+        var samples: [Double] = []
+        for x in stride(from: max(left, 0), to: min(left + width, bitmap.pixelsWide), by: 6) {
+            for y in stride(from: max(top, 0), to: min(top + height, bitmap.pixelsHigh), by: 6) {
+                if let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) {
+                    samples.append((color.redComponent + color.greenComponent + color.blueComponent) / 3)
+                }
+            }
+        }
+        guard !samples.isEmpty else { return 0 }
+        let common = Dictionary(grouping: samples) { ($0 * 20).rounded() }.max { $0.value.count < $1.value.count }!.key / 20
+        return Double(samples.filter { abs($0 - common) > 0.08 }.count) / Double(samples.count)
+    }
+
     /// A page with only a title, so tests never touch the network.
     private func page(_ title: String) -> String {
         "data:text/html,<title>\(title)</title>"
@@ -767,6 +788,38 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(inspectorTab.waitForExistence(timeout: 15))
         let window = app.windows.firstMatch.frame
         XCTAssertTrue(window.contains(inspectorTab.frame), "Docked inside the browser window")
+
+        // The inspector must actually be drawn, not just present in the accessibility tree: its
+        // area of the window has to show its interface (toolbars, tabs, the DOM tree) rather
+        // than one flat color. (The page's content once drew over it in white.)
+        let page = app.webViews.matching(NSPredicate(format: "label == 'Inspect'")).firstMatch
+        let inspector = app.webViews.allElementsBoundByIndex.first { $0.frame != page.frame && $0.frame.height > 100 }
+        let inspectorFrame = try XCTUnwrap(inspector?.frame, "The inspector has its own web view")
+        XCTAssertFalse(page.frame.intersects(inspectorFrame.insetBy(dx: 1, dy: 1)), "The page makes room for the inspector")
+        sleep(1)
+        let screenshot = app.windows.firstMatch.screenshot()
+        let attachment = XCTAttachment(screenshot: screenshot)
+        attachment.name = "Docked Web Inspector"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        let drawn = try Self.fractionOfDistinctPixels(in: screenshot.image, region: inspectorFrame, window: window)
+        XCTAssertGreaterThan(drawn, 0.02, "The inspector's area shows its interface (\(drawn))")
+
+        // And it works: the console runs code in the page and shows the result.
+        let consoleTab = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == 'Console' OR title == 'Console'")).firstMatch
+        XCTAssertTrue(consoleTab.waitForExistence(timeout: 5))
+        consoleTab.click()
+        sleep(1)
+        app.typeText("document.title + ' from the console'\n")
+        let output = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS 'Inspect from the console' OR value CONTAINS 'Inspect from the console'"))
+            .firstMatch
+        XCTAssertTrue(output.waitForExistence(timeout: 10), "The console printed the page's title")
+        let consoleShot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        consoleShot.name = "Web Inspector Console"
+        consoleShot.lifetime = .keepAlways
+        add(consoleShot)
     }
 
     /// macOS window tabbing is off, so the View menu has no "Show Tab Bar".

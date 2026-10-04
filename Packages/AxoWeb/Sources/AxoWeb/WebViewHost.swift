@@ -74,17 +74,18 @@ public final class WebViewContainer: NSView {
     public private(set) var mountedWebView: WKWebView?
 
     /// Mounts `webView`, filling the container, and unmounts any other web view.
+    ///
+    /// The web view resizes with the container through its autoresizing mask, not Auto Layout.
+    /// When the Web Inspector docks, WebKit shrinks the web view's frame and puts the inspector
+    /// beside it in this container; constraints would fight that, leaving the page's content at
+    /// full size, drawn over the inspector.
     func mount(_ webView: WKWebView) {
         guard mountedWebView !== webView else { return }
         unmount()
-        webView.translatesAutoresizingMaskIntoConstraints = false
+        webView.translatesAutoresizingMaskIntoConstraints = true
+        webView.frame = bounds
+        webView.autoresizingMask = [.width, .height]
         addSubview(webView)
-        NSLayoutConstraint.activate([
-            webView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            webView.topAnchor.constraint(equalTo: topAnchor),
-            webView.bottomAnchor.constraint(equalTo: bottomAnchor),
-        ])
         mountedWebView = webView
     }
 
