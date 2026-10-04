@@ -136,6 +136,9 @@ public final class BrowserModel {
     }
     /// Links that arrived before the model finished starting.
     @ObservationIgnored private var pendingExternalURLs: [(url: URL, sourceApp: String?)] = []
+    /// Whether the window offers its page to the person's other devices through Handoff. Off in
+    /// UI testing, so test pages never reach real devices.
+    public var isHandoffEnabled = true
     /// The Space shown before a Focus filter switched Spaces, to return to when the Focus ends.
     @ObservationIgnored var spaceBeforeFocus: Space.ID?
     /// Per-site custom CSS and JavaScript, kept current and applied to every web view.

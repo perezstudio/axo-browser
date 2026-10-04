@@ -33,6 +33,7 @@ public struct BrowserWindow: View {
                 .toolbar(removing: .title)
         }
         .focusedSceneValue(\.browserModel, model)
+        .modifier(HandoffActivity(model: model))
         .pagePrompts(model: model)
         .task { await model.start() }
         .alert(

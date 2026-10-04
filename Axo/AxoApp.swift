@@ -13,6 +13,7 @@ import AxoIntegration
 import AxoUI
 import AxoWeb
 import AppIntents
+import CoreSpotlight
 import Foundation
 import SwiftUI
 import WebKit
@@ -38,6 +39,22 @@ struct AxoApp: App {
                     Task { await model.openExternalURL(url, sourceApp: LinkSource.currentSourceBundleID()) }
                 }
                 .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
+                // A page handed off from another device.
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                    guard let url = activity.webpageURL else { return }
+                    Task { await model.continueBrowsing(url) }
+                }
+                // A pinned tab or history page chosen in Spotlight.
+                .onContinueUserActivity(CSSearchableItemActionType) { activity in
+                    guard let identifier = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String,
+                          let target = SpotlightTarget(identifier: identifier) else { return }
+                    Task {
+                        switch target {
+                        case .tab(let id): _ = await model.showTabForIntent(id)
+                        case .page(let url): await model.continueBrowsing(url)
+                        }
+                    }
+                }
         }
         .defaultSize(width: 1200, height: 800)
 
@@ -76,6 +93,9 @@ enum AppEnvironment {
         URL.applicationSupportDirectory.appending(path: "Axo/Axo.sqlite")
     }
 
+
+    /// Keeps Spotlight showing pinned tabs and history. Kept for the app's lifetime.
+    static var spotlightIndexer: SpotlightIndexer?
 
     /// The browser window group's ID, for reopening it.
     static let browserWindowID = "browser"
@@ -149,6 +169,9 @@ enum AppEnvironment {
             model.defaultBrowser = SystemDefaultBrowser()
             // Not in UI tests either, so a test run never shows macOS's location prompt.
             model.locationAuthorization = SystemLocationAuthorization()
+        } else {
+            // UI tests never offer their pages to the person's other devices.
+            model.isHandoffEnabled = false
         }
         return model
     }
@@ -168,6 +191,12 @@ enum AppEnvironment {
             extensionBridge = ExtensionBridge(model: model, manager: manager)
             // Focus filters and other App Intents reach the store and window through this.
             IntentBridge.current = IntentBridge(store: store, window: BrowserIntentWindow(model: model))
+            // UI tests use an in-memory database, which must never reach the system's Spotlight index.
+            if !isUITesting {
+                let indexer = SpotlightIndexer(store: store)
+                indexer.start()
+                spotlightIndexer = indexer
+            }
             model.browserImporter = BrowserImportBridge(importer: BrowserImporter(store: store, applicationSupport: otherBrowsersFolder))
             return model
         } catch {
