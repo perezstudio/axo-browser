@@ -223,4 +223,19 @@ struct TabStoreTests {
         #expect(tab.id == id)
         #expect(try await store.tab(id: id) != nil)
     }
+
+    @Test func tabsAreFoundAcrossSpacesByTitleOrAddress() async throws {
+        let home = try await store.bootstrap()
+        let work = try await store.createSpace(name: "Work", profileID: home.profileID)
+        let mail = try await store.openTab(url: URL(string: "https://mail.example.com")!, title: "Inbox", in: home.id)
+        let docs = try await store.openTab(url: URL(string: "https://docs.example.com")!, title: "Design Doc", in: work.id)
+        let old = try await store.openTab(url: URL(string: "https://old.example.com/docs")!, title: "Old", in: work.id)
+        try await store.archiveTab(id: old.id)
+        try await store.markActive(id: mail.id, at: Date().addingTimeInterval(60))
+
+        #expect(try await store.searchTabs(matching: "DOC").map(\.id) == [docs.id], "Case-insensitive; archived tabs are left out")
+        #expect(try await store.searchTabs(matching: "mail.example").map(\.id) == [mail.id])
+        #expect(try await store.searchTabs(matching: "").map(\.id) == [mail.id, docs.id], "Most recently used first")
+        #expect(try await store.searchTabs(matching: "", limit: 1).count == 1)
+    }
 }

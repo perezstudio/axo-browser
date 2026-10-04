@@ -167,9 +167,7 @@ enum AppEnvironment {
             let model = BrowserModel(store: store, pool: pool, initialSpaceID: lastSpaceID)
             extensionBridge = ExtensionBridge(model: model, manager: manager)
             // Focus filters and other App Intents reach the store and window through this.
-            IntentBridge.current = IntentBridge(store: store) { [weak model] spaceID in
-                await model?.applyFocusSpace(spaceID)
-            }
+            IntentBridge.current = IntentBridge(store: store, window: BrowserIntentWindow(model: model))
             model.browserImporter = BrowserImportBridge(importer: BrowserImporter(store: store, applicationSupport: otherBrowsersFolder))
             return model
         } catch {
@@ -196,9 +194,78 @@ struct SystemDefaultBrowser: DefaultBrowserSetting {
     }
 }
 
-/// Registers the App Intents defined in AxoIntegration (Focus filters) with the app.
+/// Registers the App Intents defined in AxoIntegration (Focus filters, Shortcuts actions) with
+/// the app.
 struct AxoAppIntents: AppIntentsPackage {
     static var includedPackages: [any AppIntentsPackage.Type] { [AxoIntegrationIntents.self] }
+}
+
+/// Phrases for Siri and Spotlight. Every action is also in the Shortcuts app.
+struct AxoShortcuts: AppShortcutsProvider {
+    static var appShortcuts: [AppShortcut] {
+        AppShortcut(
+            intent: ShowSpaceIntent(),
+            phrases: [
+                "Show \(\.$space) in \(.applicationName)",
+                "Switch to \(\.$space) in \(.applicationName)",
+            ],
+            shortTitle: "Show Space",
+            systemImageName: "square.stack"
+        )
+        AppShortcut(
+            intent: FindTabsIntent(),
+            phrases: ["Find tabs in \(.applicationName)", "Search \(.applicationName) tabs"],
+            shortTitle: "Find Tabs",
+            systemImageName: "magnifyingglass"
+        )
+        AppShortcut(
+            intent: SaveTabToSpaceIntent(),
+            phrases: ["Save this tab to \(\.$space) in \(.applicationName)"],
+            shortTitle: "Save Tab to Space",
+            systemImageName: "pin"
+        )
+        AppShortcut(
+            intent: GetCurrentTabIntent(),
+            phrases: ["Get the current tab in \(.applicationName)"],
+            shortTitle: "Get Current Tab",
+            systemImageName: "macwindow"
+        )
+    }
+}
+
+/// Connects AxoIntegration's intents to the window model.
+@MainActor
+final class BrowserIntentWindow: IntentWindow {
+    private weak var model: BrowserModel?
+
+    init(model: BrowserModel) {
+        self.model = model
+    }
+
+    func applyFocusSpace(_ spaceID: Space.ID?) async {
+        await model?.applyFocusSpace(spaceID)
+    }
+
+    func showSpace(_ spaceID: Space.ID) async -> Bool {
+        await model?.showSpaceForIntent(spaceID) ?? false
+    }
+
+    func open(_ url: URL, in spaceID: Space.ID?) async {
+        await model?.openForIntent(url, in: spaceID)
+    }
+
+    func showTab(_ tabID: AxoCore.Tab.ID) async -> Bool {
+        await model?.showTabForIntent(tabID) ?? false
+    }
+
+    var currentTab: AxoCore.Tab? {
+        model?.selectedTab
+    }
+
+    func saveCurrentTab(to spaceID: Space.ID, pinned: Bool) async throws -> AxoCore.Tab {
+        guard let model else { throw IntentBridgeError.notReady }
+        return try await model.saveCurrentTab(to: spaceID, pinned: pinned)
+    }
 }
 
 /// Lets the model bring the browser window back: routed links and Open in Axo add tabs, which

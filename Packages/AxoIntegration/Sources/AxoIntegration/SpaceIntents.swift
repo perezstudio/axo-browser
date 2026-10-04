@@ -2,7 +2,25 @@ import AppIntents
 import AxoCore
 import Foundation
 
-/// What App Intents need from the running app: the Spaces, and a way to show one. The app sets
+/// What App Intents need from Axo's window. The app implements it over its window model.
+@MainActor
+public protocol IntentWindow: AnyObject, Sendable {
+    /// Shows a Space when a Focus starts, or the earlier Space when it ends (`nil`).
+    func applyFocusSpace(_ spaceID: Space.ID?) async
+    /// Switches the window to a Space and brings it forward. Returns whether the Space exists.
+    func showSpace(_ spaceID: Space.ID) async -> Bool
+    /// Opens a page in a new tab, in `spaceID` if given or else the current Space, and brings
+    /// the window forward.
+    func open(_ url: URL, in spaceID: Space.ID?) async
+    /// Shows a tab in its Space and brings the window forward. Returns whether the tab exists.
+    func showTab(_ tabID: Tab.ID) async -> Bool
+    /// The tab the window shows, if any.
+    var currentTab: Tab? { get }
+    /// Copies the current tab's page into a Space as a new tab, pinned or not. Returns it.
+    func saveCurrentTab(to spaceID: Space.ID, pinned: Bool) async throws -> Tab
+}
+
+/// What App Intents need from the running app: its store and its window. The app sets
 /// ``current`` at launch. (App Intents' own `@Dependency` only resolves inside a real intent
 /// run, which unit tests can't start.)
 public final class IntentBridge: Sendable {
@@ -16,22 +34,32 @@ public final class IntentBridge: Sendable {
     }
 
     let store: TabStore
-    /// Shows a Space when a Focus starts, or the earlier Space when it ends (`nil`).
-    let applyFocusSpace: @Sendable @MainActor (Space.ID?) async -> Void
+    let window: any IntentWindow
 
     /// Creates a bridge over the app's store and window.
-    public init(store: TabStore, applyFocusSpace: @escaping @Sendable @MainActor (Space.ID?) async -> Void) {
+    public init(store: TabStore, window: any IntentWindow) {
         self.store = store
-        self.applyFocusSpace = applyFocusSpace
+        self.window = window
     }
 }
 
 /// Axo couldn't reach its window or database.
 public enum IntentBridgeError: Error, CustomLocalizedStringResourceConvertible {
     case notReady
+    /// The Space doesn't exist anymore.
+    case spaceNotFound
+    /// The tab doesn't exist anymore.
+    case tabNotFound
+    /// Axo's window isn't showing a tab.
+    case noCurrentTab
 
     public var localizedStringResource: LocalizedStringResource {
-        "Axo isn't ready yet. Open Axo and try again."
+        switch self {
+        case .notReady: "Axo isn't ready yet. Open Axo and try again."
+        case .spaceNotFound: "That Space isn't in Axo anymore."
+        case .tabNotFound: "That tab isn't in Axo anymore."
+        case .noCurrentTab: "Axo isn't showing a tab."
+        }
     }
 }
 
@@ -97,7 +125,7 @@ public struct SpaceFocusFilter: SetFocusFilterIntent {
     }
 
     public func perform() async throws -> some IntentResult {
-        try await IntentBridge.require().applyFocusSpace(space?.id)
+        try await IntentBridge.require().window.applyFocusSpace(space?.id)
         return .result()
     }
 }
