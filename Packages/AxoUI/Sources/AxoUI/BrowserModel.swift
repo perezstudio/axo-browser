@@ -24,6 +24,12 @@ public final class BrowserModel {
     public internal(set) var splits: [TabSplit] = []
     /// The page open in Peek, a temporary card over the current tab, if any.
     public internal(set) var peek: Peek?
+    /// Pages open in mini windows (links from other apps), oldest first.
+    public internal(set) var miniWindows: [MiniWindow] = []
+    /// Shows a mini window on screen. The default makes an AppKit window; tests record instead.
+    @ObservationIgnored public var presentMiniWindow: ((MiniWindow) -> Void)?
+    /// Closes a mini window's AppKit window after its page moved to a tab.
+    @ObservationIgnored public var dismissMiniWindow: ((MiniWindow.ID) -> Void)?
     /// The tab the next command bar choice joins in a split view (Add Split View).
     public internal(set) var pendingSplitAnchor: AxoCore.Tab.ID?
     /// A name the sidebar should ask for, such as a new folder's.
@@ -186,10 +192,15 @@ public final class BrowserModel {
             await self?.chooseFiles(for: request)
         }
         pool.onWebViewFocus = { [weak self] tabID in self?.paneDidTakeFocus(tabID) }
+        presentMiniWindow = { [weak self] mini in
+            guard let self else { return }
+            MiniWindowController.show(mini, model: self)
+        }
+        dismissMiniWindow = { id in MiniWindowController.dismiss(id) }
         pool.onOpenInNewTab = { [weak self] url, sourceID in
             guard let self else { return }
-            if self.peek?.tab.id == sourceID {
-                // New-window links in Peek stay in Peek.
+            if self.peek?.tab.id == sourceID || self.miniWindows.contains(where: { $0.id == sourceID }) {
+                // New-window links in Peek or a mini window stay there.
                 self.pool.load(url, in: sourceID)
             } else if self.tabs.first(where: { $0.id == sourceID })?.isPinned == true {
                 self.openPeek(url, from: sourceID)
@@ -230,7 +241,7 @@ public final class BrowserModel {
             let initial = spaces.first { $0.id == initialSpaceID } ?? first
             try await show(initial)
             for url in pendingExternalURLs {
-                await openTab(url: url)
+                openMiniWindow(url)
             }
             pendingExternalURLs = []
             observeSpaces()
@@ -787,15 +798,14 @@ public final class BrowserModel {
 
     // MARK: Default browser and links from other apps
 
-    /// Opens a link another app sent (as the default browser) in a new tab in the current Space.
-    /// Links that arrive during launch open once the window is ready.
+    /// Opens a link another app sent (as the default browser) in a mini window, which can move
+    /// into the current Space as a tab. Links that arrive during launch open once Axo is ready.
     public func openExternalURL(_ url: URL) async {
         guard space != nil else {
             pendingExternalURLs.append(url)
             return
         }
-        hideCommandBar()
-        await openTab(url: url)
+        openMiniWindow(url)
     }
 
     /// Checks again whether Axo is the default browser.
@@ -1067,8 +1077,8 @@ public final class BrowserModel {
         pageChangeSave = Task {
             await previousSave?.value
             do {
-                if peek?.tab.id == tabID {
-                    // Peek isn't in the sidebar, but its pages are still history.
+                if isTemporaryPage(tabID) {
+                    // Peek and mini windows aren't in the sidebar, but their pages are history.
                     if let profileID = space?.profileID {
                         try await store.history.recordVisit(to: url, title: title, profileID: profileID, at: now())
                     }

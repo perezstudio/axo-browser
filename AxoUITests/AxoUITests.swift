@@ -301,9 +301,9 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(app.textFields["commandField"].waitForNonExistence(timeout: 5))
     }
 
-    /// A link sent from another app opens as a tab in the existing window, not a new window.
+    /// A link sent from another app opens in a mini window, and Open in Axo makes it a tab.
     @MainActor
-    func testLinksFromOtherAppsOpenAsTabs() throws {
+    func testLinksFromOtherAppsOpenInAMiniWindow() throws {
         let app = launchApp()
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
@@ -311,8 +311,14 @@ final class AxoUITests: XCTestCase {
         // Port 9 on the loopback address refuses connections, so nothing leaves the machine.
         app.open(URL(string: "http://127.0.0.1:9/from-another-app")!)
 
-        XCTAssertTrue(sidebar.staticTexts["127.0.0.1"].waitForExistence(timeout: 10))
-        XCTAssertEqual(app.windows.count, 1, "The link opens in the existing window")
+        let openInAxo = app.buttons["miniOpenInAxoButton"]
+        XCTAssertTrue(openInAxo.waitForExistence(timeout: 10), "The link opens in a mini window")
+        XCTAssertEqual(app.windows.count, 2)
+        XCTAssertFalse(sidebar.staticTexts["127.0.0.1"].exists, "It isn't a tab yet")
+
+        openInAxo.click()
+        XCTAssertTrue(sidebar.staticTexts["127.0.0.1"].waitForExistence(timeout: 10), "Open in Axo makes it a tab")
+        XCTAssertEqual(app.windows.count, 1, "The mini window closes")
     }
 
     /// In a pinned tab, a link to another site opens in Peek instead of leaving the pinned page.

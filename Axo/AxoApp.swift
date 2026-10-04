@@ -30,8 +30,8 @@ struct AxoApp: App {
         // window shares the same model.
         WindowGroup {
             BrowserWindow(model: model)
-                // Links from other apps (as the default browser) and opened HTML files become
-                // tabs in this window instead of opening another window.
+                // Links from other apps (as the default browser) and opened HTML files open in
+                // mini windows, not another browser window (handlesExternalEvents below).
                 .onOpenURL { url in
                     Task { await model.openExternalURL(url) }
                 }
