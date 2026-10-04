@@ -96,6 +96,8 @@ public struct BrowserCommands: Commands {
             Button(model?.isShowingDownloads == true ? "Hide Downloads" : "Show Downloads") { model?.isShowingDownloads.toggle() }
                 .keyboardShortcut("l", modifiers: [.command, .option])
                 .disabled(model == nil)
+            Button("Customize This Site…") { model?.customizeCurrentSite() }
+                .disabled(model?.selectedHost == nil)
             Button("Site Settings…") {
                 guard let model else { return }
                 Task { await model.showSiteSettings() }

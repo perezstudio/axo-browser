@@ -321,6 +321,39 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(app.textFields["commandField"].waitForNonExistence(timeout: 5))
     }
 
+    /// Settings › Site Customizations adds a site's CSS, turns it off, and deletes it.
+    @MainActor
+    func testSiteCustomizationsInSettings() throws {
+        let app = launchApp()
+        XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 5))
+        app.typeKey(",", modifierFlags: .command)
+        let pane = app.toolbars.buttons["Site Customizations"]
+        XCTAssertTrue(pane.waitForExistence(timeout: 5))
+        pane.click()
+
+        app.buttons["addSiteCustomizationButton"].click()
+        let domain = app.textFields["customizationDomainField"]
+        XCTAssertTrue(domain.waitForExistence(timeout: 5))
+        domain.click()
+        domain.typeText("www.Example.com")
+        let css = app.textViews["customizationCSSEditor"]
+        css.click()
+        css.typeText("p { color: red }")
+        app.buttons["saveCustomizationButton"].click()
+
+        let row = app.descendants(matching: .any).matching(identifier: "siteCustomization").firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        let toggle = row.checkBoxes.firstMatch
+        XCTAssertEqual(toggle.label, "example.com", "The domain is tidied")
+        XCTAssertEqual(toggle.value as? Int, 1)
+        toggle.click()
+        expectation(for: NSPredicate(format: "value == 0"), evaluatedWith: toggle)
+        waitForExpectations(timeout: 5)
+
+        row.buttons["Delete example.com"].click()
+        XCTAssertTrue(row.waitForNonExistence(timeout: 5))
+    }
+
     /// Settings › Link Routing adds a domain rule, and a link to that domain from another app
     /// opens as a tab in the rule's Space instead of a mini window.
     @MainActor
@@ -338,6 +371,10 @@ final class AxoUITests: XCTestCase {
         app.typeKey("1", modifierFlags: .control)
 
         app.typeKey(",", modifierFlags: .command)
+        // Settings reopens on the last pane used, so choose one.
+        let linkRouting = app.toolbars.buttons["Link Routing"]
+        XCTAssertTrue(linkRouting.waitForExistence(timeout: 5))
+        linkRouting.click()
         let addDomain = app.buttons["addDomainRouteButton"]
         XCTAssertTrue(addDomain.waitForExistence(timeout: 5))
         addDomain.click()

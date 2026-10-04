@@ -215,6 +215,18 @@ public final class AppDatabase: Sendable {
                 t.uniqueKey(["kind", "value"])
             }
         }
+        // Per-site custom CSS and JavaScript, for a domain and its subdomains, in every profile.
+        // `css` is added before the page renders; `js` runs in the page once it loads.
+        migrator.registerMigration("v11-site-customizations") { db in
+            try db.create(table: "siteCustomization") { t in
+                t.primaryKey("id", .blob)
+                t.column("domain", .text).notNull().unique()
+                t.column("css", .text).notNull().defaults(to: "")
+                t.column("js", .text).notNull().defaults(to: "")
+                t.column("isEnabled", .boolean).notNull().defaults(to: true)
+                t.column("updatedAt", .datetime).notNull()
+            }
+        }
 
         return migrator
     }
