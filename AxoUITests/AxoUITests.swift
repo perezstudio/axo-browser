@@ -247,6 +247,26 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Home tab"].waitForExistence(timeout: 5))
     }
 
+    /// The sidebar's footer: Settings on the left, a dot per Space (the current one selected) in
+    /// the middle, and New Space on the right.
+    @MainActor
+    func testSidebarFooter() throws {
+        let app = launchApp()
+        let footer = app.descendants(matching: .any)["spaceSwitcher"]
+        XCTAssertTrue(footer.waitForExistence(timeout: 5))
+        let settings = footer.buttons["settingsButton"], newSpace = footer.buttons["newSpaceButton"]
+        let dot = footer.buttons["spaceButton"]
+        XCTAssertTrue(settings.exists && newSpace.exists && dot.exists)
+        XCTAssertLessThan(settings.frame.midX, dot.frame.midX)
+        XCTAssertLessThan(dot.frame.midX, newSpace.frame.midX)
+        XCTAssertEqual(dot.label, "Home")
+        XCTAssertTrue(dot.isSelected)
+
+        settings.click()
+        let pane = app.toolbars.buttons["Link Routing"]
+        XCTAssertTrue(pane.waitForExistence(timeout: 5), "Settings opens")
+    }
+
     /// Pin a tab from its context menu, close and reopen an unpinned tab, and see that closing
     /// the pinned tab keeps it in the sidebar.
     @MainActor
