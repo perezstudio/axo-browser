@@ -1,4 +1,6 @@
+#if os(macOS)
 import AppKit
+#endif
 import AxoCore
 import Foundation
 import SwiftUI
@@ -61,6 +63,8 @@ extension BrowserModel {
         }
     }
 }
+// Mac only for now; iPhone and iPad have their own chrome.
+#if os(macOS)
 
 /// Axo's Settings window (⌘,).
 public struct SettingsView: View {
@@ -239,3 +243,4 @@ private struct AddDomainRouteSheet: View {
         }
     }
 }
+#endif

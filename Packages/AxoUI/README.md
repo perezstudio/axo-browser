@@ -6,6 +6,8 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
 
 **Depends on:** AxoCore, AxoWeb, GRDBQuery
 
+**Platforms:** macOS 27 and iOS 27. `BrowserModel` and its logic (tabs, Spaces, folders, splits, the command bar, translation, and so on) are shared. The Mac chrome (`BrowserWindow`, the sidebar, toolbar, commands, Settings, Downloads, the Extensions window, and mini windows) is inside `#if os(macOS)`; iPhone and iPad get their own chrome. Printing and the file chooser are Mac only, and Print Page isn't offered on iOS. The model tests run on both platforms (the Downloads row tests are Mac only).
+
 ## Public API
 
 - **`BrowserWindow(model:)`**: the window. The sidebar has the address field at the top (like Arc) and the Space's tabs below. Rows show the site's favicon, or a globe when there isn't one. Tabs can be dragged to reorder and closed from the context menu. The toolbar has back, forward, reload/stop, and New Tab, plus a Downloads button once there's a download. It opens a popover with progress, Cancel, Show in Finder, and Clear. A find bar opens above the page (it searches as you type, with next, previous, and Done), a loading bar runs along the top of the page, and a tab waking from hibernation shows its snapshot until the page reloads.

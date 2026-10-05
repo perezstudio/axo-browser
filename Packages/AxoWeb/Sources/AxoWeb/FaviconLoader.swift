@@ -1,6 +1,10 @@
-import AppKit
 import Foundation
 import WebKit
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 
 /// Finds, fetches, and normalizes a page's icon.
 ///
@@ -91,10 +95,11 @@ enum FaviconLoader {
         return data
     }
 
-    /// Redraws any image format AppKit can read (ICO, PNG, SVG, …) as a square PNG of
+    /// Redraws any image format the platform can read (ICO, PNG, SVG, …) as a square PNG of
     /// ``iconSize`` pixels, centered and scaled to fit. Returns `nil` if the data isn't an image.
     @MainActor
     static func normalize(_ data: Data) -> Data? {
+        #if os(macOS)
         guard let image = NSImage(data: data), image.size.width > 0, image.size.height > 0,
               let bitmap = NSBitmapImageRep(
                 bitmapDataPlanes: nil, pixelsWide: iconSize, pixelsHigh: iconSize,
@@ -116,5 +121,17 @@ enum FaviconLoader {
         image.draw(in: rect, from: .zero, operation: .copy, fraction: 1)
         NSGraphicsContext.restoreGraphicsState()
         return bitmap.representation(using: .png, properties: [:])
+        #else
+        guard let image = UIImage(data: data), image.size.width > 0, image.size.height > 0 else { return nil }
+        let side = CGFloat(iconSize)
+        let scale = min(side / image.size.width, side / image.size.height)
+        let drawSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: format)
+        return renderer.pngData { _ in
+            image.draw(in: CGRect(x: (side - drawSize.width) / 2, y: (side - drawSize.height) / 2, width: drawSize.width, height: drawSize.height))
+        }
+        #endif
     }
 }

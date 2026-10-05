@@ -1,7 +1,11 @@
+#if os(macOS)
 import AppKit
+#endif
 import AxoWeb
 import SwiftUI
 
+// Mac only for now; iPhone and iPad have their own chrome.
+#if os(macOS)
 /// The toolbar button that opens the downloads list. It appears once there's a download.
 struct DownloadsButton: View {
     @Bindable var model: BrowserModel
@@ -148,3 +152,4 @@ struct DownloadRow: View {
         }
     }
 }
+#endif

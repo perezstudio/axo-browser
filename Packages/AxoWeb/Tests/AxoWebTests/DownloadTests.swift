@@ -68,6 +68,7 @@ struct DownloadTests {
         #expect(pool.state(for: tab.id)?.url == start, "The tab stays on its page")
     }
 
+    #if os(macOS)
     @Test func finishedDownloadsAreQuarantined() async throws {
         _ = try await clickDownloadLink(named: "tool.sh", contents: "echo hi")
         try await waitUntil("download to finish") { pool.downloads.items.first?.state == .finished }
@@ -77,6 +78,7 @@ struct DownloadTests {
         #expect(properties[kLSQuarantineAgentNameKey as String] as? String == "Axo")
         #expect(properties[kLSQuarantineTypeKey as String] as? String == kLSQuarantineTypeWebDownload as String)
     }
+    #endif
 
     @Test func repeatedDownloadsGetUniqueNames() async throws {
         _ = try await clickDownloadLink(named: "notes.txt", contents: "v1")

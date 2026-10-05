@@ -309,7 +309,9 @@ Each milestone should be usable as a daily driver before the next one starts.
 **Milestone 7: Sync and iOS**
 
 - [ ] CloudKit sync of spaces, folders, and pinned tabs. Built in AxoSync (profiles, Spaces, folders, and pinned tabs; last change wins per record; an untouched Home Space merges into the synced ones on a device's first sync) with an iCloud pane in Settings, on by default. Waiting on the iCloud container `iCloud.com.perezstudio.Axo` and a signed Release build to check with real devices.
-- [ ] iPhone and iPad app sharing AxoCore, AxoPersistence, and AxoSync
+- [ ] iPhone and iPad app sharing AxoCore, AxoPersistence, and AxoSync. Decided in October 2026: AxoWeb and AxoUI's model are shared too, with the Mac chrome behind `#if os(macOS)` and separate iPhone and iPad chrome. The iOS app is its own target ("Axo iOS", bundle ID `com.perezstudio.Axo.iOS`) in the same project, shipped through the App Store, so it never uses private WebKit API.
+  - [x] Shared packages build and pass their tests on iOS (AxoPersistence, AxoCore, AxoSync, AxoWeb, and AxoUI's model).
+  - [ ] First iOS slice: Spaces, folders, and pinned tabs (synced once iCloud works), open tabs, an address and search bar, back and forward, and hibernation. iPad gets a sidebar like the Mac; iPhone a Space and tab list with a bottom address bar. No extensions, downloads, or developer tools yet.
 
 ## Performance budgets
 

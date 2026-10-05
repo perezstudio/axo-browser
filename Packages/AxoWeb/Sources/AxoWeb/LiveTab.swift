@@ -87,7 +87,7 @@ final class WebViewDelegate: NSObject, WKNavigationDelegate, WKUIDelegate {
     var onOpenInNewTab: ((URL) -> Void)?
     /// Asked when the person clicks a link in the page's main frame. Returning `true` takes the
     /// click (the page doesn't navigate).
-    var onLinkActivated: ((URL, NSEvent.ModifierFlags) -> Bool)?
+    var onLinkActivated: ((URL, LinkModifiers) -> Bool)?
     var onLoadFinished: (() -> Void)?
     var onLoadFailed: (() -> Void)?
     var onDownload: ((WKDownload) -> Void)?
@@ -164,7 +164,7 @@ final class WebViewDelegate: NSObject, WKNavigationDelegate, WKUIDelegate {
         if navigationAction.navigationType == .linkActivated,
            navigationAction.targetFrame?.isMainFrame == true,
            let url = navigationAction.request.url,
-           onLinkActivated?(url, navigationAction.modifierFlags) == true {
+           onLinkActivated?(url, LinkModifiers(navigationAction.modifierFlags)) == true {
             return .cancel
         }
         return .allow

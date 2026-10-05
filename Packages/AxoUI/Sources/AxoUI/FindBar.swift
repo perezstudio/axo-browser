@@ -48,7 +48,7 @@ struct FindBar: View {
         .background(.bar)
         .overlay(alignment: .bottom) { Divider() }
         // Esc closes the bar from the field or any of its buttons.
-        .onExitCommand { model.closeFindBar() }
+        .onExitCommandIfAvailable { model.closeFindBar() }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Find on Page")
         .onAppear { isFocused = true }

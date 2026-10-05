@@ -4,7 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "AxoWeb",
-    platforms: [.macOS("27.0")],
+    platforms: [.macOS("27.0"), .iOS("27.0")],
     products: [
         .library(name: "AxoWeb", targets: ["AxoWeb"]),
     ],

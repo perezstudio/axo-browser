@@ -1,15 +1,26 @@
-import AppKit
 import AxoCore
 import ScreenTime
 import SwiftUI
 import WebKit
+#if os(macOS)
+import AppKit
+
+/// The platform's view type.
+public typealias PlatformView = NSView
+#else
+import UIKit
+
+/// The platform's view type.
+public typealias PlatformView = UIView
+#endif
 
 /// Shows a tab's web view in SwiftUI.
 ///
 /// The host never creates or destroys web views: it asks ``WebViewPool`` for the tab's web view
 /// and mounts it. Switching tabs swaps which pooled web view is mounted, so pages keep their
 /// state. The host also tells the pool which tab is visible, so it never hibernates.
-public struct WebViewHost: NSViewRepresentable {
+@MainActor
+public struct WebViewHost {
     private let tab: AxoCore.Tab
     private let profileID: Profile.ID
     private let pool: WebViewPool
@@ -28,18 +39,6 @@ public struct WebViewHost: NSViewRepresentable {
 
     public func makeCoordinator() -> Coordinator {
         Coordinator(pool: pool)
-    }
-
-    public func makeNSView(context: Context) -> WebViewContainer {
-        WebViewContainer()
-    }
-
-    public func updateNSView(_ container: WebViewContainer, context: Context) {
-        context.coordinator.show(tab, profileID: profileID, in: container)
-    }
-
-    public static func dismantleNSView(_ container: WebViewContainer, coordinator: Coordinator) {
-        coordinator.hide(from: container)
     }
 
     /// Tracks which tab the host is showing so visibility is reported exactly once per tab.
@@ -70,9 +69,39 @@ public struct WebViewHost: NSViewRepresentable {
     }
 }
 
-/// The AppKit view that holds whichever pooled web view is mounted, with Screen Time's webpage
+#if os(macOS)
+extension WebViewHost: NSViewRepresentable {
+    public func makeNSView(context: Context) -> WebViewContainer {
+        WebViewContainer()
+    }
+
+    public func updateNSView(_ container: WebViewContainer, context: Context) {
+        context.coordinator.show(tab, profileID: profileID, in: container)
+    }
+
+    public static func dismantleNSView(_ container: WebViewContainer, coordinator: Coordinator) {
+        coordinator.hide(from: container)
+    }
+}
+#else
+extension WebViewHost: UIViewRepresentable {
+    public func makeUIView(context: Context) -> WebViewContainer {
+        WebViewContainer()
+    }
+
+    public func updateUIView(_ container: WebViewContainer, context: Context) {
+        context.coordinator.show(tab, profileID: profileID, in: container)
+    }
+
+    public static func dismantleUIView(_ container: WebViewContainer, coordinator: Coordinator) {
+        coordinator.hide(from: container)
+    }
+}
+#endif
+
+/// The view that holds whichever pooled web view is mounted, with Screen Time's webpage
 /// controller on top of it.
-public final class WebViewContainer: NSView {
+public final class WebViewContainer: PlatformView {
     /// The web view currently mounted, if any.
     public private(set) var mountedWebView: WKWebView?
 
@@ -92,9 +121,9 @@ public final class WebViewContainer: NSView {
         unmount()
         webView.translatesAutoresizingMaskIntoConstraints = true
         webView.frame = bounds
-        webView.autoresizingMask = [.width, .height]
+        webView.autoresizingMask = Self.fillingMask
         if let screenTimeView = screenTime?.view {
-            addSubview(webView, positioned: .below, relativeTo: screenTimeView)
+            insert(webView, below: screenTimeView)
         } else {
             addSubview(webView)
         }
@@ -119,11 +148,25 @@ public final class WebViewContainer: NSView {
         // Above the page (and a docked inspector), filling the container. It only draws and takes
         // clicks when it shows the block screen.
         controller.view.frame = bounds
-        controller.view.autoresizingMask = [.width, .height]
-        addSubview(controller.view, positioned: .above, relativeTo: nil)
+        controller.view.autoresizingMask = Self.fillingMask
+        addSubview(controller.view)
         screenTime = controller
         return controller
     }
+
+    #if os(macOS)
+    private static let fillingMask: NSView.AutoresizingMask = [.width, .height]
+
+    private func insert(_ view: NSView, below sibling: NSView) {
+        addSubview(view, positioned: .below, relativeTo: sibling)
+    }
+    #else
+    private static let fillingMask: UIView.AutoresizingMask = [.flexibleWidth, .flexibleHeight]
+
+    private func insert(_ view: UIView, below sibling: UIView) {
+        insertSubview(view, belowSubview: sibling)
+    }
+    #endif
 
     /// Removes the mounted web view without destroying it; the pool still owns it.
     func unmount() {

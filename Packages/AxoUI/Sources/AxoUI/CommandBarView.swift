@@ -33,7 +33,7 @@ struct CommandBarView: View {
                     .accessibilityHint("Search, enter an address, or run a command. Use the up and down arrow keys to choose a result.")
                     .accessibilityIdentifier("commandField")
                     .onSubmit { Task { await model.runCommand() } }
-                    .onExitCommand { model.hideCommandBar() }
+                    .onExitCommandIfAvailable { model.hideCommandBar() }
                     .onKeyPress(.downArrow) { model.moveCommandSelection(by: 1); return .handled }
                     .onKeyPress(.upArrow) { model.moveCommandSelection(by: -1); return .handled }
                 }
@@ -117,7 +117,7 @@ private struct CommandRow: View {
             Image(systemName: isSearch ? "magnifyingglass" : "globe")
         case .tab(let tab):
             if let favicon = model.favicon(for: tab) {
-                Image(nsImage: favicon).resizable()
+                Image(platformImage: favicon).resizable()
             } else {
                 Image(systemName: tab.isPinned ? "pin" : "macwindow")
             }

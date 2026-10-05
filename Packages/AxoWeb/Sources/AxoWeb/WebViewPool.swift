@@ -189,7 +189,7 @@ public final class WebViewPool {
         live[tab.id] = liveTab
 
         if let saved = hibernated.removeValue(forKey: tab.id), let interactionState = saved.interactionState {
-            liveTab.state.restoringSnapshot = saved.snapshot.flatMap(NSImage.init(data:))
+            liveTab.state.restoringSnapshot = saved.snapshot.flatMap(PlatformImage.init(data:))
             webView.interactionState = interactionState
         } else {
             Self.load(tab.url, in: webView)
@@ -293,6 +293,7 @@ public final class WebViewPool {
         )
     }
 
+    #if os(macOS)
     /// A print operation for the tab's page, titled with the page title, or `nil` if the tab
     /// isn't live. Run it modally for the tab's window to show the print sheet.
     public func printOperation(for tabID: Tab.ID) -> NSPrintOperation? {
@@ -310,6 +311,7 @@ public final class WebViewPool {
         operation.view?.frame = webView.bounds
         return operation
     }
+    #endif
 
     private static func load(_ url: URL, in webView: WKWebView) {
         if url.isFileURL {
@@ -516,10 +518,10 @@ public struct LinkClick: Sendable {
     /// The page the link is on, if it has finished loading one.
     public var sourceURL: URL?
     /// Keys held while clicking, such as Command.
-    public var modifiers: NSEvent.ModifierFlags
+    public var modifiers: LinkModifiers
 
     /// Creates a click.
-    public init(tabID: Tab.ID, url: URL, sourceURL: URL?, modifiers: NSEvent.ModifierFlags = []) {
+    public init(tabID: Tab.ID, url: URL, sourceURL: URL?, modifiers: LinkModifiers = []) {
         self.tabID = tabID
         self.url = url
         self.sourceURL = sourceURL

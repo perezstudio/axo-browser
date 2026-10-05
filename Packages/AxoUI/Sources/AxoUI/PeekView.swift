@@ -41,7 +41,7 @@ struct PeekOverlay: View {
             .accessibilityLabel("Peek")
             .accessibilityIdentifier("peek")
         }
-        .onExitCommand { model.closePeek() }
+        .onExitCommandIfAvailable { model.closePeek() }
     }
 
     private var header: some View {

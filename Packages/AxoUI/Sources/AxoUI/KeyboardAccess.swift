@@ -1,4 +1,6 @@
+#if os(macOS)
 import AppKit
+#endif
 import AxoCore
 import Foundation
 
@@ -159,7 +161,12 @@ extension BrowserModel {
         // Wait a turn, so SwiftUI has removed the overlay that had focus.
         Task { @MainActor in
             guard let webView = pool.liveWebView(for: selectedTabID), let window = webView.window else { return }
+            #if os(macOS)
             window.makeFirstResponder(webView)
+            #else
+            _ = window
+            webView.becomeFirstResponder()
+            #endif
         }
     }
 }

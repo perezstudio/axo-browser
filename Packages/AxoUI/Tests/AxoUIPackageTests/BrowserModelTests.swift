@@ -1,4 +1,3 @@
-import AppKit
 import AxoCore
 import AxoWeb
 import Foundation
@@ -199,14 +198,10 @@ struct BrowserModelTests {
 
     // MARK: Favicons
 
-    /// A 16 px PNG, standing in for a normalized favicon.
+    /// A 1 px PNG, standing in for a normalized favicon. (Encoded rather than drawn, so the
+    /// test runs on every platform.)
     private func iconData() throws -> Data {
-        let bitmap = try #require(NSBitmapImageRep(
-            bitmapDataPlanes: nil, pixelsWide: 16, pixelsHigh: 16, bitsPerSample: 8,
-            samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
-            bytesPerRow: 0, bitsPerPixel: 0
-        ))
-        return try #require(bitmap.representation(using: .png, properties: [:]))
+        try #require(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="))
     }
 
     @Test func reportedFaviconsShowForEveryTabOnThatHostAndAreSaved() async throws {

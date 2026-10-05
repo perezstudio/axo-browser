@@ -195,6 +195,7 @@ struct WebViewPoolTests {
         #expect(click.leavesSite == leaves)
     }
 
+    #if os(macOS)
     @Test func focusingAWebViewReportsItsTab() throws {
         let pool = WebViewPool.forTesting()
         let first = Tab.testTab(url: try pages.page("one")), second = Tab.testTab(url: try pages.page("two"))
@@ -212,6 +213,7 @@ struct WebViewPoolTests {
         window.makeFirstResponder(left)
         #expect(focused == [second.id, first.id])
     }
+    #endif
 
     @Test func pagesCanGoFullscreen() async throws {
         let pool = WebViewPool.forTesting()

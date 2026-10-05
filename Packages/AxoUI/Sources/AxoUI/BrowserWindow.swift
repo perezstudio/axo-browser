@@ -2,6 +2,8 @@ import AxoCore
 import AxoWeb
 import SwiftUI
 
+// Mac only for now; iPhone and iPad have their own chrome.
+#if os(macOS)
 /// The root view of a browser window: the sidebar on the left and web content on the right.
 public struct BrowserWindow: View {
     @Bindable private var model: BrowserModel
@@ -136,7 +138,7 @@ private struct RestoringSnapshot: View {
 
     var body: some View {
         if let snapshot = page?.restoringSnapshot {
-            Image(nsImage: snapshot)
+            Image(platformImage: snapshot)
                 .resizable()
                 .scaledToFit()
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -168,3 +170,4 @@ private struct LoadingBar: View {
         pool: WebViewPool(makeDataStore: { _ in .nonPersistent() })
     ))
 }
+#endif

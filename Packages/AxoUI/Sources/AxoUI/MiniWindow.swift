@@ -1,4 +1,6 @@
+#if os(macOS)
 import AppKit
+#endif
 import AxoCore
 import AxoWeb
 import Foundation

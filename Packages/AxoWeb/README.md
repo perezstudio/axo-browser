@@ -6,6 +6,8 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
 
 **Depends on:** AxoCore
 
+**Platforms:** macOS 27 and iOS 27. `PlatformImage` and `PlatformView` are `NSImage`/`NSView` on the Mac and `UIImage`/`UIView` on iPhone and iPad, and `LinkModifiers` is Axo's own set of modifier keys for link clicks. Printing (`printOperation(for:)`) and download quarantine are Mac only. Tests that use AppKit drawing or windows (favicons, the host's layout, focus, printing, quarantine) run on the Mac only; the rest run on both.
+
 ## Public API
 
 - **`WebViewPool`** (`@MainActor`) owns every `WKWebView`. Nothing else creates or destroys one.

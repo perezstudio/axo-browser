@@ -52,7 +52,7 @@ struct ArchivedTabsView: View {
                 Button("Done") { dismiss() }
             }
         }
-        .onExitCommand { dismiss() }
+        .onExitCommandIfAvailable { dismiss() }
         .task {
             tabs = await model.archivedTabs()
             hasLoaded = true

@@ -22,7 +22,7 @@ struct AddressField: View {
                     model.focusPage()
                 }
             }
-            .onExitCommand {
+            .onExitCommandIfAvailable {
                 isFocused = false
                 text = currentAddress
             }
