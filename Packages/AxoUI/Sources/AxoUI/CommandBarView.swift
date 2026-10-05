@@ -62,7 +62,8 @@ struct CommandBarView: View {
                     }
                 }
             }
-            .frame(width: 620)
+            .frame(maxWidth: 620)
+            .padding(.horizontal, 16)
             .background(.regularMaterial, in: .rect(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.separator))
             .shadow(color: .black.opacity(0.2), radius: 24, y: 10)

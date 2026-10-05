@@ -15,6 +15,9 @@
 		11D4C12B30705F800027735E /* AxoInspector in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C12A30705F800027735E /* AxoInspector */; };
 		11D4C1A330705F800027735E /* AxoImport in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C1A230705F800027735E /* AxoImport */; };
 		11D4C1B330705F800027735E /* AxoSync in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C1B230705F800027735E /* AxoSync */; };
+		11D4C21530705F800027735E /* AxoUI in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C21830705F800027735E /* AxoUI */; };
+		11D4C21630705F800027735E /* AxoCore in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C21930705F800027735E /* AxoCore */; };
+		11D4C21730705F800027735E /* AxoWeb in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C21A30705F800027735E /* AxoWeb */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -32,12 +35,21 @@
 			remoteGlobalIDString = 11D4C06030705F7E0027735E;
 			remoteInfo = Axo;
 		};
+		11D4C21330705F800027735E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 11D4C05930705F7E0027735E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 11D4C20830705F800027735E;
+			remoteInfo = AxoiOS;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		11D4C06130705F7E0027735E /* Axo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Axo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		11D4C07230705F800027735E /* AxoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AxoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		11D4C07C30705F800027735E /* AxoUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AxoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		11D4C20130705F800027735E /* AxoiOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AxoiOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		11D4C20230705F800027735E /* AxoiOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AxoiOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -69,6 +81,16 @@
 			path = AxoUITests;
 			sourceTree = "<group>";
 		};
+		11D4C20330705F800027735E /* AxoiOS */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AxoiOS;
+			sourceTree = "<group>";
+		};
+		11D4C20430705F800027735E /* AxoiOSUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AxoiOSUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -95,6 +117,19 @@
 			files = (
 			);
 		};
+		11D4C20630705F800027735E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+				11D4C21530705F800027735E /* AxoUI in Frameworks */,
+				11D4C21630705F800027735E /* AxoCore in Frameworks */,
+				11D4C21730705F800027735E /* AxoWeb in Frameworks */,
+			);
+		};
+		11D4C20D30705F800027735E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -104,6 +139,8 @@
 				11D4C06330705F7E0027735E /* Axo */,
 				11D4C07530705F800027735E /* AxoTests */,
 				11D4C07F30705F800027735E /* AxoUITests */,
+				11D4C20330705F800027735E /* AxoiOS */,
+				11D4C20430705F800027735E /* AxoiOSUITests */,
 				11D4C06230705F7E0027735E /* Products */,
 			);
 			sourceTree = "<group>";
@@ -114,6 +151,8 @@
 				11D4C06130705F7E0027735E /* Axo.app */,
 				11D4C07230705F800027735E /* AxoTests.xctest */,
 				11D4C07C30705F800027735E /* AxoUITests.xctest */,
+				11D4C20130705F800027735E /* AxoiOS.app */,
+				11D4C20230705F800027735E /* AxoiOSUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -191,6 +230,50 @@
 			productReference = 11D4C07C30705F800027735E /* AxoUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		11D4C20830705F800027735E /* AxoiOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 11D4C20930705F800027735E /* Build configuration list for PBXNativeTarget "AxoiOS" */;
+			buildPhases = (
+				11D4C20530705F800027735E /* Sources */,
+				11D4C20630705F800027735E /* Frameworks */,
+				11D4C20730705F800027735E /* Resources */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				11D4C20330705F800027735E /* AxoiOS */,
+			);
+			name = AxoiOS;
+			packageProductDependencies = (
+				11D4C21830705F800027735E /* AxoUI */,
+				11D4C21930705F800027735E /* AxoCore */,
+				11D4C21A30705F800027735E /* AxoWeb */,
+			);
+			productName = AxoiOS;
+			productReference = 11D4C20130705F800027735E /* AxoiOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+		11D4C20F30705F800027735E /* AxoiOSUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 11D4C21030705F800027735E /* Build configuration list for PBXNativeTarget "AxoiOSUITests" */;
+			buildPhases = (
+				11D4C20C30705F800027735E /* Sources */,
+				11D4C20D30705F800027735E /* Frameworks */,
+				11D4C20E30705F800027735E /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				11D4C21430705F800027735E /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				11D4C20430705F800027735E /* AxoiOSUITests */,
+			);
+			name = AxoiOSUITests;
+			productName = AxoiOSUITests;
+			productReference = 11D4C20230705F800027735E /* AxoiOSUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -211,6 +294,13 @@
 					11D4C07B30705F800027735E = {
 						CreatedOnToolsVersion = 27.0;
 						TestTargetID = 11D4C06030705F7E0027735E;
+					};
+					11D4C20830705F800027735E = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					11D4C20F30705F800027735E = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = 11D4C20830705F800027735E;
 					};
 				};
 			};
@@ -242,6 +332,8 @@
 				11D4C06030705F7E0027735E /* Axo */,
 				11D4C07130705F800027735E /* AxoTests */,
 				11D4C07B30705F800027735E /* AxoUITests */,
+				11D4C20830705F800027735E /* AxoiOS */,
+				11D4C20F30705F800027735E /* AxoiOSUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -258,6 +350,16 @@
 			);
 		};
 		11D4C07A30705F800027735E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
+		11D4C20730705F800027735E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
+		11D4C20E30705F800027735E /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
 			);
@@ -280,6 +382,16 @@
 			files = (
 			);
 		};
+		11D4C20530705F800027735E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
+		11D4C20C30705F800027735E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -292,6 +404,11 @@
 			isa = PBXTargetDependency;
 			target = 11D4C06030705F7E0027735E /* Axo */;
 			targetProxy = 11D4C07D30705F800027735E /* PBXContainerItemProxy */;
+		};
+		11D4C21430705F800027735E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 11D4C20830705F800027735E /* AxoiOS */;
+			targetProxy = 11D4C21330705F800027735E /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -572,6 +689,136 @@
 			};
 			name = Release;
 		};
+		11D4C20A30705F800027735E /* Debug configuration for PBXNativeTarget "AxoiOS" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = YPGUL25V6H;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Axo;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Websites you allow can use your camera, for things like video calls.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Websites you allow can use your location, for things like maps and directions.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Websites you allow can use your microphone, for things like calls and voice notes.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.perezstudio.Axo.iOS;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		11D4C20B30705F800027735E /* Release configuration for PBXNativeTarget "AxoiOS" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = YPGUL25V6H;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Axo;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Websites you allow can use your camera, for things like video calls.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Websites you allow can use your location, for things like maps and directions.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Websites you allow can use your microphone, for things like calls and voice notes.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.perezstudio.Axo.iOS;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		11D4C21130705F800027735E /* Debug configuration for PBXNativeTarget "AxoiOSUITests" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = YPGUL25V6H;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.perezstudio.Axo.iOS.UITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = AxoiOS;
+			};
+			name = Debug;
+		};
+		11D4C21230705F800027735E /* Release configuration for PBXNativeTarget "AxoiOSUITests" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = YPGUL25V6H;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.perezstudio.Axo.iOS.UITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = AxoiOS;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -605,6 +852,24 @@
 				11D4C08C30705F800027735E /* Debug configuration for PBXNativeTarget "AxoUITests" */,
 				11D4C08D30705F800027735E /* Release configuration for PBXNativeTarget "AxoUITests" */,
 			);
+			defaultConfigurationName = Release;
+		};
+		11D4C20930705F800027735E /* Build configuration list for PBXNativeTarget "AxoiOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				11D4C20A30705F800027735E /* Debug configuration for PBXNativeTarget "AxoiOS" */,
+				11D4C20B30705F800027735E /* Release configuration for PBXNativeTarget "AxoiOS" */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		11D4C21030705F800027735E /* Build configuration list for PBXNativeTarget "AxoiOSUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				11D4C21130705F800027735E /* Debug configuration for PBXNativeTarget "AxoiOSUITests" */,
+				11D4C21230705F800027735E /* Release configuration for PBXNativeTarget "AxoiOSUITests" */,
+			);
+			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
@@ -688,6 +953,21 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 11D4C10630705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoSync" */;
 			productName = AxoSync;
+		};
+		11D4C21830705F800027735E /* AxoUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 11D4C10030705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoUI" */;
+			productName = AxoUI;
+		};
+		11D4C21930705F800027735E /* AxoCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 11D4C10130705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoCore" */;
+			productName = AxoCore;
+		};
+		11D4C21A30705F800027735E /* AxoWeb */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 11D4C10230705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoWeb" */;
+			productName = AxoWeb;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
