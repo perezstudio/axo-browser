@@ -186,6 +186,10 @@ final class AccessibilityAuditTests: XCTestCase {
         XCTAssertTrue(app.radioButtons["Above the page"].waitForExistence(timeout: 5))
         try audit(app, "general settings")
 
+        app.toolbars.buttons["Profiles"].click()
+        XCTAssertTrue(app.textFields["profileNameField"].waitForExistence(timeout: 5))
+        try audit(app, "profiles")
+
         app.toolbars.buttons["Site Customizations"].click()
         XCTAssertTrue(app.buttons["addSiteCustomizationButton"].waitForExistence(timeout: 5))
         try audit(app, "site customizations")

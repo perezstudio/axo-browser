@@ -91,6 +91,9 @@ public final class BrowserModel {
     @ObservationIgnored let store: TabStore
     @ObservationIgnored private var observationTask: Task<Void, Never>?
     @ObservationIgnored private var spacesObservationTask: Task<Void, Never>?
+    @ObservationIgnored var profilesObservationTask: Task<Void, Never>?
+    /// Every profile, by name, kept current for Settings.
+    public internal(set) var allProfiles: [Profile] = []
     @ObservationIgnored private var foldersObservationTask: Task<Void, Never>?
     @ObservationIgnored private var splitsObservationTask: Task<Void, Never>?
     /// The pane each split last had focused, so selecting the split's row returns to it.
@@ -180,7 +183,7 @@ public final class BrowserModel {
     @ObservationIgnored public var announce: (String) -> Void = { message in
         AccessibilityNotification.Announcement(message).post()
     }
-    @ObservationIgnored private let logger = Logger(subsystem: "com.perezstudio.Axo", category: "BrowserModel")
+    @ObservationIgnored let logger = Logger(subsystem: "com.perezstudio.Axo", category: "BrowserModel")
 
     /// Creates a model. Call ``start()`` before showing it.
     ///
@@ -254,6 +257,7 @@ public final class BrowserModel {
     isolated deinit {
         observationTask?.cancel()
         spacesObservationTask?.cancel()
+        profilesObservationTask?.cancel()
         linkRoutesObservationTask?.cancel()
         siteCustomizationsObservationTask?.cancel()
         foldersObservationTask?.cancel()
@@ -286,6 +290,7 @@ public final class BrowserModel {
                 await openExternalURL(link.url, sourceApp: link.sourceApp)
             }
             observeSpaces()
+            observeProfiles()
             observeLinkRoutes()
             observeSiteCustomizations()
             pool.startHibernationTimer()

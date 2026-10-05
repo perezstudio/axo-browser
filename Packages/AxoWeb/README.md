@@ -13,6 +13,7 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
 - **`WebViewPool`** (`@MainActor`) owns every `WKWebView`. Nothing else creates or destroys one.
   - `webView(for:profileID:)` returns a tab's web view, creating it (loads `tab.url`) or waking it from hibernation (restores `interactionState`, so back and forward history survive).
   - Each profile gets one website data store, `WKWebsiteDataStore(forIdentifier: profileID)` by default, shared by its tabs. Pass `makeDataStore:` to override it, for example with `.nonPersistent()` in tests.
+  - `clearWebsiteData(for:)` removes a profile's cookies, caches, and site data. `removeWebsiteData(for:)` discards a deleted profile's web views and deletes its store for good through `removeDataStore`, which tests replace. WebKit crashes if that removal runs off the main thread, so it's `@MainActor`.
   - `beginShowing(_:)` / `endShowing(_:)` count where a tab is on screen. Visible tabs never hibernate.
   - `hibernate(_:)`, `hibernateIdleTabs()`, and `startHibernationTimer()` discard hidden web views after `Configuration.hibernationTimeout` (30 minutes by default). Hibernating is `async`: it first captures a 640 pt JPEG of the page (`snapshot(for:)`). If the tab is shown or closed during the capture, it stays live.
   - When a hibernated tab wakes, its `WebTabState.restoringSnapshot` holds that picture until the restored page finishes loading.

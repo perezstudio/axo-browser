@@ -280,6 +280,43 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Above"].waitForExistence(timeout: 10), "⌘L focuses the address field above the page")
     }
 
+    /// Settings › Profiles adds a profile, then deletes the default one, moving the Home Space to
+    /// the new profile.
+    @MainActor
+    func testProfilesInSettings() throws {
+        let app = launchApp()
+        XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 5))
+        app.typeKey(",", modifierFlags: .command)
+        let pane = app.toolbars.buttons["Profiles"]
+        XCTAssertTrue(pane.waitForExistence(timeout: 5))
+        pane.click()
+
+        let list = app.outlines["profileList"].exists ? app.outlines["profileList"] : app.tables["profileList"]
+        XCTAssertTrue(app.textFields["profileNameField"].waitForExistence(timeout: 5), "The current profile is selected")
+        XCTAssertEqual(app.textFields["profileNameField"].value as? String, "Default")
+        XCTAssertTrue(app.staticTexts["Home"].exists, "It lists the Spaces that use it")
+        XCTAssertFalse(app.buttons["deleteProfileButton"].isEnabled, "The only profile can't be deleted")
+
+        app.buttons["addProfileButton"].click()
+        let nameField = app.textFields["nameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.typeText("Work\n")
+        XCTAssertTrue(list.staticTexts["Work"].waitForExistence(timeout: 5))
+        expectation(for: NSPredicate(format: "value == 'Work'"), evaluatedWith: app.textFields["profileNameField"])
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(app.staticTexts["No Spaces use this profile."].exists)
+
+        list.staticTexts["Default"].click()
+        app.buttons["deleteProfileButton"].click()
+        let confirm = app.buttons["confirmDeleteProfileButton"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.popUpButtons["replacementProfilePicker"].exists, "It asks where Home goes")
+        confirm.click()
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: list.staticTexts["Default"])
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(list.staticTexts["Work"].exists)
+    }
+
     /// The sidebar's footer: Settings on the left, a dot per Space (the current one selected) in
     /// the middle, and New Space on the right.
     @MainActor

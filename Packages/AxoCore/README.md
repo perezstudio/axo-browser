@@ -33,7 +33,7 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
 - **`TabStore`:** the async API over the sidebar model.
   - `TabStore.openOnDisk(at:)` and `TabStore.makeInMemory()` open the database, so callers above AxoCore never import AxoPersistence.
   - Spaces: `spaces()`, `observeSpaces()`, `createSpace(name:profileID:)` (added after the others), `renameSpace(id:to:)`, and `deleteSpace(id:)`. Deleting a Space deletes its tabs, keeps its profile, and refuses to delete the last Space.
-  - Profiles: `profiles()`, `createProfile(name:)`, `renameProfile(id:to:)`, and `deleteProfile(id:)`, which refuses while a Space uses the profile.
+  - Profiles: `profiles()`, `observeProfiles()`, `createProfile(name:)`, `renameProfile(id:to:)`, `moveSpace(id:toProfile:)`, and `deleteProfile(id:movingSpacesTo:)`, which moves the profile's Spaces to another profile first (`profileInUse` without one). Both return the moved tabs, whose web views belong to the old profile. The last profile can't be deleted (`cannotDeleteLastProfile`). `deleteProfile(id:)` refuses while a Space uses the profile.
   - `bootstrap()` returns the first Space, creating a default profile and Space on first launch.
   - `openTab(id:url:title:in:at:)` (pass an `id` to keep a page that was already showing, such as a promoted Peek), `moveTab(id:to:)`, `updateTab(id:url:title:)`, and `closeTab(id:)` write off the main actor.
   - `TabPosition` is `.start`, `.end`, or `.after(tabID)`, within the tab's section. Pinned tabs come first, and each section has its own order. Anchoring across sections throws `anchorInDifferentSection`.
