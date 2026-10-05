@@ -1,6 +1,6 @@
 # AxoIntegration
 
-Default browser, location services, App Intents (Focus filters and Shortcuts actions), Spotlight, Focus filters, Handoff, Spotlight, passkeys, Screen Time, and Translation.
+Default browser, location services, App Intents (Focus filters and Shortcuts actions), and Spotlight. Passkeys and Translation come later; Handoff lives in AxoUI and Screen Time in AxoWeb, next to the views they work with.
 
 Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLAN.md` for the architecture.
 
@@ -31,7 +31,7 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
   - **Opening results:** result identifiers map to `SpotlightTarget` (`.tab` or `.page`), so the app can open what the person picked.
   - **Tests:** the index is a `SpotlightIndex` protocol (`SystemSpotlightIndex` for real use), so tests never write to Spotlight.
 
-The rest of this package (App Intents, Focus filters, Handoff, Spotlight, passkeys, Screen Time, Translation) comes in Milestone 6.
+Still to come: on-device translation and tab summaries (Milestone 6), and passkeys, which are waiting on Apple's entitlement (see `docs/PLAN.md`).
 
 ## Testing
 

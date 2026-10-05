@@ -1,5 +1,6 @@
 import AppKit
 import AxoCore
+import ScreenTime
 import SwiftUI
 import WebKit
 
@@ -58,6 +59,7 @@ public struct WebViewHost: NSViewRepresentable {
                 shownTabID = tab.id
             }
             container.mount(pool.webView(for: tab, profileID: profileID))
+            container.configureScreenTime(profileID: profileID, recordsUsage: pool.reportsScreenTimeUsage)
         }
 
         func hide(from container: WebViewContainer) {
@@ -68,10 +70,16 @@ public struct WebViewHost: NSViewRepresentable {
     }
 }
 
-/// The AppKit view that holds whichever pooled web view is mounted.
+/// The AppKit view that holds whichever pooled web view is mounted, with Screen Time's webpage
+/// controller on top of it.
 public final class WebViewContainer: NSView {
     /// The web view currently mounted, if any.
     public private(set) var mountedWebView: WKWebView?
+
+    /// Reports the mounted page's URL to Screen Time and shows Screen Time's block screen over it
+    /// when the site is over its limit or blocked by a parent. Created on first mount.
+    public private(set) var screenTime: STWebpageController?
+    private var urlObservation: NSKeyValueObservation?
 
     /// Mounts `webView`, filling the container, and unmounts any other web view.
     ///
@@ -85,13 +93,44 @@ public final class WebViewContainer: NSView {
         webView.translatesAutoresizingMaskIntoConstraints = true
         webView.frame = bounds
         webView.autoresizingMask = [.width, .height]
-        addSubview(webView)
+        if let screenTimeView = screenTime?.view {
+            addSubview(webView, positioned: .below, relativeTo: screenTimeView)
+        } else {
+            addSubview(webView)
+        }
         mountedWebView = webView
+        urlObservation = webView.observe(\.url, options: [.initial, .new]) { [weak self] webView, _ in
+            MainActor.assumeIsolated { self?.screenTime?.url = webView.url }
+        }
+    }
+
+    /// Sets up Screen Time for the mounted page's profile. Each profile's web history stays
+    /// separate in Screen Time.
+    func configureScreenTime(profileID: Profile.ID, recordsUsage: Bool) {
+        let controller = screenTime ?? makeScreenTimeController()
+        controller.suppressUsageRecording = !recordsUsage
+        let identifier = STWebHistory.ProfileIdentifier(rawValue: profileID.uuidString)
+        if controller.profileIdentifier != identifier { controller.profileIdentifier = identifier }
+        controller.url = mountedWebView?.url
+    }
+
+    private func makeScreenTimeController() -> STWebpageController {
+        let controller = STWebpageController()
+        // Above the page (and a docked inspector), filling the container. It only draws and takes
+        // clicks when it shows the block screen.
+        controller.view.frame = bounds
+        controller.view.autoresizingMask = [.width, .height]
+        addSubview(controller.view, positioned: .above, relativeTo: nil)
+        screenTime = controller
+        return controller
     }
 
     /// Removes the mounted web view without destroying it; the pool still owns it.
     func unmount() {
+        urlObservation?.invalidate()
+        urlObservation = nil
         mountedWebView?.removeFromSuperview()
         mountedWebView = nil
+        screenTime?.url = nil
     }
 }

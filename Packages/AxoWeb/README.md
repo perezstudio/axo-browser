@@ -41,6 +41,10 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
   - **JavaScript:** runs at document end, in the page's world, top frame only.
   - **Page policies:** user scripts aren't subject to a page's Content Security Policy.
   - **Replacing scripts:** Axo adds no other user scripts, so updating live web views replaces all of theirs.
+- **Screen Time:** each `WebViewContainer` holds an `STWebpageController` above its page.
+  - **Usage:** it reports the page's URL (followed through KVO) so Screen Time can count usage, keeping each profile's history separate (`profileIdentifier` is the profile ID).
+  - **Limits:** when a site is over its limit or blocked by a parent, it shows Screen Time's block screen. Otherwise clicks go straight through to the page.
+  - **Turning off recording:** `WebViewPool.reportsScreenTimeUsage` (on by default) is off in tests and UI testing, so test pages never count as the person's usage. Blocking still applies.
 - **Fullscreen:** the pool turns on `WKPreferences.isElementFullscreenEnabled`, which is off by default, so videos and pages can use the Fullscreen API. Picture in picture needs a private preference, so the app turns it on through AxoInspector's `PictureInPicture`.
 - **`UserAgent`** sets the user agent for every tab (and, through AxoExtensions, every extension page): WebKit's default plus `Version/<macOS major.minor> Safari/605.1.15`, like Safari. A plain `WKWebView` leaves that out, which breaks sites and extensions that detect the browser from it (Bitwarden's background script fails to start without it).
 - **`WebTabState`** (`@Observable`) mirrors a live tab's URL, title, loading state, progress, and back and forward availability, plus `restoringSnapshot`. Get it with `pool.state(for:)`.

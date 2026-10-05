@@ -170,8 +170,10 @@ enum AppEnvironment {
             // Not in UI tests either, so a test run never shows macOS's location prompt.
             model.locationAuthorization = SystemLocationAuthorization()
         } else {
-            // UI tests never offer their pages to the person's other devices.
+            // UI tests never offer their pages to the person's other devices, and their pages
+            // never count as the person's Screen Time usage.
             model.isHandoffEnabled = false
+            model.pool.reportsScreenTimeUsage = false
         }
         return model
     }

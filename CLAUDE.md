@@ -37,6 +37,7 @@ The full plan, architecture, and reasoning behind every decision are in `docs/PL
 - Esc (`onExitCommand`) doesn't reach SwiftUI while a web view has keyboard focus. Overlays over pages get Esc from a menu item's `.keyboardShortcut(.escape, modifiers: [])`, enabled only while they're open (see Close Peek).
 - A modal overlay (`.accessibilityAddTraits(.isModal)`) hides the rest of the window from the accessibility tree. In UI tests, check the sidebar after it closes. Pinned rows don't have the `tabRow` identifier, because the Pinned section's identifier replaces it.
 - App Intents live in AxoIntegration and reach the app through `IntentBridge.current`, not `@Dependency`, which doesn't resolve in unit tests. The app's `AxoAppIntents` (`AppIntentsPackage`) includes `AxoIntegrationIntents`, so the metadata processor extracts the package's intents into the app. Add new intent packages there. Siri and Spotlight phrases (`AxoShortcuts`, an `AppShortcutsProvider`) live in the app target. New window actions go through the `IntentWindow` protocol, which `BrowserIntentWindow` implements.
+- Screen Time usage recording (`WebViewPool.reportsScreenTimeUsage`) is off in tests and UI testing mode. Screen Time's view sits above each page and must never take clicks unless it's blocking; a `WebViewHostTests` hit test checks that.
 - Spotlight indexing and Handoff are off in UI testing mode (the app doesn't start `SpotlightIndexer` and sets `isHandoffEnabled = false`), so test data never reaches the system index or the person's devices. Unit tests use a fake `SpotlightIndex`.
 - Tell VoiceOver users about changes they can't see with `BrowserModel.announce`, which tests replace to record messages.
 - Menu bar menus are always in the accessibility tree, so a UI test lookup like `app.menuItems["Move to Folder"]` can match both the menu bar and a context menu. Scope context menu lookups to `app.windows.firstMatch`.
@@ -60,6 +61,7 @@ The full plan, architecture, and reasoning behind every decision are in `docs/PL
 - Links from other apps arrive through SwiftUI's `onOpenURL`. The sending app comes from the Apple Event being handled at that moment (`LinkSource`). Don't install a Get URL Apple Event handler: it stops SwiftUI from opening a window when a link launches Axo.
 - The browser `WindowGroup` has the ID `"browser"`, so `BrowserWindowOpener` can reopen it through `openWindow`. The Settings scene shows `SettingsView`.
 - The app's database lives at `~/Library/Application Support/Axo/Axo.sqlite`. The last Space shown is remembered in `UserDefaults` under `lastSpaceID` (not in UI testing).
+- UI tests share user defaults (`com.perezstudio.Axo`) with the person's own Axo, so state like WebKit's "inspector starts docked" carries over. Override what a test depends on with launch arguments (an argument domain doesn't change saved values), as `makeApp()` does for the inspector.
 - Never pin pooled web views with Auto Layout constraints. The docked Web Inspector resizes the web view's frame, and constraints made the page draw over the inspector (`WebViewContainer` uses an autoresizing mask). `testWebInspectorOpens` checks the inspector's pixels in a window screenshot, not just the accessibility tree.
 - To look at the UI, attach `XCTAttachment(screenshot: app.windows.firstMatch.screenshot())` in a UI test and export it from the result bundle. It captures only Axo's window and doesn't need accessibility access. Don't screen-capture the desktop, which can include the user's other windows.
 - Printing can't be tested automatically: WebKit print operations hang when run synchronously and need a window to run modally. Test the operation's configuration and check the print sheet by hand.
@@ -87,13 +89,13 @@ The app is split into local Swift packages in `Packages/`. Respect the dependenc
 | --- | --- | --- |
 | AxoUI | SwiftUI chrome, windows, sidebar, command bar, settings, mascot | AxoCore, AxoWeb, GRDBQuery |
 | AxoCore | Profiles, Spaces, folders, tabs, windows, TabStore | AxoPersistence, GRDB |
-| AxoWeb | Web view pool, `NSViewRepresentable` host, delegates, downloads, permissions, hibernation | AxoCore |
+| AxoWeb | Web view pool, `NSViewRepresentable` host, delegates, downloads, permissions, hibernation, Screen Time over each page | AxoCore |
 | AxoExtensions | `WKWebExtensionController`, CRX install, tab and window adapters. Its `AxoCRX` target (CRX3 verification, safe zip extraction, manifest checks) has no dependencies so it can be open sourced on its own | AxoCore, AxoWeb |
 | AxoInspector | All private WebKit API (Web Inspector, picture in picture) | AxoWeb |
 | AxoPersistence | GRDB database, migrations, FTS5 search index | GRDB |
 | AxoSync | `CKSyncEngine` mapping for Spaces, folders, pinned tabs | AxoPersistence |
 | AxoImport | Importing from Arc (sidebar JSON, Chromium history) and Chrome (bookmarks, history) | AxoCore, GRDB |
-| AxoIntegration | Default browser, App Intents, Focus filters, Handoff, Spotlight, passkeys, Screen Time, Translation | AxoCore |
+| AxoIntegration | Default browser, App Intents, Focus filters, Handoff, Spotlight, passkeys, Translation | AxoCore |
 
 ## Hard rules
 

@@ -41,12 +41,15 @@ extension WebViewPool {
         downloadsDirectory: URL = FileManager.default.temporaryDirectory
             .appending(path: "AxoWebTests-Downloads-\(UUID().uuidString)", directoryHint: .isDirectory)
     ) -> WebViewPool {
-        WebViewPool(
+        let pool = WebViewPool(
             configuration: .init(hibernationTimeout: timeout),
             makeDataStore: { _ in .nonPersistent() },
             downloads: DownloadManager(directory: downloadsDirectory),
             now: { clock.now }
         )
+        // Test pages never count as the person's Screen Time usage.
+        pool.reportsScreenTimeUsage = false
+        return pool
     }
 }
 
