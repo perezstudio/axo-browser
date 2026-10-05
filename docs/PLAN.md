@@ -308,7 +308,7 @@ Each milestone should be usable as a daily driver before the next one starts.
 
 **Milestone 7: Sync and iOS**
 
-- [ ] CloudKit sync of spaces, folders, and pinned tabs
+- [ ] CloudKit sync of spaces, folders, and pinned tabs. Built in AxoSync (profiles, Spaces, folders, and pinned tabs; last change wins per record; an untouched Home Space merges into the synced ones on a device's first sync) with an iCloud pane in Settings, on by default. Waiting on the iCloud container `iCloud.com.perezstudio.Axo` and a signed Release build to check with real devices.
 - [ ] iPhone and iPad app sharing AxoCore, AxoPersistence, and AxoSync
 
 ## Performance budgets

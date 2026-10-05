@@ -227,6 +227,89 @@ public final class AppDatabase: Sendable {
                 t.column("updatedAt", .datetime).notNull()
             }
         }
+        // iCloud sync bookkeeping (AxoSync). Profiles, Spaces, folders, and pinned tabs sync.
+        // - `syncChange`: one row per synced record changed here and not yet sent, kept by
+        //   triggers so every write path is covered. A record's latest change replaces the
+        //   earlier one. Unpinning or deleting a pinned tab is a deletion.
+        // - `syncApplying`: holds a row while AxoSync writes changes from iCloud, inside that
+        //   write's transaction, so the triggers don't send them back.
+        // - `syncRecordMetadata`: each record's CloudKit system fields (change tag and so on).
+        // - `syncParkedRecord`: records from iCloud waiting for a parent that hasn't arrived.
+        // - `syncSetting`: small values by key, such as the sync engine's saved state.
+        migrator.registerMigration("v12-sync") { db in
+            try db.create(table: "syncChange") { t in
+                t.column("recordType", .text).notNull()
+                t.column("recordID", .blob).notNull()
+                t.column("isDeletion", .boolean).notNull()
+                t.column("changedAt", .datetime).notNull()
+                t.primaryKey(["recordType", "recordID"])
+            }
+            try db.create(table: "syncApplying") { t in
+                t.column("flag", .integer).notNull()
+            }
+            try db.create(table: "syncRecordMetadata") { t in
+                t.column("recordType", .text).notNull()
+                t.column("recordID", .blob).notNull()
+                t.column("systemFields", .blob).notNull()
+                t.primaryKey(["recordType", "recordID"])
+            }
+            try db.create(table: "syncParkedRecord") { t in
+                t.column("recordType", .text).notNull()
+                t.column("recordID", .blob).notNull()
+                t.column("record", .blob).notNull()
+                t.column("systemFields", .blob)
+                t.primaryKey(["recordType", "recordID"])
+            }
+            try db.create(table: "syncSetting") { t in
+                t.primaryKey("key", .text)
+                t.column("value", .blob).notNull()
+            }
+
+            // GRDB's date format, so `changedAt` reads back as a Date. (An upsert rather than INSERT OR
+            // REPLACE: inside a trigger, the outer statement's conflict handling wins.)
+            let now = "strftime('%Y-%m-%d %H:%M:%f', 'now')"
+            let notApplying = "NOT EXISTS (SELECT 1 FROM syncApplying)"
+            func record(_ type: String, _ id: String, deletion: Bool) -> String {
+                """
+                INSERT INTO syncChange (recordType, recordID, isDeletion, changedAt) VALUES ('\(type)', \(id), \(deletion ? 1 : 0), \(now))
+                ON CONFLICT (recordType, recordID) DO UPDATE SET isDeletion = excluded.isDeletion, changedAt = excluded.changedAt;
+                """
+            }
+            func changed(_ columns: [String]) -> String {
+                columns.map { "OLD.\($0) IS NOT NEW.\($0)" }.joined(separator: " OR ")
+            }
+            let tables: [(table: String, type: String, columns: [String])] = [
+                ("profile", "Profile", ["name"]),
+                ("space", "Space", ["profileID", "name", "sortKey"]),
+                ("folder", "Folder", ["spaceID", "parentID", "name", "sortKey"]),
+            ]
+            for (table, type, columns) in tables {
+                try db.execute(sql: """
+                    CREATE TRIGGER \(table)_sync_insert AFTER INSERT ON \(table) WHEN \(notApplying)
+                    BEGIN \(record(type, "NEW.id", deletion: false)) END;
+                    CREATE TRIGGER \(table)_sync_update AFTER UPDATE ON \(table)
+                    WHEN \(notApplying) AND (\(changed(columns)))
+                    BEGIN \(record(type, "NEW.id", deletion: false)) END;
+                    CREATE TRIGGER \(table)_sync_delete AFTER DELETE ON \(table) WHEN \(notApplying)
+                    BEGIN \(record(type, "OLD.id", deletion: true)) END;
+                    """)
+            }
+            // Only pinned tabs sync. A page change in a pinned tab (url, title) isn't a change;
+            // its home page, place, and pinned state are.
+            let tabColumns = changed(["isPinned", "homeURL", "sortKey", "folderID", "spaceID"])
+            try db.execute(sql: """
+                CREATE TRIGGER tab_sync_insert AFTER INSERT ON tab WHEN \(notApplying) AND NEW.isPinned
+                BEGIN \(record("Tab", "NEW.id", deletion: false)) END;
+                CREATE TRIGGER tab_sync_update AFTER UPDATE ON tab
+                WHEN \(notApplying) AND NEW.isPinned AND (\(tabColumns))
+                BEGIN \(record("Tab", "NEW.id", deletion: false)) END;
+                CREATE TRIGGER tab_sync_unpin AFTER UPDATE ON tab
+                WHEN \(notApplying) AND OLD.isPinned AND NOT NEW.isPinned
+                BEGIN \(record("Tab", "NEW.id", deletion: true)) END;
+                CREATE TRIGGER tab_sync_delete AFTER DELETE ON tab WHEN \(notApplying) AND OLD.isPinned
+                BEGIN \(record("Tab", "OLD.id", deletion: true)) END;
+                """)
+        }
 
         return migrator
     }

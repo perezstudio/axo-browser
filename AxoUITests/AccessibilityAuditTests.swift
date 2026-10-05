@@ -181,6 +181,12 @@ final class AccessibilityAuditTests: XCTestCase {
         app.toolbars.buttons["Site Customizations"].click()
         XCTAssertTrue(app.buttons["addSiteCustomizationButton"].waitForExistence(timeout: 5))
         try audit(app, "site customizations")
+
+        app.toolbars.buttons["iCloud"].click()
+        XCTAssertTrue(app.descendants(matching: .any)["syncToggle"].waitForExistence(timeout: 5))
+        try audit(app, "iCloud")
+        app.toolbars.buttons["Site Customizations"].click()
+        XCTAssertTrue(app.buttons["addSiteCustomizationButton"].waitForExistence(timeout: 5))
         app.buttons["addSiteCustomizationButton"].click()
         XCTAssertTrue(app.textFields["customizationDomainField"].waitForExistence(timeout: 5))
         try audit(app, "customization editor")

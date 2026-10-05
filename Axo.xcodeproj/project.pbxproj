@@ -11,9 +11,10 @@
 		11D4C12330705F800027735E /* AxoCore in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C12230705F800027735E /* AxoCore */; };
 		11D4C12530705F800027735E /* AxoWeb in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C12430705F800027735E /* AxoWeb */; };
 		11D4C12730705F800027735E /* AxoIntegration in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C12630705F800027735E /* AxoIntegration */; };
-		11D4C1A330705F800027735E /* AxoImport in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C1A230705F800027735E /* AxoImport */; };
 		11D4C12930705F800027735E /* AxoExtensions in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C12830705F800027735E /* AxoExtensions */; };
 		11D4C12B30705F800027735E /* AxoInspector in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C12A30705F800027735E /* AxoInspector */; };
+		11D4C1A330705F800027735E /* AxoImport in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C1A230705F800027735E /* AxoImport */; };
+		11D4C1B330705F800027735E /* AxoSync in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C1B230705F800027735E /* AxoSync */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -79,6 +80,7 @@
 				11D4C12930705F800027735E /* AxoExtensions in Frameworks */,
 				11D4C12730705F800027735E /* AxoIntegration in Frameworks */,
 				11D4C1A330705F800027735E /* AxoImport in Frameworks */,
+				11D4C1B330705F800027735E /* AxoSync in Frameworks */,
 				11D4C12330705F800027735E /* AxoCore in Frameworks */,
 				11D4C12530705F800027735E /* AxoWeb in Frameworks */,
 			);
@@ -139,6 +141,7 @@
 				11D4C12830705F800027735E /* AxoExtensions */,
 				11D4C12630705F800027735E /* AxoIntegration */,
 				11D4C1A230705F800027735E /* AxoImport */,
+				11D4C1B230705F800027735E /* AxoSync */,
 				11D4C12230705F800027735E /* AxoCore */,
 				11D4C12430705F800027735E /* AxoWeb */,
 			);
@@ -333,7 +336,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = Axo/Axo.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "Axo/Axo-Release.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = YPGUL25V6H;
@@ -607,9 +610,17 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
+		11D4C10030705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoUI" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/AxoUI;
+		};
 		11D4C10130705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoCore" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/AxoCore;
+		};
+		11D4C10230705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoWeb" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/AxoWeb;
 		};
 		11D4C10330705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoExtensions" */ = {
 			isa = XCLocalSwiftPackageReference;
@@ -619,14 +630,6 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/AxoInspector;
 		};
-		11D4C10730705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoIntegration" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = Packages/AxoIntegration;
-		};
-		11D4C1A130705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoImport" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = Packages/AxoImport;
-		};
 		11D4C10530705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoPersistence" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/AxoPersistence;
@@ -635,13 +638,13 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/AxoSync;
 		};
-		11D4C10030705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoUI" */ = {
+		11D4C10730705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoIntegration" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = Packages/AxoUI;
+			relativePath = Packages/AxoIntegration;
 		};
-		11D4C10230705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoWeb" */ = {
+		11D4C1A130705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoImport" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = Packages/AxoWeb;
+			relativePath = Packages/AxoImport;
 		};
 /* End XCLocalSwiftPackageReference section */
 
@@ -666,11 +669,6 @@
 			package = 11D4C10730705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoIntegration" */;
 			productName = AxoIntegration;
 		};
-		11D4C1A230705F800027735E /* AxoImport */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 11D4C1A130705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoImport" */;
-			productName = AxoImport;
-		};
 		11D4C12830705F800027735E /* AxoExtensions */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 11D4C10330705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoExtensions" */;
@@ -680,6 +678,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 11D4C10430705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoInspector" */;
 			productName = AxoInspector;
+		};
+		11D4C1A230705F800027735E /* AxoImport */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 11D4C1A130705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoImport" */;
+			productName = AxoImport;
+		};
+		11D4C1B230705F800027735E /* AxoSync */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 11D4C10630705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoSync" */;
+			productName = AxoSync;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
