@@ -16,6 +16,7 @@ final class AccessibilityAuditTests: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["AXO_UI_TESTING"] = "1"
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
+        app.launchArguments += ["-__WebInspectorPageGroupLevel1__.WebKit2InspectorStartsAttached", "YES"]
         // For the mini window screen (a closed loopback port, so nothing loads).
         app.launchEnvironment["AXO_UI_TESTING_EXTERNAL_URL"] = "http://localhost:9/from-another-app"
         app.launch()

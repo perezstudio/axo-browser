@@ -55,6 +55,10 @@ public final class WebViewPool {
     /// File selection is cancelled when this is `nil`.
     public var onFileSelection: ((FileSelectionRequest) async -> [URL]?)?
 
+    /// Whether visible pages report their usage to Screen Time. Turn it off in tests, so test
+    /// pages never count as the person's usage. Screen Time still blocks sites over their limit.
+    public var reportsScreenTimeUsage = true
+
     /// The user scripts for per-site custom CSS and JavaScript. See ``setSiteCustomizations(_:)``.
     private var siteCustomizationScripts: [WKUserScript] = []
 

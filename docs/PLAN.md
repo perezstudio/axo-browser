@@ -67,13 +67,13 @@ Arrows point from a package to what it depends on; AxoCore sits at the center.
 | --- | --- |
 | AxoUI | Windows, sidebar, command bar, settings, mascot. Never creates or destroys web views. |
 | AxoCore | Profiles, spaces, folders, tabs, windows, and the TabStore. Tabs reference a web view but don't require one. |
-| AxoWeb | Web view pool, `NSViewRepresentable` host, navigation and UI delegates, downloads, permissions, hibernation. One `WKWebsiteDataStore(forIdentifier:)` per profile. |
+| AxoWeb | Web view pool, `NSViewRepresentable` host, navigation and UI delegates, downloads, permissions, hibernation, Screen Time's webpage controller over each page. One `WKWebsiteDataStore(forIdentifier:)` per profile. |
 | AxoExtensions | One `WKWebExtensionController` per profile, CRX install (verify, strip CRX3 header, unzip, load), `WKWebExtensionTab` and `WKWebExtensionWindow` adapters, `unsupportedAPIs` surfaced in the extension manager. |
 | AxoInspector | All private WebKit API behind runtime checks: the inspector (`developerExtrasEnabled`, `_WKInspector`, with public `isInspectable` as the fallback) and picture in picture (`_allowsPictureInPictureMediaPlayback`). |
 | AxoPersistence | The single GRDB database: sidebar model, history, bookmarks, and an FTS5 index for the command bar. `DatabasePool` for concurrent reads, `DatabaseMigrator` for schema changes, `ValueObservation` plus GRDBQuery for reactive SwiftUI. |
 | AxoSync | Maps spaces, folders, and pinned tabs to CloudKit records with `CKSyncEngine`. No servers to run. |
 | AxoImport | Reads Arc's sidebar file and Chrome's bookmarks, plus Chromium history from both, and imports them through AxoCore. |
-| AxoIntegration | Default browser, location services, App Intents, Focus filters, Handoff, Spotlight, passkeys, Screen Time, Translation. |
+| AxoIntegration | Default browser, location services, App Intents, Focus filters, Handoff, Spotlight, passkeys, Translation. |
 
 One database keeps storage simple to test, migrate, and sync. SwiftData and Core Data were ruled out because they lack full-text search, add overhead on write-heavy history, fit awkwardly with Swift 6 concurrency, and their built-in CloudKit sync gives no control over ordering or conflicts.
 
@@ -303,7 +303,7 @@ Each milestone should be usable as a daily driver before the next one starts.
 - [x] Focus filters that switch Spaces automatically: add Axo's "Show a Space" filter to a Focus. Axo shows that Space while the Focus is on and returns to the earlier Space when it ends.
 - [x] App Intents and Shortcuts actions: Open in Axo, Show Space (for "morning tabs" kept in a Space), Find Tabs, Show Tab, Get Current Tab, and Save Tab to Space. Siri and Spotlight phrases come through an `AppShortcutsProvider`.
 - [x] Handoff and Spotlight indexing of pinned tabs and history: the window offers its page through Handoff and opens pages handed off to it. Spotlight indexes pinned tabs from every Space and the 500 most recent history pages, and opens the result picked.
-- [ ] Screen Time web usage support
+- [x] Screen Time web usage support: an `STWebpageController` over each visible page reports its URL per profile and shows Screen Time's block screen when a site is over its limit. It lives in AxoWeb rather than AxoIntegration because it has to sit on top of the web view. Removing history from Screen Time (`STWebHistory`) comes with a Clear History command.
 - [ ] On-device page translation and tab summaries
 
 **Milestone 7: Sync and iOS**

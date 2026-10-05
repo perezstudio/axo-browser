@@ -35,6 +35,10 @@ final class AxoUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["AXO_UI_TESTING"] = "1"
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
+        // UI tests share user defaults with the person's own Axo. WebKit remembers whether they
+        // last docked the Web Inspector, so start it docked for this run (an argument-domain
+        // override, which doesn't change their saved choice).
+        app.launchArguments += ["-__WebInspectorPageGroupLevel1__.WebKit2InspectorStartsAttached", "YES"]
         return app
     }
 
@@ -795,7 +799,7 @@ final class AxoUITests: XCTestCase {
         let page = app.webViews.matching(NSPredicate(format: "label == 'Inspect'")).firstMatch
         let inspector = app.webViews.allElementsBoundByIndex.first { $0.frame != page.frame && $0.frame.height > 100 }
         let inspectorFrame = try XCTUnwrap(inspector?.frame, "The inspector has its own web view")
-        XCTAssertFalse(page.frame.intersects(inspectorFrame.insetBy(dx: 1, dy: 1)), "The page makes room for the inspector")
+        XCTAssertFalse(page.frame.intersects(inspectorFrame.insetBy(dx: 1, dy: 1)), "The page makes room for the inspector. web views: \(app.webViews.allElementsBoundByIndex.map { "\($0.frame) \($0.label)" })")
         sleep(1)
         let screenshot = app.windows.firstMatch.screenshot()
         let attachment = XCTAttachment(screenshot: screenshot)

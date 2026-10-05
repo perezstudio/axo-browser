@@ -1,5 +1,6 @@
 import AxoCore
 import Foundation
+import ScreenTime
 import Testing
 import WebKit
 @testable import AxoWeb
@@ -70,5 +71,53 @@ struct WebViewHostTests {
         #expect(container.mountedWebView == nil)
         #expect(!pool.isVisible(two.id))
         #expect(pool.isLive(two.id))
+    }
+
+    // MARK: Screen Time
+
+    @Test func screenTimeFollowsThePageAndLetsClicksThrough() async throws {
+        let window = NSWindow(contentRect: NSRect(x: -10_000, y: -10_000, width: 800, height: 600), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let container = WebViewContainer(frame: window.contentView!.bounds)
+        window.contentView?.addSubview(container)
+        let webView = WKWebView()
+        container.mount(webView)
+        let profile = UUID()
+        container.configureScreenTime(profileID: profile, recordsUsage: false)
+
+        let screenTime = try #require(container.screenTime)
+        #expect(screenTime.view.superview === container)
+        #expect(container.subviews.last === screenTime.view, "On top of the page")
+        #expect(screenTime.suppressUsageRecording)
+        #expect(screenTime.profileIdentifier?.rawValue == profile.uuidString)
+
+        webView.loadHTMLString("<title>Page</title><p>Hi</p>", baseURL: URL(string: "http://example.com/news")!)
+        try await waitUntil("the page") { screenTime.url?.absoluteString == "http://example.com/news" }
+
+        // Unless it's showing the block screen, it must not take the page's clicks.
+        let hit = container.hitTest(NSPoint(x: 400, y: 300))
+        #expect(hit === webView || hit?.isDescendant(of: webView) == true, "Clicks reach the page: \(String(describing: hit))")
+
+        container.unmount()
+        #expect(screenTime.url == nil, "Nothing is reported while no page is mounted")
+    }
+
+    @Test func remountingKeepsOneScreenTimeControllerBelowNothing() {
+        let container = WebViewContainer(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+        container.mount(WKWebView())
+        container.configureScreenTime(profileID: UUID(), recordsUsage: true)
+        let controller = container.screenTime
+        let second = WKWebView()
+        container.mount(second)
+        container.configureScreenTime(profileID: UUID(), recordsUsage: true)
+        #expect(container.screenTime === controller)
+        #expect(container.subviews == [second, controller!.view], "The new page goes under Screen Time's view")
+        #expect(controller?.suppressUsageRecording == false)
+    }
+
+    @Test func testPoolsDontReportUsage() {
+        #expect(WebViewPool.forTesting().reportsScreenTimeUsage == false)
+        #expect(WebViewPool(makeDataStore: { _ in .nonPersistent() }).reportsScreenTimeUsage)
     }
 }
