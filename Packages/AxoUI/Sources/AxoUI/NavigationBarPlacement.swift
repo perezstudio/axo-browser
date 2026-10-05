@@ -1,6 +1,6 @@
 /// Where the Mac window's navigation bar (back, forward, reload, and the address field) goes,
 /// chosen in Settings › General.
-public enum NavigationBarPlacement: String, CaseIterable, Identifiable, Sendable {
+nonisolated public enum NavigationBarPlacement: String, CaseIterable, Identifiable, Sendable {
     /// At the top of the sidebar: the buttons beside the sidebar toggle, the address field
     /// below them.
     case sidebar

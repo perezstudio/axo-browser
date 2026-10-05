@@ -280,6 +280,55 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Above"].waitForExistence(timeout: 10), "⌘L focuses the address field above the page")
     }
 
+    /// With the navigation bar above the page, its address field and buttons work like the
+    /// sidebar's: the field shows the page's address, clicking it and typing navigates the tab,
+    /// and back and forward follow the history. Everything sits over the page, not the sidebar.
+    @MainActor
+    func testAddressBarAbovePage() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        app.typeKey(",", modifierFlags: .command)
+        let general = app.toolbars.buttons["General"]
+        XCTAssertTrue(general.waitForExistence(timeout: 5))
+        general.click()
+        app.radioButtons["Above the page"].click()
+        app.typeKey("w", modifierFlags: .command)
+
+        let address = app.descendants(matching: .any)["pageAddressBar"].textFields["addressField"]
+        XCTAssertTrue(address.waitForExistence(timeout: 5))
+        for id in ["backButton", "forwardButton", "reloadButton", "siteSettingsButton"] {
+            let button = app.buttons[id]
+            XCTAssertTrue(button.exists, "\(id) is in the page's toolbar")
+            XCTAssertGreaterThan(button.frame.minX, sidebar.frame.maxX - 1, "\(id) sits over the page")
+        }
+
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText(page("First") + "\n")
+        XCTAssertTrue(sidebar.staticTexts["First"].waitForExistence(timeout: 10))
+        expectation(for: NSPredicate(format: "value CONTAINS '%3Ctitle%3EFirst'"), evaluatedWith: address)
+        waitForExpectations(timeout: 5)
+
+        // Clicking the field selects the address, so typing replaces it and the tab navigates.
+        address.click()
+        address.typeKey("a", modifierFlags: .command)
+        address.typeText(page("Second") + "\n")
+        XCTAssertTrue(sidebar.staticTexts["Second"].waitForExistence(timeout: 10))
+        XCTAssertFalse(sidebar.staticTexts["First"].exists, "It navigates the tab instead of opening another")
+        expectation(for: NSPredicate(format: "value CONTAINS '%3Ctitle%3ESecond'"), evaluatedWith: address)
+        waitForExpectations(timeout: 5)
+
+        let back = app.buttons["backButton"], forward = app.buttons["forwardButton"]
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: back)
+        waitForExpectations(timeout: 10)
+        back.click()
+        XCTAssertTrue(sidebar.staticTexts["First"].waitForExistence(timeout: 10))
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: forward)
+        waitForExpectations(timeout: 10)
+        forward.click()
+        XCTAssertTrue(sidebar.staticTexts["Second"].waitForExistence(timeout: 10))
+    }
+
     /// Settings › Profiles adds a profile, then deletes the default one, moving the Home Space to
     /// the new profile.
     @MainActor
