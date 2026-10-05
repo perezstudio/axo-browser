@@ -103,7 +103,7 @@ private struct SpaceDot: View {
     var body: some View {
         Button(action: action) {
             Circle()
-                .fill(isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
+                .fill(fill)
                 .frame(width: isSelected ? 8 : 6, height: isSelected ? 8 : 6)
                 // Not only color: a ring marks the current Space when the person asks for it.
                 .overlay {
@@ -120,6 +120,15 @@ private struct SpaceDot: View {
         .accessibilityHint(index < 9 ? "Control-\(index + 1)" : "")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("spaceButton")
+    }
+
+    /// The Space's color when it has one (faded when it isn't the current Space), otherwise
+    /// the primary color.
+    private var fill: AnyShapeStyle {
+        if let color = space.spaceColor?.color {
+            return AnyShapeStyle(isSelected ? color : color.opacity(0.5))
+        }
+        return isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary)
     }
 }
 #endif

@@ -126,6 +126,36 @@ public final class TabStore: Sendable {
         }
     }
 
+    /// Sets a Space's color (a palette name) and icon (an SF Symbol name); `nil` clears either.
+    public func setSpaceAppearance(id: Space.ID, color: String?, icon: String?) async throws {
+        try await database.writer.write { db in
+            guard var space = try Space.fetchOne(db, id: id) else { throw TabStoreError.spaceNotFound(id) }
+            space.color = color
+            space.icon = icon
+            try space.update(db)
+        }
+    }
+
+    /// Moves a Space in the Space order, directly after `anchor` or first when it's `nil`. Only
+    /// the moved Space's row changes.
+    public func moveSpace(id: Space.ID, after anchor: Space.ID?) async throws {
+        try await database.writer.write { db in
+            guard var space = try Space.fetchOne(db, id: id) else { throw TabStoreError.spaceNotFound(id) }
+            let others = try Space.order(Space.Columns.sortKey, Space.Columns.id).fetchAll(db).filter { $0.id != id }
+            let index: Int
+            if let anchor {
+                guard let anchorIndex = others.firstIndex(where: { $0.id == anchor }) else { throw TabStoreError.spaceNotFound(anchor) }
+                index = anchorIndex + 1
+            } else {
+                index = 0
+            }
+            let before = index > 0 ? others[index - 1].sortKey : nil
+            let after = index < others.count ? others[index].sortKey : nil
+            space.sortKey = try SortKey.between(before, after)
+            try space.update(db)
+        }
+    }
+
     /// Deletes a Space and all its tabs. The Space's profile and its website data are kept.
     ///
     /// - Returns: The IDs of the deleted tabs, so their web views can be discarded.

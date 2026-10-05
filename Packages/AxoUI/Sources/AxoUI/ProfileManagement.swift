@@ -85,3 +85,24 @@ extension BrowserModel {
         }
     }
 }
+
+extension BrowserModel {
+    /// Sets a Space's color and icon; `nil` clears either.
+    public func setSpaceAppearance(_ spaceID: Space.ID, color: SpaceColor?, icon: String?) async {
+        do {
+            try await store.setSpaceAppearance(id: spaceID, color: color?.rawValue, icon: icon)
+        } catch {
+            report(error, "Axo couldn't change the Space.")
+        }
+    }
+
+    /// Moves a Space in the Space order, after `anchor` or first when it's `nil`.
+    public func moveSpace(_ spaceID: Space.ID, after anchor: Space.ID?) async {
+        do {
+            // The Space observation updates `spaces`.
+            try await store.moveSpace(id: spaceID, after: anchor)
+        } catch {
+            report(error, "Axo couldn't move the Space.")
+        }
+    }
+}

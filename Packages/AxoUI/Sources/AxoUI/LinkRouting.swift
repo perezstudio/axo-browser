@@ -81,6 +81,8 @@ public struct SettingsView: View {
                 .tabItem { Label("General", systemImage: "gearshape") }
             ProfileSettings(model: model)
                 .tabItem { Label("Profiles", systemImage: "person.2") }
+            SpaceSettings(model: model)
+                .tabItem { Label("Spaces", systemImage: "square.stack") }
             LinkRoutingSettings(model: model)
                 .tabItem { Label("Link Routing", systemImage: "arrow.triangle.branch") }
             SiteCustomizationSettings(model: model)

@@ -295,4 +295,25 @@ struct MigrationTests {
             #expect(try changes() == ["Profile": true, "Space": true])
         }
     }
+
+    @Test func v13SpacesHaveAnOptionalColorAndIconThatSync() throws {
+        let database = try AppDatabase.makeInMemory()
+        let profileID = UUID(), spaceID = UUID()
+        try database.writer.write { db in
+            try db.execute(sql: "INSERT INTO profile (id, name) VALUES (?, 'Default')", arguments: [profileID])
+            try db.execute(sql: "INSERT INTO space (id, profileID, name, sortKey) VALUES (?, ?, 'Home', 'a0')", arguments: [spaceID, profileID])
+            let row = try #require(try Row.fetchOne(db, sql: "SELECT color, icon FROM space"))
+            #expect(row["color"] as String? == nil && row["icon"] as String? == nil)
+
+            try db.execute(sql: "DELETE FROM syncChange")
+            try db.execute(sql: "UPDATE space SET color = 'blue'")
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM syncChange WHERE recordType = 'Space'") == 1)
+            try db.execute(sql: "DELETE FROM syncChange")
+            try db.execute(sql: "UPDATE space SET icon = 'briefcase'")
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM syncChange") == 1)
+            try db.execute(sql: "DELETE FROM syncChange")
+            try db.execute(sql: "UPDATE space SET icon = 'briefcase'")
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM syncChange") == 0, "Unchanged writes aren't changes")
+        }
+    }
 }

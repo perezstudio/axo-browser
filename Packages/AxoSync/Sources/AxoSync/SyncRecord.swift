@@ -55,7 +55,7 @@ public struct SyncRecordID: Hashable, Codable, Sendable, CustomStringConvertible
 /// | Type | Fields |
 /// | --- | --- |
 /// | Profile | `name` |
-/// | Space | `profileID`, `name`, `sortKey` |
+/// | Space | `profileID`, `name`, `sortKey`, `color`, `icon` |
 /// | Folder | `spaceID`, `parentID`, `name`, `sortKey` |
 /// | Tab (pinned) | `spaceID`, `folderID`, `url` (its home page), `title`, `sortKey` |
 public struct SyncRecord: Equatable, Codable, Sendable {
@@ -75,7 +75,7 @@ public struct SyncRecord: Equatable, Codable, Sendable {
     public static func fieldNames(for type: SyncRecordType) -> [String] {
         switch type {
         case .profile: ["name"]
-        case .space: ["profileID", "name", "sortKey"]
+        case .space: ["profileID", "name", "sortKey", "color", "icon"]
         case .folder: ["spaceID", "parentID", "name", "sortKey"]
         case .tab: ["spaceID", "folderID", "url", "title", "sortKey"]
         }

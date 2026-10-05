@@ -190,6 +190,10 @@ final class AccessibilityAuditTests: XCTestCase {
         XCTAssertTrue(app.textFields["profileNameField"].waitForExistence(timeout: 5))
         try audit(app, "profiles")
 
+        app.toolbars.buttons["Spaces"].click()
+        XCTAssertTrue(app.textFields["spaceNameSettingsField"].waitForExistence(timeout: 5))
+        try audit(app, "spaces")
+
         app.toolbars.buttons["Site Customizations"].click()
         XCTAssertTrue(app.buttons["addSiteCustomizationButton"].waitForExistence(timeout: 5))
         try audit(app, "site customizations")

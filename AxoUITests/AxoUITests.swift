@@ -366,6 +366,57 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(list.staticTexts["Work"].exists)
     }
 
+    /// Settings › Spaces gives a Space a color and icon, adds a Space, renames it, and deletes it.
+    @MainActor
+    func testSpacesInSettings() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        app.typeKey(",", modifierFlags: .command)
+        let pane = app.toolbars.buttons["Spaces"]
+        XCTAssertTrue(pane.waitForExistence(timeout: 5))
+        pane.click()
+
+        let name = app.textFields["spaceNameSettingsField"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5), "The current Space is selected")
+        XCTAssertEqual(name.value as? String, "Home")
+        XCTAssertTrue(app.descendants(matching: .any)["spaceProfilePicker"].exists, "It shows the profile (a picker once there are two)")
+        XCTAssertFalse(app.buttons["deleteSpaceButton"].isEnabled, "The only Space can't be deleted")
+
+        let teal = app.descendants(matching: .any)["spaceColorSwatches"].buttons["Teal"]
+        teal.click()
+        expectation(for: NSPredicate(format: "isSelected == true"), evaluatedWith: teal)
+        waitForExpectations(timeout: 5)
+        let leaf = app.descendants(matching: .any)["spaceIconGrid"].buttons["Leaf"]
+        leaf.click()
+        expectation(for: NSPredicate(format: "isSelected == true"), evaluatedWith: leaf)
+        waitForExpectations(timeout: 5)
+
+        app.buttons["addSpaceButton"].click()
+        let newName = app.textFields["spaceNameField"]
+        XCTAssertTrue(newName.waitForExistence(timeout: 5))
+        newName.typeText("Work")
+        app.buttons["createSpaceButton"].click()
+        expectation(for: NSPredicate(format: "value == 'Work'"), evaluatedWith: name)
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(app.buttons["deleteSpaceButton"].isEnabled)
+
+        name.click()
+        name.typeKey("a", modifierFlags: .command)
+        name.typeText("Projects\n")
+        let list = app.outlines["spaceList"].exists ? app.outlines["spaceList"] : app.tables["spaceList"]
+        XCTAssertTrue(list.staticTexts["Projects"].waitForExistence(timeout: 5))
+
+        app.buttons["deleteSpaceButton"].click()
+        // The − button is also called Delete Space, so look in the confirmation sheet.
+        let confirm = app.sheets.buttons["Delete Space"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.click()
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: list.staticTexts["Projects"])
+        waitForExpectations(timeout: 5)
+        XCTAssertEqual(app.buttons.matching(identifier: "spaceButton").count, 1)
+    }
+
     /// The sidebar's footer: Settings on the left, a dot per Space (the current one selected) in
     /// the middle, and New Space on the right.
     @MainActor

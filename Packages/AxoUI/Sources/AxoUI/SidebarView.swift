@@ -19,8 +19,14 @@ struct SidebarView: View {
                 }
                 .accessibilityIdentifier("pinnedSection")
             }
-            Section(model.space?.name ?? "Tabs") {
+            Section {
                 rows(for: model.unpinnedTabs.filter { !model.isSplitFollower($0) }, pinned: false)
+            } header: {
+                if let space = model.space, let icon = space.icon {
+                    Label(space.name, systemImage: icon)
+                } else {
+                    Text(model.space?.name ?? "Tabs")
+                }
             }
         }
         .sheet(isPresented: $isShowingArchive) {

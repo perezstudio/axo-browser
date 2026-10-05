@@ -224,4 +224,20 @@ struct SyncStoreTests {
         try await mac.sync()
         #expect(await cloud.recordCount == 4)
     }
+
+    @Test func spaceColorsAndIconsSync() async throws {
+        let space = try await mac.tabs.bootstrap()
+        try await mac.sync()
+        try await iPad.sync()
+        try await mac.tabs.setSpaceAppearance(id: space.id, color: "teal", icon: "leaf")
+        try await mac.sync()
+        try await iPad.sync()
+        let synced = try #require(try await iPad.tabs.spaces().first)
+        #expect(synced.color == "teal" && synced.icon == "leaf")
+
+        try await iPad.tabs.setSpaceAppearance(id: space.id, color: nil, icon: nil)
+        try await iPad.sync()
+        try await mac.sync()
+        #expect(try await mac.tabs.spaces().first?.color == nil, "Clearing syncs too")
+    }
 }

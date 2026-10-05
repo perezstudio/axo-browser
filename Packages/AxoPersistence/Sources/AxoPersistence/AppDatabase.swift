@@ -311,6 +311,27 @@ public final class AppDatabase: Sendable {
                 """)
         }
 
+        // A Space's color (a palette name, such as "blue") and icon (an SF Symbol name), both
+        // optional. They sync, so the Space trigger from v12 is recreated to notice them.
+        migrator.registerMigration("v13-space-appearance") { db in
+            try db.alter(table: "space") { t in
+                t.add(column: "color", .text)
+                t.add(column: "icon", .text)
+            }
+            let now = "strftime('%Y-%m-%d %H:%M:%f', 'now')"
+            let changed = ["profileID", "name", "sortKey", "color", "icon"]
+                .map { "OLD.\($0) IS NOT NEW.\($0)" }.joined(separator: " OR ")
+            try db.execute(sql: """
+                DROP TRIGGER space_sync_update;
+                CREATE TRIGGER space_sync_update AFTER UPDATE ON space
+                WHEN NOT EXISTS (SELECT 1 FROM syncApplying) AND (\(changed))
+                BEGIN
+                INSERT INTO syncChange (recordType, recordID, isDeletion, changedAt) VALUES ('Space', NEW.id, 0, \(now))
+                ON CONFLICT (recordType, recordID) DO UPDATE SET isDeletion = excluded.isDeletion, changedAt = excluded.changedAt;
+                END;
+                """)
+        }
+
         return migrator
     }
 

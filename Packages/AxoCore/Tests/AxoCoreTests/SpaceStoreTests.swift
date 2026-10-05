@@ -116,4 +116,28 @@ struct SpaceStoreTests {
             try await store.deleteProfile(id: work.id, movingSpacesTo: nil)
         }
     }
+
+    @Test func spacesHaveAnOptionalColorAndIcon() async throws {
+        let home = try await store.bootstrap()
+        #expect(home.color == nil && home.icon == nil)
+        try await store.setSpaceAppearance(id: home.id, color: "blue", icon: "briefcase")
+        let saved = try #require(try await store.spaces().first)
+        #expect(saved.color == "blue" && saved.icon == "briefcase")
+        try await store.setSpaceAppearance(id: home.id, color: nil, icon: nil)
+        #expect(try await store.spaces().first?.color == nil)
+    }
+
+    @Test func spacesReorderByMovingOneRow() async throws {
+        let home = try await store.bootstrap()
+        let work = try await store.createSpace(name: "Work", profileID: home.profileID)
+        let play = try await store.createSpace(name: "Play", profileID: home.profileID)
+
+        try await store.moveSpace(id: play.id, after: nil)
+        #expect(try await store.spaces().map(\.name) == ["Play", "Home", "Work"])
+        try await store.moveSpace(id: play.id, after: work.id)
+        #expect(try await store.spaces().map(\.name) == ["Home", "Work", "Play"])
+        try await store.moveSpace(id: home.id, after: work.id)
+        #expect(try await store.spaces().map(\.name) == ["Work", "Home", "Play"])
+        #expect(try await store.spaces().first { $0.id == work.id }?.sortKey == work.sortKey, "Only the moved Space changes")
+    }
 }
