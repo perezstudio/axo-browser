@@ -71,7 +71,8 @@ struct SiteCustomizationTests {
     @Test func changesReachLiveWebViewsOnTheirNextLoad() async throws {
         let pool = WebViewPool.forTesting()
         let webView = try await load(page, at: "http://example.com/", pool: pool)
-        #expect(webView.title == "Page")
+        // The title can arrive just after loading finishes.
+        try await waitUntil("the page's title") { webView.title == "Page" }
 
         pool.setSiteCustomizations([SiteCustomization(domain: "example.com", js: "document.title = 'After'")])
         webView.loadHTMLString(page, baseURL: URL(string: "http://example.com/")!)

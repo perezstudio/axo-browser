@@ -34,6 +34,7 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
   - `bootstrap()` returns the first Space, creating a default profile and Space on first launch.
   - `openTab(id:url:title:in:at:)` (pass an `id` to keep a page that was already showing, such as a promoted Peek), `moveTab(id:to:)`, `updateTab(id:url:title:)`, and `closeTab(id:)` write off the main actor.
   - `TabPosition` is `.start`, `.end`, or `.after(tabID)`, within the tab's section. Pinned tabs come first, and each section has its own order. Anchoring across sections throws `anchorInDifferentSection`.
+  - `searchableContent(historyLimit:)` and `observeSearchableContent(historyLimit:)` return what Spotlight indexes: pinned tabs in every Space (with Space names) and the most recent history (with profile names).
   - `searchTabs(matching:limit:)` finds sidebar tabs in any Space by title or address, ignoring case, most recently used first.
   - Folders (`Folder` and `PinnedItem`): `folders(in:)`, `observeFolders(in:)`, `createFolder(named:in:parent:)`, `renameFolder`, `setFolderExpanded`, `deleteFolder` (its contents move up a level, in order), and `movePinnedItem(_:into:after:)`, which moves a pinned tab or folder to any level (pinning unpinned tabs) and refuses folder cycles. Folders and pinned tabs at one level share an order.
   - Pinning: `setPinned(_:tabID:)` (pinning records the current page as `homeURL`), `setHomeURL(_:tabID:)`, and `resetPinnedTab(id:)`.

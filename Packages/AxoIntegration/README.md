@@ -1,6 +1,6 @@
 # AxoIntegration
 
-Default browser, location services, App Intents (Focus filters and Shortcuts actions), Focus filters, Handoff, Spotlight, passkeys, Screen Time, and Translation.
+Default browser, location services, App Intents (Focus filters and Shortcuts actions), Spotlight, Focus filters, Handoff, Spotlight, passkeys, Screen Time, and Translation.
 
 Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLAN.md` for the architecture.
 
@@ -25,6 +25,11 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
   - **Get Current Tab** returns the tab on screen.
   - **Save Tab to Space** copies the current page into a Space, pinned by default.
   - **Opening Axo:** actions that change the window set `openAppWhenRun`. Failures throw `IntentBridgeError` with plain messages.
+
+- **Spotlight:** `SpotlightIndexer` keeps the system's Core Spotlight index showing pinned tabs from every Space and the 500 most recently visited pages.
+  - **Updates:** it watches `observeSearchableContent` and rebuilds Axo's two groups (`pinnedTabsDomain`, `historyDomain`) a few seconds after changes. Pages that are already pinned tabs aren't listed twice.
+  - **Opening results:** result identifiers map to `SpotlightTarget` (`.tab` or `.page`), so the app can open what the person picked.
+  - **Tests:** the index is a `SpotlightIndex` protocol (`SystemSpotlightIndex` for real use), so tests never write to Spotlight.
 
 The rest of this package (App Intents, Focus filters, Handoff, Spotlight, passkeys, Screen Time, Translation) comes in Milestone 6.
 
