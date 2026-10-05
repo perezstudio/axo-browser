@@ -21,6 +21,9 @@ public enum CommandAction: String, CaseIterable, Hashable, Sendable {
     case addSplitView
     case separateSplitView
     case rotateSplitView
+    case translatePage
+    case showOriginalPage
+    case summarizePage
 
     /// The name shown in the command bar.
     public var title: String {
@@ -43,6 +46,9 @@ public enum CommandAction: String, CaseIterable, Hashable, Sendable {
         case .addSplitView: "Add Split View"
         case .separateSplitView: "Separate Split View"
         case .rotateSplitView: "Rotate Split View"
+        case .translatePage: "Translate Page"
+        case .showOriginalPage: "Show Original Page"
+        case .summarizePage: "Summarize Page"
         }
     }
 
@@ -67,6 +73,9 @@ public enum CommandAction: String, CaseIterable, Hashable, Sendable {
         case .addSplitView: "rectangle.split.2x1"
         case .separateSplitView: "rectangle"
         case .rotateSplitView: "rectangle.split.1x2"
+        case .translatePage: "translate"
+        case .showOriginalPage: "arrow.uturn.backward.circle"
+        case .summarizePage: "text.line.3.summary"
         }
     }
 }

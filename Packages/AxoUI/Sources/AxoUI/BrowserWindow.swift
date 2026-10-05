@@ -28,6 +28,12 @@ public struct BrowserWindow: View {
                         CommandBarView(model: model)
                     }
                 }
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    if let translation = model.selectedTranslation {
+                        TranslationBar(model: model, translation: translation)
+                    }
+                }
+                .modifier(PageTranslationTask(model: model))
                 .toolbar { NavigationToolbar(model: model) }
                 // The sidebar's address field already shows where you are.
                 .toolbar(removing: .title)

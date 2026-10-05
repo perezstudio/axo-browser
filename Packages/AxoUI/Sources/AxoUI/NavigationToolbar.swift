@@ -24,6 +24,11 @@ struct NavigationToolbar: ToolbarContent {
                 DownloadsButton(model: model)
             }
         }
+        if model.pageSummarizer != nil {
+            ToolbarItem(placement: .primaryAction) {
+                SummaryButton(model: model)
+            }
+        }
         ToolbarItem(placement: .primaryAction) {
             let isLoading = model.selectedPage?.isLoading == true
             Button(isLoading ? "Stop" : "Reload", systemImage: isLoading ? "xmark" : "arrow.clockwise") {

@@ -169,11 +169,14 @@ enum AppEnvironment {
             model.defaultBrowser = SystemDefaultBrowser()
             // Not in UI tests either, so a test run never shows macOS's location prompt.
             model.locationAuthorization = SystemLocationAuthorization()
+            model.pageSummarizer = SystemPageSummarizer()
         } else {
             // UI tests never offer their pages to the person's other devices, and their pages
             // never count as the person's Screen Time usage.
             model.isHandoffEnabled = false
             model.pool.reportsScreenTimeUsage = false
+            // The on-device model's answers vary, so UI tests get a predictable stand-in.
+            model.pageSummarizer = UITestingPageSummarizer()
         }
         return model
     }
@@ -355,6 +358,26 @@ final class SystemLocationAuthorization: LocationAuthorizing {
 
     func requestIfNeeded() {
         authorization.requestIfNeeded()
+    }
+}
+
+/// Connects AxoIntegration's on-device summarizer to the model.
+struct SystemPageSummarizer: PageSummarizing {
+    let summarizer = PageSummarizer()
+
+    var unavailableReason: String? { summarizer.availability.message }
+
+    func summarize(title: String, url: URL?, text: String) async throws -> String {
+        try await summarizer.summarize(title: title, url: url, text: text)
+    }
+}
+
+/// A predictable summarizer for UI tests: the page's title and the start of its text.
+struct UITestingPageSummarizer: PageSummarizing {
+    var unavailableReason: String? { nil }
+
+    func summarize(title: String, url: URL?, text: String) async throws -> String {
+        "• \(title): \(text.prefix(40))"
     }
 }
 

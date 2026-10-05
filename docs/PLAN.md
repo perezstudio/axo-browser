@@ -73,7 +73,7 @@ Arrows point from a package to what it depends on; AxoCore sits at the center.
 | AxoPersistence | The single GRDB database: sidebar model, history, bookmarks, and an FTS5 index for the command bar. `DatabasePool` for concurrent reads, `DatabaseMigrator` for schema changes, `ValueObservation` plus GRDBQuery for reactive SwiftUI. |
 | AxoSync | Maps spaces, folders, and pinned tabs to CloudKit records with `CKSyncEngine`. No servers to run. |
 | AxoImport | Reads Arc's sidebar file and Chrome's bookmarks, plus Chromium history from both, and imports them through AxoCore. |
-| AxoIntegration | Default browser, location services, App Intents, Focus filters, Handoff, Spotlight, passkeys, Translation. |
+| AxoIntegration | Default browser, location services, App Intents, Focus filters, Handoff, Spotlight, passkeys, page summaries. |
 
 One database keeps storage simple to test, migrate, and sync. SwiftData and Core Data were ruled out because they lack full-text search, add overhead on write-heavy history, fit awkwardly with Swift 6 concurrency, and their built-in CloudKit sync gives no control over ordering or conflicts.
 
@@ -304,7 +304,7 @@ Each milestone should be usable as a daily driver before the next one starts.
 - [x] App Intents and Shortcuts actions: Open in Axo, Show Space (for "morning tabs" kept in a Space), Find Tabs, Show Tab, Get Current Tab, and Save Tab to Space. Siri and Spotlight phrases come through an `AppShortcutsProvider`.
 - [x] Handoff and Spotlight indexing of pinned tabs and history: the window offers its page through Handoff and opens pages handed off to it. Spotlight indexes pinned tabs from every Space and the 500 most recent history pages, and opens the result picked.
 - [x] Screen Time web usage support: an `STWebpageController` over each visible page reports its URL per profile and shows Screen Time's block screen when a site is over its limit. It lives in AxoWeb rather than AxoIntegration because it has to sit on top of the web view. Removing history from Screen Time (`STWebHistory`) comes with a Clear History command.
-- [ ] On-device page translation and tab summaries
+- [x] On-device page translation and tab summaries: View › Translate Page (and the command bar) detects the page's language with NaturalLanguage and translates its text into the person's preferred language with the Translation framework; a bar above the page offers Show Original. Summarize Page, a toolbar button, writes a short summary with the on-device Foundation Models model and says plainly why when Apple Intelligence isn't available. Translation lives in AxoUI, because its session comes from a SwiftUI modifier; the summarizer is in AxoIntegration and the page text helpers in AxoWeb.
 
 **Milestone 7: Sync and iOS**
 

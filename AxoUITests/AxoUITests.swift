@@ -608,6 +608,31 @@ final class AxoUITests: XCTestCase {
         waitForExpectations(timeout: 5)
     }
 
+    /// Summarize Page shows a summary of the page's text in a popover. UI tests use a
+    /// predictable stand-in for the on-device model. Translation isn't run here, since it can
+    /// show macOS's language download sheet; the model tests cover it with a fake session.
+    @MainActor
+    func testSummarizePageShowsASummary() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["summarizeButton"].isEnabled, "Nothing to summarize without a tab")
+
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,<title>Story</title><p>Axolotls regrow limbs.</p>\n")
+        XCTAssertTrue(sidebar.staticTexts["Story"].waitForExistence(timeout: 10))
+
+        app.menuBars.menuBarItems["View"].click()
+        XCTAssertTrue(app.menuBars.menuItems["Translate Page"].isEnabled)
+        XCTAssertTrue(app.menuBars.menuItems["Summarize Page"].isEnabled)
+        app.typeKey(.escape, modifierFlags: [])
+
+        app.buttons["summarizeButton"].click()
+        let summary = app.staticTexts["summaryText"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 10))
+        XCTAssertEqual(summary.value as? String, "• Story: Axolotls regrow limbs.")
+    }
+
     /// Import from Another Browser reads Arc's Spaces and Chrome's bookmarks from fixture files
     /// (never the real ones) and adds them to the sidebar.
     @MainActor

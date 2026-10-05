@@ -104,6 +104,26 @@ public struct BrowserCommands: Commands {
             }
             .disabled(model?.siteSettingsOrigin == nil)
             Divider()
+            if model?.selectedTranslation != nil {
+                Button("Show Original Page") {
+                    guard let model else { return }
+                    Task { await model.showOriginalPage() }
+                }
+            } else {
+                Button("Translate Page") {
+                    guard let model else { return }
+                    Task { await model.translateSelectedPage() }
+                }
+                .disabled(model?.canTranslatePage != true)
+            }
+            if model?.pageSummarizer != nil {
+                Button("Summarize Page") {
+                    guard let model else { return }
+                    Task { await model.summarizeSelectedPage() }
+                }
+                .disabled(model?.canSummarizePage != true)
+            }
+            Divider()
         }
         CommandMenu("Tabs") {
             Button("Next Tab") { model?.selectTab(offsetBy: 1) }

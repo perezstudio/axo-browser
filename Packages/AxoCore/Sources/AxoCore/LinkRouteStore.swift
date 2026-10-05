@@ -90,15 +90,17 @@ public final class LinkRouteStore: Sendable {
 
     /// Every rule, oldest first.
     public func routes() async throws -> [LinkRoute] {
-        try await database.writer.read { db in
-            try LinkRoute.order(LinkRoute.Columns.createdAt, LinkRoute.Columns.value).fetchAll(db)
-        }
+        try await database.writer.read { db in try Self.orderedRoutes.fetchAll(db) }
     }
+
+    /// Rules oldest first. Rules saved within the same instant keep the order they were added
+    /// (row ID), not the order of their text.
+    private static let orderedRoutes = LinkRoute.order(LinkRoute.Columns.createdAt, Column.rowID)
 
     /// Streams every rule: the current list first, then a new list after every change.
     public func observeRoutes() -> AsyncValueObservation<[LinkRoute]> {
         ValueObservation
-            .tracking { db in try LinkRoute.order(LinkRoute.Columns.createdAt, LinkRoute.Columns.value).fetchAll(db) }
+            .tracking { db in try Self.orderedRoutes.fetchAll(db) }
             .values(in: database.writer)
     }
 

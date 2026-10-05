@@ -49,6 +49,15 @@ struct LinkRouteTests {
         #expect(space("https://swift.org/", from: "com.apple.mail") == nil)
     }
 
+    /// Rules added within the same instant (the clock's precision) stay in the order added,
+    /// rather than sorting by their text.
+    @Test func rulesAddedAtOnceKeepTheirOrder() async throws {
+        let now = Date()
+        try await routes.add(.domain, value: "github.com", spaceID: home.id, at: now)
+        try await routes.add(.app, value: "com.apple.mail", spaceID: home.id, at: now)
+        #expect(try await routes.routes().map(\.value) == ["github.com", "com.apple.mail"])
+    }
+
     @Test func rulesAreSavedChangedAndDeleted() async throws {
         let work = try await store.createSpace(name: "Work", profileID: home.profileID)
         let rule = try await routes.add(.domain, value: "github.com", spaceID: home.id)

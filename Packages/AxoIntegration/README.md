@@ -1,6 +1,6 @@
 # AxoIntegration
 
-Default browser, location services, App Intents (Focus filters and Shortcuts actions), and Spotlight. Passkeys and Translation come later; Handoff lives in AxoUI and Screen Time in AxoWeb, next to the views they work with.
+Default browser, location services, App Intents (Focus filters and Shortcuts actions), Spotlight, and on-device page summaries. Passkeys come later. Handoff and page translation live in AxoUI, and Screen Time in AxoWeb, next to the views they work with.
 
 Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLAN.md` for the architecture.
 
@@ -31,7 +31,12 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
   - **Opening results:** result identifiers map to `SpotlightTarget` (`.tab` or `.page`), so the app can open what the person picked.
   - **Tests:** the index is a `SpotlightIndex` protocol (`SystemSpotlightIndex` for real use), so tests never write to Spotlight.
 
-Still to come: on-device translation and tab summaries (Milestone 6), and passkeys, which are waiting on Apple's entitlement (see `docs/PLAN.md`).
+- **`PageSummarizer`** writes three to five bullet points about a page with the on-device Apple Intelligence model (FoundationModels). Nothing leaves the Mac.
+  - `availability` maps the system model's state to plain reasons (`Availability.message`), such as "Turn on Apple Intelligence in System Settings to summarize pages."
+  - `summarize(title:url:text:)` sends the title, address, and up to `textLimit` characters of text, and throws `PageSummaryError` with the reason when it can't.
+  - **Tests** don't use the model, except one that runs only with `AXO_SUMMARIES=1` on a Mac where it's available.
+
+Still to come: passkeys, which are waiting on Apple's entitlement (see `docs/PLAN.md`).
 
 ## Testing
 
