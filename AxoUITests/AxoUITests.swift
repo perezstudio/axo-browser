@@ -247,6 +247,39 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Home tab"].waitForExistence(timeout: 5))
     }
 
+    /// Settings › General moves the navigation bar from the sidebar to the page's toolbar, where
+    /// ⌘L still focuses the address field. (UI testing keeps settings in its own store.)
+    @MainActor
+    func testNavigationBarPlacement() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        let address = app.textFields["addressField"]
+        XCTAssertTrue(address.waitForExistence(timeout: 5))
+        XCTAssertLessThanOrEqual(address.frame.maxX, sidebar.frame.maxX + 1, "The sidebar holds the address field by default")
+        XCTAssertTrue(app.buttons["backButton"].exists)
+
+        app.typeKey(",", modifierFlags: .command)
+        let general = app.toolbars.buttons["General"]
+        XCTAssertTrue(general.waitForExistence(timeout: 5))
+        general.click()
+        let abovePage = app.radioButtons["Above the page"]
+        XCTAssertTrue(abovePage.waitForExistence(timeout: 5))
+        abovePage.click()
+        app.typeKey("w", modifierFlags: .command)
+
+        let pageBar = app.descendants(matching: .any)["pageAddressBar"]
+        XCTAssertTrue(pageBar.waitForExistence(timeout: 5))
+        XCTAssertTrue(pageBar.textFields["addressField"].exists)
+        XCTAssertEqual(app.textFields.matching(identifier: "addressField").count, 1, "The sidebar no longer has one")
+        XCTAssertGreaterThan(address.frame.minX, sidebar.frame.maxX - 1, "It sits in the page's toolbar")
+        XCTAssertTrue(app.buttons["backButton"].exists && app.buttons["reloadButton"].exists)
+
+        app.typeKey("l", modifierFlags: .command)
+        app.typeText("data:text/html,<title>Above</title>\n")
+        XCTAssertTrue(sidebar.staticTexts["Above"].waitForExistence(timeout: 10), "⌘L focuses the address field above the page")
+    }
+
     /// The sidebar's footer: Settings on the left, a dot per Space (the current one selected) in
     /// the middle, and New Space on the right.
     @MainActor

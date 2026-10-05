@@ -8,6 +8,7 @@ import SwiftUI
 struct SidebarView: View {
     let model: BrowserModel
     @State private var isShowingArchive = false
+    @AppStorage(NavigationBarPlacement.storageKey) private var navigationBarPlacement = NavigationBarPlacement.sidebar
 
     var body: some View {
         // Folders are selectable too, so the keyboard can reach, open, and act on them.
@@ -52,15 +53,17 @@ struct SidebarView: View {
             SpaceSwitcher(model: model)
         }
         .safeAreaInset(edge: .top) {
-            // Like Arc, the address field sits at the top of the sidebar.
-            HStack(spacing: 6) {
-                AddressField(model: model)
-                SiteSettingsButton(model: model)
+            // Like Arc, the address field can sit at the top of the sidebar.
+            if navigationBarPlacement == .sidebar {
+                AddressBar(model: model)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 6)
             }
-            .padding(.horizontal, 10)
-            .padding(.bottom, 6)
         }
         .toolbar {
+            if navigationBarPlacement == .sidebar {
+                SidebarNavigationToolbar(model: model)
+            }
             ToolbarItem {
                 Button("New Tab", systemImage: "plus") { model.beginNewTab() }
                     .help("New Tab")

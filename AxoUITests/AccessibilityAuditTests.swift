@@ -182,6 +182,10 @@ final class AccessibilityAuditTests: XCTestCase {
         XCTAssertTrue(app.buttons["addDomainRouteButton"].waitForExistence(timeout: 5))
         try audit(app, "settings")
 
+        app.toolbars.buttons["General"].click()
+        XCTAssertTrue(app.radioButtons["Above the page"].waitForExistence(timeout: 5))
+        try audit(app, "general settings")
+
         app.toolbars.buttons["Site Customizations"].click()
         XCTAssertTrue(app.buttons["addSiteCustomizationButton"].waitForExistence(timeout: 5))
         try audit(app, "site customizations")

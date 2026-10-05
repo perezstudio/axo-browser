@@ -3,20 +3,23 @@ import SwiftUI
 
 // Mac only for now; iPhone and iPad have their own chrome.
 #if os(macOS)
-/// Back, forward, and reload. The address field lives at the top of the sidebar.
+/// The page column's toolbar: back, forward, the address field, and reload when the navigation
+/// bar is above the page, and the extension, downloads, and summary buttons.
 struct NavigationToolbar: ToolbarContent {
     let model: BrowserModel
+    let placement: NavigationBarPlacement
 
     var body: some ToolbarContent {
-        ToolbarItemGroup(placement: .navigation) {
-            Button("Back", systemImage: "chevron.backward") { model.goBack() }
-                .disabled(model.selectedPage?.canGoBack != true)
-                .help("Go back")
-                .accessibilityIdentifier("backButton")
-            Button("Forward", systemImage: "chevron.forward") { model.goForward() }
-                .disabled(model.selectedPage?.canGoForward != true)
-                .help("Go forward")
-                .accessibilityIdentifier("forwardButton")
+        if placement == .page {
+            ToolbarItemGroup(placement: .navigation) {
+                BackForwardButtons(model: model)
+            }
+            ToolbarItem(placement: .principal) {
+                AddressBar(model: model)
+                    .frame(minWidth: 240, idealWidth: 520, maxWidth: 680)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("pageAddressBar")
+            }
         }
         ToolbarItemGroup(placement: .primaryAction) {
             ExtensionToolbarButtons(model: model)
@@ -31,14 +34,66 @@ struct NavigationToolbar: ToolbarContent {
                 SummaryButton(model: model)
             }
         }
-        ToolbarItem(placement: .primaryAction) {
-            let isLoading = model.selectedPage?.isLoading == true
-            Button(isLoading ? "Stop" : "Reload", systemImage: isLoading ? "xmark" : "arrow.clockwise") {
-                model.reloadOrStop()
+        if placement == .page {
+            ToolbarItem(placement: .primaryAction) {
+                ReloadButton(model: model)
             }
-            .disabled(model.selectedTabID == nil)
-            .help(isLoading ? "Stop loading this page" : "Reload this page")
-            .accessibilityIdentifier("reloadButton")
+        }
+    }
+}
+
+/// The sidebar's toolbar when the navigation bar is in the sidebar: back, forward, and reload
+/// beside the sidebar toggle.
+struct SidebarNavigationToolbar: ToolbarContent {
+    let model: BrowserModel
+
+    var body: some ToolbarContent {
+        ToolbarItemGroup(placement: .navigation) {
+            BackForwardButtons(model: model)
+            ReloadButton(model: model)
+        }
+    }
+}
+
+/// Back and forward.
+struct BackForwardButtons: View {
+    let model: BrowserModel
+
+    var body: some View {
+        Button("Back", systemImage: "chevron.backward") { model.goBack() }
+            .disabled(model.selectedPage?.canGoBack != true)
+            .help("Go back")
+            .accessibilityIdentifier("backButton")
+        Button("Forward", systemImage: "chevron.forward") { model.goForward() }
+            .disabled(model.selectedPage?.canGoForward != true)
+            .help("Go forward")
+            .accessibilityIdentifier("forwardButton")
+    }
+}
+
+/// Reload, or Stop while the page loads.
+struct ReloadButton: View {
+    let model: BrowserModel
+
+    var body: some View {
+        let isLoading = model.selectedPage?.isLoading == true
+        Button(isLoading ? "Stop" : "Reload", systemImage: isLoading ? "xmark" : "arrow.clockwise") {
+            model.reloadOrStop()
+        }
+        .disabled(model.selectedTabID == nil)
+        .help(isLoading ? "Stop loading this page" : "Reload this page")
+        .accessibilityIdentifier("reloadButton")
+    }
+}
+
+/// The address field and Site Settings, at the top of the sidebar or above the page.
+struct AddressBar: View {
+    let model: BrowserModel
+
+    var body: some View {
+        HStack(spacing: 6) {
+            AddressField(model: model)
+            SiteSettingsButton(model: model)
         }
     }
 }

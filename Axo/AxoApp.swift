@@ -33,6 +33,7 @@ struct AxoApp: App {
         // window shares the same model.
         WindowGroup(id: AppEnvironment.browserWindowID) {
             BrowserWindow(model: model)
+                .defaultAppStorage(AppEnvironment.settings)
                 .modifier(BrowserWindowOpener(model: model))
                 // Links from other apps (as the default browser) and opened HTML files open in
                 // mini windows, not another browser window (handlesExternalEvents below).
@@ -61,6 +62,7 @@ struct AxoApp: App {
 
         Settings {
             SettingsView(model: model)
+                .defaultAppStorage(AppEnvironment.settings)
         }
         .commands {
             if AppEnvironment.isUITesting {
@@ -88,6 +90,16 @@ enum AppEnvironment {
     /// Set by UI tests: use an in-memory database, non-persistent website data, and a temporary
     /// downloads folder, so every launch starts empty and nothing touches the user's real data.
     static let isUITesting = ProcessInfo.processInfo.environment["AXO_UI_TESTING"] == "1"
+
+    /// Where the person's choices in Settings live. UI tests share user defaults with the person's
+    /// own Axo, so in UI testing mode they get a separate store, emptied at launch.
+    static let settings: UserDefaults = {
+        guard isUITesting else { return .standard }
+        let name = "com.perezstudio.Axo.UITesting"
+        let store = UserDefaults(suiteName: name)!
+        store.removePersistentDomain(forName: name)
+        return store
+    }()
 
     /// Where Axo keeps its database.
     static var databaseURL: URL {

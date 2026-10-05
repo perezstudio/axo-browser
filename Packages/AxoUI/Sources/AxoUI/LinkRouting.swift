@@ -77,6 +77,8 @@ public struct SettingsView: View {
 
     public var body: some View {
         TabView {
+            GeneralSettings()
+                .tabItem { Label("General", systemImage: "gearshape") }
             LinkRoutingSettings(model: model)
                 .tabItem { Label("Link Routing", systemImage: "arrow.triangle.branch") }
             SiteCustomizationSettings(model: model)
