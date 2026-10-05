@@ -94,6 +94,11 @@ final class AccessibilityAuditTests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Pond"].waitForExistence(timeout: 10))
         try audit(app, "page")
 
+        app.buttons["summarizeButton"].click()
+        XCTAssertTrue(app.staticTexts["summaryText"].waitForExistence(timeout: 10))
+        try audit(app, "page summary")
+        app.typeKey(.escape, modifierFlags: [])
+
         app.typeKey("t", modifierFlags: .command)
         app.typeText("data:text/html,<title>Lake</title><p>Still water.</p>\n")
         XCTAssertTrue(sidebar.staticTexts["Lake"].waitForExistence(timeout: 10))

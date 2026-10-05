@@ -5,6 +5,7 @@ import Foundation
 import Observation
 import os
 import SwiftUI
+import Translation
 
 /// The state behind a browser window: the current Space, its tabs, and the selected tab.
 ///
@@ -146,6 +147,20 @@ public final class BrowserModel {
     /// The customization being edited in the window's editor sheet, if it's open.
     public var customizationDraft: SiteCustomization?
     @ObservationIgnored private var siteCustomizationsObservationTask: Task<Void, Never>?
+    /// Translated tabs, by tab ID, so the window can offer to show the original.
+    public internal(set) var translatedPages: [AxoCore.Tab.ID: TranslatedPage] = [:]
+    /// The window's translation request. Setting it asks SwiftUI for a translation session.
+    public internal(set) var translationConfiguration: TranslationSession.Configuration?
+    /// The page text waiting to be translated.
+    @ObservationIgnored var pendingTranslation: PendingTranslation?
+    /// The language pages are translated into. Defaults to the person's preferred language.
+    @ObservationIgnored public var translationTarget = Locale.Language(identifier: Locale.preferredLanguages.first ?? "en")
+    /// Writes page summaries. Set by the app; Summarize Page is hidden without it.
+    @ObservationIgnored public var pageSummarizer: (any PageSummarizing)?
+    /// Whether the summary popover is open.
+    public var isShowingSummary = false
+    /// The summary popover's state.
+    public internal(set) var pageSummary: PageSummaryState?
     /// Link routing rules, kept current for Settings.
     public internal(set) var linkRoutes: [LinkRoute] = []
     @ObservationIgnored private var linkRoutesObservationTask: Task<Void, Never>?
@@ -180,6 +195,7 @@ public final class BrowserModel {
         self.alertMessage = alertMessage
         self.initialSpaceID = initialSpaceID
         pool.onPageChange = { [weak self] tabID, url, title in
+            self?.forgetTranslation(ifPageChangedIn: tabID, to: url)
             self?.persistPageChange(tabID: tabID, url: url, title: title)
         }
         pool.onFaviconChange = { [weak self] _, pageURL, data in
@@ -994,6 +1010,9 @@ public final class BrowserModel {
             case .renameFolder, .deleteFolder: selectedFolderID != nil
             case .addSplitView: canAddToSplit
             case .separateSplitView, .rotateSplitView: selectedSplit != nil
+            case .translatePage: canTranslatePage
+            case .showOriginalPage: selectedTranslation != nil
+            case .summarizePage: canSummarizePage
             default: true
             }
         }
@@ -1019,6 +1038,9 @@ public final class BrowserModel {
         case .addSplitView: beginSplitWithNewTab()
         case .separateSplitView: await separateSelectedSplit()
         case .rotateSplitView: await toggleSplitOrientation()
+        case .translatePage: await translateSelectedPage()
+        case .showOriginalPage: await showOriginalPage()
+        case .summarizePage: await summarizeSelectedPage()
         }
     }
 

@@ -68,6 +68,7 @@ The full plan, architecture, and reasoning behind every decision are in `docs/PL
 - Developer tools: the app adds a `WebViewPool` configurator and sets `ExtensionManager.configureExtensionWebViews` to `WebInspector.enableDeveloperTools`, so pages, popups, and background pages can be inspected. The same pool configurator turns on picture in picture (`PictureInPicture.enable`, also private API in AxoInspector). The bridge falls back to `isInspectable` (Safari's Develop menu) when the private inspector isn't available.
 - Don't use ⌥ with dead-key letters (E, I, N, U, `) in new shortcuts. On US layouts ⌥N, for example, starts a dead key, and ⌥⌘N never fired, so New Folder uses ⌃⌘N instead. ⌥⌘I (Show Web Inspector, the macOS convention) does work; its UI test proves it.
 - macOS window tabbing is off (`NSWindow.allowsAutomaticWindowTabbing = false`), because Axo's tabs live in the sidebar.
+- Translation and summaries: the `TranslationSession` that `.translationTask` hands out isn't `Sendable`, so `PageTranslationTask` uses it in a nonisolated function and passes only strings to the main actor. UI tests never translate (macOS may show a language download sheet), and they use `UITestingPageSummarizer` instead of the on-device model, whose answers vary.
 - Printing triggers macOS's Local Network prompt (printer discovery), and pages can reach local devices through WebKit's network process. `NSLocalNetworkUsageDescription` explains both. Keep it accurate if network behavior changes.
 
 ## Dependencies
@@ -95,7 +96,7 @@ The app is split into local Swift packages in `Packages/`. Respect the dependenc
 | AxoPersistence | GRDB database, migrations, FTS5 search index | GRDB |
 | AxoSync | `CKSyncEngine` mapping for Spaces, folders, pinned tabs | AxoPersistence |
 | AxoImport | Importing from Arc (sidebar JSON, Chromium history) and Chrome (bookmarks, history) | AxoCore, GRDB |
-| AxoIntegration | Default browser, App Intents, Focus filters, Handoff, Spotlight, passkeys, Translation | AxoCore |
+| AxoIntegration | Default browser, location, App Intents, Focus filters, Spotlight, on-device page summaries, passkeys | AxoCore |
 
 ## Hard rules
 
