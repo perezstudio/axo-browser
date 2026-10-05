@@ -347,6 +347,24 @@ final class AxoUITests: XCTestCase {
     }
 
     /// Settings › Site Customizations adds a site's CSS, turns it off, and deletes it.
+    /// The iCloud pane explains that a test build can't sync, with the switch unavailable.
+    /// (Syncing itself needs a signed Release build; AxoSync's tests cover it with a fake cloud.)
+    @MainActor
+    func testICloudPaneInSettings() throws {
+        let app = launchApp()
+        XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 5))
+        app.typeKey(",", modifierFlags: .command)
+        let pane = app.toolbars.buttons["iCloud"]
+        XCTAssertTrue(pane.waitForExistence(timeout: 5))
+        pane.click()
+
+        let toggle = app.descendants(matching: .any)["syncToggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        XCTAssertFalse(toggle.isEnabled)
+        XCTAssertEqual(app.staticTexts["syncStatus"].value as? String, "This copy of Axo can't use iCloud. Official releases can.")
+        XCTAssertFalse(app.buttons["syncNowButton"].exists)
+    }
+
     @MainActor
     func testSiteCustomizationsInSettings() throws {
         let app = launchApp()

@@ -49,7 +49,8 @@ public final class TabStore: Sendable {
     /// The name of the Space created on first launch.
     public static let defaultSpaceName = "Home"
 
-    let database: AppDatabase
+    /// The database the store reads and writes, shared with other stores such as AxoSync's.
+    public let database: AppDatabase
 
     /// Creates a store over `database`.
     public init(database: AppDatabase) {

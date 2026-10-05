@@ -127,6 +127,8 @@ public final class BrowserModel {
     public var isShowingSiteSettings = false
     /// The saved permission answers for the selected page's site, while Site Settings is open.
     public internal(set) var sitePermissions: [SitePermission.Kind: SitePermission.Decision] = [:]
+    /// Turns iCloud sync on and off, for the iCloud pane in Settings. Set by the app.
+    @ObservationIgnored public var iCloudSync: (any SyncControlling)?
     /// Reads and imports other browsers' data. Set by the app.
     @ObservationIgnored public var browserImporter: (any BrowserImporting)?
     /// The open Import sheet's state, if it's open.
@@ -384,6 +386,28 @@ public final class BrowserModel {
         (try? await store.profiles()) ?? []
     }
 
+    /// Keeps the shown Space current when it changes elsewhere, such as from iCloud: a rename
+    /// shows, and if the Space is deleted, the window moves to the first Space (creating one if
+    /// none are left).
+    func followShownSpace() async throws {
+        guard let current = space else { return }
+        if let fresh = spaces.first(where: { $0.id == current.id }) {
+            if fresh != current { space = fresh }
+            return
+        }
+        selectedTabBySpace[current.id] = nil
+        space = nil
+        let target: Space
+        if let first = spaces.first {
+            target = first
+        } else {
+            target = try await store.bootstrap()
+            spaces = try await store.spaces()
+        }
+        try await show(target)
+        announce("Switched to \(target.name)")
+    }
+
     /// Shows `target` in the window: its tabs, its remembered selection, and live updates.
     private func show(_ target: Space) async throws {
         if let current = space {
@@ -454,6 +478,7 @@ public final class BrowserModel {
                     // Re-read for the same reason as tabs: never apply a stale list.
                     guard let self else { return }
                     self.spaces = try await self.store.spaces()
+                    try await self.followShownSpace()
                 }
             } catch {
                 self?.logger.error("Space observation failed: \(error)")

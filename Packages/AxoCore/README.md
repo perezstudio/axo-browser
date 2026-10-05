@@ -8,6 +8,7 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
 
 ## Public API
 
+- **`TabStore.database`** is the `AppDatabase` the store uses, so other stores (such as AxoSync's `SyncStore`) share it.
 - **Records:** `Profile`, `Space`, `Tab` (with `isPinned`, `homeURL`, `lastActiveAt`, `archivedAt`, and `hasLeftHome`), and `Favicon` (a site icon keyed by lowercased host; `Favicon.key(for:)`) are plain `Codable` GRDB records. They hold persisted state only, never live web views.
 - **`ExtensionStore`** (`tabStore.extensions`) records the installed extensions per profile (`WebExtensionRecord`: ID, name, version, folder, unpacked, enabled, site access, and approved optional permissions). Updates keep the enabled state, site access, and approvals. Also `setSiteAccess` and `addGrantedOptional`.
 - **`HistoryStore`** (`tabStore.history`): `recordVisit(to:title:profileID:at:)` records http(s) pages only, one row per profile and URL. `importItems(_:profileID:)` merges another browser's history in one transaction: visit counts add up, the later visit time wins, and an imported title fills in a missing one. Also `updateTitle`, `recent`, `clear`, and `search(_:profileID:limit:)`, which matches every word as a prefix through FTS5 and ranks by relevance plus visit frequency and recency. `HistoryItem` is the record. Profiles never see each other's history.

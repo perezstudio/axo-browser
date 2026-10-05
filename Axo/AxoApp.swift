@@ -10,6 +10,7 @@ import AxoExtensions
 import AxoImport
 import AxoInspector
 import AxoIntegration
+import AxoSync
 import AxoUI
 import AxoWeb
 import AppIntents
@@ -93,6 +94,9 @@ enum AppEnvironment {
         URL.applicationSupportDirectory.appending(path: "Axo/Axo.sqlite")
     }
 
+
+    /// Runs iCloud sync. Kept for the app's lifetime.
+    static var iCloudSync: ICloudSyncController?
 
     /// Keeps Spotlight showing pinned tabs and history. Kept for the app's lifetime.
     static var spotlightIndexer: SpotlightIndexer?
@@ -202,6 +206,15 @@ enum AppEnvironment {
                 indexer.start()
                 spotlightIndexer = indexer
             }
+            // iCloud sync, in builds signed for it and never in UI tests (the pane then explains
+            // that this copy can't sync).
+            let sync = ICloudSyncController(
+                store: SyncStore(database: store.database),
+                isAvailable: !isUITesting && CloudKitSync.isAvailable(containerIdentifier: ICloudSyncController.containerIdentifier)
+            )
+            iCloudSync = sync
+            model.iCloudSync = sync
+            Task { await sync.refresh() }
             model.browserImporter = BrowserImportBridge(importer: BrowserImporter(store: store, applicationSupport: otherBrowsersFolder))
             return model
         } catch {

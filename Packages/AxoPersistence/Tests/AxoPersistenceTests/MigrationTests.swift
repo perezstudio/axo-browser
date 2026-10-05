@@ -251,4 +251,48 @@ struct MigrationTests {
             #expect(row["css"] as String == "" && row["js"] as String == "" && row["isEnabled"] as Bool == true)
         }
     }
+
+    @Test func v12RecordsChangesToSyncedRowsOnly() throws {
+        let database = try AppDatabase.makeInMemory()
+        let profileID = UUID(), spaceID = UUID(), pinnedID = UUID(), unpinnedID = UUID()
+        try database.writer.write { db in
+            func changes() throws -> [String: Bool] {
+                let rows = try Row.fetchAll(db, sql: "SELECT recordType, isDeletion FROM syncChange")
+                return Dictionary(rows.map { ($0["recordType"] as String, $0["isDeletion"] as Bool) }, uniquingKeysWith: { $1 })
+            }
+            try db.execute(sql: "INSERT INTO profile (id, name) VALUES (?, 'Default')", arguments: [profileID])
+            try db.execute(sql: "INSERT INTO space (id, profileID, name, sortKey) VALUES (?, ?, 'Home', 'a0')", arguments: [spaceID, profileID])
+            try db.execute(sql: "INSERT INTO tab (id, spaceID, url, sortKey, isPinned) VALUES (?, ?, 'https://a.example', 'a0', 1)", arguments: [pinnedID, spaceID])
+            try db.execute(sql: "INSERT INTO tab (id, spaceID, url, sortKey) VALUES (?, ?, 'https://b.example', 'a1')", arguments: [unpinnedID, spaceID])
+            #expect(try changes() == ["Profile": false, "Space": false, "Tab": false])
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM syncChange WHERE recordType = 'Tab'") == 1, "Unpinned tabs don't sync")
+            let changedAt = try #require(try Date.fetchOne(db, sql: "SELECT changedAt FROM syncChange WHERE recordType = 'Profile'"))
+            #expect(abs(changedAt.timeIntervalSinceNow) < 60)
+
+            // Page changes and unchanged writes aren't changes; moves are.
+            try db.execute(sql: "DELETE FROM syncChange")
+            try db.execute(sql: "UPDATE tab SET url = 'https://a.example/next', title = 'Next', lastActiveAt = CURRENT_TIMESTAMP")
+            try db.execute(sql: "UPDATE space SET name = 'Home'")
+            #expect(try changes().isEmpty)
+            try db.execute(sql: "UPDATE tab SET sortKey = 'b0' WHERE id = ?", arguments: [pinnedID])
+            #expect(try changes() == ["Tab": false])
+
+            // Unpinning or deleting a pinned tab is a deletion, which replaces the earlier change.
+            try db.execute(sql: "UPDATE tab SET isPinned = 0 WHERE id = ?", arguments: [pinnedID])
+            #expect(try changes() == ["Tab": true])
+            try db.execute(sql: "DELETE FROM syncChange")
+            try db.execute(sql: "DELETE FROM tab WHERE id = ?", arguments: [unpinnedID])
+            #expect(try changes().isEmpty)
+
+            // Writes from iCloud aren't recorded.
+            try db.execute(sql: "INSERT INTO syncApplying (flag) VALUES (1)")
+            try db.execute(sql: "UPDATE space SET name = 'From iCloud'")
+            try db.execute(sql: "DELETE FROM syncApplying")
+            #expect(try changes().isEmpty)
+
+            // Deleting a profile records its Space as deleted too.
+            try db.execute(sql: "DELETE FROM profile")
+            #expect(try changes() == ["Profile": true, "Space": true])
+        }
+    }
 }

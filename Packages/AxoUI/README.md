@@ -21,6 +21,8 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
   - **The editor:** a domain, an on/off switch, CSS and JavaScript editors, Delete, Save (⌘S), and Save and Reload (⌘R).
   - **Settings pane:** Site Customizations lists every site to turn off, edit, or delete, plus Add Site….
   - **Applying:** the model observes the store and passes the customizations to the pool (`setSiteCustomizations`).
+- **iCloud pane:** Settings has an iCloud pane when the app sets `BrowserModel.iCloudSync` (a `SyncControlling`, backed by AxoSync in the app). It has a switch for syncing Spaces, folders, and pinned tabs (on by default), notes what stays on the Mac, and shows `SyncStatus` in plain words, with Sync Now while syncing.
+- **Changes from elsewhere:** the window follows its Space when it changes outside the window, such as from iCloud: renames show, and if the Space is deleted the window moves to the first Space (`followShownSpace()`).
 - **Link routing and Settings:** `SettingsView` is Axo's Settings window (⌘,). Its Link Routing pane lists the rules, each with a Space picker and Delete, plus Add Domain… (a sheet) and Add App… (an Open panel in /Applications).
   - **Routing:** `openExternalURL(_:sourceApp:)` opens a link that matches a rule as a tab in the rule's Space, switching to it. Other links open in a mini window.
   - **Model:** `addDomainRoute` and `addAppRoute` return a plain message if the rule can't be added. `setRouteSpace`, `deleteRoute`, and `linkRoutes` (observed) cover the rest.

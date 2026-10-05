@@ -77,6 +77,10 @@ public struct SettingsView: View {
                 .tabItem { Label("Link Routing", systemImage: "arrow.triangle.branch") }
             SiteCustomizationSettings(model: model)
                 .tabItem { Label("Site Customizations", systemImage: "paintbrush") }
+            if let sync = model.iCloudSync {
+                SyncSettings(sync: sync)
+                    .tabItem { Label("iCloud", systemImage: "icloud") }
+            }
         }
         .frame(width: 560, height: 420)
     }

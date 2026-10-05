@@ -123,4 +123,19 @@ struct SpaceSwitchingTests {
         await fallback.start()
         #expect(fallback.space?.name == "Home", "A missing Space falls back to the first")
     }
+
+    /// Changes made elsewhere, such as by iCloud sync, reach the shown Space.
+    @Test func theShownSpaceFollowsRenamesAndDeletionsFromElsewhere() async throws {
+        let home = try #require(model.space)
+        let work = try await store.createSpace(name: "Work", profileID: home.profileID)
+        try await waitUntil { model.spaces.count == 2 }
+
+        try await store.renameSpace(id: home.id, to: "Personal")
+        try await waitUntil { model.space?.name == "Personal" }
+
+        await model.selectSpace(work.id)
+        try await store.deleteSpace(id: work.id)
+        try await waitUntil { model.space?.id == home.id }
+        #expect(model.spaces.map(\.id) == [home.id])
+    }
 }
