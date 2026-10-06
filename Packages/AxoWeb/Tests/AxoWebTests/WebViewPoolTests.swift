@@ -82,6 +82,31 @@ struct WebViewPoolTests {
         #expect(order == ["first", "second", "first", "second"], "Configurators run in order")
     }
 
+    @Test func someWebViewsStartFromTheirOwnConfiguration() throws {
+        let pool = WebViewPool.forTesting()
+        let special = try pages.page("special")
+        var asked: [(URL, Profile.ID)] = []
+        pool.baseConfiguration = { url, profile in
+            asked.append((url, profile))
+            guard url == special else { return nil }
+            let configuration = WKWebViewConfiguration()
+            configuration.preferences.minimumFontSize = 17
+            return configuration
+        }
+        var configuratorRan = false
+        pool.addWebViewConfigurator { _, _ in configuratorRan = true }
+
+        let ordinary = pool.webView(for: .testTab(url: try pages.page("ordinary")), profileID: profileID)
+        let own = pool.webView(for: .testTab(url: special), profileID: profileID)
+
+        #expect(asked.map(\.0) == [try pages.page("ordinary"), special])
+        #expect(asked.allSatisfy { $0.1 == profileID })
+        #expect(ordinary.configuration.preferences.minimumFontSize == 0)
+        #expect(own.configuration.preferences.minimumFontSize == 17)
+        #expect(own.configuration.websiteDataStore === pool.dataStore(for: profileID), "The pool's own settings still apply")
+        #expect(configuratorRan)
+    }
+
     // MARK: Loading and state
 
     @Test func loadsTheTabURLAndReportsPageChanges() async throws {

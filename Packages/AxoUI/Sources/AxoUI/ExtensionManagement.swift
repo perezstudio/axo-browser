@@ -33,7 +33,8 @@ public struct ExtensionSummary: Identifiable, Equatable, Sendable {
     public var reachesAllRequestedSites: Bool
     /// What it can do now, in plain language.
     public var lines: [String]
-    /// Why it couldn't load, if it couldn't.
+    /// Why it isn't working, in plain words (it couldn't load, or its background couldn't
+    /// start), or `nil` when it's fine.
     public var loadError: String?
 
     public init(id: String, name: String, version: String, isEnabled: Bool, isUnpacked: Bool, reachesAllRequestedSites: Bool, lines: [String], loadError: String?) {
@@ -67,6 +68,9 @@ public protocol ExtensionManaging: AnyObject {
     /// Verifies and saves an extension (a `.crx` file or an unpacked folder) turned off, and
     /// describes it for the install prompt.
     func prepareInstall(from url: URL, profileID: Profile.ID) async throws -> ExtensionInstallPrompt
+    /// Downloads an extension from the Chrome Web Store, verifies and saves it turned off, and
+    /// describes it for the install prompt.
+    func prepareWebStoreInstall(_ extensionID: String, profileID: Profile.ID) async throws -> ExtensionInstallPrompt
     /// Turns on an extension the person agreed to add.
     func confirmInstall(_ extensionID: String, profileID: Profile.ID) async throws
     /// Removes an extension.
@@ -112,6 +116,17 @@ extension BrowserModel {
             pendingExtensionInstall = try await management.prepareInstall(from: url, profileID: profileID)
         } catch {
             alertMessage = "Axo couldn't install this extension. \(error.localizedDescription)"
+        }
+    }
+
+    /// Starts installing an extension from its Chrome Web Store page ("Add to Axo"): downloads
+    /// it, then shows the usual install prompt. The current Space's profile gets it.
+    public func installFromWebStore(_ extensionID: String) async {
+        guard let management = extensionManagement, let profileID = space?.profileID else { return }
+        do {
+            pendingExtensionInstall = try await management.prepareWebStoreInstall(extensionID, profileID: profileID)
+        } catch {
+            alertMessage = "Axo couldn't add this extension from the Chrome Web Store. \(error.localizedDescription)"
         }
     }
 
@@ -260,8 +275,12 @@ private struct ExtensionRow: View {
                 // The switch says whether it's on; the label says what it turns on.
                 .accessibilityLabel(item.name)
             }
-            if let error = item.loadError {
-                Text("Couldn't load: \(error)").font(.caption).foregroundStyle(.red)
+            if let problem = item.loadError {
+                Label(problem, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("extensionProblem")
             }
             Picker("Site access", selection: Binding(
                 get: { item.reachesAllRequestedSites },

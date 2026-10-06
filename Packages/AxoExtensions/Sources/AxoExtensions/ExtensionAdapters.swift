@@ -43,7 +43,7 @@ final class ExtensionTab: NSObject, WKWebExtensionTab {
     }
 
     func indexInWindow(for context: WKWebExtensionContext) -> Int {
-        manager?.browser?.windowTabs.firstIndex { $0.id == tabID } ?? NSNotFound
+        manager?.windowTabIDs.firstIndex(of: tabID) ?? NSNotFound
     }
 
     func webView(for context: WKWebExtensionContext) -> WKWebView? { webView }
@@ -113,8 +113,8 @@ final class ExtensionWindow: NSObject, WKWebExtensionWindow {
     }
 
     func tabs(for context: WKWebExtensionContext) -> [any WKWebExtensionTab] {
-        guard let manager, let browser = manager.browser else { return [] }
-        return browser.windowTabs.map { manager.tabAdapter(for: $0.id) }
+        guard let manager else { return [] }
+        return manager.windowTabIDs.map { manager.tabAdapter(for: $0) }
     }
 
     func activeTab(for context: WKWebExtensionContext) -> (any WKWebExtensionTab)? {

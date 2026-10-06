@@ -72,6 +72,8 @@ final class LiveTab {
 
     /// Stops the web view and detaches it so it can be deallocated.
     func tearDown() {
+        // The controller keeps its message handlers, so remove the store button's.
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: WebStore.handlerName, contentWorld: WebStore.world)
         observations.forEach { $0.invalidate() }
         observations = []
         webView.stopLoading()

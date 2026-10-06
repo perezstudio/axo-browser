@@ -59,6 +59,10 @@ public final class WebViewPool {
     /// pages never count as the person's usage. Screen Time still blocks sites over their limit.
     public var reportsScreenTimeUsage = true
 
+    /// Called with an extension's ID when the person clicks "Add to Axo" on its Chrome Web Store
+    /// page, and the tab it was clicked in. Set by the app. See ``WebStore``.
+    public var onWebStoreInstall: ((String, Tab.ID) -> Void)?
+
     /// The user scripts for per-site custom CSS and JavaScript. See ``setSiteCustomizations(_:)``.
     private var siteCustomizationScripts: [WKUserScript] = []
 
@@ -66,14 +70,32 @@ public final class WebViewPool {
     /// their next page load (reload a page to see changes right away). Turned-off customizations
     /// are skipped.
     ///
-    /// Axo adds no other user scripts, so updating live web views replaces all of theirs.
+    /// Updating live web views replaces all their user scripts, so the Chrome Web Store script
+    /// is added back too.
     public func setSiteCustomizations(_ customizations: [SiteCustomization]) {
         siteCustomizationScripts = SiteCustomizationScripts.userScripts(for: customizations)
         for liveTab in live.values {
             let controller = liveTab.webView.configuration.userContentController
             controller.removeAllUserScripts()
+            controller.addUserScript(WebStore.userScript)
             siteCustomizationScripts.forEach(controller.addUserScript)
         }
+    }
+
+    /// A web view coming or going, for observers such as the extension manager.
+    public enum LiveTabEvent: Equatable, Sendable {
+        /// A tab's web view was created (not woken from hibernation: that's a new one too).
+        case created(Tab.ID, profileID: Profile.ID)
+        /// A tab's web view was discarded because the tab closed (``discard(_:)``), not hibernated.
+        case discarded(Tab.ID, profileID: Profile.ID)
+    }
+
+    private var liveTabObservers: [(LiveTabEvent) -> Void] = []
+
+    /// Adds a function called whenever a web view is created or discarded, for every page: sidebar
+    /// tabs, favorites, Peek, and mini windows.
+    public func addLiveTabObserver(_ observer: @escaping (LiveTabEvent) -> Void) {
+        liveTabObservers.append(observer)
     }
 
     /// Functions that adjust each new web view's configuration, in the order added.
@@ -85,6 +107,12 @@ public final class WebViewPool {
     public func addWebViewConfigurator(_ configure: @escaping (WKWebViewConfiguration, Profile.ID) -> Void) {
         configurators.append(configure)
     }
+
+    /// Asked for the configuration a new web view starts from, given the page it opens and its
+    /// profile. Return `nil` for an ordinary configuration. Some pages need their own: WebKit only
+    /// loads an extension's pages in a configuration made by that extension's context. The pool
+    /// then adds its own settings and runs the configurators as usual.
+    public var baseConfiguration: ((URL, Profile.ID) -> WKWebViewConfiguration?)?
 
     /// Asked when the person clicks a link in a tab's page (main frame only, not downloads).
     /// Return `true` to handle the click yourself, for example to open the link in Peek; the page
@@ -158,11 +186,17 @@ public final class WebViewPool {
             return existing.webView
         }
 
-        let configuration = WKWebViewConfiguration()
+        let configuration = baseConfiguration?(tab.url, profileID) ?? WKWebViewConfiguration()
         configuration.websiteDataStore = dataStore(for: profileID)
         // Element fullscreen (the Fullscreen API) is off by default; videos and pages expect it.
         configuration.preferences.isElementFullscreenEnabled = true
         UserAgent.apply(to: configuration)
+        configuration.userContentController.addUserScript(WebStore.userScript)
+        configuration.userContentController.add(
+            WebStoreMessageHandler { [weak self] id in self?.onWebStoreInstall?(id, tab.id) },
+            contentWorld: WebStore.world,
+            name: WebStore.handlerName
+        )
         siteCustomizationScripts.forEach(configuration.userContentController.addUserScript)
         configurators.forEach { $0(configuration, profileID) }
         let webView = PooledWebView(frame: .zero, configuration: configuration)
@@ -190,6 +224,7 @@ public final class WebViewPool {
         liveTab.onPageChange = { [weak self] url, title in self?.onPageChange?(tab.id, url, title) }
         liveTab.onLoadFinished = { [weak self] in self?.loadFavicon(for: tab.id) }
         live[tab.id] = liveTab
+        liveTabObservers.forEach { $0(.created(tab.id, profileID: profileID)) }
 
         if let saved = hibernated.removeValue(forKey: tab.id), let interactionState = saved.interactionState {
             liveTab.state.restoringSnapshot = saved.snapshot.flatMap(PlatformImage.init(data:))
@@ -411,7 +446,9 @@ public final class WebViewPool {
     public func discard(_ tabID: Tab.ID) {
         hibernated[tabID] = nil
         visibleCounts[tabID] = nil
-        live.removeValue(forKey: tabID)?.tearDown()
+        guard let liveTab = live.removeValue(forKey: tabID) else { return }
+        liveTab.tearDown()
+        liveTabObservers.forEach { $0(.discarded(tabID, profileID: liveTab.profileID)) }
     }
 
     // MARK: Permissions
@@ -483,6 +520,12 @@ public final class WebViewPool {
         let store = makeDataStore(profileID)
         dataStores[profileID] = store
         return store
+    }
+
+    /// The tabs whose web views are live for a profile, in no particular order: sidebar tabs,
+    /// favorites, Peek, and mini windows alike.
+    public func liveTabIDs(for profileID: Profile.ID) -> [Tab.ID] {
+        live.values.filter { $0.profileID == profileID }.map(\.tabID)
     }
 
     /// Removes a profile's cookies, caches, and other website data, signing it out of sites.

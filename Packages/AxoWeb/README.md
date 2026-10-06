@@ -18,7 +18,9 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
   - `hibernate(_:)`, `hibernateIdleTabs()`, and `startHibernationTimer()` discard hidden web views after `Configuration.hibernationTimeout` (30 minutes by default). Hibernating is `async`: it first captures a 640 pt JPEG of the page (`snapshot(for:)`). If the tab is shown or closed during the capture, it stays live.
   - When a hibernated tab wakes, its `WebTabState.restoringSnapshot` holds that picture until the restored page finishes loading.
   - `discard(_:)` forgets a closed tab.
+  - `liveTabIDs(for:)` lists a profile's live pages, and `addLiveTabObserver(_:)` reports each web view created and each discarded (`LiveTabEvent`), for every page: sidebar tabs, favorites, Peek, and mini windows. AxoExtensions uses them so extensions see every page.
   - `addWebViewConfigurator(_:)` adds a function called, in order, with each new web view's configuration and profile. AxoExtensions uses it to attach the profile's extension controller, and the app uses it to turn on developer tools.
+  - `baseConfiguration` supplies the configuration a new web view starts from, given its page and profile (`nil` for an ordinary one). AxoExtensions uses it for extensions' own pages, which WebKit only loads in a configuration from the extension's context.
   - `load(_:in:)`, `goBack(in:)`, `goForward(in:)`, `reload(_:)`, and `stopLoading(_:)` drive a live tab.
   - `find(_:in:backwards:)` highlights and scrolls to the next or previous match (ignoring case, wrapping) and returns whether it found one. `clearFind(in:)` removes the highlight. WebKit's public API doesn't report match counts.
   - `printOperation(for:)` returns an `NSPrintOperation` for the page, titled with the page title and fit to the page width. Run it with `runModal(for:…)`: a synchronous `run()` hangs, because WebKit prints asynchronously.
@@ -48,6 +50,7 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
   - `pageTextSegments(in:limit:)` returns the page's visible text nodes in order, skipping scripts, styles, code, form fields, and editable areas.
   - `replacePageText(_:in:)` swaps in new texts for those nodes, one each, keeping their surrounding whitespace, and `restorePageText(in:)` puts the originals back.
   - `readablePageText(in:limit:)` returns the page's text as one string, with whitespace collapsed.
+- **Chrome Web Store (`WebStore`):** every web view gets a script, in an isolated world (`AxoWebStore`), that adds an "Add to Axo" button on extension pages (`chromewebstore.google.com/detail/<name>/<id>`). It goes before the store's own install button (a button mentioning Chrome), or floats at the top right if none is found, and follows the store's in-page navigation. Clicking reports the extension ID through `onWebStoreInstall`. Only trusted clicks count, and only messages from the store's main frame over https with a valid ID (`WebStore.isValidExtensionID`, `extensionID(fromPageURL:)`). Page scripts can't see the handler.
 - **Screen Time:** each `WebViewContainer` holds an `STWebpageController` above its page.
   - **Usage:** it reports the page's URL (followed through KVO) so Screen Time can count usage, keeping each profile's history separate (`profileIdentifier` is the profile ID).
   - **Limits:** when a site is over its limit or blocked by a parent, it shows Screen Time's block screen. Otherwise clicks go straight through to the page.
