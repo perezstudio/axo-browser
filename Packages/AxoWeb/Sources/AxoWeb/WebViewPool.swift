@@ -100,6 +100,9 @@ public final class WebViewPool {
     public var onOpenInNewTab: ((URL, Tab.ID) -> Void)?
 
     private let makeDataStore: (Profile.ID) -> WKWebsiteDataStore
+    /// Deletes a profile's stored website data for good. Replace it in tests. WebKit requires the
+    /// main thread here (it crashes otherwise), hence `@MainActor`.
+    public var removeDataStore: @MainActor (Profile.ID) async throws -> Void = { try await WKWebsiteDataStore.remove(forIdentifier: $0) }
     private let now: () -> Date
     private var dataStores: [Profile.ID: WKWebsiteDataStore] = [:]
     private var live: [Tab.ID: LiveTab] = [:]
@@ -480,6 +483,22 @@ public final class WebViewPool {
         let store = makeDataStore(profileID)
         dataStores[profileID] = store
         return store
+    }
+
+    /// Removes a profile's cookies, caches, and other website data, signing it out of sites.
+    /// Its open pages keep what they already loaded.
+    public func clearWebsiteData(for profileID: Profile.ID) async {
+        await dataStore(for: profileID).removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast)
+    }
+
+    /// Deletes a deleted profile's website data store for good, after discarding any web view
+    /// still using it.
+    public func removeWebsiteData(for profileID: Profile.ID) async {
+        for (tabID, liveTab) in live where liveTab.profileID == profileID {
+            discard(tabID)
+        }
+        dataStores[profileID] = nil
+        try? await removeDataStore(profileID)
     }
 }
 

@@ -15,7 +15,7 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
     - **Arc** (`.spaces`, plus optional `.favorites`, `.openTabs`, `.history`):
       - Each Arc Space becomes an Axo Space after the existing ones, with its pinned tabs and folders. Split views become their tabs.
       - Spaces on Arc's default profile use the current Axo profile. Each other Arc profile gets a new Axo profile named "Arc <profile name>", so Spaces stay separated as they were. If writing the Spaces fails, those profiles are removed again.
-      - Favorites (Arc's Top Apps) go in a "Favorites" folder at the top of the first Space of their profile.
+      - Favorites (Arc's Top Apps) become favorites of the matching Axo profile, in order (folders flattened).
       - Open tabs come in unpinned and archive on the usual schedule from the time of import.
       - History comes from each Arc profile's Chromium `History` file under `User Data`, into the matching Axo profile.
     - **Chrome** (`.bookmarks`, `.history`):

@@ -247,6 +247,239 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Home tab"].waitForExistence(timeout: 5))
     }
 
+    /// Settings › General moves the navigation bar from the sidebar to the page's toolbar, where
+    /// ⌘L still focuses the address field. (UI testing keeps settings in its own store.)
+    @MainActor
+    func testNavigationBarPlacement() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        let address = app.textFields["addressField"]
+        XCTAssertTrue(address.waitForExistence(timeout: 5))
+        XCTAssertLessThanOrEqual(address.frame.maxX, sidebar.frame.maxX + 1, "The sidebar holds the address field by default")
+        XCTAssertTrue(app.buttons["backButton"].exists)
+
+        app.typeKey(",", modifierFlags: .command)
+        let general = app.toolbars.buttons["General"]
+        XCTAssertTrue(general.waitForExistence(timeout: 5))
+        general.click()
+        let abovePage = app.radioButtons["Above the page"]
+        XCTAssertTrue(abovePage.waitForExistence(timeout: 5))
+        abovePage.click()
+        app.typeKey("w", modifierFlags: .command)
+
+        let pageBar = app.descendants(matching: .any)["pageAddressBar"]
+        XCTAssertTrue(pageBar.waitForExistence(timeout: 5))
+        XCTAssertTrue(pageBar.textFields["addressField"].exists)
+        XCTAssertEqual(app.textFields.matching(identifier: "addressField").count, 1, "The sidebar no longer has one")
+        XCTAssertGreaterThan(address.frame.minX, sidebar.frame.maxX - 1, "It sits in the page's toolbar")
+        XCTAssertTrue(app.buttons["backButton"].exists && app.buttons["reloadButton"].exists)
+
+        app.typeKey("l", modifierFlags: .command)
+        app.typeText("data:text/html,<title>Above</title>\n")
+        XCTAssertTrue(sidebar.staticTexts["Above"].waitForExistence(timeout: 10), "⌘L focuses the address field above the page")
+    }
+
+    /// With the navigation bar above the page, its address field and buttons work like the
+    /// sidebar's: the field shows the page's address, clicking it and typing navigates the tab,
+    /// and back and forward follow the history. Everything sits over the page, not the sidebar.
+    @MainActor
+    func testAddressBarAbovePage() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        app.typeKey(",", modifierFlags: .command)
+        let general = app.toolbars.buttons["General"]
+        XCTAssertTrue(general.waitForExistence(timeout: 5))
+        general.click()
+        app.radioButtons["Above the page"].click()
+        app.typeKey("w", modifierFlags: .command)
+
+        let address = app.descendants(matching: .any)["pageAddressBar"].textFields["addressField"]
+        XCTAssertTrue(address.waitForExistence(timeout: 5))
+        for id in ["backButton", "forwardButton", "reloadButton", "siteSettingsButton"] {
+            let button = app.buttons[id]
+            XCTAssertTrue(button.exists, "\(id) is in the page's toolbar")
+            XCTAssertGreaterThan(button.frame.minX, sidebar.frame.maxX - 1, "\(id) sits over the page")
+        }
+
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText(page("First") + "\n")
+        XCTAssertTrue(sidebar.staticTexts["First"].waitForExistence(timeout: 10))
+        expectation(for: NSPredicate(format: "value CONTAINS '%3Ctitle%3EFirst'"), evaluatedWith: address)
+        waitForExpectations(timeout: 5)
+
+        // Clicking the field selects the address, so typing replaces it and the tab navigates.
+        address.click()
+        address.typeKey("a", modifierFlags: .command)
+        address.typeText(page("Second") + "\n")
+        XCTAssertTrue(sidebar.staticTexts["Second"].waitForExistence(timeout: 10))
+        XCTAssertFalse(sidebar.staticTexts["First"].exists, "It navigates the tab instead of opening another")
+        expectation(for: NSPredicate(format: "value CONTAINS '%3Ctitle%3ESecond'"), evaluatedWith: address)
+        waitForExpectations(timeout: 5)
+
+        let back = app.buttons["backButton"], forward = app.buttons["forwardButton"]
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: back)
+        waitForExpectations(timeout: 10)
+        back.click()
+        XCTAssertTrue(sidebar.staticTexts["First"].waitForExistence(timeout: 10))
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: forward)
+        waitForExpectations(timeout: 10)
+        forward.click()
+        XCTAssertTrue(sidebar.staticTexts["Second"].waitForExistence(timeout: 10))
+    }
+
+    /// Settings › Profiles adds a profile, then deletes the default one, moving the Home Space to
+    /// the new profile.
+    @MainActor
+    func testProfilesInSettings() throws {
+        let app = launchApp()
+        XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 5))
+        app.typeKey(",", modifierFlags: .command)
+        let pane = app.toolbars.buttons["Profiles"]
+        XCTAssertTrue(pane.waitForExistence(timeout: 5))
+        pane.click()
+
+        let list = app.outlines["profileList"].exists ? app.outlines["profileList"] : app.tables["profileList"]
+        XCTAssertTrue(app.textFields["profileNameField"].waitForExistence(timeout: 5), "The current profile is selected")
+        XCTAssertEqual(app.textFields["profileNameField"].value as? String, "Default")
+        XCTAssertTrue(app.staticTexts["Home"].exists, "It lists the Spaces that use it")
+        XCTAssertFalse(app.buttons["deleteProfileButton"].isEnabled, "The only profile can't be deleted")
+
+        app.buttons["addProfileButton"].click()
+        let nameField = app.textFields["nameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.typeText("Work\n")
+        XCTAssertTrue(list.staticTexts["Work"].waitForExistence(timeout: 5))
+        expectation(for: NSPredicate(format: "value == 'Work'"), evaluatedWith: app.textFields["profileNameField"])
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(app.staticTexts["No Spaces use this profile."].exists)
+
+        list.staticTexts["Default"].click()
+        app.buttons["deleteProfileButton"].click()
+        let confirm = app.buttons["confirmDeleteProfileButton"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.popUpButtons["replacementProfilePicker"].exists, "It asks where Home goes")
+        confirm.click()
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: list.staticTexts["Default"])
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(list.staticTexts["Work"].exists)
+    }
+
+    /// Settings › Spaces gives a Space a color and icon, adds a Space, renames it, and deletes it.
+    @MainActor
+    func testSpacesInSettings() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        app.typeKey(",", modifierFlags: .command)
+        let pane = app.toolbars.buttons["Spaces"]
+        XCTAssertTrue(pane.waitForExistence(timeout: 5))
+        pane.click()
+
+        let name = app.textFields["spaceNameSettingsField"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5), "The current Space is selected")
+        XCTAssertEqual(name.value as? String, "Home")
+        XCTAssertTrue(app.descendants(matching: .any)["spaceProfilePicker"].exists, "It shows the profile (a picker once there are two)")
+        XCTAssertFalse(app.buttons["deleteSpaceButton"].isEnabled, "The only Space can't be deleted")
+
+        let teal = app.descendants(matching: .any)["spaceColorSwatches"].buttons["Teal"]
+        teal.click()
+        expectation(for: NSPredicate(format: "isSelected == true"), evaluatedWith: teal)
+        waitForExpectations(timeout: 5)
+        let leaf = app.descendants(matching: .any)["spaceIconGrid"].buttons["Leaf"]
+        leaf.click()
+        expectation(for: NSPredicate(format: "isSelected == true"), evaluatedWith: leaf)
+        waitForExpectations(timeout: 5)
+
+        app.buttons["addSpaceButton"].click()
+        let newName = app.textFields["spaceNameField"]
+        XCTAssertTrue(newName.waitForExistence(timeout: 5))
+        newName.typeText("Work")
+        app.buttons["createSpaceButton"].click()
+        expectation(for: NSPredicate(format: "value == 'Work'"), evaluatedWith: name)
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(app.buttons["deleteSpaceButton"].isEnabled)
+
+        name.click()
+        name.typeKey("a", modifierFlags: .command)
+        name.typeText("Projects\n")
+        let list = app.outlines["spaceList"].exists ? app.outlines["spaceList"] : app.tables["spaceList"]
+        XCTAssertTrue(list.staticTexts["Projects"].waitForExistence(timeout: 5))
+
+        app.buttons["deleteSpaceButton"].click()
+        // The − button is also called Delete Space, so look in the confirmation sheet.
+        let confirm = app.sheets.buttons["Delete Space"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.click()
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: list.staticTexts["Projects"])
+        waitForExpectations(timeout: 5)
+        XCTAssertEqual(app.buttons.matching(identifier: "spaceButton").count, 1)
+    }
+
+    /// A tab becomes a favorite from its context menu: it moves to the grid above the pinned
+    /// tabs, ⌘1 shows it, it stays in another Space of the same profile, and its own menu
+    /// removes it.
+    @MainActor
+    func testFavorites() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText(page("Mail") + "\n")
+        XCTAssertTrue(sidebar.staticTexts["Mail"].waitForExistence(timeout: 10))
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText(page("News") + "\n")
+        XCTAssertTrue(sidebar.staticTexts["News"].waitForExistence(timeout: 10))
+
+        sidebar.staticTexts["Mail"].rightClick()
+        app.windows.firstMatch.menuItems["Add to Favorites"].click()
+        let tile = app.buttons["favoriteTile"]
+        XCTAssertTrue(tile.waitForExistence(timeout: 5))
+        XCTAssertEqual(tile.label, "Mail")
+        XCTAssertFalse(sidebar.staticTexts["Mail"].exists, "It leaves the tab list")
+        XCTAssertTrue(app.descendants(matching: .any)["favoritesGrid"].exists)
+
+        sidebar.staticTexts["News"].click()
+        app.typeKey("1", modifierFlags: .command)
+        expectation(for: NSPredicate(format: "isSelected == true"), evaluatedWith: tile)
+        waitForExpectations(timeout: 5)
+        expectation(for: NSPredicate(format: "value CONTAINS 'Mail'"), evaluatedWith: app.textFields["addressField"])
+        waitForExpectations(timeout: 5)
+
+        app.buttons["newSpaceButton"].click()
+        let nameField = app.textFields["spaceNameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.typeText("Work")
+        app.buttons["createSpaceButton"].click()
+        XCTAssertTrue(sidebar.staticTexts["Work"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["favoriteTile"].exists, "Every Space of the profile shows it")
+
+        app.buttons["favoriteTile"].rightClick()
+        app.windows.firstMatch.menuItems["Remove from Favorites"].click()
+        XCTAssertTrue(app.buttons["favoriteTile"].waitForNonExistence(timeout: 5))
+    }
+
+    /// The sidebar's footer: Settings on the left, a dot per Space (the current one selected) in
+    /// the middle, and New Space on the right.
+    @MainActor
+    func testSidebarFooter() throws {
+        let app = launchApp()
+        let footer = app.descendants(matching: .any)["spaceSwitcher"]
+        XCTAssertTrue(footer.waitForExistence(timeout: 5))
+        let settings = footer.buttons["settingsButton"], newSpace = footer.buttons["newSpaceButton"]
+        let dot = footer.buttons["spaceButton"]
+        XCTAssertTrue(settings.exists && newSpace.exists && dot.exists)
+        XCTAssertLessThan(settings.frame.midX, dot.frame.midX)
+        XCTAssertLessThan(dot.frame.midX, newSpace.frame.midX)
+        XCTAssertEqual(dot.label, "Home")
+        XCTAssertTrue(dot.isSelected)
+
+        settings.click()
+        let pane = app.toolbars.buttons["Link Routing"]
+        XCTAssertTrue(pane.waitForExistence(timeout: 5), "Settings opens")
+    }
+
     /// Pin a tab from its context menu, close and reopen an unpinned tab, and see that closing
     /// the pinned tab keeps it in the sidebar.
     @MainActor
@@ -696,8 +929,11 @@ final class AxoUITests: XCTestCase {
 
         XCTAssertEqual(app.buttons.matching(identifier: "spaceButton").count, 2, "The Arc Space is added")
         app.typeKey("2", modifierFlags: .control)
-        XCTAssertTrue(sidebar.staticTexts["Library"].waitForExistence(timeout: 5))
-        XCTAssertTrue(sidebar.staticTexts["Favorites"].exists)
+        // The Space's only tab is selected, so it starts loading (a closed port), which can
+        // replace its imported title with an empty one; the row then shows the host.
+        let library = sidebar.staticTexts.matching(NSPredicate(format: "label == 'Library' OR label == '127.0.0.1'")).firstMatch
+        XCTAssertTrue(library.waitForExistence(timeout: 5), "The Arc Space's pinned tab is there")
+        XCTAssertEqual(app.buttons.matching(identifier: "favoriteTile").count, 1, "Arc's favorite joins Favorites")
 
         // Chrome's bookmarks go into the current Space.
         app.typeKey("t", modifierFlags: .command)

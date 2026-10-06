@@ -311,6 +311,59 @@ public final class AppDatabase: Sendable {
                 """)
         }
 
+        // A Space's color (a palette name, such as "blue") and icon (an SF Symbol name), both
+        // optional. They sync, so the Space trigger from v12 is recreated to notice them.
+        migrator.registerMigration("v13-space-appearance") { db in
+            try db.alter(table: "space") { t in
+                t.add(column: "color", .text)
+                t.add(column: "icon", .text)
+            }
+            let now = "strftime('%Y-%m-%d %H:%M:%f', 'now')"
+            let changed = ["profileID", "name", "sortKey", "color", "icon"]
+                .map { "OLD.\($0) IS NOT NEW.\($0)" }.joined(separator: " OR ")
+            try db.execute(sql: """
+                DROP TRIGGER space_sync_update;
+                CREATE TRIGGER space_sync_update AFTER UPDATE ON space
+                WHEN NOT EXISTS (SELECT 1 FROM syncApplying) AND (\(changed))
+                BEGIN
+                INSERT INTO syncChange (recordType, recordID, isDeletion, changedAt) VALUES ('Space', NEW.id, 0, \(now))
+                ON CONFLICT (recordType, recordID) DO UPDATE SET isDeletion = excluded.isDeletion, changedAt = excluded.changedAt;
+                END;
+                """)
+        }
+
+        // Favorites: pages kept in a grid above the pinned tabs and shared by every Space of a
+        // profile. Each has a home URL and title; deleting a profile deletes its favorites.
+        // They sync like pinned tabs.
+        migrator.registerMigration("v14-favorites") { db in
+            try db.create(table: "favorite") { t in
+                t.primaryKey("id", .blob)
+                t.column("profileID", .blob).notNull()
+                    .references("profile", onDelete: .cascade)
+                t.column("url", .text).notNull()
+                t.column("title", .text).notNull().defaults(to: "")
+                t.column("sortKey", .text).notNull()
+            }
+            try db.create(index: "favorite_on_profileID", on: "favorite", columns: ["profileID"])
+            let now = "strftime('%Y-%m-%d %H:%M:%f', 'now')"
+            let notApplying = "NOT EXISTS (SELECT 1 FROM syncApplying)"
+            func record(_ id: String, deletion: Bool) -> String {
+                """
+                INSERT INTO syncChange (recordType, recordID, isDeletion, changedAt) VALUES ('Favorite', \(id), \(deletion ? 1 : 0), \(now))
+                ON CONFLICT (recordType, recordID) DO UPDATE SET isDeletion = excluded.isDeletion, changedAt = excluded.changedAt;
+                """
+            }
+            let changed = ["profileID", "url", "title", "sortKey"].map { "OLD.\($0) IS NOT NEW.\($0)" }.joined(separator: " OR ")
+            try db.execute(sql: """
+                CREATE TRIGGER favorite_sync_insert AFTER INSERT ON favorite WHEN \(notApplying)
+                BEGIN \(record("NEW.id", deletion: false)) END;
+                CREATE TRIGGER favorite_sync_update AFTER UPDATE ON favorite WHEN \(notApplying) AND (\(changed))
+                BEGIN \(record("NEW.id", deletion: false)) END;
+                CREATE TRIGGER favorite_sync_delete AFTER DELETE ON favorite WHEN \(notApplying)
+                BEGIN \(record("OLD.id", deletion: true)) END;
+                """)
+        }
+
         return migrator
     }
 

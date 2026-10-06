@@ -127,6 +127,21 @@ public struct BrowserCommands: Commands {
             }
             Divider()
         }
+        CommandMenu("Favorites") {
+            Button("Add to Favorites") {
+                guard let model, let id = model.selectedTab?.id else { return }
+                Task { await model.addToFavorites(id) }
+            }
+            .keyboardShortcut("d", modifiers: [.command, .shift])
+            .disabled(model?.selectedTab == nil)
+            if let favorites = model?.favorites, !favorites.isEmpty {
+                Divider()
+                ForEach(Array(favorites.prefix(9).enumerated()), id: \.element.id) { index, favorite in
+                    Button(BrowserModel.title(of: favorite)) { model?.showFavorite(at: index) }
+                        .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)
+                }
+            }
+        }
         CommandMenu("Tabs") {
             Button("Next Tab") { model?.selectTab(offsetBy: 1) }
                 .keyboardShortcut(.downArrow, modifiers: [.command, .option])

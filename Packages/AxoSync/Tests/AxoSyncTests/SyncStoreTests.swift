@@ -224,4 +224,34 @@ struct SyncStoreTests {
         try await mac.sync()
         #expect(await cloud.recordCount == 4)
     }
+
+    @Test func spaceColorsAndIconsSync() async throws {
+        let space = try await mac.tabs.bootstrap()
+        try await mac.sync()
+        try await iPad.sync()
+        try await mac.tabs.setSpaceAppearance(id: space.id, color: "teal", icon: "leaf")
+        try await mac.sync()
+        try await iPad.sync()
+        let synced = try #require(try await iPad.tabs.spaces().first)
+        #expect(synced.color == "teal" && synced.icon == "leaf")
+
+        try await iPad.tabs.setSpaceAppearance(id: space.id, color: nil, icon: nil)
+        try await iPad.sync()
+        try await mac.sync()
+        #expect(try await mac.tabs.spaces().first?.color == nil, "Clearing syncs too")
+    }
+
+    @Test func favoritesSyncWithTheirProfile() async throws {
+        let home = try await mac.tabs.bootstrap()
+        let tab = try await mac.tabs.openTab(url: URL(string: "https://example.com/mail")!, title: "Mail", in: home.id)
+        let favorite = try await mac.tabs.favorites.add(fromTab: tab.id)
+        try await mac.sync()
+        try await iPad.sync()
+        #expect(try await iPad.tabs.favorites.favorites(for: home.profileID).map(\.url) == [favorite.url])
+
+        try await mac.tabs.favorites.remove(favorite.id)
+        try await mac.sync()
+        try await iPad.sync()
+        #expect(try await iPad.tabs.favorites.favorites(for: home.profileID).isEmpty)
+    }
 }

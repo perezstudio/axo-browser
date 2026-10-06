@@ -7,6 +7,7 @@ import SwiftUI
 /// The root view of a browser window: the sidebar on the left and web content on the right.
 public struct BrowserWindow: View {
     @Bindable private var model: BrowserModel
+    @AppStorage(NavigationBarPlacement.storageKey) private var navigationBarPlacement = NavigationBarPlacement.sidebar
 
     /// Creates a window showing `model`.
     public init(model: BrowserModel) {
@@ -36,8 +37,8 @@ public struct BrowserWindow: View {
                     }
                 }
                 .modifier(PageTranslationTask(model: model))
-                .toolbar { NavigationToolbar(model: model) }
-                // The sidebar's address field already shows where you are.
+                .toolbar { NavigationToolbar(model: model, placement: navigationBarPlacement) }
+                // The address field already shows where you are.
                 .toolbar(removing: .title)
         }
         .focusedSceneValue(\.browserModel, model)
@@ -65,7 +66,7 @@ public struct BrowserWindow: View {
                 .safeAreaInset(edge: .top, spacing: 0) {
                     if model.isFindBarVisible { FindBar(model: model) }
                 }
-        } else if let tab = model.selectedTab, let space = model.space {
+        } else if let tab = model.shownTab, let space = model.space {
             WebViewHost(tab: tab, profileID: space.profileID, pool: model.pool)
                 .accessibilityIdentifier("webContent")
                 .safeAreaInset(edge: .top, spacing: 0) {

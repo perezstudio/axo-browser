@@ -6,7 +6,11 @@
       "options": {}
     }
   ],
-  "defaultOptions": {},
+  "defaultOptions": {
+    "systemAttachmentLifetime": "keepNever",
+    "preferredScreenCaptureFormat": "screenshots",
+    "uiTestingScreenshotsLifetime": "keepNever"
+  },
   "testTargets": [
     {
       "target": {

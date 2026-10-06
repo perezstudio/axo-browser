@@ -32,13 +32,19 @@ public struct Space: Codable, Hashable, Identifiable, Sendable, FetchableRecord,
     public var name: String
     /// The Space's position among its siblings. See ``SortKey``.
     public var sortKey: String
+    /// The Space's color: a palette name, such as `"blue"`, or `nil` for the app's accent color.
+    public var color: String?
+    /// The Space's icon: an SF Symbol name, or `nil` for none.
+    public var icon: String?
 
     /// Creates a Space.
-    public init(id: UUID = UUID(), profileID: UUID, name: String, sortKey: String) {
+    public init(id: UUID = UUID(), profileID: UUID, name: String, sortKey: String, color: String? = nil, icon: String? = nil) {
         self.id = id
         self.profileID = profileID
         self.name = name
         self.sortKey = sortKey
+        self.color = color
+        self.icon = icon
     }
 }
 

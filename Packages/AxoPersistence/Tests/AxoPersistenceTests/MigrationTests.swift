@@ -295,4 +295,45 @@ struct MigrationTests {
             #expect(try changes() == ["Profile": true, "Space": true])
         }
     }
+
+    @Test func v13SpacesHaveAnOptionalColorAndIconThatSync() throws {
+        let database = try AppDatabase.makeInMemory()
+        let profileID = UUID(), spaceID = UUID()
+        try database.writer.write { db in
+            try db.execute(sql: "INSERT INTO profile (id, name) VALUES (?, 'Default')", arguments: [profileID])
+            try db.execute(sql: "INSERT INTO space (id, profileID, name, sortKey) VALUES (?, ?, 'Home', 'a0')", arguments: [spaceID, profileID])
+            let row = try #require(try Row.fetchOne(db, sql: "SELECT color, icon FROM space"))
+            #expect(row["color"] as String? == nil && row["icon"] as String? == nil)
+
+            try db.execute(sql: "DELETE FROM syncChange")
+            try db.execute(sql: "UPDATE space SET color = 'blue'")
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM syncChange WHERE recordType = 'Space'") == 1)
+            try db.execute(sql: "DELETE FROM syncChange")
+            try db.execute(sql: "UPDATE space SET icon = 'briefcase'")
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM syncChange") == 1)
+            try db.execute(sql: "DELETE FROM syncChange")
+            try db.execute(sql: "UPDATE space SET icon = 'briefcase'")
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM syncChange") == 0, "Unchanged writes aren't changes")
+        }
+    }
+
+    @Test func v14FavoritesBelongToAProfileAndSync() throws {
+        let database = try AppDatabase.makeInMemory()
+        let profileID = UUID(), favoriteID = UUID()
+        try database.writer.write { db in
+            try db.execute(sql: "INSERT INTO profile (id, name) VALUES (?, 'Default')", arguments: [profileID])
+            try db.execute(sql: "DELETE FROM syncChange")
+            try db.execute(sql: "INSERT INTO favorite (id, profileID, url, sortKey) VALUES (?, ?, 'https://example.com', 'a0')", arguments: [favoriteID, profileID])
+            #expect(try String.fetchOne(db, sql: "SELECT title FROM favorite") == "")
+            #expect(try String.fetchAll(db, sql: "SELECT recordType FROM syncChange") == ["Favorite"])
+
+            try db.execute(sql: "DELETE FROM syncChange")
+            try db.execute(sql: "UPDATE favorite SET sortKey = 'a0'")
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM syncChange") == 0, "Unchanged writes aren't changes")
+
+            try db.execute(sql: "DELETE FROM profile")
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM favorite") == 0, "They go with their profile")
+            #expect(try Bool.fetchOne(db, sql: "SELECT isDeletion FROM syncChange WHERE recordType = 'Favorite'") == true)
+        }
+    }
 }

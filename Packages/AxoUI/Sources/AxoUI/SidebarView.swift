@@ -8,6 +8,7 @@ import SwiftUI
 struct SidebarView: View {
     let model: BrowserModel
     @State private var isShowingArchive = false
+    @AppStorage(NavigationBarPlacement.storageKey) private var navigationBarPlacement = NavigationBarPlacement.sidebar
 
     var body: some View {
         // Folders are selectable too, so the keyboard can reach, open, and act on them.
@@ -18,8 +19,14 @@ struct SidebarView: View {
                 }
                 .accessibilityIdentifier("pinnedSection")
             }
-            Section(model.space?.name ?? "Tabs") {
+            Section {
                 rows(for: model.unpinnedTabs.filter { !model.isSplitFollower($0) }, pinned: false)
+            } header: {
+                if let space = model.space, let icon = space.icon {
+                    Label(space.name, systemImage: icon)
+                } else {
+                    Text(model.space?.name ?? "Tabs")
+                }
             }
         }
         .sheet(isPresented: $isShowingArchive) {
@@ -52,15 +59,21 @@ struct SidebarView: View {
             SpaceSwitcher(model: model)
         }
         .safeAreaInset(edge: .top) {
-            // Like Arc, the address field sits at the top of the sidebar.
-            HStack(spacing: 6) {
-                AddressField(model: model)
-                SiteSettingsButton(model: model)
+            VStack(spacing: 8) {
+                // Like Arc, the address field can sit at the top of the sidebar.
+                if navigationBarPlacement == .sidebar {
+                    AddressBar(model: model)
+                }
+                // Favorites sit above the pinned tabs, shared by the profile's Spaces.
+                FavoritesGrid(model: model)
             }
             .padding(.horizontal, 10)
             .padding(.bottom, 6)
         }
         .toolbar {
+            if navigationBarPlacement == .sidebar {
+                SidebarNavigationToolbar(model: model)
+            }
             ToolbarItem {
                 Button("New Tab", systemImage: "plus") { model.beginNewTab() }
                     .help("New Tab")
@@ -170,6 +183,8 @@ struct TabContextMenu: View {
             Button("Add to Split View") { Task { await model.addToSplit(tab.id) } }
             Divider()
         }
+        Button("Add to Favorites") { Task { await model.addToFavorites(tab.id) } }
+        Divider()
         if tab.isPinned {
             Button("Go to Pinned Page") { Task { await model.goToPinnedHome(tab.id) } }
                 .disabled(!tab.hasLeftHome)

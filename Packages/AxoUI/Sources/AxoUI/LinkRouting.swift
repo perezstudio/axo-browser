@@ -77,6 +77,12 @@ public struct SettingsView: View {
 
     public var body: some View {
         TabView {
+            GeneralSettings()
+                .tabItem { Label("General", systemImage: "gearshape") }
+            ProfileSettings(model: model)
+                .tabItem { Label("Profiles", systemImage: "person.2") }
+            SpaceSettings(model: model)
+                .tabItem { Label("Spaces", systemImage: "square.stack") }
             LinkRoutingSettings(model: model)
                 .tabItem { Label("Link Routing", systemImage: "arrow.triangle.branch") }
             SiteCustomizationSettings(model: model)
@@ -86,7 +92,7 @@ public struct SettingsView: View {
                     .tabItem { Label("iCloud", systemImage: "icloud") }
             }
         }
-        .frame(width: 560, height: 420)
+        .frame(width: 620, height: 460)
     }
 }
 

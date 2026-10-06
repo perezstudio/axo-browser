@@ -33,7 +33,7 @@ public struct BrowserImporter: Sendable {
 
         /// Arc's Spaces with their pinned tabs and folders.
         public static let spaces = Parts(rawValue: 1 << 0)
-        /// Arc's favorites, in a Favorites folder in the first imported Space.
+        /// Arc's favorites, as favorites of the matching Axo profile.
         public static let favorites = Parts(rawValue: 1 << 1)
         /// Arc's unpinned tabs.
         public static let openTabs = Parts(rawValue: 1 << 2)
@@ -66,8 +66,6 @@ public struct BrowserImporter: Sendable {
         }
     }
 
-    /// The name of the folder that holds Arc's favorites.
-    public static let favoritesFolderName = "Favorites"
     /// The name of the folder that holds Chrome's bookmarks.
     public static let chromeFolderName = "Imported from Chrome"
 
@@ -169,23 +167,12 @@ public struct BrowserImporter: Sendable {
             createdProfiles.append(profile.id)
         }
 
-        // Each profile's favorites go first in that profile's first Space, or the first Space.
-        var favoritesBySpace: [Int: [ImportedItem]] = [:]
         var counts = Counts()
-        if parts.contains(.favorites) {
-            for (profile, favorites) in sidebar.favorites {
-                let index = sidebar.spaces.firstIndex { $0.profile == profile } ?? 0
-                favoritesBySpace[index, default: []] += favorites
-                counts.favorites += favorites.reduce(0) { $0 + $1.tabCount }
-            }
-        }
-
-        let spaces = sidebar.spaces.enumerated().map { index, space in
-            let favorites = favoritesBySpace[index].map { [ImportedItem.folder(name: Self.favoritesFolderName, children: $0)] } ?? []
-            return ImportedSpace(
+        let spaces = sidebar.spaces.map { space in
+            ImportedSpace(
                 name: space.name,
                 profileID: profileIDs[space.profile]!,
-                pinned: favorites + space.pinned,
+                pinned: space.pinned,
                 unpinned: parts.contains(.openTabs) ? space.unpinned : []
             )
         }
@@ -196,6 +183,17 @@ public struct BrowserImporter: Sendable {
             throw error
         }
         counts.spaces = spaces.count
+
+        // Each Arc profile's favorites become favorites of its Axo profile, in order.
+        if parts.contains(.favorites) {
+            for (profile, items) in sidebar.favorites {
+                guard let profileID = profileIDs[profile] else { continue }
+                for case let .tab(title, url) in items.flatMap(Self.pages) {
+                    try await store.favorites.add(url: url, title: title, profileID: profileID)
+                    counts.favorites += 1
+                }
+            }
+        }
         counts.pinnedTabs = sidebar.spaces.reduce(0) { $0 + $1.pinned.reduce(0) { $0 + $1.tabCount } }
         counts.openTabs = spaces.reduce(0) { $0 + $1.unpinned.reduce(0) { $0 + $1.tabCount } }
 
@@ -220,6 +218,14 @@ public struct BrowserImporter: Sendable {
             counts.historyPages = try await store.history.importItems(pages, profileID: currentSpace.profileID)
         }
         return counts
+    }
+
+    /// The pages in an item, in order, with folders flattened (favorites have no folders).
+    private static func pages(in item: ImportedItem) -> [ImportedItem] {
+        switch item {
+        case .tab: [item]
+        case .folder(_, let children): children.flatMap(pages)
+        }
     }
 
     // MARK: Reading

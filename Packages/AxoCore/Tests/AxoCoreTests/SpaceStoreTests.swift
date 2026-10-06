@@ -85,4 +85,59 @@ struct SpaceStoreTests {
         try await store.deleteProfile(id: spare.id)
         #expect(try await store.profiles().map(\.id) == [home.profileID])
     }
+
+    @Test func spacesMoveToAnotherProfileWithTheirTabs() async throws {
+        let home = try await store.bootstrap()
+        let work = try await store.createProfile(name: "Work")
+        let tab = try await store.openTab(url: URL(string: "https://example.com")!, in: home.id)
+
+        #expect(try await store.moveSpace(id: home.id, toProfile: work.id) == [tab.id])
+        #expect(try await store.spaces().first?.profileID == work.id)
+        #expect(try await store.moveSpace(id: home.id, toProfile: work.id).isEmpty, "Already there")
+        await #expect(throws: TabStoreError.profileNotFound(UUID(uuidString: "00000000-0000-0000-0000-000000000000")!)) {
+            try await store.moveSpace(id: home.id, toProfile: UUID(uuidString: "00000000-0000-0000-0000-000000000000")!)
+        }
+    }
+
+    @Test func deletingAProfileMovesItsSpacesFirst() async throws {
+        let home = try await store.bootstrap()
+        let work = try await store.createProfile(name: "Work")
+        let tab = try await store.openTab(url: URL(string: "https://example.com")!, in: home.id)
+
+        await #expect(throws: TabStoreError.profileInUse(home.profileID)) {
+            try await store.deleteProfile(id: home.profileID, movingSpacesTo: nil)
+        }
+        #expect(try await store.deleteProfile(id: home.profileID, movingSpacesTo: work.id) == [tab.id])
+        #expect(try await store.profiles().map(\.id) == [work.id])
+        #expect(try await store.spaces().map(\.profileID) == [work.id])
+        #expect(try await store.tab(id: tab.id) != nil, "The Space keeps its tabs")
+
+        await #expect(throws: TabStoreError.cannotDeleteLastProfile) {
+            try await store.deleteProfile(id: work.id, movingSpacesTo: nil)
+        }
+    }
+
+    @Test func spacesHaveAnOptionalColorAndIcon() async throws {
+        let home = try await store.bootstrap()
+        #expect(home.color == nil && home.icon == nil)
+        try await store.setSpaceAppearance(id: home.id, color: "blue", icon: "briefcase")
+        let saved = try #require(try await store.spaces().first)
+        #expect(saved.color == "blue" && saved.icon == "briefcase")
+        try await store.setSpaceAppearance(id: home.id, color: nil, icon: nil)
+        #expect(try await store.spaces().first?.color == nil)
+    }
+
+    @Test func spacesReorderByMovingOneRow() async throws {
+        let home = try await store.bootstrap()
+        let work = try await store.createSpace(name: "Work", profileID: home.profileID)
+        let play = try await store.createSpace(name: "Play", profileID: home.profileID)
+
+        try await store.moveSpace(id: play.id, after: nil)
+        #expect(try await store.spaces().map(\.name) == ["Play", "Home", "Work"])
+        try await store.moveSpace(id: play.id, after: work.id)
+        #expect(try await store.spaces().map(\.name) == ["Home", "Work", "Play"])
+        try await store.moveSpace(id: home.id, after: work.id)
+        #expect(try await store.spaces().map(\.name) == ["Work", "Home", "Play"])
+        #expect(try await store.spaces().first { $0.id == work.id }?.sortKey == work.sortKey, "Only the moved Space changes")
+    }
 }

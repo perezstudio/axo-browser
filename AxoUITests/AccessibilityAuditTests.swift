@@ -155,6 +155,15 @@ final class AccessibilityAuditTests: XCTestCase {
         try audit(app, "downloads")
         app.typeKey(.escape, modifierFlags: [])
 
+        // A favorite in the grid above the pinned tabs.
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,<title>Starred</title><p>Kept close.</p>\n")
+        XCTAssertTrue(sidebar.staticTexts["Starred"].waitForExistence(timeout: 10))
+        sidebar.staticTexts["Starred"].rightClick()
+        app.windows.firstMatch.menuItems["Add to Favorites"].click()
+        XCTAssertTrue(app.buttons["favoriteTile"].waitForExistence(timeout: 5))
+        try audit(app, "favorites")
+
         // Peek, from a link in a pinned tab (a closed loopback port, so nothing loads). Peek's
         // header shows the host while loading, and the audit doesn't count a bare IP address
         // as readable, so the link uses "localhost".
@@ -181,6 +190,18 @@ final class AccessibilityAuditTests: XCTestCase {
         linkRouting.click()
         XCTAssertTrue(app.buttons["addDomainRouteButton"].waitForExistence(timeout: 5))
         try audit(app, "settings")
+
+        app.toolbars.buttons["General"].click()
+        XCTAssertTrue(app.radioButtons["Above the page"].waitForExistence(timeout: 5))
+        try audit(app, "general settings")
+
+        app.toolbars.buttons["Profiles"].click()
+        XCTAssertTrue(app.textFields["profileNameField"].waitForExistence(timeout: 5))
+        try audit(app, "profiles")
+
+        app.toolbars.buttons["Spaces"].click()
+        XCTAssertTrue(app.textFields["spaceNameSettingsField"].waitForExistence(timeout: 5))
+        try audit(app, "spaces")
 
         app.toolbars.buttons["Site Customizations"].click()
         XCTAssertTrue(app.buttons["addSiteCustomizationButton"].waitForExistence(timeout: 5))

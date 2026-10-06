@@ -63,6 +63,19 @@ struct MobileSidebar: View {
 
     var body: some View {
         List(selection: Binding(get: { model.selectedTabID }, set: { model.select($0) })) {
+            if !model.favorites.isEmpty, let space = model.space {
+                Section("Favorites") {
+                    ForEach(model.favorites) { favorite in
+                        TabRow(tab: favorite.tab(in: space.id), favicon: model.favicon(for: favorite.tab(in: space.id)))
+                            .tag(favorite.id)
+                            .swipeActions {
+                                Button("Remove", systemImage: "star.slash", role: .destructive) {
+                                    Task { await model.removeFavorite(favorite.id) }
+                                }
+                            }
+                    }
+                }
+            }
             if !model.pinnedTree.isEmpty {
                 Section("Pinned") {
                     MobilePinnedLevel(model: model, nodes: model.pinnedTree)
@@ -143,7 +156,7 @@ struct MobilePage: View {
 
     var body: some View {
         Group {
-            if let tab = model.selectedTab, let space = model.space {
+            if let tab = model.shownTab, let space = model.space {
                 WebViewHost(tab: tab, profileID: space.profileID, pool: model.pool)
                     .ignoresSafeArea(edges: sizeClass == .compact ? .top : [])
                     .accessibilityIdentifier("webContent")

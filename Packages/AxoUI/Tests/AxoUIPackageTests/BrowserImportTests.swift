@@ -123,7 +123,7 @@ struct BrowserImportTests {
         let counts = ImportCounts(spaces: 5, pinnedTabs: 141, favorites: 1, openTabs: 1, bookmarks: 2, historyPages: 1_273)
         #expect(counts.parts == ImportPart.allCases)
         #expect(counts.description(of: .spaces) == "5 Spaces, with 141 pinned tabs")
-        #expect(counts.description(of: .favorites) == "1 favorite, in a Favorites folder")
+        #expect(counts.description(of: .favorites) == "1 favorite")
         #expect(counts.description(of: .openTabs) == "1 open tab")
         #expect(counts.description(of: .history) == "1,273 pages of history")
         #expect(ImportCounts(spaces: 1, pinnedTabs: 1).summary == "1 Space and 1 pinned tab")

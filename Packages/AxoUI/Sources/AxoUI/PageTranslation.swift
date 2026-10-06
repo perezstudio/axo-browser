@@ -45,7 +45,7 @@ extension BrowserModel {
     /// Translates the selected page's text into ``translationTarget`` on this Mac, with Apple's
     /// Translation framework. macOS may first offer to download the languages.
     public func translateSelectedPage() async {
-        guard let tab = selectedTab, canTranslatePage else { return }
+        guard let tab = shownTab, canTranslatePage else { return }
         let segments: [String]
         do {
             segments = try await pool.pageTextSegments(in: tab.id)

@@ -3,6 +3,7 @@ import Foundation
 /// The kinds of rows that sync, in the order a parent comes before its children.
 public enum SyncRecordType: String, CaseIterable, Codable, Comparable, Sendable {
     case profile = "Profile"
+    case favorite = "Favorite"
     case space = "Space"
     case folder = "Folder"
     case tab = "Tab"
@@ -11,6 +12,7 @@ public enum SyncRecordType: String, CaseIterable, Codable, Comparable, Sendable 
     var table: String {
         switch self {
         case .profile: "profile"
+        case .favorite: "favorite"
         case .space: "space"
         case .folder: "folder"
         case .tab: "tab"
@@ -55,7 +57,8 @@ public struct SyncRecordID: Hashable, Codable, Sendable, CustomStringConvertible
 /// | Type | Fields |
 /// | --- | --- |
 /// | Profile | `name` |
-/// | Space | `profileID`, `name`, `sortKey` |
+/// | Favorite | `profileID`, `url` (its home page), `title`, `sortKey` |
+/// | Space | `profileID`, `name`, `sortKey`, `color`, `icon` |
 /// | Folder | `spaceID`, `parentID`, `name`, `sortKey` |
 /// | Tab (pinned) | `spaceID`, `folderID`, `url` (its home page), `title`, `sortKey` |
 public struct SyncRecord: Equatable, Codable, Sendable {
@@ -75,7 +78,8 @@ public struct SyncRecord: Equatable, Codable, Sendable {
     public static func fieldNames(for type: SyncRecordType) -> [String] {
         switch type {
         case .profile: ["name"]
-        case .space: ["profileID", "name", "sortKey"]
+        case .favorite: ["profileID", "url", "title", "sortKey"]
+        case .space: ["profileID", "name", "sortKey", "color", "icon"]
         case .folder: ["spaceID", "parentID", "name", "sortKey"]
         case .tab: ["spaceID", "folderID", "url", "title", "sortKey"]
         }

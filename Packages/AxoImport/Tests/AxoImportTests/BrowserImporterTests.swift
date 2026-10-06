@@ -75,8 +75,10 @@ struct BrowserImporterTests {
         let profiles = try await store.profiles()
         #expect(profiles.first { $0.id == work.profileID }?.name == "Arc Work", "Each other Arc profile gets its own profile")
 
-        #expect(try await topLevel(personal) == ["Favorites", "My News", "Recipes"])
-        #expect(try await topLevel(work) == ["Favorites", "Docs"])
+        #expect(try await topLevel(personal) == ["My News", "Recipes"], "Favorites aren't pinned tabs")
+        #expect(try await topLevel(work) == ["Docs"])
+        #expect(try await store.favorites.favorites(for: home.profileID).count == 1, "Arc's favorites become favorites")
+        #expect(try await store.favorites.favorites(for: work.profileID).count == 1, "in their own profile")
         #expect(try await store.tabs(in: personal.id).filter { !$0.isPinned }.map(\.title) == ["Left", "Right"])
 
         #expect(try await store.history.recent(profileID: home.profileID).map(\.title) == ["Personal page"])

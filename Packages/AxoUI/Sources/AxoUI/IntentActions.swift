@@ -37,7 +37,7 @@ extension BrowserModel {
     /// Copies the selected tab's page into a Space as a new tab, pinned or not, and returns it.
     /// The original tab stays where it is.
     public func saveCurrentTab(to spaceID: Space.ID, pinned: Bool) async throws -> AxoCore.Tab {
-        guard let current = selectedTab else { throw TabStoreError.tabNotFound(UUID()) }
+        guard let current = shownTab else { throw TabStoreError.tabNotFound(UUID()) }
         let url = selectedPage?.url ?? current.url
         let title = selectedPage?.title ?? current.title
         let saved = try await store.openTab(url: url, title: title, in: spaceID)

@@ -13,7 +13,8 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
 | Record | Fields |
 | --- | --- |
 | Profile | name (website data and logins stay on each device) |
-| Space | profile, name, sort key |
+| Favorite | profile, home page, title, sort key |
+| Space | profile, name, sort key, color, icon |
 | Folder | Space, parent folder, name, sort key (expanded state stays local) |
 | Tab (pinned only) | Space, folder, home page, title, sort key |
 
