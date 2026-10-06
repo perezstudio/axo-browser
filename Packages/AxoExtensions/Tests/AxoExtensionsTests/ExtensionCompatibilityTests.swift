@@ -59,12 +59,15 @@ struct ExtensionCompatibilityTests {
         #expect(!FileManager.default.fileExists(atPath: page.appending(path: "axo-compat.js").path))
     }
 
-    /// Code like 1Password's and Todoist's: it uses chrome.notifications, a webNavigation event
-    /// WebKit lacks, and a header WebKit rejects, all at startup.
+    /// Code like 1Password's and Todoist's: it uses notifications, storage.managed, a webNavigation
+    /// event WebKit lacks, and a header WebKit rejects, all at startup, through both `chrome` and
+    /// `browser`.
     @Test @MainActor func anExtensionUsingMissingFeaturesStarts() async throws {
         let background = """
         chrome.notifications.onClicked.addListener(() => {});
+        browser.notifications.onClosed.addListener(() => {});
         chrome.webNavigation.onCreatedNavigationTarget.addListener(() => {});
+        browser.storage.managed.onChanged.addListener(() => {});
         await chrome.declarativeNetRequest.updateSessionRules({ addRules: [
           { id: 1, priority: 1, condition: { urlFilter: "example.com" },
             action: { type: "modifyHeaders", requestHeaders: [{ header: "X-Axo-Custom", operation: "set", value: "1" }] } },
@@ -77,6 +80,7 @@ struct ExtensionCompatibilityTests {
         await new Promise((resolve) => setTimeout(resolve, 200));
         chrome.webNavigation.onCreatedNavigationTarget.addListener(() => {});
         chrome.notifications.onClicked.addListener(() => {});
+        await browser.storage.managed.get("anything");
         const rules = await chrome.declarativeNetRequest.getSessionRules();
         await chrome.storage.local.set({ started: rules.map((rule) => rule.id).join(",") });
         """
@@ -98,6 +102,52 @@ struct ExtensionCompatibilityTests {
         try await Task.sleep(for: .seconds(1))
         for error in context.errors { print("COMPAT ERROR \(error.localizedDescription)") }
         #expect(context.errors.isEmpty)
+    }
+
+    /// WebKit finds the `chrome` or `browser` global when it delivers an event, and delivers
+    /// nothing if both are replaced: toolbar clicks and messages were lost, so 1Password's button
+    /// did nothing and popups couldn't reach their background.
+    @Test @MainActor func eventsStillReachTheBackground() async throws {
+        let background = """
+        chrome.action.onClicked.addListener(() => chrome.tabs.create({ url: "https://example.com/clicked" }));
+        browser.runtime.onMessage.addListener((message, sender, reply) => { reply("pong " + message); });
+        """
+        let folder = try folder("""
+        {"name": "Listens", "version": "1", "manifest_version": 3, "description": "Listens for events.",
+         "background": {"service_worker": "background.js", "type": "module"},
+         "action": {"default_title": "Listens"}, "permissions": ["tabs"]}
+        """, files: ["background.js": background, "page.html": "<!doctype html><title>Page</title>"])
+        try ExtensionCompatibility.apply(to: folder)
+
+        let store = try TabStore.makeInMemory()
+        let profileID = try await store.bootstrap().profileID
+        let manager = ExtensionManager(installer: ExtensionInstaller(root: temporaryFolder()), store: store.extensions,
+                                       pool: WebViewPool(makeDataStore: { _ in .nonPersistent() }), persistent: false)
+        let browser = FakeBrowser()
+        browser.currentProfileID = profileID
+        browser.windowTabs = [Tab(spaceID: UUID(), url: URL(string: "https://example.com/a")!, sortKey: "a0")]
+        browser.activeTabID = browser.windowTabs[0].id
+        manager.browser = browser
+        let record = try await manager.installUnpacked(at: folder, for: profileID)
+        let context = try #require(manager.context(for: record.extensionID, profileID: profileID))
+        try await context.loadBackgroundContent()
+
+        manager.performAction(extensionID: record.extensionID, profileID: profileID, tabID: browser.activeTabID)
+        let deadline = ContinuousClock.now + .seconds(10)
+        while browser.opened.isEmpty {
+            try #require(ContinuousClock.now < deadline, "Timed out waiting for action.onClicked")
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        #expect(browser.opened.first?.url?.absoluteString == "https://example.com/clicked")
+
+        let page = WKWebView(frame: .zero, configuration: try #require(context.webViewConfiguration))
+        page.load(URLRequest(url: context.baseURL.appending(path: "page.html")))
+        while page.isLoading || page.url == nil {
+            try #require(ContinuousClock.now < deadline, "Timed out loading the extension page")
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        let reply = try await page.callAsyncJavaScript("return await chrome.runtime.sendMessage('ping');", contentWorld: .page)
+        #expect(reply as? String == "pong ping")
     }
 }
 

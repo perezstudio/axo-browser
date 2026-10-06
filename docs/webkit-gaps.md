@@ -76,8 +76,14 @@ Limitations in `WKWebView` and `WKWebExtension` that block or shape Axo features
 
 ## The `chrome` namespaces can't be patched in place
 
-- **What happens:** WebKit's `chrome` (and `browser`) object silently ignores `Object.defineProperty` for its built-in namespace names, and it can hand out a fresh namespace object (such as `chrome.storage`) at times, so members added to a namespace object can disappear. Adding new names to `chrome` itself (such as `notifications`) works.
-- **For Axo:** the compatibility script replaces the `chrome` and `browser` globals with proxies, so every namespace read gets its stand-ins whatever object WebKit returns.
+- **What happens:** WebKit's `chrome` (and `browser`, the same object) silently ignores `Object.defineProperty` for its built-in namespace names, and it can hand out a fresh namespace object (such as `chrome.storage`) at times, so members added to a namespace object can disappear. Each kind of namespace shares one prototype, though, and new members or replacement methods defined there do stick, including on namespace objects WebKit creates later.
+- **For Axo:** the compatibility script patches the namespaces' prototypes and holds them for the life of the background.
+
+## Replacing both `chrome` and `browser` silences every event
+
+- **What happens:** WebKit looks up the `browser` or `chrome` global when it delivers an event to a background script. If both have been replaced (for example, with proxies of the originals), nothing is delivered: no `action.onClicked`, no `runtime.onMessage` replies, even for listeners added before the replacement. Replacing just one of them is fine. No error is reported anywhere.
+- **Reproduction:** in an MV3 background with an `action` and no popup: `for (const name of ["chrome", "browser"]) Object.defineProperty(globalThis, name, { value: new Proxy(globalThis[name], {}), configurable: true }); chrome.action.onClicked.addListener(() => console.log("clicked"));` Clicking the action logs nothing; drop the loop and it logs.
+- **For Axo:** an earlier version of the compatibility script wrapped both globals, so 1Password's toolbar button did nothing and popups couldn't reach their background. The script now leaves both globals alone (see above), and `ExtensionCompatibilityTests` checks that clicks and messages still arrive.
 
 ## Content script messages need `didOpenTab`
 

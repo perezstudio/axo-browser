@@ -61,14 +61,17 @@ public enum ExtensionCompatibility {
 
     /// The compatibility script. It changes nothing where WebKit already has the feature.
     ///
-    /// WebKit ignores attempts to redefine the namespaces on `chrome`, and it can hand out a fresh
-    /// namespace object, so stand-ins attached to those objects can vanish. Instead the script
-    /// replaces the `chrome` and `browser` globals with proxies: every read of a namespace goes
-    /// through them and gets the missing members, whatever object WebKit returns.
+    /// WebKit ignores redefining the members it has on a namespace object, and it can hand out a
+    /// fresh namespace object later, so members added to one object can vanish. Each kind of
+    /// namespace shares one prototype, though, which accepts new members and replacement methods,
+    /// so the script patches the prototypes and keeps them alive.
+    ///
+    /// It never replaces the `chrome` or `browser` globals (they're the same object). WebKit looks
+    /// them up when it delivers an event to the background, and with both replaced it delivers
+    /// nothing: no toolbar clicks, no messages.
     static let script = """
     // Added by Axo: fills in Chrome extension features WebKit doesn't have yet.
     (() => {
-      const has = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
       const event = () => {
         const listeners = new Set();
         return {
@@ -147,46 +150,46 @@ public enum ExtensionCompatibility {
         declarativeNetRequest: { updateSessionRules: retryingWithoutRejectedHeaders, updateDynamicRules: retryingWithoutRejectedHeaders },
       };
 
-      // A namespace with its missing members filled in and replaced methods swapped. WebKit's
-      // functions expect the real namespace as `this`. One wrapper per namespace object.
-      const wrappers = new WeakMap();
-      const wrapNamespace = (real, name) => {
-        if (!real || typeof real !== "object") return real;
-        const extras = missing[name] || {}, swaps = replaced[name] || {};
-        if (!Object.keys(swaps).length && Object.keys(extras).every((key) => real[key] !== undefined)) return real;
-        let wrapper = wrappers.get(real);
-        if (!wrapper) {
-          const swapped = {};
-          wrapper = new Proxy(real, {
-            get(target, property) {
-              const value = Reflect.get(target, property, target);
-              if (has(swaps, property) && typeof value === "function") {
-                return swapped[property] || (swapped[property] = swaps[property](value.bind(target)));
-              }
-              if (value === undefined && has(extras, property)) return extras[property];
-              return typeof value === "function" ? value.bind(target) : value;
-            },
-            has: (target, property) => Reflect.has(target, property) || has(extras, property),
-          });
-          wrappers.set(real, wrapper);
-        }
-        return wrapper;
+      // WebKit's namespace objects share one prototype per kind, which accepts new members (and
+      // replacements for its methods). Patch those, and hold them so they live as long as this
+      // background does: a namespace object WebKit hands out later still has the patches.
+      // Never replace the chrome or browser globals: WebKit finds them when it delivers an event,
+      // and delivers nothing if they've been replaced.
+      const prototypes = [];
+      // The namespace's own prototype; never Object.prototype, which every object shares.
+      const targetFor = (object) => {
+        const prototype = Object.getPrototypeOf(object);
+        if (!prototype || prototype === Object.prototype) return object;
+        if (!prototypes.includes(prototype)) prototypes.push(prototype);
+        return prototype;
       };
-
-      for (const globalName of ["chrome", "browser"]) {
-        const root = globalThis[globalName];
-        if (!root || typeof root !== "object") continue;
-        const wrapper = new Proxy(root, {
-          get(target, property) {
-            const value = Reflect.get(target, property, target);
-            if (property === "notifications" && value === undefined) return notifications;
-            if (typeof property === "string" && (has(missing, property) || has(replaced, property))) return wrapNamespace(value, property);
-            return typeof value === "function" ? value.bind(target) : value;
-          },
-          has: (target, property) => Reflect.has(target, property) || property === "notifications",
-        });
-        try { Object.defineProperty(globalThis, globalName, { value: wrapper, configurable: true, writable: true }); } catch {}
+      const define = (object, name, value) => {
+        try {
+          Object.defineProperty(targetFor(object), name, { value, configurable: true, writable: true });
+        } catch (error) {
+          console.warn(`Axo: couldn't add ${name}: ${error}`);
+        }
+      };
+      const root = globalThis.chrome || globalThis.browser;
+      if (!root || typeof root !== "object") return;
+      if (root.notifications === undefined) define(root, "notifications", notifications);
+      for (const [name, members] of Object.entries(missing)) {
+        const namespace = root[name];
+        if (!namespace || typeof namespace !== "object") continue;
+        for (const [member, value] of Object.entries(members)) {
+          if (namespace[member] === undefined) define(namespace, member, value);
+        }
       }
+      for (const [name, methods] of Object.entries(replaced)) {
+        const namespace = root[name];
+        if (!namespace || typeof namespace !== "object") continue;
+        for (const [method, wrap] of Object.entries(methods)) {
+          const original = namespace[method];
+          if (typeof original !== "function") continue;
+          define(namespace, method, function (...args) { return wrap(original.bind(this))(...args); });
+        }
+      }
+      globalThis[Symbol.for("axo.compatibility")] = prototypes;
     })();
     """
 }
