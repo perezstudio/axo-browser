@@ -539,6 +539,14 @@ final class ExtensionBridge: ExtensionBrowsing, ExtensionToolbarProviding, Exten
         )
     }
 
+    func prepareWebStoreInstall(_ extensionID: String, profileID: Profile.ID) async throws -> ExtensionInstallPrompt {
+        let summary = try await manager.prepareWebStoreInstall(extensionID, for: profileID)
+        return ExtensionInstallPrompt(
+            id: summary.extensionID, name: summary.name, version: summary.version,
+            lines: summary.lines, isUnpacked: summary.isUnpacked
+        )
+    }
+
     func confirmInstall(_ extensionID: String, profileID: Profile.ID) async throws {
         try await manager.confirmInstall(extensionID, profileID: profileID)
     }

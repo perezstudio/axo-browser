@@ -21,6 +21,14 @@ final class FakeExtensionManagement: ExtensionManaging {
         return prompt
     }
 
+    var webStoreRequests: [String] = []
+
+    func prepareWebStoreInstall(_ extensionID: String, profileID: Profile.ID) async throws -> ExtensionInstallPrompt {
+        webStoreRequests.append(extensionID)
+        if failInstall { throw Failure() }
+        return prompt
+    }
+
     func confirmInstall(_ extensionID: String, profileID: Profile.ID) async throws { confirmed.append(extensionID) }
     func uninstall(_ extensionID: String, profileID: Profile.ID) async throws { uninstalled.append(extensionID) }
     func installedExtensions(profileID: Profile.ID) async -> [ExtensionSummary] { installed }
@@ -50,6 +58,21 @@ struct ExtensionManagementTests {
         #expect(fake.confirmed == ["ext"])
         #expect(model.pendingExtensionInstall == nil)
         #expect(fake.uninstalled.isEmpty)
+    }
+
+    @Test func addToAxoOnTheWebStoreShowsThePrompt() async throws {
+        let id = "ddkjiahejlhfcafbddmgiahcphecmpfh"
+        // The pool reports the button's click, as its store page script does.
+        model.pool.onWebStoreInstall?(id, UUID())
+        try await waitUntil { model.pendingExtensionInstall == fake.prompt }
+        #expect(fake.webStoreRequests == [id])
+    }
+
+    @Test func webStoreFailuresAreShownPlainly() async {
+        fake.failInstall = true
+        await model.installFromWebStore("ddkjiahejlhfcafbddmgiahcphecmpfh")
+        #expect(model.pendingExtensionInstall == nil)
+        #expect(model.alertMessage == "Axo couldn't add this extension from the Chrome Web Store. The signature doesn't match.")
     }
 
     @Test func cancellingThePromptRemovesTheExtension() async {

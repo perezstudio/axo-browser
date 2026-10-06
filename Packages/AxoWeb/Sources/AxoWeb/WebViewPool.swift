@@ -59,6 +59,10 @@ public final class WebViewPool {
     /// pages never count as the person's usage. Screen Time still blocks sites over their limit.
     public var reportsScreenTimeUsage = true
 
+    /// Called with an extension's ID when the person clicks "Add to Axo" on its Chrome Web Store
+    /// page, and the tab it was clicked in. Set by the app. See ``WebStore``.
+    public var onWebStoreInstall: ((String, Tab.ID) -> Void)?
+
     /// The user scripts for per-site custom CSS and JavaScript. See ``setSiteCustomizations(_:)``.
     private var siteCustomizationScripts: [WKUserScript] = []
 
@@ -66,12 +70,14 @@ public final class WebViewPool {
     /// their next page load (reload a page to see changes right away). Turned-off customizations
     /// are skipped.
     ///
-    /// Axo adds no other user scripts, so updating live web views replaces all of theirs.
+    /// Updating live web views replaces all their user scripts, so the Chrome Web Store script
+    /// is added back too.
     public func setSiteCustomizations(_ customizations: [SiteCustomization]) {
         siteCustomizationScripts = SiteCustomizationScripts.userScripts(for: customizations)
         for liveTab in live.values {
             let controller = liveTab.webView.configuration.userContentController
             controller.removeAllUserScripts()
+            controller.addUserScript(WebStore.userScript)
             siteCustomizationScripts.forEach(controller.addUserScript)
         }
     }
@@ -163,6 +169,12 @@ public final class WebViewPool {
         // Element fullscreen (the Fullscreen API) is off by default; videos and pages expect it.
         configuration.preferences.isElementFullscreenEnabled = true
         UserAgent.apply(to: configuration)
+        configuration.userContentController.addUserScript(WebStore.userScript)
+        configuration.userContentController.add(
+            WebStoreMessageHandler { [weak self] id in self?.onWebStoreInstall?(id, tab.id) },
+            contentWorld: WebStore.world,
+            name: WebStore.handlerName
+        )
         siteCustomizationScripts.forEach(configuration.userContentController.addUserScript)
         configurators.forEach { $0(configuration, profileID) }
         let webView = PooledWebView(frame: .zero, configuration: configuration)

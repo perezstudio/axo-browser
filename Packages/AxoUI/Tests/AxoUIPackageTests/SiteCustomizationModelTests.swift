@@ -59,6 +59,7 @@ struct SiteCustomizationModelTests {
         await model.saveCustomization(SiteCustomization(domain: "example.com", js: "document.title = 'Customized'"))
         let tab = AxoCore.Tab(spaceID: UUID(), url: URL(string: "about:blank")!, sortKey: "a0")
         let webView = model.pool.webView(for: tab, profileID: try #require(model.space).profileID)
-        #expect(webView.configuration.userContentController.userScripts.count == 1)
+        // Other scripts (such as the Chrome Web Store button) are there too; look for this one.
+        #expect(webView.configuration.userContentController.userScripts.contains { $0.source.contains("document.title = 'Customized'") })
     }
 }

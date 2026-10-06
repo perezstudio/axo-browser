@@ -67,6 +67,9 @@ public protocol ExtensionManaging: AnyObject {
     /// Verifies and saves an extension (a `.crx` file or an unpacked folder) turned off, and
     /// describes it for the install prompt.
     func prepareInstall(from url: URL, profileID: Profile.ID) async throws -> ExtensionInstallPrompt
+    /// Downloads an extension from the Chrome Web Store, verifies and saves it turned off, and
+    /// describes it for the install prompt.
+    func prepareWebStoreInstall(_ extensionID: String, profileID: Profile.ID) async throws -> ExtensionInstallPrompt
     /// Turns on an extension the person agreed to add.
     func confirmInstall(_ extensionID: String, profileID: Profile.ID) async throws
     /// Removes an extension.
@@ -112,6 +115,17 @@ extension BrowserModel {
             pendingExtensionInstall = try await management.prepareInstall(from: url, profileID: profileID)
         } catch {
             alertMessage = "Axo couldn't install this extension. \(error.localizedDescription)"
+        }
+    }
+
+    /// Starts installing an extension from its Chrome Web Store page ("Add to Axo"): downloads
+    /// it, then shows the usual install prompt. The current Space's profile gets it.
+    public func installFromWebStore(_ extensionID: String) async {
+        guard let management = extensionManagement, let profileID = space?.profileID else { return }
+        do {
+            pendingExtensionInstall = try await management.prepareWebStoreInstall(extensionID, profileID: profileID)
+        } catch {
+            alertMessage = "Axo couldn't add this extension from the Chrome Web Store. \(error.localizedDescription)"
         }
     }
 

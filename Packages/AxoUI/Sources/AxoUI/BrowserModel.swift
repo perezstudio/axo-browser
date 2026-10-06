@@ -254,6 +254,10 @@ public final class BrowserModel {
                 Task { await self.openTab(url: url, at: .after(sourceID)) }
             }
         }
+        pool.onWebStoreInstall = { [weak self] extensionID, _ in
+            guard let self else { return }
+            Task { await self.installFromWebStore(extensionID) }
+        }
         pool.onLinkClick = { [weak self] click in
             self?.handleLinkClick(click) ?? false
         }

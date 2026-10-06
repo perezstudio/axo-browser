@@ -263,6 +263,20 @@ public final class ExtensionManager {
         )
     }
 
+    /// Downloads extensions from the Chrome Web Store. Replace it in tests.
+    public var webStore = WebStoreDownloader()
+
+    /// Downloads an extension from the Chrome Web Store and saves it turned off, like
+    /// ``prepareInstall(from:for:)``. The package must be signed and match `extensionID` before
+    /// anything is installed.
+    public func prepareWebStoreInstall(_ extensionID: String, for profileID: Profile.ID) async throws -> InstallSummary {
+        let data = try await webStore.download(extensionID)
+        let file = FileManager.default.temporaryDirectory.appending(path: "\(extensionID)-\(UUID().uuidString).crx")
+        try data.write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        return try await prepareInstall(from: file, for: profileID)
+    }
+
     /// Turns on an extension the person agreed to install.
     public func confirmInstall(_ extensionID: String, profileID: Profile.ID) async throws {
         unload(extensionID, profileID: profileID)

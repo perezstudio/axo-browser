@@ -48,6 +48,7 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
   - `pageTextSegments(in:limit:)` returns the page's visible text nodes in order, skipping scripts, styles, code, form fields, and editable areas.
   - `replacePageText(_:in:)` swaps in new texts for those nodes, one each, keeping their surrounding whitespace, and `restorePageText(in:)` puts the originals back.
   - `readablePageText(in:limit:)` returns the page's text as one string, with whitespace collapsed.
+- **Chrome Web Store (`WebStore`):** every web view gets a script, in an isolated world (`AxoWebStore`), that adds an "Add to Axo" button on extension pages (`chromewebstore.google.com/detail/<name>/<id>`). It goes before the store's own install button (a button mentioning Chrome), or floats at the top right if none is found, and follows the store's in-page navigation. Clicking reports the extension ID through `onWebStoreInstall`. Only trusted clicks count, and only messages from the store's main frame over https with a valid ID (`WebStore.isValidExtensionID`, `extensionID(fromPageURL:)`). Page scripts can't see the handler.
 - **Screen Time:** each `WebViewContainer` holds an `STWebpageController` above its page.
   - **Usage:** it reports the page's URL (followed through KVO) so Screen Time can count usage, keeping each profile's history separate (`profileIdentifier` is the profile ID).
   - **Limits:** when a site is over its limit or blocked by a parent, it shows Screen Time's block screen. Otherwise clicks go straight through to the page.
