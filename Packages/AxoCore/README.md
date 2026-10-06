@@ -6,6 +6,8 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
 
 **Depends on:** AxoPersistence, GRDB
 
+**Platforms:** macOS 27 and iOS 27 (iPhone and iPad). Its tests run on both.
+
 ## Public API
 
 - **`TabStore.database`** is the `AppDatabase` the store uses, so other stores (such as AxoSync's `SyncStore`) share it.

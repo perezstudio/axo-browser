@@ -6,6 +6,8 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
 
 **Depends on:** AxoPersistence, GRDB (tests also use AxoCore)
 
+**Platforms:** macOS 27 and iOS 27 (iPhone and iPad). Its tests run on both.
+
 ## What syncs
 
 | Record | Fields |
@@ -26,7 +28,7 @@ Open tabs, history, extensions, settings, and website data don't sync. A pinned 
   - **First sync:** until `finishFirstSync()` runs after the first fetch, local changes wait. If the device's only Space is untouched (not from iCloud, no pinned tabs or folders) and iCloud has Spaces, its open tabs, splits, and link rules move into the first synced Space, and the empty Space and its unused profile are removed. Then everything is queued to send. Its website data stays on disk.
   - **Resets:** `markEverythingChanged()` and `resetSyncMetadata()` (which keeps the sidebar).
 - **`CloudKitSync`** runs a `CKSyncEngine` over the private database, in one zone (`Axo`). Record names are `<Type>.<lowercase UUID>`, so a record ID alone says what it is.
-  - `isAvailable(containerIdentifier:)` checks the iCloud entitlement. Create a `CloudKitSync` only when it's true: CloudKit stops the app without it.
+  - `isAvailable(containerIdentifier:)` checks the iCloud entitlement (on iOS it's `false` for now, since iOS has no public way to read entitlements; the iOS app will decide this when it gets iCloud). Create a `CloudKitSync` only when it's true: CloudKit stops the app without it.
   - `start()`, `stop()`, and `syncNow()`. `onSynced` reports each finished fetch or send.
   - **Accounts:** signing out keeps the sidebar and forgets the iCloud bookkeeping. Signing in or switching accounts runs the first sync again. If the zone is deleted (from another device or iCloud settings), this device's sidebar becomes the copy in iCloud.
 

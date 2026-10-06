@@ -1,5 +1,8 @@
+#if os(macOS)
 import AppKit
+#endif
 import AxoCore
+import AxoWeb
 import SwiftUI
 
 /// A browser event extensions hear about (`chrome.tabs.on…`).
@@ -18,14 +21,14 @@ public struct ExtensionToolbarItem: Identifiable, Equatable {
     /// The button's title, used for its help tag and VoiceOver.
     public var label: String
     /// The icon.
-    public var icon: NSImage?
+    public var icon: PlatformImage?
     /// Badge text, or an empty string.
     public var badge: String
     /// Whether the button can be clicked.
     public var isEnabled: Bool
 
     /// Creates an item.
-    public init(id: String, label: String, icon: NSImage?, badge: String, isEnabled: Bool) {
+    public init(id: String, label: String, icon: PlatformImage?, badge: String, isEnabled: Bool) {
         self.id = id
         self.label = label
         self.icon = icon
@@ -44,6 +47,8 @@ public protocol ExtensionToolbarProviding: AnyObject {
     /// Clicks a button: the extension shows its popup or handles the click.
     func performAction(extensionID: String, profileID: Profile.ID, tabID: AxoCore.Tab.ID?)
 }
+// Mac only for now; iPhone and iPad have their own chrome.
+#if os(macOS)
 
 /// The extension buttons in the toolbar.
 struct ExtensionToolbarButtons: View {
@@ -75,7 +80,7 @@ private struct ExtensionIcon: View {
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             if let icon = item.icon {
-                Image(nsImage: icon).resizable().frame(width: 16, height: 16)
+                Image(platformImage: icon).resizable().frame(width: 16, height: 16)
             } else {
                 Image(systemName: "puzzlepiece.extension")
             }
@@ -106,3 +111,4 @@ struct PopoverAnchor: NSViewRepresentable {
         onView(view)
     }
 }
+#endif

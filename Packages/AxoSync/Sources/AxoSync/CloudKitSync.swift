@@ -44,11 +44,18 @@ public final class CloudKitSync: CKSyncEngineDelegate {
     /// Whether this build can use iCloud: it's signed with the iCloud entitlement for
     /// `containerIdentifier`. Builds without it (such as contributors' unsigned builds) don't
     /// sync.
+    ///
+    /// On iOS there's no public way to read the app's entitlements, so this is `false` until
+    /// the iOS app gets its own iCloud setup.
     public static func isAvailable(containerIdentifier: String) -> Bool {
+        #if os(macOS)
         guard let task = SecTaskCreateFromSelf(nil),
               let value = SecTaskCopyValueForEntitlement(task, "com.apple.developer.icloud-container-identifiers" as CFString, nil),
               let containers = value as? [String] else { return false }
         return containers.contains(containerIdentifier)
+        #else
+        return false
+        #endif
     }
 
     /// Starts the engine from its saved state.

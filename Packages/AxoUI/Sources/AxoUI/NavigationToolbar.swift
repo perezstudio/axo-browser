@@ -1,6 +1,8 @@
 import AxoWeb
 import SwiftUI
 
+// Mac only for now; iPhone and iPad have their own chrome.
+#if os(macOS)
 /// Back, forward, and reload. The address field lives at the top of the sidebar.
 struct NavigationToolbar: ToolbarContent {
     let model: BrowserModel
@@ -40,3 +42,4 @@ struct NavigationToolbar: ToolbarContent {
         }
     }
 }
+#endif

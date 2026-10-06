@@ -5,6 +5,8 @@ import Testing
 import WebKit
 @testable import AxoWeb
 
+// The Mac tests use AppKit windows; iPhone and iPad have their own below.
+#if os(macOS)
 @MainActor
 struct WebViewHostTests {
     let pages: TestPages
@@ -121,3 +123,25 @@ struct WebViewHostTests {
         #expect(WebViewPool(makeDataStore: { _ in .nonPersistent() }).reportsScreenTimeUsage)
     }
 }
+#else
+import UIKit
+
+@MainActor
+struct WebViewContainerTests {
+    @Test func mountedWebViewsFillTheContainerAndFollowItsSize() {
+        let container = WebViewContainer(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        let webView = WKWebView(frame: .zero)
+        container.mount(webView)
+        #expect(webView.superview === container)
+        #expect(webView.frame == container.bounds)
+
+        container.frame.size = CGSize(width: 820, height: 1000)
+        container.layoutIfNeeded()
+        #expect(webView.frame.size == CGSize(width: 820, height: 1000), "It follows the container")
+
+        container.unmount()
+        #expect(webView.superview == nil)
+        #expect(container.mountedWebView == nil)
+    }
+}
+#endif

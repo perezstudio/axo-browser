@@ -1,4 +1,6 @@
+#if os(macOS)
 import AppKit
+#endif
 import AxoCore
 import SwiftUI
 
@@ -81,6 +83,7 @@ public protocol ExtensionManaging: AnyObject {
 }
 
 extension BrowserModel {
+    #if os(macOS)
     /// Chooses a `.crx` file or an unpacked extension folder and starts installing it.
     public func chooseExtensionToInstall() {
         let panel = NSOpenPanel()
@@ -100,6 +103,7 @@ extension BrowserModel {
             panel.begin(completionHandler: handle)
         }
     }
+    #endif
 
     /// Verifies an extension and shows the install prompt.
     public func prepareExtensionInstall(from url: URL) async {
@@ -134,6 +138,8 @@ extension BrowserModel {
         await prompts.ask(prompt)
     }
 }
+// Mac only for now; iPhone and iPad have their own chrome.
+#if os(macOS)
 
 /// "Add “Name”?" with what the extension can do.
 struct ExtensionInstallSheet: View {
@@ -218,7 +224,7 @@ struct ExtensionsView: View {
                 Button("Done") { dismiss() }
             }
         }
-        .onExitCommand { dismiss() }
+        .onExitCommandIfAvailable { dismiss() }
         .task(id: model.pendingExtensionInstall) { await refresh() }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("extensionsWindow")
@@ -309,3 +315,4 @@ private struct ExtensionRow: View {
         }
     }
 }
+#endif

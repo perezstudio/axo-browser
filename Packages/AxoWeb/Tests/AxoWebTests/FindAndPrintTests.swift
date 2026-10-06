@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import AxoCore
 import Foundation
 import Testing
@@ -77,6 +81,7 @@ struct FindAndPrintTests {
 
     // MARK: Print
 
+    #if os(macOS)
     @Test func printOperationShowsThePanelAndIsTitledWithThePage() async throws {
         let tab = try await loadedTab(title: "Receipt", body: "<p>Total: 3 axolotls</p>")
 
@@ -88,4 +93,5 @@ struct FindAndPrintTests {
         #expect(operation.view?.frame.size == CGSize(width: 800, height: 600))
         #expect(pool.printOperation(for: UUID()) == nil)
     }
+    #endif
 }

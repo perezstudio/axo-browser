@@ -1,4 +1,3 @@
-import AppKit
 import AxoCore
 import Foundation
 import Testing
@@ -36,7 +35,7 @@ struct PeekTests {
         return tab
     }
 
-    private func click(_ url: URL, in tab: AxoCore.Tab, modifiers: NSEvent.ModifierFlags = []) -> Bool {
+    private func click(_ url: URL, in tab: AxoCore.Tab, modifiers: LinkModifiers = []) -> Bool {
         model.handleLinkClick(LinkClick(tabID: tab.id, url: url, sourceURL: tab.url, modifiers: modifiers))
     }
 

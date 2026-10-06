@@ -22,7 +22,7 @@ struct AddressField: View {
                     model.focusPage()
                 }
             }
-            .onExitCommand {
+            .onExitCommandIfAvailable {
                 isFocused = false
                 text = currentAddress
             }
@@ -36,8 +36,16 @@ struct AddressField: View {
                 if !isFocused { text = currentAddress }
             }
             .onChange(of: isFocused) {
+                guard !isFocused else {
+                    #if os(iOS)
+                    // Tapping the field selects the whole address, so typing replaces it, like
+                    // Safari on iPhone and iPad. A turn later, because the tap places the cursor
+                    // after the field takes focus.
+                    Task { selection = TextSelection(range: text.startIndex..<text.endIndex) }
+                    #endif
+                    return
+                }
                 // Leaving the field shows the page's real URL again, replacing whatever was typed.
-                guard !isFocused else { return }
                 text = currentAddress
             }
             .onAppear { text = currentAddress }

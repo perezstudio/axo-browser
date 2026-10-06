@@ -1,8 +1,11 @@
+#if os(macOS)
 import AppKit
+#endif
 import AxoCore
 import AxoWeb
 import SwiftUI
 
+#if os(macOS)
 /// The AppKit window that shows a mini window. One controller per mini window.
 @MainActor
 final class MiniWindowController: NSObject, NSWindowDelegate {
@@ -60,6 +63,7 @@ final class MiniWindowController: NSObject, NSWindowDelegate {
         Self.controllers[id] = nil
     }
 }
+#endif
 
 /// A mini window's content: the page, with a bar to open it in Axo's main window.
 struct MiniWindowView: View {

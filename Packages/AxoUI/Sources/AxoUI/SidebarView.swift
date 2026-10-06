@@ -1,5 +1,8 @@
 import AxoCore
+import AxoWeb
 import SwiftUI
+// The Mac sidebar; iPhone and iPad have their own chrome.
+#if os(macOS)
 
 /// The sidebar: the address field, the Space's pinned tabs, and its other tabs.
 struct SidebarView: View {
@@ -101,6 +104,8 @@ extension SidebarView {
         TabContextMenu(model: model, tab: tab)
     }
 }
+#endif
+
 
 /// A sidebar row for a tab, or for a split view when the tab's split stands behind it.
 struct SidebarTabRow: View {
@@ -119,7 +124,7 @@ struct SidebarTabRow: View {
 /// One split view in the sidebar: its tabs' icons and titles in pane order.
 struct SplitRow: View {
     let panes: [AxoCore.Tab]
-    let favicon: (AxoCore.Tab) -> NSImage?
+    let favicon: (AxoCore.Tab) -> PlatformImage?
 
     var body: some View {
         Label {
@@ -128,7 +133,7 @@ struct SplitRow: View {
             HStack(spacing: 2) {
                 ForEach(panes) { pane in
                     if let image = favicon(pane) {
-                        Image(nsImage: image).resizable().interpolation(.high)
+                        Image(platformImage: image).resizable().interpolation(.high)
                             .frame(width: 14, height: 14)
                             .clipShape(.rect(cornerRadius: 3))
                     } else {
@@ -297,14 +302,14 @@ extension View {
 /// One tab in the sidebar: the site's icon (or a globe) and the page title.
 struct TabRow: View {
     let tab: AxoCore.Tab
-    let favicon: NSImage?
+    let favicon: PlatformImage?
 
     var body: some View {
         Label {
             Text(Self.displayTitle(for: tab))
         } icon: {
             if let favicon {
-                Image(nsImage: favicon)
+                Image(platformImage: favicon)
                     .resizable()
                     .interpolation(.high)
                     .frame(width: 16, height: 16)

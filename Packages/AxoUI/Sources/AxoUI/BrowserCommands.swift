@@ -1,5 +1,7 @@
 import SwiftUI
 
+// Mac only for now; iPhone and iPad have their own chrome.
+#if os(macOS)
 extension FocusedValues {
     /// The model of the focused browser window, for menu commands.
     @Entry var browserModel: BrowserModel?
@@ -274,3 +276,4 @@ public struct BrowserCommands: Commands {
         }
     }
 }
+#endif

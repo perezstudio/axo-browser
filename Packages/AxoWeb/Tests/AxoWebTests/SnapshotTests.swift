@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import AxoCore
 import Foundation
 import Testing
@@ -32,7 +36,7 @@ struct SnapshotTests {
 
         let data = try #require(pool.snapshot(for: tab.id))
         #expect(data.starts(with: [0xFF, 0xD8]), "Snapshots are stored as JPEG")
-        let image = try #require(NSImage(data: data))
+        let image = try #require(PlatformImage(data: data))
         #expect(image.size.width <= PageSnapshot.width)
         #expect(image.size.width > 0)
     }

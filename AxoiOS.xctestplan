@@ -1,0 +1,55 @@
+{
+  "configurations": [
+    {
+      "id": "B7D906D0-2317-4206-95D6-5CAC2CE6D472",
+      "name": "Default",
+      "options": {}
+    }
+  ],
+  "defaultOptions": {},
+  "testTargets": [
+    {
+      "target": {
+        "containerPath": "container:Axo.xcodeproj",
+        "identifier": "11D4C20F30705F800027735E",
+        "name": "AxoiOSUITests"
+      }
+    },
+    {
+      "target": {
+        "containerPath": "container:Packages/AxoPersistence",
+        "identifier": "AxoPersistenceTests",
+        "name": "AxoPersistenceTests"
+      }
+    },
+    {
+      "target": {
+        "containerPath": "container:Packages/AxoCore",
+        "identifier": "AxoCoreTests",
+        "name": "AxoCoreTests"
+      }
+    },
+    {
+      "target": {
+        "containerPath": "container:Packages/AxoSync",
+        "identifier": "AxoSyncTests",
+        "name": "AxoSyncTests"
+      }
+    },
+    {
+      "target": {
+        "containerPath": "container:Packages/AxoWeb",
+        "identifier": "AxoWebTests",
+        "name": "AxoWebTests"
+      }
+    },
+    {
+      "target": {
+        "containerPath": "container:Packages/AxoUI",
+        "identifier": "AxoUIPackageTests",
+        "name": "AxoUIPackageTests"
+      }
+    }
+  ],
+  "version": 1
+}

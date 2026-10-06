@@ -48,6 +48,10 @@ final class AccessibilityAuditTests: XCTestCase {
                 s.identifier == "siri" || s.children.contains(where: containsSiriOrb)
             }
             if containsSiriOrb(snapshot) { return true }
+            // A tooltip window (help tag), shown wherever the pointer happens to rest, sometimes
+            // with no text while it appears. The text belongs to the control's `.help`, which
+            // VoiceOver reads on the control itself, and the audit checks those controls.
+            if snapshot.elementType == .helpTag { return true }
             // Containers SwiftUI creates and gives no way to label. VoiceOver moves straight into
             // unlabeled groups, so they don't get in the way.
             if snapshot.identifier.isEmpty, snapshot.label.isEmpty {

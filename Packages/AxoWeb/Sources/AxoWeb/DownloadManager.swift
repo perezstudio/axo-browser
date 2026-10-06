@@ -210,8 +210,10 @@ public final class DownloadManager: NSObject, WKDownloadDelegate {
         }
     }
 
-    /// Adds the quarantine attribute that marks `file` as downloaded from the web by Axo.
+    /// Adds the quarantine attribute that marks `file` as downloaded from the web by Axo, so
+    /// Gatekeeper checks it. (iOS has no quarantine; its sandbox covers downloads.)
     nonisolated static func markQuarantined(_ file: URL, sourceURL: URL?) {
+        #if os(macOS)
         var properties: [String: Any] = [
             kLSQuarantineAgentNameKey as String: "Axo",
             kLSQuarantineTypeKey as String: kLSQuarantineTypeWebDownload as String,
@@ -223,6 +225,7 @@ public final class DownloadManager: NSObject, WKDownloadDelegate {
         values.quarantineProperties = properties
         var file = file
         try? file.setResourceValues(values)
+        #endif
     }
 }
 

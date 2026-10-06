@@ -6,6 +6,8 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
 
 **Depends on:** GRDB
 
+**Platforms:** macOS 27 and iOS 27 (iPhone and iPad). Its tests run on both.
+
 ## Public API
 
 - `AppDatabase`: wraps Axo's one SQLite database and runs every migration when it opens.

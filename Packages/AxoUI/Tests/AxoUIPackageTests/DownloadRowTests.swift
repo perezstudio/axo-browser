@@ -5,6 +5,8 @@ import WebKit
 @testable import AxoUI
 @testable import AxoWeb
 
+// Downloads are Mac only for now.
+#if os(macOS)
 @MainActor
 struct DownloadRowTests {
     private func item(_ state: DownloadState, completed: Int64 = 0, total: Int64? = nil) -> DownloadItem {
@@ -33,3 +35,4 @@ struct DownloadRowTests {
         #expect(unnamed.filename == "Download")
     }
 }
+#endif

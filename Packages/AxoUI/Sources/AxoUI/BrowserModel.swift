@@ -1,4 +1,6 @@
+#if os(macOS)
 import AppKit
+#endif
 import AxoCore
 import AxoWeb
 import Foundation
@@ -81,7 +83,7 @@ public final class BrowserModel {
     /// The page question to show now (a permission request or a JavaScript dialog), if any.
     public private(set) var currentPrompt: PagePrompt?
     /// Site icons by lowercased host, for the tabs in the sidebar.
-    public private(set) var favicons: [String: NSImage] = [:]
+    public private(set) var favicons: [String: PlatformImage] = [:]
 
     /// The web view pool that owns this window's web views.
     public let pool: WebViewPool
@@ -119,7 +121,7 @@ public final class BrowserModel {
     /// Called for tab and window events extensions hear about. Set by the app.
     @ObservationIgnored public var onTabEvent: ((TabEvent) -> Void)?
     /// The views behind extension toolbar buttons, by extension ID, for showing popups.
-    @ObservationIgnored var extensionAnchors: [String: NSView] = [:]
+    @ObservationIgnored var extensionAnchors: [String: PlatformView] = [:]
     /// Asks macOS for location access when the person first allows a site's location request.
     /// Set by the app.
     @ObservationIgnored public var locationAuthorization: (any LocationAuthorizing)?
@@ -226,11 +228,13 @@ public final class BrowserModel {
             await self?.chooseFiles(for: request)
         }
         pool.onWebViewFocus = { [weak self] tabID in self?.paneDidTakeFocus(tabID) }
+        #if os(macOS)
         presentMiniWindow = { [weak self] mini in
             guard let self else { return }
             MiniWindowController.show(mini, model: self)
         }
         dismissMiniWindow = { id in MiniWindowController.dismiss(id) }
+        #endif
         pool.onOpenInNewTab = { [weak self] url, sourceID in
             guard let self else { return }
             if self.peek?.tab.id == sourceID || self.miniWindows.contains(where: { $0.id == sourceID }) {
@@ -263,7 +267,7 @@ public final class BrowserModel {
     }
 
     /// The icon for a tab's site, if Axo has one.
-    public func favicon(for tab: AxoCore.Tab) -> NSImage? {
+    public func favicon(for tab: AxoCore.Tab) -> PlatformImage? {
         Favicon.key(for: tab.url).flatMap { favicons[$0] }
     }
 
@@ -872,6 +876,7 @@ public final class BrowserModel {
 
     /// Shows an Open panel for a page's file input, as a sheet on the tab's window.
     private func chooseFiles(for request: FileSelectionRequest) async -> [URL]? {
+        #if os(macOS)
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = request.allowsMultipleSelection
         panel.canChooseDirectories = request.allowsDirectories
@@ -886,6 +891,10 @@ public final class BrowserModel {
             }
         }
         return response == .OK ? panel.urls : nil
+        #else
+        // WebKit on iPhone and iPad shows its own file picker and never asks.
+        return nil
+        #endif
     }
 
     // MARK: Default browser and links from other apps
@@ -932,6 +941,7 @@ public final class BrowserModel {
 
     // MARK: Extensions
 
+    #if os(macOS)
     /// Shows an extension's popup under its toolbar button (or the window's top edge if the
     /// button isn't on screen).
     public func presentExtensionPopup(_ popover: NSPopover, extensionID: String) {
@@ -942,6 +952,7 @@ public final class BrowserModel {
             popover.show(relativeTo: top, of: content, preferredEdge: .minY)
         }
     }
+    #endif
 
     // MARK: Command bar
 
@@ -1028,7 +1039,12 @@ public final class BrowserModel {
             switch action {
             case .pinTab: selectedTab.map { !$0.isPinned } ?? false
             case .unpinTab: selectedTab?.isPinned ?? false
-            case .findInPage, .printPage: selectedTabID != nil
+            case .findInPage: selectedTabID != nil
+            #if os(macOS)
+            case .printPage: selectedTabID != nil
+            #else
+            case .printPage: false
+            #endif
             case .makeDefaultBrowser: isDefaultBrowser == false
             case .importBrowserData: browserImporter != nil
             case .deleteSpace: spaces.count > 1
@@ -1111,12 +1127,14 @@ public final class BrowserModel {
         findHasNoMatches = !found
     }
 
-    /// Shows the print sheet for the selected page in its window.
+    /// Shows the print sheet for the selected page in its window. (Mac only for now.)
     public func printSelectedTab() {
+        #if os(macOS)
         guard let selectedTabID,
               let operation = pool.printOperation(for: selectedTabID),
               let window = pool.liveWebView(for: selectedTabID)?.window else { return }
         operation.runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
+        #endif
     }
 
     // MARK: Persistence
@@ -1158,7 +1176,7 @@ public final class BrowserModel {
         lookedUpFaviconHosts.formUnion(hosts)
         do {
             for (host, data) in try await store.favicons(forHosts: hosts) where favicons[host] == nil {
-                favicons[host] = NSImage(data: data)
+                favicons[host] = PlatformImage(data: data)
             }
         } catch {
             logger.error("Couldn't load favicons: \(error)")
@@ -1166,7 +1184,7 @@ public final class BrowserModel {
     }
 
     private func saveFavicon(_ data: Data, for pageURL: URL) {
-        guard let host = Favicon.key(for: pageURL), let image = NSImage(data: data) else { return }
+        guard let host = Favicon.key(for: pageURL), let image = PlatformImage(data: data) else { return }
         favicons[host] = image
         lookedUpFaviconHosts.insert(host)
         Task {

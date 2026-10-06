@@ -1,4 +1,4 @@
-import AppKit
+import Foundation
 import Observation
 
 /// The observable state of a tab's live web view, for the address bar and toolbar.
@@ -22,7 +22,7 @@ public final class WebTabState {
     public internal(set) var canGoForward = false
     /// A picture of the page from when the tab hibernated, shown while it restores. `nil` once
     /// the restored page finishes loading, or if the tab didn't wake from hibernation.
-    public internal(set) var restoringSnapshot: NSImage?
+    public internal(set) var restoringSnapshot: PlatformImage?
 
     init() {}
 }

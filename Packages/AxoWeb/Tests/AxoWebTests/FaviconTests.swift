@@ -1,3 +1,5 @@
+// These use AppKit drawing and windows; the Mac covers them.
+#if os(macOS)
 import AppKit
 import AxoCore
 import Foundation
@@ -140,3 +142,4 @@ struct FaviconTests {
         #expect(await FaviconLoader.download(ok) != nil)
     }
 }
+#endif
