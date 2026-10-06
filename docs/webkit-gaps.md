@@ -85,6 +85,12 @@ Limitations in `WKWebView` and `WKWebExtension` that block or shape Axo features
 - **Reproduction:** in an MV3 background with an `action` and no popup: `for (const name of ["chrome", "browser"]) Object.defineProperty(globalThis, name, { value: new Proxy(globalThis[name], {}), configurable: true }); chrome.action.onClicked.addListener(() => console.log("clicked"));` Clicking the action logs nothing; drop the loop and it logs.
 - **For Axo:** an earlier version of the compatibility script wrapped both globals, so 1Password's toolbar button did nothing and popups couldn't reach their background. The script now leaves both globals alone (see above), and `ExtensionCompatibilityTests` checks that clicks and messages still arrive.
 
+## Extension pages only load in the extension's own configuration
+
+- **What happens:** loading an extension's page (such as `webkit-extension://<id>/welcome.html`) in a `WKWebView` whose configuration only has `webExtensionController` set fails with `NSURLErrorDomain` -1008, and the page stays blank. It loads in a configuration from `WKWebExtensionContext.webViewConfiguration`. Extensions open their pages in tabs all the time (1Password's welcome page, options pages), so browsers have to build those tabs differently from ordinary ones, and a tab can't move between a website and an extension page in one web view.
+- **Reproduction:** with an extension loaded in a controller, `let c = WKWebViewConfiguration(); c.webExtensionController = controller` and load the extension's page in a web view made from `c`: `didFailProvisionalNavigation` reports -1008. Use `context.webViewConfiguration` and it loads.
+- **For Axo:** tabs that open on an extension page start from the context's configuration (`WebViewPool.baseConfiguration`). Navigating an existing website tab to an extension page doesn't work yet.
+
 ## Content script messages need `didOpenTab`
 
 - **What happens:** a content script's `runtime.sendMessage` fails with `Tab not found` unless the app told the controller about that page's tab with `didOpenTab`. Listing the tab in `WKWebExtensionWindow.tabs(for:)` isn't enough.

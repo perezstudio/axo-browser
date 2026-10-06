@@ -20,6 +20,7 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
   - `discard(_:)` forgets a closed tab.
   - `liveTabIDs(for:)` lists a profile's live pages, and `addLiveTabObserver(_:)` reports each web view created and each discarded (`LiveTabEvent`), for every page: sidebar tabs, favorites, Peek, and mini windows. AxoExtensions uses them so extensions see every page.
   - `addWebViewConfigurator(_:)` adds a function called, in order, with each new web view's configuration and profile. AxoExtensions uses it to attach the profile's extension controller, and the app uses it to turn on developer tools.
+  - `baseConfiguration` supplies the configuration a new web view starts from, given its page and profile (`nil` for an ordinary one). AxoExtensions uses it for extensions' own pages, which WebKit only loads in a configuration from the extension's context.
   - `load(_:in:)`, `goBack(in:)`, `goForward(in:)`, `reload(_:)`, and `stopLoading(_:)` drive a live tab.
   - `find(_:in:backwards:)` highlights and scrolls to the next or previous match (ignoring case, wrapping) and returns whether it found one. `clearFind(in:)` removes the highlight. WebKit's public API doesn't report match counts.
   - `printOperation(for:)` returns an `NSPrintOperation` for the page, titled with the page title and fit to the page width. Run it with `runModal(for:…)`: a synchronous `run()` hangs, because WebKit prints asynchronously.

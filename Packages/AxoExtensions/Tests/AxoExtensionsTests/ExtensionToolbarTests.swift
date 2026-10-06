@@ -137,6 +137,23 @@ struct ExtensionToolbarTests {
         #expect(presented.first?.0 == record.extensionID)
     }
 
+    /// Extensions open their own pages in tabs (1Password's welcome page, for one).
+    @Test func extensionPagesLoadInTabs() async throws {
+        let record = try await manager.installUnpacked(
+            at: try makeExtension(#""action": {"default_title": "Pages"}"#,
+                                  files: ["welcome.html": "<!doctype html><title>Welcome</title><p id=hi>Hello from the extension</p>"]),
+            for: profileID
+        )
+        let context = try #require(manager.context(for: record.extensionID, profileID: profileID))
+        let url = try #require(URL(string: context.baseURL.appending(path: "welcome.html").absoluteString + "#/page/welcome?language=en"))
+        let tab = Tab(spaceID: UUID(), url: url, sortKey: "b0")
+        let webView = pool.webView(for: tab, profileID: profileID)
+
+        try await waitUntil("the extension page") { webView.title == "Welcome" }
+        let text = try await webView.evaluateJavaScript("document.getElementById('hi').textContent") as? String
+        #expect(text == "Hello from the extension")
+    }
+
     @Test func otherProfilesDontSeeTheWindow() async throws {
         _ = try await manager.installUnpacked(at: try makeExtension(#""permissions": ["tabs"]"#, files: [:]), for: profileID)
         #expect(manager.isCurrent(manager.controller(for: profileID)))

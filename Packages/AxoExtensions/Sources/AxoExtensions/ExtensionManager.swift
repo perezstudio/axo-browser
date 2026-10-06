@@ -89,6 +89,11 @@ public final class ExtensionManager {
             guard let self else { return }
             configuration.webExtensionController = self.controller(for: profileID)
         }
+        // WebKit only loads an extension's own pages (such as a welcome page it opens in a tab)
+        // in a configuration made by the extension's context.
+        pool.baseConfiguration = { [weak self] url, profileID in
+            self?.pageConfiguration(for: url, profileID: profileID)
+        }
         // WebKit only matches a page to a tab it was told about, so every page counts as an open
         // tab from the moment it has a web view (favorites, Peek, and mini windows included).
         pool.addLiveTabObserver { [weak self] event in
@@ -128,6 +133,14 @@ public final class ExtensionManager {
         controller.delegate = delegate
         controllers[profileID] = controller
         return controller
+    }
+
+    /// The configuration for a web view showing one of an extension's pages, or `nil` for any other
+    /// page (or an extension that isn't loaded in that profile).
+    func pageConfiguration(for url: URL, profileID: Profile.ID) -> WKWebViewConfiguration? {
+        guard url.scheme == "webkit-extension", let host = url.host() else { return nil }
+        let context = contexts[profileID]?.values.first { $0.baseURL.host() == host }
+        return context?.webViewConfiguration
     }
 
     /// The loaded context for an extension, if it's enabled and loaded.

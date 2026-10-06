@@ -108,6 +108,12 @@ public final class WebViewPool {
         configurators.append(configure)
     }
 
+    /// Asked for the configuration a new web view starts from, given the page it opens and its
+    /// profile. Return `nil` for an ordinary configuration. Some pages need their own: WebKit only
+    /// loads an extension's pages in a configuration made by that extension's context. The pool
+    /// then adds its own settings and runs the configurators as usual.
+    public var baseConfiguration: ((URL, Profile.ID) -> WKWebViewConfiguration?)?
+
     /// Asked when the person clicks a link in a tab's page (main frame only, not downloads).
     /// Return `true` to handle the click yourself, for example to open the link in Peek; the page
     /// then doesn't navigate. Links that target a new window go to ``onOpenInNewTab`` instead.
@@ -180,7 +186,7 @@ public final class WebViewPool {
             return existing.webView
         }
 
-        let configuration = WKWebViewConfiguration()
+        let configuration = baseConfiguration?(tab.url, profileID) ?? WKWebViewConfiguration()
         configuration.websiteDataStore = dataStore(for: profileID)
         // Element fullscreen (the Fullscreen API) is off by default; videos and pages expect it.
         configuration.preferences.isElementFullscreenEnabled = true
