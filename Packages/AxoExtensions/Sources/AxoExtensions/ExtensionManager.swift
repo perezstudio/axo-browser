@@ -68,6 +68,8 @@ public final class ExtensionManager {
     @ObservationIgnored private var loadedProfiles: Set<Profile.ID> = []
     @ObservationIgnored private let logger = Logger(subsystem: "com.perezstudio.Axo", category: "Extensions")
     @ObservationIgnored private var tabAdapters: [Tab.ID: ExtensionTab] = [:]
+    /// Tabs WebKit has been told are open (`didOpenTab`), so none is announced twice.
+    @ObservationIgnored private var openedTabs: Set<Tab.ID> = []
     @ObservationIgnored private lazy var delegate = ControllerDelegate(manager: self)
     @ObservationIgnored lazy var window = ExtensionWindow(manager: self)
 
@@ -86,6 +88,23 @@ public final class ExtensionManager {
         pool.addWebViewConfigurator { [weak self] configuration, profileID in
             guard let self else { return }
             configuration.webExtensionController = self.controller(for: profileID)
+        }
+        // WebKit only matches a page to a tab it was told about, so every page counts as an open
+        // tab from the moment it has a web view (favorites, Peek, and mini windows included).
+        pool.addLiveTabObserver { [weak self] event in
+            guard let self else { return }
+            switch event {
+            case .created(let tabID, let profileID):
+                guard !self.openedTabs.contains(tabID) else { return }
+                self.openedTabs.insert(tabID)
+                self.controller(for: profileID).didOpenTab(self.tabAdapter(for: tabID))
+            case .discarded(let tabID, let profileID):
+                // Sidebar tabs are closed through tabDidClose, which the app sends.
+                guard self.browser?.windowTabs.contains(where: { $0.id == tabID }) != true,
+                      self.openedTabs.remove(tabID) != nil,
+                      let adapter = self.tabAdapters.removeValue(forKey: tabID) else { return }
+                self.controller(for: profileID).didCloseTab(adapter, windowIsClosing: false)
+            }
         }
     }
 
@@ -142,17 +161,32 @@ public final class ExtensionManager {
         return adapter
     }
 
+    /// The tabs extensions see in the window: the sidebar's tabs in order, then every other live
+    /// page of the same profile (favorites, Peek, mini windows, and pages left open in other
+    /// Spaces). Without those, their content scripts' messages fail with "Tab not found".
+    var windowTabIDs: [Tab.ID] {
+        guard let browser else { return [] }
+        let sidebar = browser.windowTabs.map(\.id)
+        guard let profileID = browser.currentProfileID else { return sidebar }
+        let listed = Set(sidebar)
+        let others = pool.liveTabIDs(for: profileID).filter { !listed.contains($0) }.sorted { $0.uuidString < $1.uuidString }
+        return sidebar + others
+    }
+
     private var currentController: WKWebExtensionController? {
         browser?.currentProfileID.map { controller(for: $0) }
     }
 
     /// Tells extensions a tab opened (`chrome.tabs.onCreated`).
     public func tabDidOpen(_ id: Tab.ID) {
+        guard !openedTabs.contains(id) else { return }
+        openedTabs.insert(id)
         currentController?.didOpenTab(tabAdapter(for: id))
     }
 
     /// Tells extensions a tab closed (`chrome.tabs.onRemoved`).
     public func tabDidClose(_ id: Tab.ID) {
+        openedTabs.remove(id)
         guard let adapter = tabAdapters.removeValue(forKey: id) else { return }
         currentController?.didCloseTab(adapter, windowIsClosing: false)
     }
@@ -261,6 +295,28 @@ public final class ExtensionManager {
             lines: Self.describe(webExtension),
             isUnpacked: installed.isUnpacked
         )
+    }
+
+    /// Why an extension isn't working, in plain words: it couldn't load, or its background stopped
+    /// on an error (with the error, so the person or its developer can tell why). `nil` when
+    /// nothing went wrong.
+    public func problem(for extensionID: String, profileID: Profile.ID) -> String? {
+        if let error = loadErrors[extensionID] { return "Couldn't load: \(error)" }
+        guard let context = context(for: extensionID, profileID: profileID) else { return nil }
+        return Self.backgroundProblem(in: context.errors.map { $0 as NSError })
+    }
+
+    /// Describes a background that failed to start, from a context's errors: WebKit's failure,
+    /// plus the exception just before it (messages the extension only logged aren't counted).
+    nonisolated static func backgroundProblem(in errors: [NSError]) -> String? {
+        let failed = WKWebExtensionContext.Error.Code.backgroundContentFailedToLoad.rawValue
+        guard let failure = errors.lastIndex(where: { $0.domain == WKWebExtensionContext.errorDomain && $0.code == failed }) else {
+            return nil
+        }
+        let cause = errors[..<failure].last { error in
+            error.localizedDescription.range(of: #"^[A-Z][A-Za-z]*Error\b"#, options: .regularExpression) != nil
+        }
+        return cause.map { "Its background couldn't start: \($0.localizedDescription)" } ?? "Its background couldn't start."
     }
 
     /// Downloads extensions from the Chrome Web Store. Replace it in tests.
@@ -393,6 +449,15 @@ public final class ExtensionManager {
     private func load(_ record: WebExtensionRecord) async {
         guard context(for: record.extensionID, profileID: record.profileID) == nil else { return }
         do {
+            // Fill in Chrome features WebKit lacks, in Axo's own copy only (never a developer's
+            // unpacked folder). Extensions installed before this get it on their next load.
+            if !record.isUnpacked {
+                do {
+                    try ExtensionCompatibility.apply(to: record.folder)
+                } catch {
+                    logger.error("Couldn't add compatibility to \(record.extensionID): \(error)")
+                }
+            }
             let webExtension = try await WKWebExtension(resourceBaseURL: record.folder)
             let context = WKWebExtensionContext(for: webExtension)
             // Chrome's ID, so `browser.runtime.id` matches what native messaging hosts and other

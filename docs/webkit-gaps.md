@@ -57,7 +57,32 @@ Limitations in `WKWebView` and `WKWebExtension` that block or shape Axo features
 - **Need:** extensions show system notifications with `chrome.notifications.create` and react to clicks. Bitwarden uses them for alerts such as login requests from another device.
 - **What happens:** `WKWebExtension` has no `notifications` API, so `chrome.notifications` is undefined even when the manifest requests the `notifications` permission. Bitwarden checks for it, switches to a fallback that reports "Notification clicked is not supported.", and keeps running. That message then appears in `WKWebExtensionContext.errors`.
 - **Reproduction:** load an MV3 extension with `"permissions": ["notifications"]` whose background script runs `console.log(typeof chrome.notifications)`. It logs `undefined`.
-- **For now:** extension notifications don't appear. Axo could provide them later if WebKit adds a hook for them.
+- **For now:** extension notifications don't appear. Axo's compatibility script (`ExtensionCompatibility` in AxoExtensions) gives extensions installed from a CRX a stand-in `chrome.notifications`, so code that uses it keeps running. Axo could show real notifications later if WebKit adds a hook for them.
+- **Effect on 1Password (8.12, October 2026):** unlike Bitwarden, 1Password reads `chrome.notifications.onClicked` at startup without checking, so its background script stops with `TypeError: undefined is not an object (evaluating 'chrome.notifications.onClicked')` and the extension doesn't work at all.
+
+## `declarativeNetRequest` rejects custom header names
+
+- **Need:** extensions add `modifyHeaders` rules that set their own request headers. Todoist sets `Doist-Platform` on requests to its servers.
+- **What happens:** `declarativeNetRequest.updateSessionRules()` (and the dynamic and static rule paths) throws `Rule with id 1 is invalid. The header 'Doist-Platform' is not recognized.` WebKit only accepts a fixed list of header names in `requestHeaders` and `responseHeaders`; Chrome accepts any valid header name. Todoist 12.21 awaits this call at startup, so its background script stops and the extension doesn't work.
+- **Reproduction:** load an MV3 extension with `"permissions": ["declarativeNetRequestWithHostAccess"]` and `"host_permissions": ["https://example.com/*"]` whose background script runs `chrome.declarativeNetRequest.updateSessionRules({ addRules: [{ id: 1, priority: 1, action: { type: "modifyHeaders", requestHeaders: [{ header: "X-Custom", operation: "set", value: "1" }] }, condition: { urlFilter: "example.com" } }] })`. It throws instead of adding the rule.
+- **For now:** Axo's compatibility script retries `updateSessionRules` and `updateDynamicRules` without the rejected headers (dropping rules left with nothing to change), so such extensions start; the custom headers just aren't sent.
+
+## Missing `webNavigation` events and `storage.managed`
+
+- **Need:** extensions listen for `webNavigation.onCreatedNavigationTarget` (a link opening in a new tab), `onHistoryStateUpdated`, `onReferenceFragmentUpdated`, and `onTabReplaced`, and read `storage.managed` (settings an organization pushes). 1Password uses `onCreatedNavigationTarget` and `storage.managed.onChanged`; Todoist checks `onCreatedNavigationTarget.hasListener`.
+- **What happens:** WebKit's `webNavigation` has only the core navigation events, and there's no `storage.managed`. Code that calls `addListener` on them throws `TypeError: undefined is not an object` and, at startup, stops the background script.
+- **Reproduction:** in an MV3 background script with the `webNavigation` permission, `console.log(typeof chrome.webNavigation.onCreatedNavigationTarget, typeof chrome.storage.managed)` logs `undefined undefined`.
+- **For now:** Axo's compatibility script supplies stand-ins that never fire (and an empty `storage.managed`).
+
+## The `chrome` namespaces can't be patched in place
+
+- **What happens:** WebKit's `chrome` (and `browser`) object silently ignores `Object.defineProperty` for its built-in namespace names, and it can hand out a fresh namespace object (such as `chrome.storage`) at times, so members added to a namespace object can disappear. Adding new names to `chrome` itself (such as `notifications`) works.
+- **For Axo:** the compatibility script replaces the `chrome` and `browser` globals with proxies, so every namespace read gets its stand-ins whatever object WebKit returns.
+
+## Content script messages need `didOpenTab`
+
+- **What happens:** a content script's `runtime.sendMessage` fails with `Tab not found` unless the app told the controller about that page's tab with `didOpenTab`. Listing the tab in `WKWebExtensionWindow.tabs(for:)` isn't enough.
+- **For Axo:** `ExtensionManager` announces every page with a web view (sidebar tabs, favorites, Peek, mini windows) through the pool's live tab events. Not a WebKit bug, but undocumented.
 
 ## Passkeys need a managed entitlement
 

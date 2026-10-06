@@ -33,7 +33,8 @@ public struct ExtensionSummary: Identifiable, Equatable, Sendable {
     public var reachesAllRequestedSites: Bool
     /// What it can do now, in plain language.
     public var lines: [String]
-    /// Why it couldn't load, if it couldn't.
+    /// Why it isn't working, in plain words (it couldn't load, or its background couldn't
+    /// start), or `nil` when it's fine.
     public var loadError: String?
 
     public init(id: String, name: String, version: String, isEnabled: Bool, isUnpacked: Bool, reachesAllRequestedSites: Bool, lines: [String], loadError: String?) {
@@ -274,8 +275,12 @@ private struct ExtensionRow: View {
                 // The switch says whether it's on; the label says what it turns on.
                 .accessibilityLabel(item.name)
             }
-            if let error = item.loadError {
-                Text("Couldn't load: \(error)").font(.caption).foregroundStyle(.red)
+            if let problem = item.loadError {
+                Label(problem, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("extensionProblem")
             }
             Picker("Site access", selection: Binding(
                 get: { item.reachesAllRequestedSites },

@@ -567,7 +567,7 @@ final class ExtensionBridge: ExtensionBrowsing, ExtensionToolbarProviding, Exten
                 isUnpacked: record.isUnpacked,
                 reachesAllRequestedSites: record.siteAccess == .all,
                 lines: manager.grantedDescription(for: record.extensionID, profileID: profileID),
-                loadError: manager.loadErrors[record.extensionID]
+                loadError: manager.problem(for: record.extensionID, profileID: profileID)
             )
         }
     }

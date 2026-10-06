@@ -20,10 +20,20 @@ struct RealExtensionTests {
         var testDescription: String { file }
     }
 
-    nonisolated static let samples = [
-        Sample(file: "ubol.crx", chromeID: "ddkjiahejlhfcafbddmgiahcphecmpfh"),
-        Sample(file: "bitwarden.crx", chromeID: "nngceckbapebfimnlniiiahkandclblb"),
-    ]
+    /// uBlock Origin Lite and Bitwarden, or the packages named in `AXO_REAL_EXTENSION_FILES`
+    /// (`file=chromeID`, comma-separated) to check others.
+    nonisolated static let samples: [Sample] = {
+        guard let list = ProcessInfo.processInfo.environment["AXO_REAL_EXTENSION_FILES"] else {
+            return [
+                Sample(file: "ubol.crx", chromeID: "ddkjiahejlhfcafbddmgiahcphecmpfh"),
+                Sample(file: "bitwarden.crx", chromeID: "nngceckbapebfimnlniiiahkandclblb"),
+            ]
+        }
+        return list.split(separator: ",").compactMap { item in
+            let parts = item.split(separator: "=").map(String.init)
+            return parts.count == 2 ? Sample(file: parts[0], chromeID: parts[1]) : nil
+        }
+    }()
 
     private func data(for sample: Sample) throws -> Data {
         let folder = try #require(ProcessInfo.processInfo.environment["AXO_REAL_EXTENSIONS"])
@@ -42,6 +52,12 @@ struct RealExtensionTests {
         let profileID = try await store.bootstrap().profileID
         let pool = WebViewPool(makeDataStore: { _ in .nonPersistent() })
         let manager = ExtensionManager(installer: ExtensionInstaller(root: temporaryFolder()), store: store.extensions, pool: pool, persistent: false)
+        // A window with a tab, as in the app, so extensions that look up their window find one.
+        let browser = FakeBrowser()
+        browser.currentProfileID = profileID
+        browser.windowTabs = [Tab(spaceID: UUID(), url: URL(string: "about:blank")!, sortKey: "a0")]
+        browser.activeTabID = browser.windowTabs[0].id
+        manager.browser = browser
 
         progress("installing \(sample.file)")
         let record = try await manager.install(crx: try data(for: sample), for: profileID)

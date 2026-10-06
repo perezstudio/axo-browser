@@ -82,6 +82,22 @@ public final class WebViewPool {
         }
     }
 
+    /// A web view coming or going, for observers such as the extension manager.
+    public enum LiveTabEvent: Equatable, Sendable {
+        /// A tab's web view was created (not woken from hibernation: that's a new one too).
+        case created(Tab.ID, profileID: Profile.ID)
+        /// A tab's web view was discarded because the tab closed (``discard(_:)``), not hibernated.
+        case discarded(Tab.ID, profileID: Profile.ID)
+    }
+
+    private var liveTabObservers: [(LiveTabEvent) -> Void] = []
+
+    /// Adds a function called whenever a web view is created or discarded, for every page: sidebar
+    /// tabs, favorites, Peek, and mini windows.
+    public func addLiveTabObserver(_ observer: @escaping (LiveTabEvent) -> Void) {
+        liveTabObservers.append(observer)
+    }
+
     /// Functions that adjust each new web view's configuration, in the order added.
     private var configurators: [(WKWebViewConfiguration, Profile.ID) -> Void] = []
 
@@ -202,6 +218,7 @@ public final class WebViewPool {
         liveTab.onPageChange = { [weak self] url, title in self?.onPageChange?(tab.id, url, title) }
         liveTab.onLoadFinished = { [weak self] in self?.loadFavicon(for: tab.id) }
         live[tab.id] = liveTab
+        liveTabObservers.forEach { $0(.created(tab.id, profileID: profileID)) }
 
         if let saved = hibernated.removeValue(forKey: tab.id), let interactionState = saved.interactionState {
             liveTab.state.restoringSnapshot = saved.snapshot.flatMap(PlatformImage.init(data:))
@@ -423,7 +440,9 @@ public final class WebViewPool {
     public func discard(_ tabID: Tab.ID) {
         hibernated[tabID] = nil
         visibleCounts[tabID] = nil
-        live.removeValue(forKey: tabID)?.tearDown()
+        guard let liveTab = live.removeValue(forKey: tabID) else { return }
+        liveTab.tearDown()
+        liveTabObservers.forEach { $0(.discarded(tabID, profileID: liveTab.profileID)) }
     }
 
     // MARK: Permissions
@@ -495,6 +514,12 @@ public final class WebViewPool {
         let store = makeDataStore(profileID)
         dataStores[profileID] = store
         return store
+    }
+
+    /// The tabs whose web views are live for a profile, in no particular order: sidebar tabs,
+    /// favorites, Peek, and mini windows alike.
+    public func liveTabIDs(for profileID: Profile.ID) -> [Tab.ID] {
+        live.values.filter { $0.profileID == profileID }.map(\.tabID)
     }
 
     /// Removes a profile's cookies, caches, and other website data, signing it out of sites.
