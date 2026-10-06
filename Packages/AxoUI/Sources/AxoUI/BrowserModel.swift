@@ -20,7 +20,7 @@ public final class BrowserModel {
     /// The Space shown in the sidebar, once ``start()`` finishes.
     public private(set) var space: Space?
     /// The Space's tabs in sidebar order, kept current as the database changes.
-    public private(set) var tabs: [AxoCore.Tab] = []
+    public internal(set) var tabs: [AxoCore.Tab] = []
     /// The Space's folders, kept current as the database changes.
     public private(set) var folders: [Folder] = []
     /// The Space's split views, kept current as the database changes.
@@ -92,6 +92,11 @@ public final class BrowserModel {
     @ObservationIgnored private var observationTask: Task<Void, Never>?
     @ObservationIgnored private var spacesObservationTask: Task<Void, Never>?
     @ObservationIgnored var profilesObservationTask: Task<Void, Never>?
+    /// The current Space's profile's favorites, in grid order.
+    public internal(set) var favorites: [Favorite] = []
+    @ObservationIgnored var favoritesObservationTask: Task<Void, Never>?
+    /// The profile whose favorites are being observed.
+    @ObservationIgnored var favoritesProfileID: Profile.ID?
     /// Every profile, by name, kept current for Settings.
     public internal(set) var allProfiles: [Profile] = []
     @ObservationIgnored private var foldersObservationTask: Task<Void, Never>?
@@ -258,6 +263,7 @@ public final class BrowserModel {
         observationTask?.cancel()
         spacesObservationTask?.cancel()
         profilesObservationTask?.cancel()
+        favoritesObservationTask?.cancel()
         linkRoutesObservationTask?.cancel()
         siteCustomizationsObservationTask?.cancel()
         foldersObservationTask?.cancel()
@@ -401,7 +407,10 @@ public final class BrowserModel {
     func followShownSpace() async throws {
         guard let current = space else { return }
         if let fresh = spaces.first(where: { $0.id == current.id }) {
-            if fresh != current { space = fresh }
+            if fresh != current {
+                space = fresh
+                if fresh.profileID != current.profileID { await observeFavorites(for: fresh.profileID) }
+            }
             return
         }
         selectedTabBySpace[current.id] = nil
@@ -423,12 +432,16 @@ public final class BrowserModel {
             selectedTabBySpace[current.id] = selectedTabID
         }
         space = target
+        await observeFavorites(for: target.profileID)
         tabs = try await store.tabs(in: target.id)
         folders = try await store.folders(in: target.id)
         splits = try await store.splits(in: target.id)
         observeFolders(in: target.id)
         observeSplits(in: target.id)
-        let remembered = selectedTabBySpace[target.id].flatMap { id in tabs.first { $0.id == id }?.id }
+        // A favorite stays shown in every Space of its profile.
+        let remembered = selectedTabBySpace[target.id].flatMap { id in
+            tabs.first { $0.id == id }?.id ?? favorites.first { $0.id == id }?.id
+        }
         select(remembered ?? tabs.first?.id)
         observeTabs(in: target.id)
         await loadSavedFavicons()
@@ -516,8 +529,8 @@ public final class BrowserModel {
     }
 
     /// Asks the pool for the selected tab's web view, so its state is ready for the toolbar.
-    private func activateSelectedTab() {
-        guard let tab = selectedTab, let space else {
+    func activateSelectedTab() {
+        guard let tab = shownTab, let space else {
             selectedPage = nil
             return
         }
@@ -565,6 +578,10 @@ public final class BrowserModel {
     /// it back), and a pinned tab stays in the sidebar but unloads and returns to its home page.
     /// If the tab was selected, the tab below it (or above, if it was last) is selected.
     public func closeTab(_ id: AxoCore.Tab.ID) async {
+        if isFavorite(id) {
+            closeFavorite(id)
+            return
+        }
         guard let space, let tab = tabs.first(where: { $0.id == id }) else { return }
         let visibleOrder = tabs.map(\.id)
         let otherPanes = tab.splitID.map { splitID in tabs.filter { $0.splitID == splitID && $0.id != id }.map(\.id) } ?? []
@@ -991,7 +1008,10 @@ public final class BrowserModel {
     /// Recomputes the results for the current query and highlights the first one.
     private func refreshCommandResults() {
         let query = commandQuery
-        commandResults = CommandRanking.immediateResults(for: query, tabs: tabs, availableActions: availableActions)
+        // Favorites switch like tabs, but can't join a split view.
+        let favoriteTabs = pendingSplitAnchor == nil ? space.map { space in favorites.map { $0.tab(in: space.id) } } ?? [] : []
+        let openTabs = favoriteTabs + tabs
+        commandResults = CommandRanking.immediateResults(for: query, tabs: openTabs, availableActions: availableActions)
         commandSelection = 0
         commandSearchTask?.cancel()
         guard let profileID = space?.profileID, !query.trimmingCharacters(in: .whitespaces).isEmpty else { return }
@@ -999,7 +1019,7 @@ public final class BrowserModel {
         commandSearchTask = Task { [weak self] in
             let items = (try? await history.search(query, profileID: profileID)) ?? []
             guard let self, !Task.isCancelled, self.commandQuery == query else { return }
-            self.commandResults += CommandRanking.historyResults(items, excludingOpen: self.tabs)
+            self.commandResults += CommandRanking.historyResults(items, excludingOpen: openTabs)
         }
     }
 
@@ -1211,8 +1231,9 @@ public final class BrowserModel {
         pageChangeSave = Task {
             await previousSave?.value
             do {
-                if isTemporaryPage(tabID) {
-                    // Peek and mini windows aren't in the sidebar, but their pages are history.
+                if isTemporaryPage(tabID) || isFavorite(tabID) {
+                    // Peek, mini windows, and favorites aren't sidebar tabs, but their pages are
+                    // history. A favorite keeps its home page.
                     if let profileID = space?.profileID {
                         try await store.history.recordVisit(to: url, title: title, profileID: profileID, at: now())
                     }

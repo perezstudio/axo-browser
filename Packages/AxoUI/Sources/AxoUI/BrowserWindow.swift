@@ -66,7 +66,7 @@ public struct BrowserWindow: View {
                 .safeAreaInset(edge: .top, spacing: 0) {
                     if model.isFindBarVisible { FindBar(model: model) }
                 }
-        } else if let tab = model.selectedTab, let space = model.space {
+        } else if let tab = model.shownTab, let space = model.space {
             WebViewHost(tab: tab, profileID: space.profileID, pool: model.pool)
                 .accessibilityIdentifier("webContent")
                 .safeAreaInset(edge: .top, spacing: 0) {

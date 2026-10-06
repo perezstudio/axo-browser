@@ -5,7 +5,7 @@ import SwiftUI
 extension BrowserModel {
     /// The page to offer through Handoff: the selected page, if it's an http or https page.
     public var handoffURL: URL? {
-        guard isHandoffEnabled, let url = selectedPage?.url ?? selectedTab?.url,
+        guard isHandoffEnabled, let url = selectedPage?.url ?? shownTab?.url,
               Self.isWebPage(url) else { return nil }
         return url
     }
@@ -30,7 +30,7 @@ struct HandoffActivity: ViewModifier {
     func body(content: Content) -> some View {
         content.userActivity(NSUserActivityTypeBrowsingWeb, isActive: model.handoffURL != nil) { activity in
             activity.webpageURL = model.handoffURL
-            activity.title = model.selectedPage?.title ?? model.selectedTab?.title
+            activity.title = model.selectedPage?.title ?? model.shownTab?.title
         }
     }
 }

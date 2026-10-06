@@ -240,4 +240,18 @@ struct SyncStoreTests {
         try await mac.sync()
         #expect(try await mac.tabs.spaces().first?.color == nil, "Clearing syncs too")
     }
+
+    @Test func favoritesSyncWithTheirProfile() async throws {
+        let home = try await mac.tabs.bootstrap()
+        let tab = try await mac.tabs.openTab(url: URL(string: "https://example.com/mail")!, title: "Mail", in: home.id)
+        let favorite = try await mac.tabs.favorites.add(fromTab: tab.id)
+        try await mac.sync()
+        try await iPad.sync()
+        #expect(try await iPad.tabs.favorites.favorites(for: home.profileID).map(\.url) == [favorite.url])
+
+        try await mac.tabs.favorites.remove(favorite.id)
+        try await mac.sync()
+        try await iPad.sync()
+        #expect(try await iPad.tabs.favorites.favorites(for: home.profileID).isEmpty)
+    }
 }

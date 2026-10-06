@@ -59,12 +59,16 @@ struct SidebarView: View {
             SpaceSwitcher(model: model)
         }
         .safeAreaInset(edge: .top) {
-            // Like Arc, the address field can sit at the top of the sidebar.
-            if navigationBarPlacement == .sidebar {
-                AddressBar(model: model)
-                    .padding(.horizontal, 10)
-                    .padding(.bottom, 6)
+            VStack(spacing: 8) {
+                // Like Arc, the address field can sit at the top of the sidebar.
+                if navigationBarPlacement == .sidebar {
+                    AddressBar(model: model)
+                }
+                // Favorites sit above the pinned tabs, shared by the profile's Spaces.
+                FavoritesGrid(model: model)
             }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 6)
         }
         .toolbar {
             if navigationBarPlacement == .sidebar {
@@ -179,6 +183,8 @@ struct TabContextMenu: View {
             Button("Add to Split View") { Task { await model.addToSplit(tab.id) } }
             Divider()
         }
+        Button("Add to Favorites") { Task { await model.addToFavorites(tab.id) } }
+        Divider()
         if tab.isPinned {
             Button("Go to Pinned Page") { Task { await model.goToPinnedHome(tab.id) } }
                 .disabled(!tab.hasLeftHome)

@@ -63,7 +63,7 @@ public struct ImportCounts: Hashable, Sendable {
     public func description(of part: ImportPart) -> String {
         switch part {
         case .spaces: "\(Self.count(spaces, "Space", "Spaces")), with \(Self.count(pinnedTabs, "pinned tab", "pinned tabs"))"
-        case .favorites: "\(Self.count(favorites, "favorite", "favorites")), in a Favorites folder"
+        case .favorites: Self.count(favorites, "favorite", "favorites")
         case .openTabs: Self.count(openTabs, "open tab", "open tabs")
         case .bookmarks: "\(Self.count(bookmarks, "bookmark", "bookmarks")), as pinned tabs in an “Imported from Chrome” folder"
         case .history: Self.count(historyPages, "page of history", "pages of history")

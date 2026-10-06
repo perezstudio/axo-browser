@@ -186,7 +186,8 @@ The private route can change in any macOS release and would likely be rejected f
 | Feature | How Axo builds it |
 | --- | --- |
 | Spaces and profiles | One `WKWebsiteDataStore(forIdentifier:)` per profile; each Space points at a profile |
-| Pinned and today tabs | Pinned tabs remember a home URL and can reset to it; unpinned tabs auto-archive after a configurable period; folders are a tree in AxoCore |
+| Favorites | A grid of icon tiles above the pinned tabs, shared by every Space of a profile (one web view per favorite, so it's the same page in each Space). Kept separate from pinned tabs in the UI: no titles, no folders. ⌘1–⌘9 open them |
+| Pinned and today tabs | Pinned tabs remember a home URL and can reset to it; unpinned tabs auto-archive after a configurable period; folders are a tree in AxoCore. Pinned tabs and folders are Axo's bookmarks |
 | Tab hibernation | Web view pool discards idle web views and restores them from `interactionState` |
 | Command bar (Cmd+T) | Axo's own index over tabs, history, bookmarks, and actions, backed by SQLite FTS5 and a fast fuzzy matcher |
 | Split view | Two or more mounted web views in one window, easy once the pool owns them |
@@ -305,6 +306,12 @@ Each milestone should be usable as a daily driver before the next one starts.
 - [x] Handoff and Spotlight indexing of pinned tabs and history: the window offers its page through Handoff and opens pages handed off to it. Spotlight indexes pinned tabs from every Space and the 500 most recent history pages, and opens the result picked.
 - [x] Screen Time web usage support: an `STWebpageController` over each visible page reports its URL per profile and shows Screen Time's block screen when a site is over its limit. It lives in AxoWeb rather than AxoIntegration because it has to sit on top of the web view. Removing history from Screen Time (`STWebHistory`) comes with a Clear History command.
 - [x] On-device page translation and tab summaries: View › Translate Page (and the command bar) detects the page's language with NaturalLanguage and translates its text into the person's preferred language with the Translation framework; a bar above the page offers Show Original. Summarize Page, a toolbar button, writes a short summary with the on-device Foundation Models model and says plainly why when Apple Intelligence isn't available. Translation lives in AxoUI, because its session comes from a SwiftUI modifier; the summarizer is in AxoIntegration and the page text helpers in AxoWeb.
+
+**Mac interface pass (October 2026, between Milestones 6 and 7)**
+
+- [x] Sidebar footer: Settings, Space dots in a glass capsule, New Space.
+- [x] Settings: General (navigation bar in the sidebar or above the page), Profiles, and Spaces (name, profile, color, icon, order).
+- [x] Favorites: a profile-wide grid above the pinned tabs (decided in October 2026: favorites are new and separate; pinned tabs and folders stay per Space as bookmarks).
 
 **Milestone 7: Sync and iOS**
 

@@ -21,6 +21,7 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
 | --- | --- |
 | `v1-profiles-spaces-tabs` | `profile`, `space` (→ profile, cascade), `tab` (→ space, cascade) |
 | `v2-favicons` | `favicon` (site icons as 64 px PNGs, keyed by host) |
+| `v14-favorites` | `favorite` (a profile's favorites: home URL, title, sort key; → profile, cascade), with sync triggers |
 | `v13-space-appearance` | `space.color` (a palette name) and `space.icon` (an SF Symbol name), both optional; the Space sync trigger is recreated to include them |
 | `v12-sync` | iCloud sync bookkeeping: `syncChange` (local changes to profiles, Spaces, folders, and pinned tabs not yet sent, kept by triggers), `syncApplying` (set while changes from iCloud are written, so the triggers skip them), `syncRecordMetadata` (CloudKit system fields), `syncParkedRecord` (records waiting for a parent), `syncSetting` (engine state and the first-sync flag) |
 | `v11-site-customizations` | `siteCustomization` (custom CSS and JavaScript for a domain and its subdomains; unique per domain; on by default) |

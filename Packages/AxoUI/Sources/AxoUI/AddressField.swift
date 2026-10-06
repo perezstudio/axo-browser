@@ -53,6 +53,6 @@ struct AddressField: View {
 
     /// The selected page's URL, falling back to the saved URL of a tab that hasn't loaded yet.
     private var currentAddress: String {
-        (model.selectedPage?.url ?? model.selectedTab?.url)?.absoluteString ?? ""
+        (model.selectedPage?.url ?? model.shownTab?.url)?.absoluteString ?? ""
     }
 }

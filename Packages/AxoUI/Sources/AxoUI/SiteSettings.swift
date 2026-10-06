@@ -48,7 +48,7 @@ final class SitePermissionAdapter: PermissionDecisionStore {
 extension BrowserModel {
     /// The selected page's site, if it's an http or https page.
     public var siteSettingsOrigin: PageOrigin? {
-        (selectedPage?.url ?? selectedTab?.url).flatMap(PageOrigin.init(url:))
+        (selectedPage?.url ?? shownTab?.url).flatMap(PageOrigin.init(url:))
     }
 
     /// Opens Site Settings for the selected page's site.

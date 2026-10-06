@@ -242,6 +242,7 @@ public final class SyncStore: Sendable {
     static func localRecord(for id: SyncRecordID, modifiedAt: Date, _ db: Database) throws -> SyncRecord? {
         let sql = switch id.type {
         case .profile: "SELECT name FROM profile WHERE id = ?"
+        case .favorite: "SELECT profileID, url, title, sortKey FROM favorite WHERE id = ?"
         case .space: "SELECT profileID, name, sortKey, color, icon FROM space WHERE id = ?"
         case .folder: "SELECT spaceID, parentID, name, sortKey FROM folder WHERE id = ?"
         case .tab: "SELECT spaceID, folderID, COALESCE(homeURL, url) AS url, title, sortKey FROM tab WHERE id = ? AND isPinned"
@@ -279,6 +280,14 @@ public final class SyncStore: Sendable {
                 sql: "INSERT INTO profile (id, name) VALUES (?, ?) ON CONFLICT (id) DO UPDATE SET name = excluded.name",
                 arguments: [id, name]
             )
+        case .favorite:
+            guard let url = record.fields["url"], let sortKey = record.fields["sortKey"],
+                  try exists("profile", record.uuid("profileID")) else { return false }
+            try db.execute(sql: """
+                INSERT INTO favorite (id, profileID, url, title, sortKey) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT (id) DO UPDATE SET profileID = excluded.profileID, url = excluded.url,
+                    title = excluded.title, sortKey = excluded.sortKey
+                """, arguments: [id, record.uuid("profileID"), url, record.fields["title"] ?? "", sortKey])
         case .space:
             guard let name = record.fields["name"], let sortKey = record.fields["sortKey"],
                   try exists("profile", record.uuid("profileID")) else { return false }

@@ -683,7 +683,7 @@ public final class TabStore: Sendable {
     /// Computes a sort key for `position` within one section of a Space, ignoring the tab being
     /// moved. For pinned tabs, the section is one level of the pinned tree (`folder`), where
     /// folders and tabs share an order.
-    private static func sortKey(
+    static func sortKey(
         for position: TabPosition,
         in spaceID: Space.ID,
         pinned: Bool,

@@ -29,7 +29,7 @@ extension BrowserModel {
 
     /// Opens the summary popover and summarizes the selected page.
     public func summarizeSelectedPage() async {
-        guard let summarizer = pageSummarizer, let tab = selectedTab else { return }
+        guard let summarizer = pageSummarizer, let tab = shownTab else { return }
         isShowingSummary = true
         if let reason = summarizer.unavailableReason {
             pageSummary = .failed(reason)

@@ -417,6 +417,49 @@ final class AxoUITests: XCTestCase {
         XCTAssertEqual(app.buttons.matching(identifier: "spaceButton").count, 1)
     }
 
+    /// A tab becomes a favorite from its context menu: it moves to the grid above the pinned
+    /// tabs, ⌘1 shows it, it stays in another Space of the same profile, and its own menu
+    /// removes it.
+    @MainActor
+    func testFavorites() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText(page("Mail") + "\n")
+        XCTAssertTrue(sidebar.staticTexts["Mail"].waitForExistence(timeout: 10))
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText(page("News") + "\n")
+        XCTAssertTrue(sidebar.staticTexts["News"].waitForExistence(timeout: 10))
+
+        sidebar.staticTexts["Mail"].rightClick()
+        app.windows.firstMatch.menuItems["Add to Favorites"].click()
+        let tile = app.buttons["favoriteTile"]
+        XCTAssertTrue(tile.waitForExistence(timeout: 5))
+        XCTAssertEqual(tile.label, "Mail")
+        XCTAssertFalse(sidebar.staticTexts["Mail"].exists, "It leaves the tab list")
+        XCTAssertTrue(app.descendants(matching: .any)["favoritesGrid"].exists)
+
+        sidebar.staticTexts["News"].click()
+        app.typeKey("1", modifierFlags: .command)
+        expectation(for: NSPredicate(format: "isSelected == true"), evaluatedWith: tile)
+        waitForExpectations(timeout: 5)
+        expectation(for: NSPredicate(format: "value CONTAINS 'Mail'"), evaluatedWith: app.textFields["addressField"])
+        waitForExpectations(timeout: 5)
+
+        app.buttons["newSpaceButton"].click()
+        let nameField = app.textFields["spaceNameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.typeText("Work")
+        app.buttons["createSpaceButton"].click()
+        XCTAssertTrue(sidebar.staticTexts["Work"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["favoriteTile"].exists, "Every Space of the profile shows it")
+
+        app.buttons["favoriteTile"].rightClick()
+        app.windows.firstMatch.menuItems["Remove from Favorites"].click()
+        XCTAssertTrue(app.buttons["favoriteTile"].waitForNonExistence(timeout: 5))
+    }
+
     /// The sidebar's footer: Settings on the left, a dot per Space (the current one selected) in
     /// the middle, and New Space on the right.
     @MainActor
@@ -886,8 +929,11 @@ final class AxoUITests: XCTestCase {
 
         XCTAssertEqual(app.buttons.matching(identifier: "spaceButton").count, 2, "The Arc Space is added")
         app.typeKey("2", modifierFlags: .control)
-        XCTAssertTrue(sidebar.staticTexts["Library"].waitForExistence(timeout: 5))
-        XCTAssertTrue(sidebar.staticTexts["Favorites"].exists)
+        // The Space's only tab is selected, so it starts loading (a closed port), which can
+        // replace its imported title with an empty one; the row then shows the host.
+        let library = sidebar.staticTexts.matching(NSPredicate(format: "label == 'Library' OR label == '127.0.0.1'")).firstMatch
+        XCTAssertTrue(library.waitForExistence(timeout: 5), "The Arc Space's pinned tab is there")
+        XCTAssertEqual(app.buttons.matching(identifier: "favoriteTile").count, 1, "Arc's favorite joins Favorites")
 
         // Chrome's bookmarks go into the current Space.
         app.typeKey("t", modifierFlags: .command)

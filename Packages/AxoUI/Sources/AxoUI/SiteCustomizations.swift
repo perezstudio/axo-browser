@@ -5,7 +5,7 @@ import SwiftUI
 extension BrowserModel {
     /// The selected page's host, if it's a web page.
     var selectedHost: String? {
-        guard let url = selectedPage?.url ?? selectedTab?.url,
+        guard let url = selectedPage?.url ?? shownTab?.url,
               let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return nil }
         return url.host()?.lowercased()
     }
