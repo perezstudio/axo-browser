@@ -1,13 +1,13 @@
 import AxoCore
 import Foundation
-import WebKit
 
 /// Reading and rewriting a page's text, for translation and summaries.
 ///
 /// Runs in an isolated content world, so pages can't see or interfere with it.
 @MainActor
 enum PageText {
-    static let world = WKContentWorld.world(name: "AxoPageText")
+    /// The isolated world the scripts run in.
+    static let world = "AxoPageText"
 
     /// Collects the page's visible text nodes (skipping scripts, styles, and code), remembers
     /// them, and returns their text. Trims to `limit` nodes.
@@ -62,27 +62,27 @@ extension WebViewPool {
     /// The visible text of a live tab's page, in order, for translation. Each string is one text
     /// node; pass the translations back to ``replacePageText(_:in:)`` in the same order.
     public func pageTextSegments(in tabID: Tab.ID, limit: Int = 2_000) async throws -> [String] {
-        guard let webView = liveWebView(for: tabID) else { return [] }
-        let result = try await webView.callAsyncJavaScript(PageText.collect, arguments: ["limit": limit], contentWorld: PageText.world)
+        guard let page = livePage(for: tabID) else { return [] }
+        let result = try await page.callJavaScript(PageText.collect, arguments: ["limit": limit], in: PageText.world)
         return result as? [String] ?? []
     }
 
     /// Replaces the text collected by ``pageTextSegments(in:limit:)`` with `texts`, in order.
     public func replacePageText(_ texts: [String], in tabID: Tab.ID) async throws {
-        guard let webView = liveWebView(for: tabID) else { return }
-        _ = try await webView.callAsyncJavaScript(PageText.replace, arguments: ["texts": texts], contentWorld: PageText.world)
+        guard let page = livePage(for: tabID) else { return }
+        _ = try await page.callJavaScript(PageText.replace, arguments: ["texts": texts], in: PageText.world)
     }
 
     /// Puts back the page's original text after ``replacePageText(_:in:)``.
     public func restorePageText(in tabID: Tab.ID) async throws {
-        guard let webView = liveWebView(for: tabID) else { return }
-        _ = try await webView.callAsyncJavaScript(PageText.restore, contentWorld: PageText.world)
+        guard let page = livePage(for: tabID) else { return }
+        _ = try await page.callJavaScript(PageText.restore, arguments: [:], in: PageText.world)
     }
 
     /// A live tab's readable text, up to `limit` characters, for summaries.
     public func readablePageText(in tabID: Tab.ID, limit: Int = 6_000) async throws -> String {
-        guard let webView = liveWebView(for: tabID) else { return "" }
-        let result = try await webView.callAsyncJavaScript(PageText.readable, arguments: ["limit": limit], contentWorld: PageText.world)
+        guard let page = livePage(for: tabID) else { return "" }
+        let result = try await page.callJavaScript(PageText.readable, arguments: ["limit": limit], in: PageText.world)
         return result as? String ?? ""
     }
 }

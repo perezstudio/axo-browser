@@ -528,13 +528,13 @@ public final class BrowserModel {
         activateSelectedTab()
     }
 
-    /// Asks the pool for the selected tab's web view, so its state is ready for the toolbar.
+    /// Asks the pool for the selected tab's page, so its state is ready for the toolbar.
     func activateSelectedTab() {
         guard let tab = shownTab, let space else {
             selectedPage = nil
             return
         }
-        _ = pool.webView(for: tab, profileID: space.profileID)
+        pool.page(for: tab, profileID: space.profileID)
         selectedPage = pool.state(for: tab.id)
     }
 
@@ -905,7 +905,7 @@ public final class BrowserModel {
         panel.canChooseFiles = true
         panel.prompt = "Choose"
         let response: NSApplication.ModalResponse
-        if let window = pool.liveWebView(for: request.tabID)?.window {
+        if let window = pool.livePage(for: request.tabID)?.view.window {
             response = await panel.beginSheetModal(for: window)
         } else {
             response = await withCheckedContinuation { continuation in
@@ -1157,7 +1157,7 @@ public final class BrowserModel {
         #if os(macOS)
         guard let selectedTabID,
               let operation = pool.printOperation(for: selectedTabID),
-              let window = pool.liveWebView(for: selectedTabID)?.window else { return }
+              let window = pool.livePage(for: selectedTabID)?.view.window else { return }
         operation.runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
         #endif
     }

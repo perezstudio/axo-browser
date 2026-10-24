@@ -12,7 +12,7 @@ The full plan, architecture, and reasoning behind every decision are in `docs/PL
 
 - Swift 6 with strict concurrency enabled. No `@unchecked Sendable` or `nonisolated(unsafe)` without a comment explaining why it is safe.
 - SwiftUI for browser chrome (windows, sidebar, command bar, settings).
-- AppKit `WKWebView` for web content, hosted via `NSViewRepresentable`.
+- AppKit `WKWebView` for web content, hosted via `NSViewRepresentable`, behind AxoWeb's `WebEngine` seam. The Mac is moving to a Chromium fork while iPhone and iPad stay on WebKit; see `docs/chromium-engine.md`.
 - Minimum deployment target: macOS 27, the latest release, to keep things simple and avoid availability checks. (`WKWebExtension` has been public since macOS 15.4.)
 - Storage: SQLite through GRDB, with GRDBQuery for SwiftUI. One database for everything.
 - Sync: CloudKit via `CKSyncEngine`.
@@ -57,6 +57,8 @@ The full plan, architecture, and reasoning behind every decision are in `docs/PL
 - `AxoUI` uses `.defaultIsolation(MainActor.self)`. Other packages use the Swift 6 default (nonisolated); AxoWeb marks its types `@MainActor` explicitly.
 - SwiftUI has its own `Tab` type. In files that import SwiftUI, write `AxoCore.Tab` for Axo's tab record.
 - AxoWeb tests load local HTML files in real `WKWebView`s with `.nonPersistent()` data stores. Never load network URLs in tests.
+- The pool talks to its engine only through `WebEngine` and `EnginePage` (AxoWeb), so the Mac can switch to Chromium (`docs/chromium-engine.md`). AxoUI and other engine-neutral code use `page(for:profileID:)`, `livePage(for:)`, and `EnginePage.view`, never `WKWebView`. The WebKit-only pool accessors (`liveWebView(for:)`, `webView(for:profileID:)`, `dataStore(for:)`, `addWebViewConfigurator(_:)`, `removeDataStore`) are for AxoExtensions, AxoInspector, the app's developer tools, and tests. New page features go on `EnginePage` with a WebKit implementation in `WebKitPage`; downloads report through `DownloadItem` (`chooseDestination`, `reportProgress`, `reportFinished`, `reportFailed`). Test pool logic on `FakeEngine` from the `AxoWebTestSupport` product.
+- WebKit gives a fresh `WKContentWorld` once the last object for a name is released, losing what earlier scripts stored in it. `WebKitPage` keeps worlds by name; use `callJavaScript(_:arguments:in:)` rather than making worlds yourself.
 - Extension content scripts don't run on `file:` pages. Tests that need them use `LoopbackWebServer` from `AxoExtensionsTestSupport`, which serves on 127.0.0.1 only.
 - UI tests launch the app with the `AXO_UI_TESTING=1` environment variable (in-memory database, non-persistent website data, temporary downloads folder) and the `-ApplePersistenceIgnoreState YES` argument (no restored window state). Pages come from `data:` URLs. Reuse the `launchApp()` helper in `AxoUITests`. Tests that launch the app themselves call `AxoUITests.bringToFront(app)` after `launch()`. Each test case's `tearDown` quits Axo. Otherwise the next launch quits the old instance first, and macOS moving focus afterwards can take focus away from the new one, so keystrokes fail with "not foreground".
 - Overlays and fields that need keyboard focus must live inside a split view column (sidebar or page), not on the `NavigationSplitView` itself or in toolbar items; focus doesn't reach those. The command bar is an overlay on the page column for this reason.
@@ -97,7 +99,7 @@ The app is split into local Swift packages in `Packages/`. Respect the dependenc
 | --- | --- | --- |
 | AxoUI | SwiftUI chrome, windows, sidebar, command bar, settings, mascot | AxoCore, AxoWeb, GRDBQuery |
 | AxoCore | Profiles, Spaces, folders, tabs, windows, TabStore | AxoPersistence, GRDB |
-| AxoWeb | Web view pool, `NSViewRepresentable` host, delegates, downloads, permissions, hibernation, Screen Time over each page | AxoCore |
+| AxoWeb | Page pool, the `WebEngine`/`EnginePage` seam and `WebKitEngine`, `NSViewRepresentable` host, downloads, permissions, hibernation, Screen Time over each page. `AxoWebTestSupport` (fake engine) for tests | AxoCore |
 | AxoExtensions | `WKWebExtensionController`, CRX install, tab and window adapters. Its `AxoCRX` target (CRX3 verification, safe zip extraction, manifest checks) has no dependencies so it can be open sourced on its own | AxoCore, AxoWeb |
 | AxoInspector | All private WebKit API (Web Inspector, picture in picture) | AxoWeb |
 | AxoPersistence | GRDB database, migrations, FTS5 search index | GRDB |

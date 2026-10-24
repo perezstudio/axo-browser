@@ -1,7 +1,6 @@
 import AxoCore
 import Foundation
 import Observation
-import WebKit
 
 /// The state of a download.
 public enum DownloadState: Equatable, Sendable {
@@ -25,7 +24,7 @@ public final class DownloadItem: Identifiable {
     public let sourceURL: URL?
     /// The tab that started the download, if any.
     public let sourceTabID: Tab.ID?
-    /// The file name, known once WebKit suggests one.
+    /// The file name, known once the engine suggests one.
     public internal(set) var filename: String
     /// Where the file is being saved, once chosen.
     public internal(set) var destination: URL?
@@ -38,13 +37,15 @@ public final class DownloadItem: Identifiable {
     /// The expected size in bytes, or `nil` if the server didn't say.
     public internal(set) var totalBytes: Int64?
 
-    @ObservationIgnored let download: WKDownload?
-    @ObservationIgnored var progressObservations: [NSKeyValueObservation] = []
+    /// Stops the engine's download.
+    @ObservationIgnored private let cancelDownload: @MainActor () -> Void
+    @ObservationIgnored weak var manager: DownloadManager?
 
-    init(download: WKDownload?, sourceURL: URL?, sourceTabID: Tab.ID?) {
-        self.download = download
+    init(sourceURL: URL?, sourceTabID: Tab.ID?, manager: DownloadManager, cancel: @escaping @MainActor () -> Void) {
         self.sourceURL = sourceURL
         self.sourceTabID = sourceTabID
+        self.manager = manager
+        self.cancelDownload = cancel
         self.filename = sourceURL?.lastPathComponent.nilIfEmpty ?? "Download"
     }
 
@@ -52,16 +53,81 @@ public final class DownloadItem: Identifiable {
     public var isActive: Bool {
         state == .inProgress
     }
+
+    // MARK: Reporting, for engines
+
+    /// Chooses where the file goes: a unique name for `suggestedFilename` in the manager's
+    /// folder. Returns `nil`, failing the download, if the folder can't be created or the
+    /// download already stopped. Engines call it once, when they know the file's name.
+    public func chooseDestination(suggestedFilename: String, expectedLength: Int64?) -> URL? {
+        guard isActive, let manager else { return nil }
+        do {
+            try FileManager.default.createDirectory(at: manager.directory, withIntermediateDirectories: true)
+        } catch {
+            reportFailed("Axo couldn't create the Downloads folder.")
+            return nil
+        }
+        let destination = DownloadManager.uniqueDestination(for: suggestedFilename, in: manager.directory)
+        filename = destination.lastPathComponent
+        self.destination = destination
+        if let expectedLength, expectedLength > 0 {
+            totalBytes = expectedLength
+        }
+        return destination
+    }
+
+    /// Reports bytes received so far, and the total when known (`0` or less if not).
+    public func reportProgress(completedBytes completed: Int64, totalBytes total: Int64) {
+        guard isActive else { return }
+        completedBytes = completed
+        if total > 0 {
+            totalBytes = total
+            fractionCompleted = Double(completed) / Double(total)
+        }
+    }
+
+    /// Reports that the file is complete at ``destination``. Quarantines it on the Mac.
+    public func reportFinished() {
+        guard isActive else { return }
+        state = .finished
+        fractionCompleted = 1
+        if let destination {
+            DownloadManager.markQuarantined(destination, sourceURL: sourceURL)
+            if let size = try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize {
+                completedBytes = Int64(size)
+                totalBytes = Int64(size)
+            }
+        }
+        manager?.onEnd?(self)
+    }
+
+    /// Reports that the download stopped with an error, described for display.
+    public func reportFailed(_ message: String) {
+        guard isActive else { return }
+        state = .failed(message)
+        manager?.onEnd?(self)
+    }
+
+    /// Cancels the engine's download. Called by ``DownloadManager/cancel(_:)``.
+    func cancelForPerson() {
+        guard isActive else { return }
+        state = .cancelled
+        cancelDownload()
+        manager?.onEnd?(self)
+    }
 }
 
 /// Tracks every download in the app and decides where files go.
+///
+/// Engines start downloads with ``begin(sourceURL:sourceTabID:cancel:)`` and report on the item
+/// it returns, so the list doesn't depend on which engine made a download.
 ///
 /// Files are saved in ``directory`` with unique, Finder-style names. Finished files get the
 /// macOS quarantine attribute, so Gatekeeper checks them before they first open, as it does
 /// for downloads from Safari.
 @MainActor
 @Observable
-public final class DownloadManager: NSObject, WKDownloadDelegate {
+public final class DownloadManager {
     /// Downloads, newest first.
     public private(set) var items: [DownloadItem] = []
     /// Called when a download stops: finished, failed, or cancelled. The app uses it to tell
@@ -70,8 +136,6 @@ public final class DownloadManager: NSObject, WKDownloadDelegate {
 
     /// The folder files are saved in.
     @ObservationIgnored public let directory: URL
-
-    @ObservationIgnored private var itemsByDownload: [ObjectIdentifier: DownloadItem] = [:]
 
     /// Creates a manager that saves into `directory`, the user's Downloads folder by default.
     public init(directory: URL = .downloadsDirectory) {
@@ -83,21 +147,18 @@ public final class DownloadManager: NSObject, WKDownloadDelegate {
         items.filter(\.isActive).count
     }
 
-    /// Starts tracking a download that WebKit created for a navigation.
-    func track(_ download: WKDownload, sourceTabID: Tab.ID?) {
-        let item = DownloadItem(download: download, sourceURL: download.originalRequest?.url, sourceTabID: sourceTabID)
-        download.delegate = self
-        itemsByDownload[ObjectIdentifier(download)] = item
+    /// Adds a download an engine started, newest first, and returns the item the engine reports
+    /// to. `cancel` stops the engine's download when the person cancels it.
+    public func begin(sourceURL: URL?, sourceTabID: Tab.ID?, cancel: @escaping @MainActor () -> Void) -> DownloadItem {
+        let item = DownloadItem(sourceURL: sourceURL, sourceTabID: sourceTabID, manager: self, cancel: cancel)
         items.insert(item, at: 0)
-        observeProgress(of: download, for: item)
+        return item
     }
 
     /// Cancels a running download and removes its partial file. Does nothing otherwise.
     public func cancel(_ item: DownloadItem) {
         guard item.isActive else { return }
-        item.state = .cancelled
-        item.download?.cancel { _ in }
-        finish(item)
+        item.cancelForPerson()
         if let destination = item.destination {
             try? FileManager.default.removeItem(at: destination)
         }
@@ -114,78 +175,7 @@ public final class DownloadManager: NSObject, WKDownloadDelegate {
         items.removeAll { !$0.isActive }
     }
 
-    // MARK: WKDownloadDelegate
-
-    public func download(
-        _ download: WKDownload,
-        decideDestinationUsing response: URLResponse,
-        suggestedFilename: String
-    ) async -> URL? {
-        guard let item = itemsByDownload[ObjectIdentifier(download)], item.isActive else { return nil }
-        do {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        } catch {
-            item.state = .failed("Axo couldn't create the Downloads folder.")
-            finish(item)
-            return nil
-        }
-        let destination = Self.uniqueDestination(for: suggestedFilename, in: directory)
-        item.filename = destination.lastPathComponent
-        item.destination = destination
-        if response.expectedContentLength > 0 {
-            item.totalBytes = response.expectedContentLength
-        }
-        return destination
-    }
-
-    public func downloadDidFinish(_ download: WKDownload) {
-        guard let item = itemsByDownload[ObjectIdentifier(download)] else { return }
-        item.state = .finished
-        item.fractionCompleted = 1
-        if let destination = item.destination {
-            Self.markQuarantined(destination, sourceURL: item.sourceURL)
-            if let size = try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize {
-                item.completedBytes = Int64(size)
-                item.totalBytes = Int64(size)
-            }
-        }
-        finish(item)
-    }
-
-    public func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
-        guard let item = itemsByDownload[ObjectIdentifier(download)], item.isActive else { return }
-        item.state = .failed(error.localizedDescription)
-        finish(item)
-    }
-
     // MARK: Helpers
-
-    private func observeProgress(of download: WKDownload, for item: DownloadItem) {
-        // Progress may report on any thread, so hop to the main actor before touching the item.
-        item.progressObservations = [
-            download.progress.observe(\.fractionCompleted, options: [.new]) { [weak item] progress, _ in
-                let completed = progress.completedUnitCount
-                let total = progress.totalUnitCount
-                Task { @MainActor in
-                    guard let item, item.isActive else { return }
-                    item.completedBytes = completed
-                    if total > 0 {
-                        item.totalBytes = total
-                        item.fractionCompleted = Double(completed) / Double(total)
-                    }
-                }
-            },
-        ]
-    }
-
-    private func finish(_ item: DownloadItem) {
-        defer { onEnd?(item) }
-        item.progressObservations.forEach { $0.invalidate() }
-        item.progressObservations = []
-        if let download = item.download {
-            itemsByDownload[ObjectIdentifier(download)] = nil
-        }
-    }
 
     /// A destination in `directory` that doesn't exist yet: `name.ext`, then `name 2.ext`, and
     /// so on, like Finder. Path separators and leading dots are removed from the suggested name.

@@ -25,7 +25,10 @@ let package = Package(
         ),
         .testTarget(
             name: "AxoUIPackageTests",
-            dependencies: ["AxoUI"]
+            dependencies: [
+                "AxoUI",
+                .product(name: "AxoWebTestSupport", package: "AxoWeb"),
+            ]
         ),
     ]
 )

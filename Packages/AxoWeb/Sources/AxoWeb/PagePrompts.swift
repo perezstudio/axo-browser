@@ -1,6 +1,5 @@
 import AxoCore
 import Foundation
-import WebKit
 
 /// A device or capability a page can ask to use.
 public enum PermissionKind: String, Hashable, Sendable, CaseIterable {
@@ -47,11 +46,6 @@ public struct PageOrigin: Hashable, Sendable {
         self.scheme = scheme.lowercased()
         self.host = host.lowercased()
         self.port = port
-    }
-
-    @MainActor
-    init(_ origin: WKSecurityOrigin) {
-        self.init(scheme: origin.protocol, host: origin.host, port: origin.port)
     }
 
     /// The origin of a web page's URL, or `nil` for URLs that aren't http or https. A port that
