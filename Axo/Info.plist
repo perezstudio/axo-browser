@@ -34,5 +34,17 @@
 			</array>
 		</dict>
 	</array>
+	<!-- Usage descriptions for devices only the Chromium engine reaches (Chrome declares the same
+	     keys). It runs in Axo's process, so macOS kills Axo if one is missing when Chromium asks,
+	     as it does for Bluetooth at startup. Camera, microphone, location, and local network are
+	     build settings. -->
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Websites you allow can connect to Bluetooth devices, such as fitness trackers and game controllers.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Websites you allow can connect to Bluetooth devices, such as fitness trackers and game controllers.</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Websites you allow can capture audio from your Mac, for things like sharing your screen with sound.</string>
+	<key>NSWebBrowserPublicKeyCredentialUsageDescription</key>
+	<string>Websites can ask to use your passkeys to sign you in.</string>
 </dict>
 </plist>

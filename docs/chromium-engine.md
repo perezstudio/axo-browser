@@ -14,7 +14,7 @@ The trade is the one `docs/PLAN.md` always named: more memory and energy, a larg
 ## What stays on WebKit
 
 - **iPhone and iPad.** Apple allows other engines on iOS only through BrowserEngineKit, and only in the EU. The iOS app ships through the App Store and keeps `WKWebView`.
-- **The Mac, until Chromium is ready.** WebKit stays the Mac's engine, behind the same seam, until Chromium reaches parity (Phase 4 below). It's the fallback while the work is in progress.
+- **Not the Mac.** Decided in October 2026: the Mac runs only on Chromium, with no WebKit fallback. Every launch uses the embedded engine, and if it can't load, Axo says why and quits. WebKit stays in the Mac build only for test runs (unit tests and most UI tests) until Phase 4 removes it.
 
 So AxoWeb always has two engines, and everything above it must not care which one runs.
 
@@ -59,11 +59,11 @@ The `AxoChromium` Swift package wraps that API as a `ChromiumEngine` that confor
 
 For now the engine is compiled into Chromium's own `Chromium Framework.framework`, which brings Chrome's helper apps and packaging with it. Renaming it to `AxoEngine` and publishing it as a downloadable framework come later, with release packaging.
 
-**How Axo reaches it today:** Axo doesn't link the framework. The API is a set of Objective-C protocols (`AxoEngineProtocols.h`, copied into `AxoChromium`'s `AxoEngineAPI` target). Axo loads the framework with `dlopen` and finds the classes by name, so builds without the engine work exactly as before. Debug builds embed the engine when a built `axo-chromium` checkout sits next to Axo; the `ChromiumEngine` user default then switches every tab to it.
+**How Axo reaches it today:** Axo doesn't link the framework. The API is a set of Objective-C protocols (`AxoEngineProtocols.h`, copied into `AxoChromium`'s `AxoEngineAPI` target). Axo loads the framework with `dlopen` and finds the classes by name, so Axo compiles without the engine. Every build configuration embeds the engine from a built `axo-chromium` checkout next to Axo, and every Mac launch runs on it. A build without one warns and can't open, though its tests still run on WebKit.
 
 **Updating Chromium** means rebuilding the framework at the new version, publishing it with the same API, and bumping the version and checksum in `AxoChromium`. No app code changes. When the API itself must change, its version number changes too, and `AxoChromium` checks it at launch.
 
-This also means contributors build Axo without a Chromium checkout (over 100 GB, hours to build).
+Once the framework is published, contributors will build and run Axo without a Chromium checkout (over 100 GB, hours to build). Until then, running the Mac app needs one.
 
 ### 3. The `axo-chromium` repository
 

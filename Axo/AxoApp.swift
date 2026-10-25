@@ -215,16 +215,14 @@ enum AppEnvironment {
         }
         do {
             let store = isUITesting ? try TabStore.makeInMemory() : try TabStore.openOnDisk(at: databaseURL)
-            // Extensions run on WebKit (WKWebExtension). With the Chromium engine they're off
-            // until Chromium's own extension system arrives (Phase 2).
+            // WebKit's extensions (WKWebExtension) run only in test runs, which use WebKit. On
+            // Chromium, ChromiumExtensionBridge connects the engine's own extensions.
             let manager = chromium == nil ? startExtensions(store: store, pool: pool) : nil
             let model = BrowserModel(store: store, pool: pool, initialSpaceID: lastSpaceID)
             if let manager {
                 extensionBridge = ExtensionBridge(model: model, manager: manager)
             }
-            if let problem = ChromiumSupport.problem {
-                model.alertMessage = problem
-            } else if let chromium {
+            if let chromium {
                 chromium.onStateChange = { [weak model] (state: ChromiumEngine.State) in
                     guard case .failed(let reason) = state else { return }
                     model?.alertMessage = "The Chromium engine didn't start: \(reason)"

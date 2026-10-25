@@ -1,8 +1,9 @@
 #!/bin/bash
-# Run by the Axo target's "Embed Chromium Engine" build phase. In Debug builds, copies the
-# Chromium engine framework built by the axo-chromium fork into Axo.app/Contents/Frameworks and
-# signs it with Axo's identity, so the "ChromiumEngine" debug setting can use it (see
-# docs/chromium-engine.md). Without a built engine, Axo builds and runs on WebKit as usual.
+# Run by the Axo target's "Embed Chromium Engine" build phase. Copies the Chromium engine
+# framework built by the axo-chromium fork into Axo.app/Contents/Frameworks and signs it with
+# Axo's identity. The Mac runs every tab on it, with no WebKit fallback (see
+# docs/chromium-engine.md), so a build without an engine warns: it builds, but the app says the
+# engine is missing and quits (test runs still use WebKit).
 #
 # The engine comes from $AXO_CHROMIUM_OUT, or from a sibling checkout of axo-chromium:
 #   ../axo-chromium/chromium/src/out/Axo
@@ -11,11 +12,6 @@ set -euo pipefail
 
 DEST="$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH"
 FRAMEWORK_NAME="Chromium Framework.framework"
-if [[ "$CONFIGURATION" != "Debug" ]]; then
-  rm -rf "$DEST/$FRAMEWORK_NAME"
-  exit 0
-fi
-
 OUT="${AXO_CHROMIUM_OUT:-$SRCROOT/../axo-chromium/chromium/src/out/Axo}"
 # In a git worktree, the sibling checkout sits next to the main checkout instead.
 if [[ -z "${AXO_CHROMIUM_OUT:-}" && ! -d "$OUT" ]]; then
@@ -27,7 +23,7 @@ fi
 SOURCE="$OUT/Chromium.app/Contents/Frameworks/$FRAMEWORK_NAME"
 if [[ ! -d "$SOURCE" ]]; then
   rm -rf "$DEST/$FRAMEWORK_NAME"
-  echo "note: No Chromium engine at $SOURCE; building Axo without it."
+  echo "warning: No Chromium engine at $SOURCE. Build axo-chromium next to Axo (or set AXO_CHROMIUM_OUT); without it Axo can't open."
   exit 0
 fi
 

@@ -12,6 +12,17 @@
 	<true/>
 	<key>com.apple.security.personal-information.location</key>
 	<true/>
+	<!-- The rest of Chrome's app entitlements (chrome/app/app-entitlements.plist), for the
+	     Chromium engine running in Axo's process: Web Bluetooth, WebUSB and WebHID, printing,
+	     and the Photos library in file pickers. -->
+	<key>com.apple.security.device.bluetooth</key>
+	<true/>
+	<key>com.apple.security.device.usb</key>
+	<true/>
+	<key>com.apple.security.device.print</key>
+	<true/>
+	<key>com.apple.security.personal-information.photos-library</key>
+	<true/>
 	<key>com.apple.developer.icloud-container-identifiers</key>
 	<array>
 		<string>iCloud.com.perezstudio.Axo</string>
