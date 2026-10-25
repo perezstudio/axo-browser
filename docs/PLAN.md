@@ -321,6 +321,11 @@ Each milestone should be usable as a daily driver before the next one starts.
   - [x] The engine runs inside an AppKit app: `AXOApplication`, `AXOEngine` (Chromium's loop nested in AppKit's), `AXOProfile`, and `AXOPage` load a page in the fork's test shell and quit cleanly. One small Chromium patch.
   - [x] The `AxoChromium` Swift package with `ChromiumEngine`, and the `ChromiumEngine` debug setting: Debug builds embed the engine from a sibling `axo-chromium` checkout, and every tab then runs on Chromium. `ChromiumEngineUITests` (opt-in) loads a tab and checks it ran in Chromium.
 - [ ] Phase 2: the hidden tab model and Chrome extensions (Bitwarden, uBlock Origin Lite, native messaging, Chrome Web Store installs).
+  - [x] Decided: real, hidden Chrome `Browser` windows holding the current Space's tabs, and hibernation by Chrome's discarding (see `docs/chromium-engine.md`).
+  - [x] Pages live in a hidden Chrome window's tab strip (one per profile for now), and an unpacked Manifest V3 extension loaded into the profile finds the page through `chrome.tabs.query` (the fork's `scripts/test_extension_tabs.sh`).
+  - [ ] Axo's windows and Spaces in the engine API: one hidden window per Axo window, switching its tabs with the Space, and two-way sync with the sidebar (tabs extensions open, close, or move).
+  - [ ] Extension management through the engine (install, enable, remove, toolbar buttons, popups, permission prompts), Chrome Web Store installs, and native messaging.
+  - [ ] Bitwarden and uBlock Origin Lite passing the real-extension tests on Chromium.
 - [ ] Phase 3: permissions, downloads, dialogs, DevTools, Widevine, packaging, and performance against the WebKit build.
 - [ ] Phase 4: prove one Chromium update, then ship the Mac on Chromium and remove WebKit, AxoExtensions, and AxoInspector from it.
 

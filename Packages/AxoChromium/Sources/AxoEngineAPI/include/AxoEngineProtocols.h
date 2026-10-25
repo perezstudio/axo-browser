@@ -14,7 +14,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 4
+#define AXO_ENGINE_API_VERSION 5
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -73,6 +73,12 @@ NS_SWIFT_UI_ACTOR
 
 /// Removes cookies, caches, and other website data.
 - (void)clearWebsiteDataWithCompletion:(void (^)(void))completion;
+
+/// Loads an unpacked extension (a folder with a manifest.json) into the profile, as Chrome's
+/// developer mode does. `completion` gets the extension's ID, or an error.
+- (void)loadUnpackedExtensionAtURL:(NSURL*)url
+                        completion:(void (^)(NSString* _Nullable extensionID, NSError* _Nullable error))completion
+    NS_SWIFT_NAME(loadUnpackedExtension(at:completion:));
 
 /// Deletes a profile's data for good. Close its pages first.
 + (void)removeProfileWithIdentifier:(NSUUID*)identifier

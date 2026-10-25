@@ -72,6 +72,13 @@ final class FakeProfile: NSObject, AXOProfile {
         completion()
     }
 
+    private(set) var loadedExtensions: [URL] = []
+
+    func loadUnpackedExtension(at url: URL, completion: @escaping (String?, (any Error)?) -> Void) {
+        loadedExtensions.append(url)
+        completion("fake-extension-id", nil)
+    }
+
     static func removeProfile(withIdentifier identifier: UUID, completion: @escaping ((any Error)?) -> Void) {
         completion(FakeEngineError())
     }
