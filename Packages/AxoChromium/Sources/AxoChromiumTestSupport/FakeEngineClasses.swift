@@ -85,6 +85,7 @@ public final class FakeProfile: NSObject, AXOProfile {
     public var actions: [any AXOExtensionAction] = []
     public var onExtensionsChange: (() -> Void)?
     public var onExtensionPopupRequest: ((any AXOExtensionPopup) -> Void)?
+    public var onExtensionWindowOpen: ((any AXOWindow, NSSize) -> Void)?
     public private(set) var enabledChanges: [(String, Bool)] = []
     public private(set) var uninstalled: [String] = []
     public private(set) var performed: [(extensionID: String, page: any AXOPage, window: any AXOWindow)] = []

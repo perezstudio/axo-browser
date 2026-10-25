@@ -54,6 +54,8 @@ public final class ChromiumEngine: WebEngine {
     /// Called when an extension opens its own popup (`chrome.action.openPopup`), as some do when
     /// their toolbar button is clicked, with its profile. Show it under the extension's button.
     public var onExtensionPopupRequest: ((ChromiumExtensionPopup, Profile.ID) -> Void)?
+    /// Extensions' popup windows that are open, kept until Chrome closes their page.
+    private var popupWindows: [any AXOWindow] = []
     /// Profiles whose extension changes are being followed.
     private var followedProfiles: Set<Profile.ID> = []
 
@@ -144,6 +146,9 @@ public final class ChromiumEngine: WebEngine {
             profile.onExtensionPopupRequest = { [weak self] popup in
                 self?.onExtensionPopupRequest?(ChromiumExtensionPopup(popup), profileID)
             }
+            profile.onExtensionWindowOpen = { [weak self] window, size in
+                self?.popupWindowOpened(window, size: size, profileID: profileID)
+            }
         }
         return profile
     }
@@ -174,6 +179,22 @@ public final class ChromiumEngine: WebEngine {
 
     // MARK: Window events
 
+    /// An extension's popup window: its first page goes to the pool, which shows it in a small
+    /// window. Others close; popup windows show one page.
+    private func popupWindowOpened(_ window: any AXOWindow, size: NSSize, profileID: Profile.ID) {
+        guard let first = window.pages.first else {
+            window.close()
+            return
+        }
+        window.pages.dropFirst().forEach { $0.close() }
+        window.delegate = windowEvents
+        popupWindows.append(window)
+        let page = ChromiumPage(profileID: profileID)
+        pagesByEnginePage.setObject(page, forKey: first)
+        page.attach(first)
+        delegate?.engine(self, didOpenPopupWindowWith: page, size: CGSize(width: size.width, height: size.height), profileID: profileID)
+    }
+
     fileprivate func window(_ window: any AXOWindow, didOpen enginePage: any AXOPage, at index: Int) {
         guard let profileID = windows.first(where: { $0.value === window })?.key else {
             enginePage.close()
@@ -186,6 +207,8 @@ public final class ChromiumEngine: WebEngine {
     }
 
     fileprivate func window(_ window: any AXOWindow, didClose enginePage: any AXOPage) {
+        // A popup window goes once Chrome closed its page.
+        popupWindows.removeAll { $0 === window }
         guard let page = pagesByEnginePage.object(forKey: enginePage) else { return }
         page.closedByEngine()
         delegate?.engine(self, didClose: page)

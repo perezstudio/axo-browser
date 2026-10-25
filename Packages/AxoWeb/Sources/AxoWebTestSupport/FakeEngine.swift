@@ -28,6 +28,12 @@ public final class FakeEngine: WebEngine {
         delegate?.engine(self, didOpen: page, profileID: profileID, at: index)
     }
 
+    /// Plays the engine opening `page` in a popup window, as an extension's
+    /// `chrome.windows.create({type: "popup"})` would.
+    public func openPopupWindowOnItsOwn(_ page: any EnginePage, size: CGSize, profileID: Profile.ID) {
+        delegate?.engine(self, didOpenPopupWindowWith: page, size: size, profileID: profileID)
+    }
+
     /// Plays the engine closing `page` on its own, as `chrome.tabs.remove` would.
     public func closePageOnItsOwn(_ page: any EnginePage) {
         delegate?.engine(self, didClose: page)

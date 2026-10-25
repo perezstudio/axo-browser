@@ -51,6 +51,10 @@ public protocol WebEngineDelegate: AnyObject {
     func engine(_ engine: any WebEngine, didClose page: any EnginePage)
     /// The engine made `page` the selected one.
     func engine(_ engine: any WebEngine, didActivate page: any EnginePage)
+    /// The engine opened `page`, already loading, in a popup window of its own (an extension's
+    /// `chrome.windows.create` with `type: "popup"`), `size` points big (zero when unspecified).
+    /// The engine closing the page (``engine(_:didClose:)``) closes the window.
+    func engine(_ engine: any WebEngine, didOpenPopupWindowWith page: any EnginePage, size: CGSize, profileID: Profile.ID)
 }
 
 /// One tab's page in a ``WebEngine``. Owned by ``WebViewPool``.

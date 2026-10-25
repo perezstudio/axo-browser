@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 10
+#define AXO_ENGINE_API_VERSION 11
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -122,6 +122,14 @@ NS_SWIFT_UI_ACTOR
 /// their toolbar button is clicked. Show it under the extension's toolbar button, as for a popup
 /// from `performExtensionAction`. Without a handler, the extension's call fails.
 @property(nonatomic, copy, nullable) void (^onExtensionPopupRequest)(id<AXOExtensionPopup> popup);
+
+/// Called when an extension opens a popup window (`chrome.windows.create` with `type: "popup"`),
+/// such as a password manager's pop-out. Show the window's first page in a small window of
+/// `size` (zero when the extension gave none), and set the window's delegate: it hears when
+/// Chrome closes the page (`chrome.windows.remove`), which closes the window. Closing the page
+/// closes the window for Chrome too. Normal windows (`type: "normal"`) don't come here: their tabs
+/// open in the profile's existing window. Without a handler, popup windows fail to open.
+@property(nonatomic, copy, nullable) void (^onExtensionWindowOpen)(id<AXOWindow> window, NSSize size);
 
 /// Installs an extension package (a CRX3 `.crx` file), as Chrome does when a person drops one on
 /// its Extensions page: Axo asks the person first. `completion` gets the extension's ID, or an

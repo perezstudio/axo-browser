@@ -88,6 +88,35 @@ struct ChromiumEngineTests {
         #expect(FakeAXOEngine.configurations.first?.nativeMessagingHostFolders == folders)
     }
 
+    @Test func extensionPopupWindowsReachThePoolAndCloseWithTheirPage() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine)
+        var popups: [EnginePopupWindow] = []
+        var closed: [Tab.ID] = []
+        pool.onEnginePopupWindow = { popups.append($0) }
+        pool.onEngineClosedTab = { closed.append($0) }
+        let profile = try #require(engine.readyProfile(profileID) as? FakeProfile)
+        let window = FakeWindow(profile: profile)
+        let chromePage = FakePage(profile: profile)
+        window.pages = [chromePage]
+
+        let open = try #require(profile.onExtensionWindowOpen, "The engine handles extensions' popup windows")
+        open(window, NSSize(width: 380, height: 600))
+        let popup = try #require(popups.first)
+        #expect(popup.size == CGSize(width: 380, height: 600))
+        #expect(popup.profileID == profileID)
+        let tab = Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial)
+        pool.adopt(popup.page, as: tab, profileID: profileID)
+        #expect(pool.livePage(for: tab.id)?.view.subviews.first === chromePage.view)
+
+        // chrome.windows.remove: Chrome closes the page, which closes the window.
+        window.delegate?.window(window, didClose: chromePage)
+        #expect(closed == [tab.id])
+    }
+
     @Test func aFailedStartReportsWhy() {
         FakeAXOEngine.failure = FakeEngineError()
         let scheduled = Scheduled()

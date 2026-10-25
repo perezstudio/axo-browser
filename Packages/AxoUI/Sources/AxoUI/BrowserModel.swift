@@ -258,6 +258,14 @@ public final class BrowserModel {
                 Task { await self.openTab(url: url, at: .after(sourceID)) }
             }
         }
+        // Extensions' popup windows open as mini windows.
+        pool.onEnginePopupWindow = { [weak self] popup in
+            guard let self else {
+                popup.page.close()
+                return
+            }
+            self.showEnginePopupWindow(popup)
+        }
         // Tabs the engine changed on its own (Chromium's extension APIs) follow in the sidebar.
         pool.onEngineOpenedPage = { [weak self] opened in
             guard let self else {
@@ -641,6 +649,10 @@ public final class BrowserModel {
     /// it back), and a pinned tab stays in the sidebar but unloads and returns to its home page.
     /// If the tab was selected, the tab below it (or above, if it was last) is selected.
     public func closeTab(_ id: AxoCore.Tab.ID) async {
+        if miniWindows.contains(where: { $0.id == id }) {
+            closeMiniWindowForEngine(id)
+            return
+        }
         if isFavorite(id) {
             closeFavorite(id)
             return

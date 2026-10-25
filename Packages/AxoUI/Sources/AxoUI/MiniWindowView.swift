@@ -21,8 +21,9 @@ final class MiniWindowController: NSObject, NSWindowDelegate {
     private init(mini: MiniWindow, model: BrowserModel) {
         id = mini.id
         self.model = model
+        let size = mini.contentSize ?? CGSize(width: 880, height: 620)
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 880, height: 620),
+            contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -73,6 +74,27 @@ struct MiniWindowView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if !mini.isExtensionWindow { openInAxoBar }
+            WebViewHost(tab: mini.tab, profileID: mini.profileID, pool: model.pool)
+                .overlay(alignment: .top) {
+                    if let page = model.miniWindowPage(mini.id), page.isLoading {
+                        ProgressView(value: page.estimatedProgress)
+                            .progressViewStyle(.linear)
+                            .controlSize(.small)
+                            .accessibilityLabel("Loading")
+                    }
+                }
+        }
+        // Extensions choose their popup windows' size; others have a sensible minimum.
+        .frame(minWidth: mini.isExtensionWindow ? 200 : 420, minHeight: mini.isExtensionWindow ? 150 : 300)
+        .onChange(of: title, initial: true) { setTitle(title) }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("miniWindowContent")
+    }
+
+    /// The page's title and a button that moves the page to a tab in Axo's window.
+    private var openInAxoBar: some View {
+        VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Text(title)
                     .font(.headline)
@@ -88,20 +110,7 @@ struct MiniWindowView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             Divider()
-            WebViewHost(tab: mini.tab, profileID: mini.profileID, pool: model.pool)
-                .overlay(alignment: .top) {
-                    if let page = model.miniWindowPage(mini.id), page.isLoading {
-                        ProgressView(value: page.estimatedProgress)
-                            .progressViewStyle(.linear)
-                            .controlSize(.small)
-                            .accessibilityLabel("Loading")
-                    }
-                }
         }
-        .frame(minWidth: 420, minHeight: 300)
-        .onChange(of: title, initial: true) { setTitle(title) }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("miniWindowContent")
     }
 
     /// The page's title, or its host while it loads.

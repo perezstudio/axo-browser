@@ -89,6 +89,11 @@ public final class WebViewPool {
     /// Make a tab for it and call ``adopt(_:as:profileID:)``; without a handler the page closes.
     public var onEngineOpenedPage: ((EngineOpenedPage) -> Void)?
 
+    /// Called when the engine opened a page in a popup window of its own (an extension's
+    /// `chrome.windows.create`). Show it in a small window and call ``adopt(_:as:profileID:)``;
+    /// without a handler the page closes. ``onEngineClosedTab`` reports when the engine closes it.
+    public var onEnginePopupWindow: ((EnginePopupWindow) -> Void)?
+
     /// Called when the engine closed a tab's page on its own (an extension's `chrome.tabs.remove`).
     /// The page is already gone; close the tab.
     public var onEngineClosedTab: ((Tab.ID) -> Void)?
@@ -488,6 +493,31 @@ extension WebViewPool: WebEngineDelegate {
     public func engine(_ engine: any WebEngine, didActivate page: any EnginePage) {
         guard let tabID = tabID(of: page) else { return }
         onEngineActivatedTab?(tabID)
+    }
+
+    public func engine(_ engine: any WebEngine, didOpenPopupWindowWith page: any EnginePage, size: CGSize, profileID: Profile.ID) {
+        guard let handler = onEnginePopupWindow else {
+            page.close()
+            return
+        }
+        handler(EnginePopupWindow(page: page, profileID: profileID, size: size))
+    }
+}
+
+/// A popup window the engine opened on its own, for ``WebViewPool/onEnginePopupWindow``.
+public struct EnginePopupWindow {
+    /// The window's page, already loading. Pass it to ``WebViewPool/adopt(_:as:profileID:)``.
+    public let page: any EnginePage
+    /// The profile it opened in.
+    public let profileID: Profile.ID
+    /// The size the window asked for, in points, or zero when it didn't say.
+    public let size: CGSize
+
+    /// Creates the description of a popup window.
+    public init(page: any EnginePage, profileID: Profile.ID, size: CGSize) {
+        self.page = page
+        self.profileID = profileID
+        self.size = size
     }
 }
 

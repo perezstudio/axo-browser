@@ -12,6 +12,11 @@ public struct MiniWindow: Identifiable, Equatable {
     public var tab: AxoCore.Tab
     /// The profile whose cookies and website data the page uses.
     public var profileID: Profile.ID
+    /// Set for an extension's popup window (`chrome.windows.create`): it has no "Open in Axo" bar,
+    /// and closes when the extension closes it.
+    public var isExtensionWindow = false
+    /// The size the window's content asked for, or `nil` for the usual size.
+    public var contentSize: CGSize?
 
     public var id: AxoCore.Tab.ID { tab.id }
 }
@@ -28,6 +33,29 @@ extension BrowserModel {
         let mini = MiniWindow(tab: AxoCore.Tab(spaceID: space.id, url: url, sortKey: SortKey.initial), profileID: space.profileID)
         miniWindows.append(mini)
         presentMiniWindow?(mini)
+    }
+
+    /// Shows an extension's popup window: a mini window for the page the engine opened, sized as
+    /// the extension asked.
+    func showEnginePopupWindow(_ popup: EnginePopupWindow) {
+        guard let space, space.profileID == popup.profileID else {
+            popup.page.close()
+            return
+        }
+        let tab = AxoCore.Tab(spaceID: space.id, url: popup.page.url ?? URL(string: "about:blank")!, sortKey: SortKey.initial)
+        var mini = MiniWindow(tab: tab, profileID: popup.profileID)
+        mini.isExtensionWindow = true
+        mini.contentSize = popup.size.width > 0 && popup.size.height > 0 ? popup.size : nil
+        pool.adopt(popup.page, as: tab, profileID: popup.profileID)
+        miniWindows.append(mini)
+        presentMiniWindow?(mini)
+    }
+
+    /// Closes a mini window whose page the engine closed (an extension's `chrome.windows.remove`).
+    func closeMiniWindowForEngine(_ id: MiniWindow.ID) {
+        guard miniWindows.contains(where: { $0.id == id }) else { return }
+        miniWindows.removeAll { $0.id == id }
+        dismissMiniWindow?(id)
     }
 
     /// A mini window's live page state, for its title and loading bar.

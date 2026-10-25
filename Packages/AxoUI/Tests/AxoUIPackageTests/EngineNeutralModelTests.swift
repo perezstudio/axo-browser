@@ -135,6 +135,30 @@ struct EngineNeutralModelTests {
         #expect(model.tabs.map(\.id) == [firstID])
     }
 
+    @Test func extensionPopupWindowsOpenAsMiniWindowsAndCloseWithTheirPage() async throws {
+        _ = try await openPage(URL(string: "https://example.com/")!)
+        let profileID = try #require(model.space?.profileID)
+        var presented: [MiniWindow] = []
+        var dismissed: [MiniWindow.ID] = []
+        model.presentMiniWindow = { presented.append($0) }
+        model.dismissMiniWindow = { dismissed.append($0) }
+        let popup = FakePage(profileID: profileID)
+        popup.navigate(to: URL(string: "https://example.com/pop-out")!, title: "Pop-out")
+
+        engine.openPopupWindowOnItsOwn(popup, size: CGSize(width: 380, height: 600), profileID: profileID)
+
+        let mini = try #require(presented.first)
+        #expect(mini.isExtensionWindow)
+        #expect(mini.contentSize == CGSize(width: 380, height: 600))
+        #expect(model.miniWindows.map(\.id) == [mini.id])
+        #expect(model.pool.livePage(for: mini.id) === popup, "It keeps the page that's already loading")
+        #expect(model.tabs.count == 1, "It isn't a sidebar tab")
+
+        engine.closePageOnItsOwn(popup)
+        try await waitUntil { model.miniWindows.isEmpty }
+        #expect(dismissed == [mini.id], "chrome.windows.remove closes the window")
+    }
+
     @Test func closingATabClosesItsPage() async throws {
         let page = try await openPage(URL(string: "https://example.com/")!)
 
