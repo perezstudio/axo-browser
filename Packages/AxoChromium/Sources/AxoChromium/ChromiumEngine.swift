@@ -48,6 +48,11 @@ public final class ChromiumEngine: WebEngine {
     /// Hears the windows' events. Kept for the engine's lifetime.
     private lazy var windowEvents = WindowEvents(engine: self)
 
+    /// Called when a profile's extensions or their toolbar buttons change, with the profile.
+    public var onExtensionsChange: ((Profile.ID) -> Void)?
+    /// Profiles whose extension changes are being followed.
+    private var followedProfiles: Set<Profile.ID> = []
+
     /// Creates an engine.
     ///
     /// - Parameters:
@@ -118,6 +123,22 @@ public final class ChromiumEngine: WebEngine {
         let enginePage = classes.page.page(with: profile)
         pagesByEnginePage.setObject(page, forKey: enginePage)
         page.attach(enginePage)
+    }
+
+    /// The engine's profile for `profileID` once the engine is ready, following its extension
+    /// changes from then on.
+    func readyProfile(_ profileID: Profile.ID) -> (any AXOProfile)? {
+        guard state == .ready else { return nil }
+        let profile = classes.profile.profile(withIdentifier: profileID)
+        if followedProfiles.insert(profileID).inserted {
+            profile.onExtensionsChange = { [weak self] in self?.onExtensionsChange?(profileID) }
+        }
+        return profile
+    }
+
+    /// The profile's engine window, for extension popups.
+    func engineWindow(for profileID: Profile.ID) -> any AXOWindow {
+        window(for: profileID)
     }
 
     /// The profile's engine window, made on first use.

@@ -24,6 +24,54 @@ final class ChromiumEngineUITests: XCTestCase {
         try await super.tearDown()
     }
 
+    /// Launches Axo in UI testing mode on the Chromium engine.
+    @MainActor
+    private func launchChromiumApp(extensionFolder: URL? = nil) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchEnvironment["AXO_UI_TESTING"] = "1"
+        app.launchEnvironment["AXO_UI_TESTING_CHROMIUM"] = "1"
+        if let extensionFolder {
+            app.launchEnvironment["AXO_UI_TESTING_EXTENSION"] = extensionFolder.path
+        }
+        app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
+        app.launch()
+        AxoUITests.bringToFront(app)
+        return app
+    }
+
+    /// An extension's toolbar button shows its badge, and clicking it opens its popup, with
+    /// Chromium running the extension. The same extension as the WebKit test
+    /// (testExtensionToolbarButtonOpensItsPopup).
+    @MainActor
+    func testExtensionToolbarButtonOpensItsPopupInChromium() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "AxoUITestExtension-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try """
+        {"name": "Axo Helper", "version": "1.0", "manifest_version": 3, "description": "UI test extension.",
+         "action": {"default_title": "Axo Helper", "default_popup": "popup.html"},
+         "background": {"service_worker": "bg.js"}}
+        """.write(to: folder.appending(path: "manifest.json"), atomically: true, encoding: .utf8)
+        try "chrome.action.setBadgeText({ text: '3' });".write(to: folder.appending(path: "bg.js"), atomically: true, encoding: .utf8)
+        try "<!doctype html><title>Helper</title><body style='width:240px'><p>Hello from Axo Helper</p></body>"
+            .write(to: folder.appending(path: "popup.html"), atomically: true, encoding: .utf8)
+
+        let app = launchChromiumApp(extensionFolder: folder)
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 10))
+        // Toolbar buttons belong to a page, so open one.
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,<title>Page</title><p>Page</p>\n")
+
+        let button = app.buttons.matching(NSPredicate(format: "identifier == 'extensionButton' AND label CONTAINS 'Axo Helper'")).firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 30))
+        expectation(for: NSPredicate(format: "label CONTAINS '3'"), evaluatedWith: button)
+        waitForExpectations(timeout: 15)
+
+        button.click()
+        XCTAssertTrue(app.popovers.firstMatch.waitForExistence(timeout: 15))
+        XCTAssertTrue(app.popovers.firstMatch.staticTexts["Hello from Axo Helper"].waitForExistence(timeout: 15))
+    }
+
     /// A tab loads its page in Chromium. The page names the engine from its user agent, which
     /// says "Chrome/" only in Chromium, so the test can't pass on WebKit.
     @MainActor

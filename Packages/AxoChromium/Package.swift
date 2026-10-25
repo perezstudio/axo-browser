@@ -7,6 +7,8 @@ let package = Package(
     platforms: [.macOS("27.0")],
     products: [
         .library(name: "AxoChromium", targets: ["AxoChromium"]),
+        // Fake engine classes for other targets' tests.
+        .library(name: "AxoChromiumTestSupport", targets: ["AxoChromiumTestSupport"]),
     ],
     dependencies: [
         .package(path: "../AxoCore"),
@@ -24,9 +26,11 @@ let package = Package(
                 "AxoWeb",
             ]
         ),
+        // Fake engine classes, written against the same protocols as the real framework.
+        .target(name: "AxoChromiumTestSupport", dependencies: ["AxoEngineAPI"]),
         .testTarget(
             name: "AxoChromiumTests",
-            dependencies: ["AxoChromium"]
+            dependencies: ["AxoChromium", "AxoChromiumTestSupport"]
         ),
     ]
 )

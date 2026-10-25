@@ -1,0 +1,136 @@
+import AppKit
+import AxoCore
+import AxoEngineAPI
+import AxoWeb
+import Foundation
+
+/// An installed extension in the Chromium engine.
+public struct ChromiumExtension: Equatable, Sendable {
+    /// Chrome's extension ID.
+    public var id: String
+    public var name: String
+    public var version: String
+    public var isEnabled: Bool
+    /// Loaded from a folder in developer mode.
+    public var isUnpacked: Bool
+
+    /// Creates the description of an extension.
+    public init(id: String, name: String, version: String, isEnabled: Bool, isUnpacked: Bool) {
+        self.id = id
+        self.name = name
+        self.version = version
+        self.isEnabled = isEnabled
+        self.isUnpacked = isUnpacked
+    }
+}
+
+/// An extension's toolbar button for one page, in the Chromium engine.
+public struct ChromiumToolbarButton {
+    /// The extension the button belongs to.
+    public var extensionID: String
+    /// The button's title, for its tooltip and VoiceOver.
+    public var title: String
+    /// Badge text, or an empty string.
+    public var badge: String
+    /// The icon, or `nil` while it loads.
+    public var icon: NSImage?
+    /// Whether the button can be clicked on this page.
+    public var isEnabled: Bool
+    /// Whether clicking it opens a popup.
+    public var hasPopup: Bool
+}
+
+/// An extension's popup, open. Show ``view`` in a popover sized to ``preferredSize``.
+@MainActor
+public final class ChromiumExtensionPopup {
+    private let popup: any AXOExtensionPopup
+
+    init(_ popup: any AXOExtensionPopup) {
+        self.popup = popup
+    }
+
+    /// The extension whose popup this is.
+    public var extensionID: String { popup.extensionIdentifier }
+    /// The view that draws the popup.
+    public var view: NSView { popup.view }
+    /// The popup page's title, for VoiceOver.
+    public var title: String { popup.title }
+    /// The size the popup's content wants.
+    public var preferredSize: NSSize { popup.preferredSize }
+
+    /// Called when ``preferredSize`` changes.
+    public var onResize: ((NSSize) -> Void)? {
+        get { popup.onResize }
+        set { popup.onResize = newValue }
+    }
+
+    /// Called when the popup closes itself (`window.close()`).
+    public var onClose: (() -> Void)? {
+        get { popup.onClose }
+        set { popup.onClose = newValue }
+    }
+
+    /// Closes the popup.
+    public func close() {
+        popup.close()
+    }
+}
+
+/// Extensions in the Chromium engine: what Axo's Extensions window lists, its toolbar buttons,
+/// and their popups. Everything is empty or does nothing until the engine is ready.
+extension ChromiumEngine {
+    /// A profile's installed extensions.
+    public func extensions(profileID: Profile.ID) -> [ChromiumExtension] {
+        guard let profile = readyProfile(profileID) else { return [] }
+        return profile.extensions.map {
+            ChromiumExtension(id: $0.identifier, name: $0.name, version: $0.version, isEnabled: $0.isEnabled, isUnpacked: $0.isUnpacked)
+        }
+    }
+
+    /// Turns an extension on or off.
+    public func setExtension(_ extensionID: String, enabled: Bool, profileID: Profile.ID) {
+        readyProfile(profileID)?.setExtension(extensionID, enabled: enabled)
+    }
+
+    /// Uninstalls an extension and deletes its data.
+    public func uninstallExtension(_ extensionID: String, profileID: Profile.ID) {
+        readyProfile(profileID)?.uninstallExtension(extensionID)
+    }
+
+    /// Loads an unpacked extension folder into a profile, in developer mode, and returns its ID.
+    public func loadUnpackedExtension(at url: URL, profileID: Profile.ID) async throws -> String {
+        guard let profile = readyProfile(profileID) else { throw ChromiumEngineError.notReady }
+        return try await profile.loadUnpackedExtension(at: url)
+    }
+
+    /// The toolbar buttons of a profile's enabled extensions, for `page` (the selected tab's).
+    public func toolbarButtons(profileID: Profile.ID, page: (any EnginePage)?) -> [ChromiumToolbarButton] {
+        guard let profile = readyProfile(profileID), let enginePage = (page as? ChromiumPage)?.page else { return [] }
+        return profile.extensionActions(for: enginePage).map {
+            ChromiumToolbarButton(
+                extensionID: $0.extensionIdentifier, title: $0.title, badge: $0.badgeText,
+                icon: $0.icon, isEnabled: $0.isEnabled, hasPopup: $0.hasPopup
+            )
+        }
+    }
+
+    /// Clicks an extension's toolbar button with `page` as the selected tab, and returns its
+    /// popup, open and loading, or `nil` when the extension handled the click itself.
+    public func performExtensionAction(_ extensionID: String, profileID: Profile.ID, page: (any EnginePage)?) async -> ChromiumExtensionPopup? {
+        guard let profile = readyProfile(profileID), let enginePage = (page as? ChromiumPage)?.page else { return nil }
+        let popup = await profile.performExtensionAction(extensionID, on: enginePage, window: engineWindow(for: profileID))
+        return popup.map(ChromiumExtensionPopup.init)
+    }
+}
+
+/// Why the Chromium engine couldn't do something.
+public enum ChromiumEngineError: Error, LocalizedError {
+    /// The engine hasn't finished starting.
+    case notReady
+
+    public var errorDescription: String? {
+        switch self {
+        case .notReady: "The Chromium engine is still starting. Try again in a moment."
+        }
+    }
+}

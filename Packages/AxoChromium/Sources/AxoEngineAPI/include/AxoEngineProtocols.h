@@ -6,7 +6,8 @@
 // match, and AXO_ENGINE_API_VERSION says which version a framework implements.
 //
 // Classes: AXOApplication (an NSApplication subclass), AXOEngine, AXOEngineConfiguration,
-// AXOProfile, AXOWindow, AXOPage, and AXODownload, each adopting the protocol of the same name. Every class
+// AXOProfile, AXOWindow, AXOPage, AXODownload, AXOExtension, AXOExtensionAction, and
+// AXOExtensionPopup, each adopting the protocol of the same name. Every class
 // is main-thread only, like AppKit, and completion handlers run on the main thread.
 //
 // Every protocol is NS_SWIFT_UI_ACTOR, so Swift treats the API as main-actor isolated, which it
@@ -14,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 6
+#define AXO_ENGINE_API_VERSION 7
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -22,6 +23,9 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol AXOPageDelegate;
 @protocol AXOWindow;
 @protocol AXOWindowDelegate;
+@protocol AXOExtension;
+@protocol AXOExtensionAction;
+@protocol AXOExtensionPopup;
 @protocol AXODownload;
 
 /// The domain of errors the engine reports.
@@ -81,6 +85,34 @@ NS_SWIFT_UI_ACTOR
 - (void)loadUnpackedExtensionAtURL:(NSURL*)url
                         completion:(void (^)(NSString* _Nullable extensionID, NSError* _Nullable error))completion
     NS_SWIFT_NAME(loadUnpackedExtension(at:completion:));
+
+/// The profile's installed extensions, enabled or not.
+@property(nonatomic, readonly) NSArray<id<AXOExtension>>* extensions;
+
+/// Turns an extension on or off.
+- (void)setExtension:(NSString*)extensionID enabled:(BOOL)enabled
+    NS_SWIFT_NAME(setExtension(_:enabled:));
+
+/// Uninstalls an extension and deletes its data.
+- (void)uninstallExtension:(NSString*)extensionID;
+
+/// The toolbar buttons of the profile's enabled extensions, for `page`: what Chrome's toolbar
+/// would show when that page is the active tab.
+- (NSArray<id<AXOExtensionAction>>*)extensionActionsForPage:(id<AXOPage>)page
+    NS_SWIFT_NAME(extensionActions(for:));
+
+/// Clicks an extension's toolbar button with `page` as the active tab of `window`. If the
+/// extension has a popup, `completion` gets it, open and loading; otherwise `nil`, and the
+/// extension handled the click (`chrome.action.onClicked`).
+- (void)performExtensionAction:(NSString*)extensionID
+                        onPage:(id<AXOPage>)page
+                        window:(id<AXOWindow>)window
+                    completion:(void (^)(id<AXOExtensionPopup> _Nullable popup))completion
+    NS_SWIFT_NAME(performExtensionAction(_:on:window:completion:));
+
+/// Called when extensions are installed, removed, turned on or off, or change their toolbar
+/// buttons (titles, badges, icons).
+@property(nonatomic, copy, nullable) void (^onExtensionsChange)(void);
 
 /// Deletes a profile's data for good. Close its pages first.
 + (void)removeProfileWithIdentifier:(NSUUID*)identifier
@@ -232,6 +264,55 @@ NS_SWIFT_UI_ACTOR
 - (void)window:(id<AXOWindow>)window didMovePage:(id<AXOPage>)page toIndex:(NSInteger)index;
 /// Chrome made a page the active one (`chrome.tabs.update({active: true})`, for one).
 - (void)window:(id<AXOWindow>)window didActivatePage:(id<AXOPage>)page;
+@end
+
+// MARK: - Extensions
+
+/// An installed extension.
+NS_SWIFT_UI_ACTOR
+@protocol AXOExtension <NSObject>
+@property(nonatomic, readonly) NSString* identifier;
+@property(nonatomic, readonly) NSString* name;
+@property(nonatomic, readonly) NSString* version;
+@property(nonatomic, readonly, getter=isEnabled) BOOL enabled;
+/// Loaded from a folder in developer mode rather than installed from a package.
+@property(nonatomic, readonly, getter=isUnpacked) BOOL unpacked;
+@end
+
+/// An extension's toolbar button for one page.
+NS_SWIFT_UI_ACTOR
+@protocol AXOExtensionAction <NSObject>
+@property(nonatomic, readonly) NSString* extensionIdentifier;
+/// The button's title (its tooltip and VoiceOver label).
+@property(nonatomic, readonly) NSString* title;
+/// Badge text, or an empty string.
+@property(nonatomic, readonly) NSString* badgeText;
+/// The icon, or `nil` while it loads.
+@property(nonatomic, readonly, nullable) NSImage* icon;
+/// Whether the button can be clicked on this page.
+@property(nonatomic, readonly, getter=isEnabled) BOOL enabled;
+/// Whether clicking it opens a popup.
+@property(nonatomic, readonly) BOOL hasPopup;
+@end
+
+/// An extension's popup, open. Show `view` in a popover; it sizes itself to its content.
+NS_SWIFT_UI_ACTOR
+@protocol AXOExtensionPopup <NSObject>
+@property(nonatomic, readonly) NSString* extensionIdentifier;
+/// The view that draws the popup.
+@property(nonatomic, readonly) NSView* view;
+/// The popup page's title, for VoiceOver.
+@property(nonatomic, readonly) NSString* title;
+/// The size the popup's content wants.
+@property(nonatomic, readonly) NSSize preferredSize;
+/// Called when `preferredSize` changes.
+@property(nonatomic, copy, nullable) void (^onResize)(NSSize size);
+/// Called once the popup page has loaded.
+@property(nonatomic, copy, nullable) void (^onLoad)(void);
+/// Called when the popup closes itself (`window.close()`); it's unusable after.
+@property(nonatomic, copy, nullable) void (^onClose)(void);
+/// Closes the popup.
+- (void)close;
 @end
 
 // MARK: - Downloads

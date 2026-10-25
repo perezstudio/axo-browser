@@ -121,6 +121,8 @@ enum AppEnvironment {
     static var extensionManager: ExtensionManager?
     /// Connects the window model and the extension manager. Kept for the app's lifetime.
     static var extensionBridge: ExtensionBridge?
+    /// Connects the window model and the Chromium engine's extensions, when that engine runs.
+    static var chromiumExtensionBridge: ChromiumExtensionBridge?
 
     /// Where installed extensions live.
     static var extensionsFolder: URL {
@@ -226,6 +228,19 @@ enum AppEnvironment {
                 chromium.onStateChange = { [weak model] (state: ChromiumEngine.State) in
                     guard case .failed(let reason) = state else { return }
                     model?.alertMessage = "The Chromium engine didn't start: \(reason)"
+                }
+                chromiumExtensionBridge = ChromiumExtensionBridge(model: model, engine: chromium)
+                // UI tests can preinstall an unpacked extension, as with WebKit.
+                if isUITesting, let path = ProcessInfo.processInfo.environment["AXO_UI_TESTING_EXTENSION"] {
+                    let previous = chromium.onStateChange
+                    chromium.onStateChange = { [weak chromium] state in
+                        previous?(state)
+                        guard state == .ready, let chromium else { return }
+                        Task {
+                            guard let profileID = try? await store.bootstrap().profileID else { return }
+                            _ = try? await chromium.loadUnpackedExtension(at: URL(fileURLWithPath: path, isDirectory: true), profileID: profileID)
+                        }
+                    }
                 }
             }
             // Focus filters and other App Intents reach the store and window through this.

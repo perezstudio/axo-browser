@@ -30,7 +30,8 @@ struct PeekTests {
         try "<title>Home</title>".write(to: url, atomically: true, encoding: .utf8)
         let tab = try await store.openTab(url: url, title: "Home", in: try #require(model.space).id)
         if pinned { try await store.setPinned(true, tabID: tab.id) }
-        try await waitUntil { model.tabs.contains { $0.id == tab.id } }
+        // Wait for the pinned state too: the tab can appear between the two writes, unpinned.
+        try await waitUntil { model.tabs.contains { $0.id == tab.id && $0.isPinned == pinned } }
         model.select(tab.id)
         return tab
     }

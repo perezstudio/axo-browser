@@ -5,6 +5,7 @@ import AxoWeb
 import Foundation
 import Testing
 @testable import AxoChromium
+import AxoChromiumTestSupport
 
 /// The engine adapter, on fake engine classes. Serialized because the fakes keep class-level
 /// state, like the real framework.
@@ -256,6 +257,76 @@ struct ChromiumEngineTests {
         #expect(!chromePage.isClosed, "Chrome already closed it")
     }
 
+    // MARK: Extensions
+
+    @Test func extensionsAndButtonsComeFromTheProfile() async throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        let page = engine.makePage(profileID: profileID)
+        #expect(engine.extensions(profileID: profileID).isEmpty, "Nothing before the engine is ready")
+        #expect(engine.toolbarButtons(profileID: profileID, page: page).isEmpty)
+
+        engine.start()
+        scheduled.run()
+        let profile = try #require(FakeProfile.made[profileID])
+        profile.extensions = [FakeExtension(identifier: "abc", name: "Blocker", isEnabled: false)]
+        profile.actions = [FakeExtensionAction(extensionIdentifier: "abc", title: "Blocker", badgeText: "3")]
+
+        #expect(engine.extensions(profileID: profileID) == [ChromiumExtension(id: "abc", name: "Blocker", version: "1.0", isEnabled: false, isUnpacked: true)])
+        let button = try #require(engine.toolbarButtons(profileID: profileID, page: page).first)
+        #expect(button.extensionID == "abc" && button.title == "Blocker" && button.badge == "3" && button.hasPopup)
+
+        engine.setExtension("abc", enabled: true, profileID: profileID)
+        engine.uninstallExtension("abc", profileID: profileID)
+        #expect(profile.enabledChanges.map(\.0) == ["abc"] && profile.enabledChanges.map(\.1) == [true])
+        #expect(profile.uninstalled == ["abc"])
+    }
+
+    @Test func clickingAButtonReturnsItsPopup() async throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let page = engine.makePage(profileID: profileID)
+        let profile = try #require(FakeProfile.made[profileID])
+        let fakePopup = FakeExtensionPopup(extensionIdentifier: "abc")
+        profile.nextPopup = fakePopup
+
+        let popup = try #require(await engine.performExtensionAction("abc", profileID: profileID, page: page))
+        let performed = try #require(profile.performed.first)
+        #expect(performed.extensionID == "abc")
+        #expect(performed.page === FakePage.made.first)
+        #expect(performed.window === FakeWindow.made.first, "Against the profile's engine window")
+        #expect(popup.view === fakePopup.view)
+
+        var sizes: [NSSize] = []
+        var closed = false
+        popup.onResize = { sizes.append($0) }
+        popup.onClose = { closed = true }
+        fakePopup.onResize?(NSSize(width: 220, height: 120))
+        fakePopup.onClose?()
+        #expect(sizes == [NSSize(width: 220, height: 120)])
+        #expect(closed)
+        popup.close()
+        #expect(fakePopup.isClosed)
+
+        profile.nextPopup = nil
+        #expect(await engine.performExtensionAction("abc", profileID: profileID, page: page) == nil, "No popup: the extension handled the click")
+    }
+
+    @Test func extensionChangesAreReportedPerProfile() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        var changed: [Profile.ID] = []
+        engine.onExtensionsChange = { changed.append($0) }
+        _ = engine.extensions(profileID: profileID)
+
+        FakeProfile.made[profileID]?.onExtensionsChange?()
+        #expect(changed == [profileID])
+    }
+
     @Test func profileDataGoesToTheEngine() async throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)
@@ -273,5 +344,12 @@ struct ChromiumEngineTests {
 private extension Result {
     var failure: Failure? {
         if case .failure(let error) = self { error } else { nil }
+    }
+}
+
+extension FakeEngine {
+    /// The fake classes as the engine's class set.
+    static var classes: ChromiumEngineClasses {
+        ChromiumEngineClasses(engine: FakeAXOEngine.self, configuration: FakeConfiguration.self, profile: FakeProfile.self, page: FakePage.self, window: FakeWindow.self)
     }
 }
