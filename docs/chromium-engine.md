@@ -51,6 +51,14 @@ The Swift side never imports Chromium headers. It links one binary framework wit
 
 The `AxoChromium` Swift package wraps that API as a `ChromiumEngine` that conforms to `WebEngine`, and points at the framework with `.binaryTarget(url:checksum:)`.
 
+**What the host app must do**, found while building Phase 1 (details in the fork's `docs/decisions.md`):
+
+- **Principal class:** set `NSPrincipalClass` to `AXOApplication`, which the framework provides. Chrome's browser code requires `NSApp` to be Chrome's own application class.
+- **Starting the engine:** call `AXOEngine.runWithConfiguration(_:ready:)` once after launch, from a run-loop callout (`RunLoop.main.perform`), never a main-queue block. Chromium's main loop runs nested inside AppKit's, so SwiftUI keeps owning app launch, but the call only returns when the engine shuts down. `ready` reports when pages can be made.
+- **Quitting:** quitting the app shuts the engine down first; `AXOApplication` handles it.
+
+For now the engine is compiled into Chromium's own `Chromium Framework.framework`, which brings Chrome's helper apps and packaging with it. Renaming it to `AxoEngine` and publishing it as an xcframework come with the `AxoChromium` package.
+
 **Updating Chromium** means rebuilding the framework at the new version, publishing it with the same API, and bumping the version and checksum in `AxoChromium`. No app code changes. When the API itself must change, its version number changes too, and `AxoChromium` checks it at launch.
 
 This also means contributors build Axo without a Chromium checkout (over 100 GB, hours to build).
@@ -83,7 +91,8 @@ Electron embeds only Chromium's content layer and its extension support is parti
 - **The hidden tab model.** Chrome's extension APIs read tabs from `Browser` and `TabStripModel`. `axo/` keeps hidden ones that mirror Axo's windows, Spaces, tabs, splits, and favorites, so `chrome.tabs.query` agrees with the sidebar. This is the largest piece of work and the biggest risk.
 - **Chrome's own UI.** Permission bubbles, extension install prompts, autofill, and dialogs are drawn by Chrome's Views code. Each is either routed to SwiftUI through the framework's API or allowed to show as a Chrome popup, decided one at a time. This is where patches tend to grow.
 - **Site compatibility needs licenses.** Protected video (Netflix, Spotify) needs Widevine, which needs an agreement with Google; apply early, it takes a while. H.264 and AAC need `proprietary_codecs` and `ffmpeg_branding="Chrome"`, which have their own licensing questions. Safe Browsing needs Google API keys, which never go in the repo.
-- **Packaging.** Chromium runs its GPU, renderer, and utility processes from helper apps inside Axo's bundle. Each needs signing, Hardened Runtime, and the JIT entitlements V8 needs. The app grows by roughly 200 MB, and Sparkle updates grow with it.
+- **Packaging.** Chromium runs its GPU, renderer, and utility processes from helper apps inside Axo's bundle. Each needs signing, Hardened Runtime, and the JIT entitlements V8 needs. The first build's `Chromium.app` is 541 MB without debug symbols, so expect Axo to grow by several hundred MB unless the framework can be slimmed. Sparkle updates grow with it.
+- **Build time and memory.** A full Chromium build at full speed made a 24 GB Mac unresponsive enough that macOS's watchdog restarted it, twice. The fork's build is throttled (6 jobs at background priority, one link at a time) and takes 8 to 12 hours from scratch; incremental builds of `axo/` take minutes. Chromium version updates are near-full rebuilds, so they belong on a dedicated build machine.
 - **Existing data.** Cookies and website data in WebKit's data stores can't move to Chromium's profiles. Tabs, Spaces, history, and everything else in Axo's database are unaffected.
 
 ## What changes per package

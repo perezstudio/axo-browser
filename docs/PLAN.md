@@ -317,6 +317,9 @@ Each milestone should be usable as a daily driver before the next one starts.
 
 - [x] Phase 0: the `WebEngine` and `EnginePage` seam in AxoWeb, with WebKit behind it as `WebKitEngine`, no raw web views in AxoUI, downloads driven through engine-neutral `DownloadItem` calls, and a fake engine for the pool's tests.
 - [ ] Phase 1: the `axo-chromium` repository and `AxoEngine.xcframework`, rendering one tab in Axo behind a debug setting.
+  - [x] The private `perezstudio/axo-chromium` repository, pinned to Chromium 156.0.8078.48 (Extended Stable), with sync and throttled build scripts.
+  - [x] The engine runs inside an AppKit app: `AXOApplication`, `AXOEngine` (Chromium's loop nested in AppKit's), `AXOProfile`, and `AXOPage` load a page in the fork's test shell and quit cleanly. One small Chromium patch.
+  - [ ] The `AxoChromium` Swift package with `ChromiumEngine`, and a debug setting that opens a Chromium tab in Axo.
 - [ ] Phase 2: the hidden tab model and Chrome extensions (Bitwarden, uBlock Origin Lite, native messaging, Chrome Web Store installs).
 - [ ] Phase 3: permissions, downloads, dialogs, DevTools, Widevine, packaging, and performance against the WebKit build.
 - [ ] Phase 4: prove one Chromium update, then ship the Mac on Chromium and remove WebKit, AxoExtensions, and AxoInspector from it.
