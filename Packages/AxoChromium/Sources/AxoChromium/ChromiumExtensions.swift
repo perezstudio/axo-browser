@@ -103,6 +103,13 @@ extension ChromiumEngine {
         return try await profile.loadUnpackedExtension(at: url)
     }
 
+    /// Installs an extension package (`.crx`) into a profile and returns its ID. Ask the person
+    /// first.
+    public func installPackage(at url: URL, profileID: Profile.ID) async throws -> String {
+        guard let profile = readyProfile(profileID) else { throw ChromiumEngineError.notReady }
+        return try await profile.installPackage(at: url)
+    }
+
     /// The toolbar buttons of a profile's enabled extensions, for `page` (the selected tab's).
     public func toolbarButtons(profileID: Profile.ID, page: (any EnginePage)?) -> [ChromiumToolbarButton] {
         guard let profile = readyProfile(profileID), let enginePage = (page as? ChromiumPage)?.page else { return [] }

@@ -1,6 +1,7 @@
 import AppKit
 import AxoChromium
 import AxoCore
+import AxoExtensions
 import AxoUI
 import AxoWeb
 import Foundation
@@ -9,8 +10,9 @@ import Observation
 /// Connects Axo's toolbar and Extensions window to extensions in the Chromium engine (Phase 2 of
 /// `docs/chromium-engine.md`), as ``ExtensionBridge`` does for WebKit's.
 ///
-/// Not yet with Chromium: installing `.crx` packages, site access settings, and inspecting
-/// background pages. Unpacked folders install in developer mode.
+/// Packages (`.crx`) install through Chrome's installer after Axo's prompt; unpacked folders
+/// load in developer mode. Not yet with Chromium: site access settings and inspecting
+/// background pages.
 @Observable
 final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManaging {
     @ObservationIgnored private weak var model: BrowserModel?
@@ -78,16 +80,24 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
     // MARK: ExtensionManaging
 
     func prepareInstall(from url: URL, profileID: Profile.ID) async throws -> ExtensionInstallPrompt {
-        guard url.hasDirectoryPath || (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else {
-            throw ChromiumExtensionError.packagesNotSupported
-        }
-        let manifest = try UnpackedManifest(folder: url)
-        // The folder's path is the install's ID until Chrome assigns one.
-        return ExtensionInstallPrompt(id: url.path, name: manifest.name, version: manifest.version, lines: [], isUnpacked: true)
+        let preview = try InstallPreview(url: url, profileID: profileID)
+        // The file's path is the install's ID until Chrome assigns one.
+        return ExtensionInstallPrompt(
+            id: url.path, name: preview.name, version: preview.version, lines: preview.lines, isUnpacked: preview.isUnpacked
+        )
     }
 
     func confirmInstall(_ extensionID: String, profileID: Profile.ID) async throws {
-        _ = try await engine.loadUnpackedExtension(at: URL(fileURLWithPath: extensionID, isDirectory: true), profileID: profileID)
+        let url = URL(fileURLWithPath: extensionID)
+        if Self.isFolder(url) {
+            _ = try await engine.loadUnpackedExtension(at: url, profileID: profileID)
+        } else {
+            _ = try await engine.installPackage(at: url, profileID: profileID)
+        }
+    }
+
+    static func isFolder(_ url: URL) -> Bool {
+        url.hasDirectoryPath || (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
     }
 
     func uninstall(_ extensionID: String, profileID: Profile.ID) async throws {
@@ -119,35 +129,52 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
 
 /// What the Chromium engine can't do with extensions yet, said plainly.
 enum ChromiumExtensionError: Error, LocalizedError {
-    case packagesNotSupported
     case siteAccessNotSupported
-    case unreadableManifest
 
     var errorDescription: String? {
         switch self {
-        case .packagesNotSupported:
-            "The Chromium engine can't install .crx packages yet. Choose an unpacked extension folder instead."
         case .siteAccessNotSupported:
             "The Chromium engine can't change which sites an extension reaches yet."
-        case .unreadableManifest:
-            "This folder has no readable manifest.json, so it isn't an extension."
         }
     }
 }
 
-/// The name and version from an unpacked extension's `manifest.json`, for the install prompt.
-struct UnpackedManifest {
+/// What the install prompt shows for a package or folder: its name, version, and what it can do.
+///
+/// A package is checked the way the WebKit installer checks it (its CRX3 signature, and a safe
+/// unpack into a temporary folder that's deleted afterwards); Chrome's installer checks it again
+/// when it installs. Permissions are described with ``PermissionDescriptions``, as in WebKit's
+/// prompt.
+struct InstallPreview {
     var name: String
     var version: String
+    var lines: [String]
+    var isUnpacked: Bool
 
-    init(folder: URL) throws {
-        guard let data = try? Data(contentsOf: folder.appending(path: "manifest.json")),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { throw ChromiumExtensionError.unreadableManifest }
+    init(url: URL, profileID: Profile.ID) throws {
+        let folder: URL
+        var temporary: URL?
+        if ChromiumExtensionBridge.isFolder(url) {
+            folder = try ExtensionInstaller(root: url.deletingLastPathComponent()).inspectUnpacked(at: url).folder
+            isUnpacked = true
+        } else {
+            let root = FileManager.default.temporaryDirectory.appending(path: "AxoInstallPreview-\(UUID().uuidString)", directoryHint: .isDirectory)
+            temporary = root
+            folder = try ExtensionInstaller(root: root).install(crx: Data(contentsOf: url), for: profileID).folder
+            isUnpacked = false
+        }
+        defer { temporary.map { try? FileManager.default.removeItem(at: $0) } }
+
+        // The installer already checked the manifest; read what the prompt shows from it.
+        let json = (try? JSONSerialization.jsonObject(with: Data(contentsOf: folder.appending(path: "manifest.json")))) as? [String: Any] ?? [:]
         let declared = json["name"] as? String ?? ""
-        // Localized names ("__MSG_name__") need the extension's locales; the folder name will do.
-        name = declared.isEmpty || declared.hasPrefix("__MSG_") ? folder.lastPathComponent : declared
+        // Localized names ("__MSG_name__") need the extension's locales; the file name will do.
+        name = declared.isEmpty || declared.hasPrefix("__MSG_") ? url.deletingPathExtension().lastPathComponent : declared
         version = json["version"] as? String ?? ""
+        let permissions = json["permissions"] as? [String] ?? []
+        let contentScriptMatches = (json["content_scripts"] as? [[String: Any]] ?? []).flatMap { $0["matches"] as? [String] ?? [] }
+        let hosts = (json["host_permissions"] as? [String] ?? []) + contentScriptMatches
+        lines = PermissionDescriptions.lines(permissions: permissions, matchPatterns: hosts)
     }
 }
 

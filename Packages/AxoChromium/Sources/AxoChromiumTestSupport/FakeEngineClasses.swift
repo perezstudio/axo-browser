@@ -74,6 +74,12 @@ public final class FakeProfile: NSObject, AXOProfile {
     }
 
     public private(set) var loadedExtensions: [URL] = []
+    public private(set) var installedPackages: [URL] = []
+
+    public func installPackage(at url: URL, completion: @escaping (String?, (any Error)?) -> Void) {
+        installedPackages.append(url)
+        completion("fake-package-id", nil)
+    }
     public var extensions: [any AXOExtension] = []
     public var actions: [any AXOExtensionAction] = []
     public var onExtensionsChange: (() -> Void)?

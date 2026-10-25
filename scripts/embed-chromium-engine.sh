@@ -6,6 +6,7 @@
 #
 # The engine comes from $AXO_CHROMIUM_OUT, or from a sibling checkout of axo-chromium:
 #   ../axo-chromium/chromium/src/out/Axo
+# (next to the main checkout when building from a git worktree).
 set -euo pipefail
 
 DEST="$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH"
@@ -16,6 +17,13 @@ if [[ "$CONFIGURATION" != "Debug" ]]; then
 fi
 
 OUT="${AXO_CHROMIUM_OUT:-$SRCROOT/../axo-chromium/chromium/src/out/Axo}"
+# In a git worktree, the sibling checkout sits next to the main checkout instead.
+if [[ -z "${AXO_CHROMIUM_OUT:-}" && ! -d "$OUT" ]]; then
+  COMMON="$(git -C "$SRCROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+  if [[ -n "$COMMON" ]]; then
+    OUT="$(dirname "$(dirname "$COMMON")")/axo-chromium/chromium/src/out/Axo"
+  fi
+fi
 SOURCE="$OUT/Chromium.app/Contents/Frameworks/$FRAMEWORK_NAME"
 if [[ ! -d "$SOURCE" ]]; then
   rm -rf "$DEST/$FRAMEWORK_NAME"

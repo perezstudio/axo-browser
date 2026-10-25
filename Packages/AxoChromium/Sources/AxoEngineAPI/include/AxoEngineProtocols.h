@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 7
+#define AXO_ENGINE_API_VERSION 8
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -113,6 +113,13 @@ NS_SWIFT_UI_ACTOR
 /// Called when extensions are installed, removed, turned on or off, or change their toolbar
 /// buttons (titles, badges, icons).
 @property(nonatomic, copy, nullable) void (^onExtensionsChange)(void);
+
+/// Installs an extension package (a CRX3 `.crx` file), as Chrome does when a person drops one on
+/// its Extensions page: Axo asks the person first. `completion` gets the extension's ID, or an
+/// error saying why it didn't install.
+- (void)installPackageAtURL:(NSURL*)url
+                 completion:(void (^)(NSString* _Nullable extensionID, NSError* _Nullable error))completion
+    NS_SWIFT_NAME(installPackage(at:completion:));
 
 /// Deletes a profile's data for good. Close its pages first.
 + (void)removeProfileWithIdentifier:(NSUUID*)identifier

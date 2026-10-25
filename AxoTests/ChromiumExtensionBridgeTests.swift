@@ -7,6 +7,7 @@ import AppKit
 import AxoChromium
 import AxoChromiumTestSupport
 import AxoCore
+import AxoExtensions
 import AxoUI
 import AxoWeb
 import Foundation
@@ -61,20 +62,30 @@ struct ChromiumExtensionBridgeTests {
         #expect(profile.performed.first?.page === FakePage.made.last)
     }
 
-    @Test func unpackedFoldersInstallAndPackagesSayTheyCant() async throws {
+    @Test func unpackedFoldersShowWhatTheyCanDoThenLoad() async throws {
         let folder = FileManager.default.temporaryDirectory.appending(path: "AxoTests-Extension-\(UUID().uuidString)", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        try #"{"manifest_version": 3, "name": "Tab Tidy", "version": "2.1"}"#.write(to: folder.appending(path: "manifest.json"), atomically: true, encoding: .utf8)
+        try #"{"manifest_version": 3, "name": "Tab Tidy", "version": "2.1", "permissions": ["tabs"], "host_permissions": ["<all_urls>"]}"#
+            .write(to: folder.appending(path: "manifest.json"), atomically: true, encoding: .utf8)
 
         let prompt = try await bridge.prepareInstall(from: folder, profileID: profileID)
         #expect(prompt.name == "Tab Tidy" && prompt.version == "2.1" && prompt.isUnpacked)
+        #expect(prompt.lines == PermissionDescriptions.lines(permissions: ["tabs"], matchPatterns: ["<all_urls>"]), "As WebKit's prompt describes them")
+        #expect(!prompt.lines.isEmpty)
 
         try await bridge.confirmInstall(prompt.id, profileID: profileID)
         #expect(FakeProfile.made[profileID]?.loadedExtensions.map(\.standardizedFileURL.path) == [folder.standardizedFileURL.path])
+    }
 
-        await #expect(throws: ChromiumExtensionError.self) {
-            try await bridge.prepareInstall(from: folder.appending(path: "thing.crx"), profileID: profileID)
+    @Test func packagesAreCheckedBeforeThePromptAndInstallThroughTheEngine() async throws {
+        let bogus = FileManager.default.temporaryDirectory.appending(path: "AxoTests-\(UUID().uuidString).crx")
+        try Data("not a package".utf8).write(to: bogus)
+        await #expect(throws: (any Error).self, "A file that isn't a signed CRX3 package never reaches the prompt") {
+            try await bridge.prepareInstall(from: bogus, profileID: profileID)
         }
+
+        try await bridge.confirmInstall(bogus.path, profileID: profileID)
+        #expect(FakeProfile.made[profileID]?.installedPackages.map(\.path) == [bogus.path], "Confirmed packages go to Chrome's installer")
     }
 
     @Test func installedExtensionsListAndToggle() async throws {

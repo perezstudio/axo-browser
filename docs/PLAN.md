@@ -326,8 +326,9 @@ Each milestone should be usable as a daily driver before the next one starts.
   - [x] Axo's windows and Spaces in the engine API: one hidden window per profile holding the current Space's live tabs, switching with the Space, and two-way sync with the sidebar. A tab an extension opens becomes a sidebar tab that keeps its page; one it closes closes; one it selects is selected. Checked in the fork's `scripts/test_engine.sh` and Axo's package tests.
   - [ ] Still to sync: extensions moving tabs (placing them among pinned tabs, folders, and splits), favorites in the window, and hibernated tabs (Chrome's discarding, so extensions still see them).
   - [x] Toolbar buttons and popups through the engine (API version 7): Axo's toolbar shows Chromium extensions' buttons with badges, and their popups open in Axo's popover sized to fit. The Extensions window lists, turns on and off, and removes them, and installs unpacked folders. `ChromiumEngineUITests` checks a badge and a popup with the real engine.
-  - [ ] Still to come for extensions: `.crx` installs and the Chrome Web Store, permission prompts and site access, inspecting background pages, and native messaging.
-  - [ ] Bitwarden and uBlock Origin Lite passing the real-extension tests on Chromium.
+  - [x] `.crx` installs (API version 8): the Extensions window checks a package and shows what it can do in Axo's install prompt, as with WebKit, then Chrome's installer installs it and turns it on with the approved permissions.
+  - [ ] Still to come for extensions: the Chrome Web Store, site access settings, inspecting background pages, and native messaging.
+  - [ ] Bitwarden and uBlock Origin Lite passing the real-extension tests on Chromium. So far, both real packages install enabled, show their toolbar buttons, and open their popups in the fork's test shell (`--package-test`); a test of their features in Axo is still to come.
 - [ ] Phase 3: permissions, downloads, dialogs, DevTools, Widevine, packaging, and performance against the WebKit build.
 - [ ] Phase 4: prove one Chromium update, then ship the Mac on Chromium and remove WebKit, AxoExtensions, and AxoInspector from it.
 
