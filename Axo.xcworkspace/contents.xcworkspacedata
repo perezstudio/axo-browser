@@ -20,6 +20,9 @@
       location = "group:Packages/AxoInspector">
    </FileRef>
    <FileRef
+      location = "group:Packages/AxoChromium">
+   </FileRef>
+   <FileRef
       location = "group:Packages/AxoPersistence">
    </FileRef>
    <FileRef

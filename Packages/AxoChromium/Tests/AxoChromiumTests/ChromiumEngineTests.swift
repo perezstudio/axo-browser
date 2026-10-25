@@ -1,0 +1,220 @@
+import AppKit
+import AxoCore
+import AxoEngineAPI
+import AxoWeb
+import Foundation
+import Testing
+@testable import AxoChromium
+
+/// The engine adapter, on fake engine classes. Serialized because the fakes keep class-level
+/// state, like the real framework.
+@MainActor
+@Suite(.serialized)
+struct ChromiumEngineTests {
+    let directory = FileManager.default.temporaryDirectory.appending(path: "AxoChromiumTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+    let profileID = UUID()
+    let url = URL(string: "https://example.com/")!
+
+    init() {
+        FakeEngine.reset()
+    }
+
+    /// An engine whose scheduled blocks run when `scheduled` is drained.
+    private func makeEngine(scheduled: Scheduled) -> ChromiumEngine {
+        ChromiumEngine(classes: FakeEngine.classes, userDataDirectory: directory) { scheduled.blocks.append($0) }
+    }
+
+    @MainActor
+    final class Scheduled {
+        var blocks: [@MainActor () -> Void] = []
+        func run() {
+            let pending = blocks
+            blocks = []
+            pending.forEach { $0() }
+        }
+    }
+
+    // MARK: Loading the framework
+
+    @Test func classesAreFoundAndTheirAPIVersionChecked() throws {
+        let fakes: [String: AnyClass] = [
+            "AXOEngine": FakeAXOEngine.self, "AXOEngineConfiguration": FakeConfiguration.self,
+            "AXOProfile": FakeProfile.self, "AXOPage": FakePage.self,
+        ]
+        let found = try ChromiumFramework.classes { fakes[$0] }.get()
+        #expect(ObjectIdentifier(found.page) == ObjectIdentifier(FakePage.self))
+
+        #expect(ChromiumFramework.classes { $0 == "AXOPage" ? nil : fakes[$0] }.failure == .missingClass("AXOPage"))
+        FakeAXOEngine.apiVersionOverride = ChromiumFramework.apiVersion + 1
+        #expect(ChromiumFramework.classes { fakes[$0] }.failure == .apiVersionMismatch(framework: ChromiumFramework.apiVersion + 1, axo: ChromiumFramework.apiVersion))
+    }
+
+    @Test func aBundleWithoutTheFrameworkSaysSo() {
+        let empty = Bundle(url: FileManager.default.temporaryDirectory)!
+        #expect(ChromiumFramework.load(from: empty).failure == .notEmbedded)
+    }
+
+    // MARK: Starting
+
+    @Test func startingRunsTheEngineOnALaterTurnWithItsDataFolder() {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        var states: [ChromiumEngine.State] = []
+        engine.onStateChange = { states.append($0) }
+
+        engine.start()
+        #expect(engine.state == .starting)
+        #expect(FakeAXOEngine.configurations.isEmpty, "Nothing runs until the run loop turns")
+
+        scheduled.run()
+        #expect(engine.state == .ready)
+        #expect(states == [.starting, .ready])
+        #expect(FakeAXOEngine.configurations.first?.userDataDirectory == directory)
+
+        engine.start()
+        #expect(FakeAXOEngine.configurations.count == 1, "Starting twice does nothing")
+    }
+
+    @Test func aFailedStartReportsWhy() {
+        FakeAXOEngine.failure = FakeEngineError()
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        #expect(engine.state == .failed("The fake engine refused to start."))
+    }
+
+    // MARK: Pages
+
+    @Test func pagesMadeBeforeTheEngineIsReadyAttachWhenItIs() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        let early = try #require(engine.makePage(profileID: profileID) as? ChromiumPage)
+        early.load(url)
+        let closed = engine.makePage(profileID: profileID)
+        closed.close()
+        #expect(FakePage.made.isEmpty)
+        #expect(early.isLoading, "A page waiting for the engine counts as loading")
+
+        scheduled.run()
+        #expect(FakePage.made.count == 1, "Only the page still open attaches")
+        let fake = try #require(FakePage.made.first)
+        #expect(fake.loads == [url], "It loads what it was asked for while waiting")
+        #expect(fake.profile.identifier == profileID)
+        #expect(fake.view.superview === early.view)
+
+        _ = engine.makePage(profileID: profileID)
+        #expect(FakePage.made.count == 2, "Pages made once the engine is ready attach right away")
+    }
+
+    @Test func thePoolHearsThePagesEvents() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine)
+        var clicks: [LinkClick] = []
+        var newTabs: [URL] = []
+        pool.onLinkClick = { clicks.append($0); return true }
+        pool.onOpenInNewTab = { url, _ in newTabs.append(url) }
+        let tab = Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial)
+
+        pool.page(for: tab, profileID: profileID)
+        let fake = try #require(FakePage.made.first)
+        #expect(fake.loads == [url])
+        fake.canGoBack = true
+        fake.navigate(to: URL(string: "https://example.com/next")!, title: "Next")
+        #expect(pool.state(for: tab.id)?.title == "Next")
+        #expect(pool.state(for: tab.id)?.canGoBack == true)
+
+        let link = URL(string: "https://elsewhere.example/")!
+        let delegate = try #require(fake.delegate)
+        #expect(delegate.page(fake, shouldHandleLinkTo: link, modifiers: [.command, .shift]))
+        #expect(clicks.first?.modifiers == [.command, .shift])
+        delegate.page(fake, wantsToOpenURLInNewTab: link)
+        #expect(newTabs == [link])
+    }
+
+    @Test func permissionRequestsReachThePool() async throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine)
+        pool.onPermissionRequest = { request in request.kind == .camera ? .allow : .deny }
+        pool.page(for: Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial), profileID: profileID)
+        let fake = try #require(FakePage.made.first)
+        let delegate = try #require(fake.delegate)
+
+        let allowed = await withCheckedContinuation { continuation in
+            delegate.page(fake, requestsPermission: .camera, origin: URL(string: "https://meet.example.com")!) { continuation.resume(returning: $0) }
+        }
+        #expect(allowed)
+    }
+
+    @Test func downloadsReportToThePoolsList() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine, downloads: DownloadManager(directory: directory))
+        let tab = Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial)
+        pool.page(for: tab, profileID: profileID)
+        let fake = try #require(FakePage.made.first)
+        let download = FakeDownload(sourceURL: URL(string: "https://example.com/report.pdf"))
+
+        fake.delegate?.page(fake, didStart: download)
+        let item = try #require(pool.downloads.items.first)
+        let observer = try #require(download.observer)
+        #expect(item.sourceTabID == tab.id)
+        let destination = try #require(observer.download(download, destinationForSuggestedFilename: "report.pdf", expectedLength: 10))
+        #expect(destination.deletingLastPathComponent().standardizedFileURL == directory.standardizedFileURL)
+        observer.download(download, didReceiveBytes: 5, ofTotal: 10)
+        #expect(item.fractionCompleted == 0.5)
+        observer.download(download, didFailWithMessage: "The network went away.")
+        #expect(item.state == .failed("The network went away."))
+
+        let second = FakeDownload(sourceURL: nil)
+        fake.delegate?.page(fake, didStart: second)
+        pool.downloads.cancel(try #require(pool.downloads.items.first))
+        #expect(second.isCancelled, "Cancelling in Axo cancels Chromium's download")
+    }
+
+    @Test func hibernatedPagesWithoutSavedHistoryReloadTheirURL() async throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine)
+        let tab = Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial)
+        pool.page(for: tab, profileID: profileID)
+        let first = try #require(FakePage.made.first)
+
+        #expect(await pool.hibernate(tab.id))
+        #expect(first.isClosed)
+        pool.page(for: tab, profileID: profileID)
+        let woken = try #require(FakePage.made.last)
+        #expect(woken !== first)
+        #expect(woken.loads == [url], "Chromium doesn't save history yet, so it reloads the URL")
+    }
+
+    @Test func profileDataGoesToTheEngine() async throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        await engine.clearWebsiteData(for: profileID)
+        #expect(FakeProfile.made.isEmpty, "Nothing to clear before the engine runs")
+
+        engine.start()
+        scheduled.run()
+        await engine.clearWebsiteData(for: profileID)
+        #expect(FakeProfile.made[profileID]?.clearCount == 1)
+        await #expect(throws: FakeEngineError.self) { try await engine.removeWebsiteData(for: profileID) }
+    }
+}
+
+private extension Result {
+    var failure: Failure? {
+        if case .failure(let error) = self { error } else { nil }
+    }
+}

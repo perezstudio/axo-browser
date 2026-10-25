@@ -70,6 +70,13 @@
     },
     {
       "target": {
+        "containerPath": "container:Packages/AxoChromium",
+        "identifier": "AxoChromiumTests",
+        "name": "AxoChromiumTests"
+      }
+    },
+    {
+      "target": {
         "containerPath": "container:Packages/AxoSync",
         "identifier": "AxoSyncTests",
         "name": "AxoSyncTests"

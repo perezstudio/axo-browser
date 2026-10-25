@@ -316,10 +316,10 @@ Each milestone should be usable as a daily driver before the next one starts.
 **Chromium engine on the Mac (decided October 2026; design in `docs/chromium-engine.md`)**
 
 - [x] Phase 0: the `WebEngine` and `EnginePage` seam in AxoWeb, with WebKit behind it as `WebKitEngine`, no raw web views in AxoUI, downloads driven through engine-neutral `DownloadItem` calls, and a fake engine for the pool's tests.
-- [ ] Phase 1: the `axo-chromium` repository and `AxoEngine.xcframework`, rendering one tab in Axo behind a debug setting.
+- [x] Phase 1: the `axo-chromium` repository and the engine framework, rendering tabs in Axo behind a debug setting (October 2026). Publishing the framework as a downloadable, versioned artifact moved to Phase 3's packaging.
   - [x] The private `perezstudio/axo-chromium` repository, pinned to Chromium 156.0.8078.48 (Extended Stable), with sync and throttled build scripts.
   - [x] The engine runs inside an AppKit app: `AXOApplication`, `AXOEngine` (Chromium's loop nested in AppKit's), `AXOProfile`, and `AXOPage` load a page in the fork's test shell and quit cleanly. One small Chromium patch.
-  - [ ] The `AxoChromium` Swift package with `ChromiumEngine`, and a debug setting that opens a Chromium tab in Axo.
+  - [x] The `AxoChromium` Swift package with `ChromiumEngine`, and the `ChromiumEngine` debug setting: Debug builds embed the engine from a sibling `axo-chromium` checkout, and every tab then runs on Chromium. `ChromiumEngineUITests` (opt-in) loads a tab and checks it ran in Chromium.
 - [ ] Phase 2: the hidden tab model and Chrome extensions (Bitwarden, uBlock Origin Lite, native messaging, Chrome Web Store installs).
 - [ ] Phase 3: permissions, downloads, dialogs, DevTools, Widevine, packaging, and performance against the WebKit build.
 - [ ] Phase 4: prove one Chromium update, then ship the Mac on Chromium and remove WebKit, AxoExtensions, and AxoInspector from it.

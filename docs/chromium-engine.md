@@ -57,7 +57,9 @@ The `AxoChromium` Swift package wraps that API as a `ChromiumEngine` that confor
 - **Starting the engine:** call `AXOEngine.runWithConfiguration(_:ready:)` once after launch, from a run-loop callout (`RunLoop.main.perform`), never a main-queue block. Chromium's main loop runs nested inside AppKit's, so SwiftUI keeps owning app launch, but the call only returns when the engine shuts down. `ready` reports when pages can be made.
 - **Quitting:** quitting the app shuts the engine down first; `AXOApplication` handles it.
 
-For now the engine is compiled into Chromium's own `Chromium Framework.framework`, which brings Chrome's helper apps and packaging with it. Renaming it to `AxoEngine` and publishing it as an xcframework come with the `AxoChromium` package.
+For now the engine is compiled into Chromium's own `Chromium Framework.framework`, which brings Chrome's helper apps and packaging with it. Renaming it to `AxoEngine` and publishing it as a downloadable framework come later, with release packaging.
+
+**How Axo reaches it today:** Axo doesn't link the framework. The API is a set of Objective-C protocols (`AxoEngineProtocols.h`, copied into `AxoChromium`'s `AxoEngineAPI` target). Axo loads the framework with `dlopen` and finds the classes by name, so builds without the engine work exactly as before. Debug builds embed the engine when a built `axo-chromium` checkout sits next to Axo; the `ChromiumEngine` user default then switches every tab to it.
 
 **Updating Chromium** means rebuilding the framework at the new version, publishing it with the same API, and bumping the version and checksum in `AxoChromium`. No app code changes. When the API itself must change, its version number changes too, and `AxoChromium` checks it at launch.
 
@@ -113,9 +115,9 @@ Hard rules 2 (the pool owns pages), 4 (private WebKit API), and 6 (one data stor
 | Phase | Scope | Done when |
 | --- | --- | --- |
 | **0** | The `WebEngine` seam in AxoWeb, with WebKit behind it, no raw web views in AxoUI, and a fake engine for tests. No Chromium. | Every test passes on the Mac and iOS with `WebKitEngine`, and the pool's own tests run on the fake engine. |
-| **1** | `axo-chromium` skeleton: build the pinned Chromium, a minimal framework API (profile, page, view, navigation, events), and `AxoChromium` rendering one tab behind a debug setting. | A page loads in a Chromium tab in Axo. |
+| **1** (done, October 2026) | `axo-chromium` skeleton: build the pinned Chromium, a minimal framework API (profile, page, view, navigation, events), and `AxoChromium` rendering tabs behind a debug setting. | A page loads in a Chromium tab in Axo. |
 | **2** | The hidden tab model and extensions. Bitwarden and uBlock Origin Lite pass `RealExtensionTests`, native messaging works, and the Chrome Web Store installs. | The extensions people use daily work. |
-| **3** | Permissions, downloads, dialogs, DevTools, Widevine, notarization, helper apps, Sparkle. Measure launch, memory, and energy against the WebKit build. | Daily-driver parity with the WebKit Mac app. |
+| **3** | Permissions, downloads, dialogs, DevTools, Widevine, notarization, helper apps, Sparkle, and publishing the framework as a versioned download. Measure launch, memory, and energy against the WebKit build. | Daily-driver parity with the WebKit Mac app. |
 | **4** | One full Chromium update through the process above, to prove it. Then Chromium becomes the Mac's engine, and WebKit, AxoExtensions, and AxoInspector leave the Mac. | The Mac ships on Chromium. |
 
 ## Open questions

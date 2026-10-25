@@ -5,6 +5,7 @@
 //  Created by Kevin Perez on 10/2/26.
 //
 
+import AxoChromium
 import AxoCore
 import AxoExtensions
 import AxoImport
@@ -19,7 +20,7 @@ import Foundation
 import SwiftUI
 import WebKit
 
-@main
+/// The app's scenes. ``AxoMain`` starts it.
 struct AxoApp: App {
     @State private var model = AppEnvironment.makeBrowserModel()
 
@@ -199,17 +200,34 @@ enum AppEnvironment {
 
     private static func makeModel() -> BrowserModel {
         let lastSpaceID = isUITesting ? nil : UserDefaults.standard.string(forKey: lastSpaceKey).flatMap(UUID.init(uuidString:))
-        let pool = isUITesting
-            ? WebViewPool(
+        let chromium = ChromiumSupport.makeEngine()
+        let pool = if let chromium {
+            WebViewPool(engine: chromium)
+        } else if isUITesting {
+            WebViewPool(
                 makeDataStore: { _ in .nonPersistent() },
                 downloads: DownloadManager(directory: uiTestingDownloadsDirectory)
             )
-            : WebViewPool()
+        } else {
+            WebViewPool()
+        }
         do {
             let store = isUITesting ? try TabStore.makeInMemory() : try TabStore.openOnDisk(at: databaseURL)
-            let manager = startExtensions(store: store, pool: pool)
+            // Extensions run on WebKit (WKWebExtension). With the Chromium engine they're off
+            // until Chromium's own extension system arrives (Phase 2).
+            let manager = chromium == nil ? startExtensions(store: store, pool: pool) : nil
             let model = BrowserModel(store: store, pool: pool, initialSpaceID: lastSpaceID)
-            extensionBridge = ExtensionBridge(model: model, manager: manager)
+            if let manager {
+                extensionBridge = ExtensionBridge(model: model, manager: manager)
+            }
+            if let problem = ChromiumSupport.problem {
+                model.alertMessage = problem
+            } else if let chromium {
+                chromium.onStateChange = { [weak model] (state: ChromiumEngine.State) in
+                    guard case .failed(let reason) = state else { return }
+                    model?.alertMessage = "The Chromium engine didn't start: \(reason)"
+                }
+            }
             // Focus filters and other App Intents reach the store and window through this.
             IntentBridge.current = IntentBridge(store: store, window: BrowserIntentWindow(model: model))
             // UI tests use an in-memory database, which must never reach the system's Spotlight index.
