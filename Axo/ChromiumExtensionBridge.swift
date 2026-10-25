@@ -20,7 +20,7 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
     /// Bumped when extensions or their buttons change, so views reading the toolbar update.
     private var revision = 0
     /// The open popup and its popover's delegate, by extension.
-    @ObservationIgnored private var popups: [String: (popup: ChromiumExtensionPopup, closer: PopoverCloser)] = [:]
+    @ObservationIgnored private(set) var popups: [String: (popup: ChromiumExtensionPopup, closer: PopoverCloser)] = [:]
 
     init(model: BrowserModel, engine: ChromiumEngine) {
         self.model = model
@@ -28,6 +28,8 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
         model.extensionToolbar = self
         model.extensionManagement = self
         engine.onExtensionsChange = { [weak self] _ in self?.revision += 1 }
+        // Extensions that handle their own clicks (1Password) open their popup themselves.
+        engine.onExtensionPopupRequest = { [weak self] popup, _ in self?.present(popup) }
         // Buttons appear once the engine is ready.
         let previous = engine.onStateChange
         engine.onStateChange = { [weak self] state in

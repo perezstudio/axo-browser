@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 8
+#define AXO_ENGINE_API_VERSION 9
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -113,6 +113,11 @@ NS_SWIFT_UI_ACTOR
 /// Called when extensions are installed, removed, turned on or off, or change their toolbar
 /// buttons (titles, badges, icons).
 @property(nonatomic, copy, nullable) void (^onExtensionsChange)(void);
+
+/// Called when an extension opens its own popup (`chrome.action.openPopup`), as some do when
+/// their toolbar button is clicked. Show it under the extension's toolbar button, as for a popup
+/// from `performExtensionAction`. Without a handler, the extension's call fails.
+@property(nonatomic, copy, nullable) void (^onExtensionPopupRequest)(id<AXOExtensionPopup> popup);
 
 /// Installs an extension package (a CRX3 `.crx` file), as Chrome does when a person drops one on
 /// its Extensions page: Axo asks the person first. `completion` gets the extension's ID, or an

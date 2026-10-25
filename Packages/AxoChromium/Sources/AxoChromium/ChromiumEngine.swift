@@ -50,6 +50,9 @@ public final class ChromiumEngine: WebEngine {
 
     /// Called when a profile's extensions or their toolbar buttons change, with the profile.
     public var onExtensionsChange: ((Profile.ID) -> Void)?
+    /// Called when an extension opens its own popup (`chrome.action.openPopup`), as some do when
+    /// their toolbar button is clicked, with its profile. Show it under the extension's button.
+    public var onExtensionPopupRequest: ((ChromiumExtensionPopup, Profile.ID) -> Void)?
     /// Profiles whose extension changes are being followed.
     private var followedProfiles: Set<Profile.ID> = []
 
@@ -132,6 +135,9 @@ public final class ChromiumEngine: WebEngine {
         let profile = classes.profile.profile(withIdentifier: profileID)
         if followedProfiles.insert(profileID).inserted {
             profile.onExtensionsChange = { [weak self] in self?.onExtensionsChange?(profileID) }
+            profile.onExtensionPopupRequest = { [weak self] popup in
+                self?.onExtensionPopupRequest?(ChromiumExtensionPopup(popup), profileID)
+            }
         }
         return profile
     }

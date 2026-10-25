@@ -62,6 +62,17 @@ struct ChromiumExtensionBridgeTests {
         #expect(profile.performed.first?.page === FakePage.made.last)
     }
 
+    @Test func popupsExtensionsOpenThemselvesShowLikeClickedOnes() async throws {
+        await model.openTab(url: URL(string: "https://example.com/")!)
+        _ = bridge.toolbarItems(profileID: profileID, tabID: model.selectedTabID)
+        let profile = try #require(FakeProfile.made[profileID])
+        let popup = FakeExtensionPopup(extensionIdentifier: "onepassword")
+
+        let request = try #require(profile.onExtensionPopupRequest, "The engine passes chrome.action.openPopup on")
+        request(popup)
+        #expect(Array(bridge.popups.keys) == ["onepassword"])
+    }
+
     @Test func unpackedFoldersShowWhatTheyCanDoThenLoad() async throws {
         let folder = FileManager.default.temporaryDirectory.appending(path: "AxoTests-Extension-\(UUID().uuidString)", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

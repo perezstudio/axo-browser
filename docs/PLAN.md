@@ -328,6 +328,7 @@ Each milestone should be usable as a daily driver before the next one starts.
   - [ ] Still to sync: extensions moving tabs (placing them among pinned tabs, folders, and splits), favorites in the window, and hibernated tabs (Chrome's discarding, so extensions still see them).
   - [x] Toolbar buttons and popups through the engine (API version 7): Axo's toolbar shows Chromium extensions' buttons with badges, and their popups open in Axo's popover sized to fit. The Extensions window lists, turns on and off, and removes them, and installs unpacked folders. `ChromiumEngineUITests` checks a badge and a popup with the real engine.
   - [x] `.crx` installs (API version 8): the Extensions window checks a package and shows what it can do in Axo's install prompt, as with WebKit, then Chrome's installer installs it and turns it on with the approved permissions.
+  - [x] Popups extensions open themselves (`chrome.action.openPopup`, API version 9), which 1Password uses from its click handler.
   - [ ] Still to come for extensions: the Chrome Web Store, site access settings, inspecting background pages, and native messaging.
   - [ ] Bitwarden and uBlock Origin Lite passing the real-extension tests on Chromium. So far, both real packages install enabled, show their toolbar buttons, and open their popups in the fork's test shell (`--package-test`); a test of their features in Axo is still to come.
 - [ ] Phase 3: permissions, downloads, dialogs, DevTools, Widevine, packaging, and performance against the WebKit build.
