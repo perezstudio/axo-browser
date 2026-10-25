@@ -86,6 +86,13 @@ public final class FakeProfile: NSObject, AXOProfile {
     public var onExtensionsChange: (() -> Void)?
     public var onExtensionPopupRequest: ((any AXOExtensionPopup) -> Void)?
     public var onExtensionWindowOpen: ((any AXOWindow, NSSize) -> Void)?
+    public var extensionCommands: [any AXOExtensionCommand] = []
+    public private(set) var performedCommands: [(name: String, extensionID: String, page: any AXOPage)] = []
+
+    public func performExtensionCommand(_ name: String, extension extensionID: String, on page: any AXOPage, window: any AXOWindow, completion: @escaping ((any AXOExtensionPopup)?) -> Void) {
+        performedCommands.append((name, extensionID, page))
+        completion(name == "_execute_action" ? nextPopup : nil)
+    }
     public private(set) var enabledChanges: [(String, Bool)] = []
     public private(set) var uninstalled: [String] = []
     public private(set) var performed: [(extensionID: String, page: any AXOPage, window: any AXOWindow)] = []
@@ -213,6 +220,22 @@ public final class FakeExtensionAction: NSObject, AXOExtensionAction {
         self.extensionIdentifier = extensionIdentifier
         self.title = title
         self.badgeText = badgeText
+    }
+}
+
+public final class FakeExtensionCommand: NSObject, AXOExtensionCommand {
+    public let extensionIdentifier: String
+    public let name: String
+    public let title: String
+    public let keyEquivalent: String
+    public let modifierFlags: NSEvent.ModifierFlags
+
+    public init(extensionIdentifier: String, name: String, title: String, keyEquivalent: String, modifierFlags: NSEvent.ModifierFlags) {
+        self.extensionIdentifier = extensionIdentifier
+        self.name = name
+        self.title = title
+        self.keyEquivalent = keyEquivalent
+        self.modifierFlags = modifierFlags
     }
 }
 

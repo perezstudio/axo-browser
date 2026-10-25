@@ -11,6 +11,7 @@ import AxoExtensions
 import AxoUI
 import AxoWeb
 import Foundation
+import SwiftUI
 import Testing
 @testable import Axo
 
@@ -60,6 +61,27 @@ struct ChromiumExtensionBridgeTests {
         try await waitUntil { !profile.performed.isEmpty }
         #expect(profile.performed.first?.extensionID == "abc")
         #expect(profile.performed.first?.page === FakePage.made.last)
+    }
+
+    @Test func extensionShortcutsBecomeMenuShortcutsAndRunOnTheSelectedPage() async throws {
+        await model.openTab(url: URL(string: "https://example.com/")!)
+        _ = bridge.toolbarItems(profileID: profileID, tabID: model.selectedTabID)
+        let profile = try #require(FakeProfile.made[profileID])
+        profile.extensions = [FakeExtension(identifier: "onepassword", name: "1Password")]
+        profile.extensionCommands = [
+            FakeExtensionCommand(extensionIdentifier: "onepassword", name: "_execute_action", title: "1Password", keyEquivalent: "X", modifierFlags: .command),
+            FakeExtensionCommand(extensionIdentifier: "onepassword", name: "lock", title: "Lock the extension", keyEquivalent: "l", modifierFlags: [.command, .option]),
+        ]
+
+        let shortcuts = bridge.shortcuts(profileID: profileID)
+        #expect(shortcuts.map(\.title) == ["1Password", "1Password: Lock the extension"])
+        #expect(shortcuts.first?.key == "x" && shortcuts.first?.modifiers == [.command, .shift], "An uppercase key equivalent means Shift")
+        #expect(shortcuts.last?.key == "l" && shortcuts.last?.modifiers == [.command, .option])
+
+        bridge.performShortcut(try #require(shortcuts.last), profileID: profileID, tabID: model.selectedTabID)
+        try await waitUntil { !profile.performedCommands.isEmpty }
+        #expect(profile.performedCommands.map(\.name) == ["lock"])
+        #expect(profile.performedCommands.first?.page === FakePage.made.last, "On the selected tab's page")
     }
 
     @Test func popupsExtensionsOpenThemselvesShowLikeClickedOnes() async throws {

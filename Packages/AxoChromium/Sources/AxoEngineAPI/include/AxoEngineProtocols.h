@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 11
+#define AXO_ENGINE_API_VERSION 12
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -26,6 +26,7 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol AXOExtension;
 @protocol AXOExtensionAction;
 @protocol AXOExtensionPopup;
+@protocol AXOExtensionCommand;
 @protocol AXODownload;
 
 /// The domain of errors the engine reports.
@@ -123,6 +124,21 @@ NS_SWIFT_UI_ACTOR
 /// from `performExtensionAction`. Without a handler, the extension's call fails.
 @property(nonatomic, copy, nullable) void (^onExtensionPopupRequest)(id<AXOExtensionPopup> popup);
 
+/// The keyboard shortcuts of the profile's enabled extensions (`commands` in their manifests)
+/// that have keys. Show them as menu items; they change with `onExtensionsChange`.
+@property(nonatomic, readonly) NSArray<id<AXOExtensionCommand>>* extensionCommands;
+
+/// Runs an extension's command with `page` as the active tab, as pressing its shortcut does:
+/// `_execute_action` clicks the extension's toolbar button (`completion` gets its popup, or nil
+/// when the extension handled the click), and other commands reach the extension's
+/// `chrome.commands.onCommand` with access to the page (`completion` gets nil).
+- (void)performExtensionCommand:(NSString*)name
+                      extension:(NSString*)extensionID
+                         onPage:(id<AXOPage>)page
+                         window:(id<AXOWindow>)window
+                     completion:(void (^)(id<AXOExtensionPopup> _Nullable popup))completion
+    NS_SWIFT_NAME(performExtensionCommand(_:extension:on:window:completion:));
+
 /// Called when an extension opens a popup window (`chrome.windows.create` with `type: "popup"`),
 /// such as a password manager's pop-out. Show the window's first page in a small window of
 /// `size` (zero when the extension gave none), and set the window's delegate: it hears when
@@ -194,6 +210,11 @@ NS_SWIFT_UI_ACTOR
                       completion:(void (^)(NSArray<NSURL*>* _Nullable files))completion;
 /// A download started. Report its progress through `download.observer`, which the delegate sets.
 - (void)page:(id<AXOPage>)page didStartDownload:(id<AXODownload>)download;
+@optional
+/// A key press the page didn't use, such as a ⌘ shortcut: the page sees key presses first while
+/// it has keyboard focus. Return `YES` if the app used it, for example as a menu shortcut
+/// (`-[NSMenu performKeyEquivalent:]`). Without this, unused key presses are dropped.
+- (BOOL)page:(id<AXOPage>)page didNotHandleKeyEvent:(NSEvent*)event;
 @end
 
 /// One tab's page: a Chromium `WebContents` and its view.
@@ -317,6 +338,22 @@ NS_SWIFT_UI_ACTOR
 @property(nonatomic, readonly, getter=isEnabled) BOOL enabled;
 /// Whether clicking it opens a popup.
 @property(nonatomic, readonly) BOOL hasPopup;
+@end
+
+/// A keyboard shortcut an extension declares, as `NSMenuItem` takes it.
+NS_SWIFT_UI_ACTOR
+@protocol AXOExtensionCommand <NSObject>
+/// The extension the shortcut belongs to.
+@property(nonatomic, readonly) NSString* extensionIdentifier;
+/// `_execute_action` (click the extension's toolbar button), or a name the extension chose.
+@property(nonatomic, readonly) NSString* name;
+/// What the shortcut does, for its menu item: the manifest's description, or for
+/// `_execute_action` without one, the extension's name.
+@property(nonatomic, readonly) NSString* title;
+/// The key, as an `NSMenuItem` key equivalent.
+@property(nonatomic, readonly) NSString* keyEquivalent;
+/// The modifier keys.
+@property(nonatomic, readonly) NSEventModifierFlags modifierFlags;
 @end
 
 /// An extension's popup, open. Show `view` in a popover; it sizes itself to its content.

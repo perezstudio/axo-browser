@@ -40,6 +40,33 @@ public struct ChromiumToolbarButton {
     public var hasPopup: Bool
 }
 
+/// A keyboard shortcut an extension declares (`commands` in its manifest), as `NSMenuItem`
+/// takes it: an uppercase ``keyEquivalent`` means Shift.
+public struct ChromiumExtensionCommand: Equatable {
+    /// The extension the shortcut belongs to.
+    public var extensionID: String
+    /// `_execute_action` (click the extension's button), or a name the extension chose.
+    public var name: String
+    /// What the shortcut does.
+    public var title: String
+    /// The key.
+    public var keyEquivalent: String
+    /// The modifier keys besides Shift for an uppercase key.
+    public var modifierFlags: NSEvent.ModifierFlags
+
+    /// Whether this is the shortcut that clicks the extension's toolbar button.
+    public var isActionCommand: Bool { name == "_execute_action" }
+
+    /// Creates the description of a shortcut.
+    public init(extensionID: String, name: String, title: String, keyEquivalent: String, modifierFlags: NSEvent.ModifierFlags) {
+        self.extensionID = extensionID
+        self.name = name
+        self.title = title
+        self.keyEquivalent = keyEquivalent
+        self.modifierFlags = modifierFlags
+    }
+}
+
 /// An extension's popup, open. Show ``view`` in a popover sized to ``preferredSize``.
 @MainActor
 public final class ChromiumExtensionPopup {
@@ -108,6 +135,25 @@ extension ChromiumEngine {
     public func installPackage(at url: URL, profileID: Profile.ID) async throws -> String {
         guard let profile = readyProfile(profileID) else { throw ChromiumEngineError.notReady }
         return try await profile.installPackage(at: url)
+    }
+
+    /// The keyboard shortcuts, with keys, of a profile's enabled extensions.
+    public func extensionCommands(profileID: Profile.ID) -> [ChromiumExtensionCommand] {
+        guard let profile = readyProfile(profileID) else { return [] }
+        return profile.extensionCommands.map {
+            ChromiumExtensionCommand(
+                extensionID: $0.extensionIdentifier, name: $0.name, title: $0.title,
+                keyEquivalent: $0.keyEquivalent, modifierFlags: $0.modifierFlags
+            )
+        }
+    }
+
+    /// Runs an extension's command with `page` as the selected tab, as its shortcut would, and
+    /// returns the popup it opened (for `_execute_action`), or `nil`.
+    public func performExtensionCommand(_ name: String, extensionID: String, profileID: Profile.ID, page: (any EnginePage)?) async -> ChromiumExtensionPopup? {
+        guard let profile = readyProfile(profileID), let enginePage = (page as? ChromiumPage)?.page else { return nil }
+        let popup = await profile.performExtensionCommand(name, extension: extensionID, on: enginePage, window: engineWindow(for: profileID))
+        return popup.map(ChromiumExtensionPopup.init)
     }
 
     /// The toolbar buttons of a profile's enabled extensions, for `page` (the selected tab's).

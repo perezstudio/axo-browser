@@ -117,6 +117,28 @@ struct ChromiumEngineTests {
         #expect(closed == [tab.id])
     }
 
+    @Test func keysThePageDidNotUseGoToTheMenu() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let page = engine.makePage(profileID: profileID)
+        let fake = try #require(FakePage.made.last)
+        var handled: [String] = []
+        let original = ChromiumPage.handleUnusedKeyEvent
+        ChromiumPage.handleUnusedKeyEvent = { handled.append($0.charactersIgnoringModifiers ?? ""); return true }
+        defer { ChromiumPage.handleUnusedKeyEvent = original }
+        let shortcut = try #require(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0, windowNumber: 0,
+            context: nil, characters: "l", charactersIgnoringModifiers: "l", isARepeat: false, keyCode: 37
+        ))
+
+        let used = try #require(fake.delegate?.page?(fake, didNotHandleKeyEvent: shortcut))
+        #expect(used)
+        #expect(handled == ["l"], "⌘L reaches Axo's menu while the page has focus")
+        withExtendedLifetime(page) {}
+    }
+
     @Test func aFailedStartReportsWhy() {
         FakeAXOEngine.failure = FakeEngineError()
         let scheduled = Scheduled()

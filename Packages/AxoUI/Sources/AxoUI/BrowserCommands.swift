@@ -243,6 +243,19 @@ public struct BrowserCommands: Commands {
                     }
                 }
             }
+            // Extensions' keyboard shortcuts work as menu items, so they also work while a page
+            // has keyboard focus, and the menu shows which keys do what.
+            if let model, let profileID = model.space?.profileID,
+               let shortcuts = model.extensionToolbar?.shortcuts(profileID: profileID), !shortcuts.isEmpty {
+                Menu("Extension Shortcuts") {
+                    ForEach(shortcuts) { shortcut in
+                        Button(shortcut.title) {
+                            model.extensionToolbar?.performShortcut(shortcut, profileID: profileID, tabID: model.selectedTabID)
+                        }
+                        .keyboardShortcut(KeyEquivalent(shortcut.key), modifiers: shortcut.modifiers)
+                    }
+                }
+            }
         }
         CommandMenu("Spaces") {
             Button("New Space…") { model?.isCreatingSpace = true }

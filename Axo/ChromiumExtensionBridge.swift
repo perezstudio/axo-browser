@@ -6,6 +6,7 @@ import AxoUI
 import AxoWeb
 import Foundation
 import Observation
+import SwiftUI
 
 /// Connects Axo's toolbar and Extensions window to extensions in the Chromium engine (Phase 2 of
 /// `docs/chromium-engine.md`), as ``ExtensionBridge`` does for WebKit's.
@@ -53,6 +54,45 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
             guard let popup = await engine.performExtensionAction(extensionID, profileID: profileID, page: page) else { return }
             present(popup)
         }
+    }
+
+    func shortcuts(profileID: Profile.ID) -> [ExtensionShortcut] {
+        _ = revision
+        let names = Dictionary(engine.extensions(profileID: profileID).map { ($0.id, $0.name) }) { first, _ in first }
+        return engine.extensionCommands(profileID: profileID).compactMap { command in
+            guard let shortcut = Self.shortcut(for: command) else { return nil }
+            var result = shortcut
+            // Named commands say what they do; say which extension they belong to as well.
+            if !command.isActionCommand, let name = names[command.extensionID] {
+                result.title = "\(name): \(command.title)"
+            }
+            return result
+        }
+    }
+
+    func performShortcut(_ shortcut: ExtensionShortcut, profileID: Profile.ID, tabID: AxoCore.Tab.ID?) {
+        let page = page(for: tabID)
+        Task {
+            guard let popup = await engine.performExtensionCommand(shortcut.name, extensionID: shortcut.extensionID, profileID: profileID, page: page) else { return }
+            present(popup)
+        }
+    }
+
+    /// A menu item's shortcut for an extension's command. `NSMenuItem` key equivalents mean Shift
+    /// with an uppercase letter; SwiftUI wants the lowercase letter and Shift.
+    static func shortcut(for command: ChromiumExtensionCommand) -> ExtensionShortcut? {
+        guard command.keyEquivalent.count == 1, let key = command.keyEquivalent.first else { return nil }
+        var modifiers: EventModifiers = []
+        if command.modifierFlags.contains(.command) { modifiers.insert(.command) }
+        if command.modifierFlags.contains(.option) { modifiers.insert(.option) }
+        if command.modifierFlags.contains(.control) { modifiers.insert(.control) }
+        if command.modifierFlags.contains(.shift) { modifiers.insert(.shift) }
+        var lowered = key
+        if key.isUppercase, let lower = key.lowercased().first {
+            lowered = lower
+            modifiers.insert(.shift)
+        }
+        return ExtensionShortcut(extensionID: command.extensionID, name: command.name, title: command.title, key: lowered, modifiers: modifiers)
     }
 
     private func page(for tabID: AxoCore.Tab.ID?) -> (any EnginePage)? {

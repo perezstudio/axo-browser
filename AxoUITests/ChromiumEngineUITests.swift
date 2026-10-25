@@ -72,6 +72,47 @@ final class ChromiumEngineUITests: XCTestCase {
         XCTAssertTrue(app.popovers.firstMatch.staticTexts["Hello from Axo Helper"].waitForExistence(timeout: 15))
     }
 
+    /// An extension's keyboard shortcuts (chrome.commands) are menu items under Tabs › Extension
+    /// Shortcuts, and pressing them while the page has keyboard focus runs them: ⌘⇧Y reaches the
+    /// extension's chrome.commands.onCommand (which sets its badge), and ⌘⇧U opens its popup.
+    @MainActor
+    func testExtensionShortcutsRunWhileThePageHasFocus() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "AxoUITestShortcuts-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try """
+        {"name": "Axo Shortcuts", "version": "1.0", "manifest_version": 3, "description": "UI test extension.",
+         "action": {"default_title": "Axo Shortcuts", "default_popup": "popup.html"},
+         "background": {"service_worker": "bg.js"},
+         "commands": {
+           "_execute_action": {"suggested_key": {"default": "Ctrl+Shift+U"}},
+           "mark": {"suggested_key": {"default": "Ctrl+Shift+Y"}, "description": "Mark the button"}}}
+        """.write(to: folder.appending(path: "manifest.json"), atomically: true, encoding: .utf8)
+        try "chrome.commands.onCommand.addListener(() => chrome.action.setBadgeText({ text: 'OK' }));"
+            .write(to: folder.appending(path: "bg.js"), atomically: true, encoding: .utf8)
+        try "<!doctype html><title>Shortcuts</title><body style='width:240px'><p>Opened by a shortcut</p></body>"
+            .write(to: folder.appending(path: "popup.html"), atomically: true, encoding: .utf8)
+
+        let app = launchChromiumApp(extensionFolder: folder)
+        XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 10))
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,<title>Page</title><p>Page</p>\n")
+        let button = app.buttons.matching(NSPredicate(format: "identifier == 'extensionButton' AND label CONTAINS 'Axo Shortcuts'")).firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 30))
+
+        let markItem = app.menuBars.menuItems["Axo Shortcuts: Mark the button"]
+        XCTAssertTrue(markItem.waitForExistence(timeout: 10), "The shortcut is a menu item")
+
+        // Keyboard focus in the page, where Chromium sees key presses first.
+        app.webViews.firstMatch.exists ? app.webViews.firstMatch.click() : app.windows.firstMatch.click()
+        app.typeKey("y", modifierFlags: [.command, .shift])
+        expectation(for: NSPredicate(format: "label CONTAINS 'OK'"), evaluatedWith: button)
+        waitForExpectations(timeout: 15)
+
+        app.typeKey("u", modifierFlags: [.command, .shift])
+        XCTAssertTrue(app.popovers.firstMatch.waitForExistence(timeout: 15))
+        XCTAssertTrue(app.popovers.firstMatch.staticTexts["Opened by a shortcut"].waitForExistence(timeout: 15))
+    }
+
     /// A tab loads its page in Chromium. The page names the engine from its user agent, which
     /// says "Chrome/" only in Chromium, so the test can't pass on WebKit.
     @MainActor

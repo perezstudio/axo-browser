@@ -229,6 +229,17 @@ extension ChromiumPage: AXOPageDelegate {
         downloads[key] = observer
         download.observer = observer
     }
+
+    /// Key presses the page didn't use, such as ⌘ shortcuts, go to the app's menu, so Axo's
+    /// shortcuts (and extensions' shortcuts in it) work while the page has keyboard focus.
+    func page(_ page: any AXOPage, didNotHandleKeyEvent event: NSEvent) -> Bool {
+        ChromiumPage.handleUnusedKeyEvent(event)
+    }
+
+    /// Where unused key presses go: the app's main menu. Tests replace it.
+    static var handleUnusedKeyEvent: (NSEvent) -> Bool = { event in
+        NSApp.mainMenu?.performKeyEquivalent(with: event) ?? false
+    }
 }
 
 /// Reports a Chromium download's progress to its ``DownloadItem``.

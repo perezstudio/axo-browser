@@ -37,6 +37,31 @@ public struct ExtensionToolbarItem: Identifiable, Equatable {
     }
 }
 
+/// An extension's keyboard shortcut (`chrome.commands`), shown as a menu item with its keys.
+public struct ExtensionShortcut: Identifiable, Equatable {
+    /// The extension and command, together.
+    public var id: String { "\(extensionID)/\(name)" }
+    /// The extension the shortcut belongs to.
+    public var extensionID: String
+    /// The command's name, which the provider runs.
+    public var name: String
+    /// The menu item's title.
+    public var title: String
+    /// The key, lowercase for letters (Shift is in ``modifiers``).
+    public var key: Character
+    /// The modifier keys.
+    public var modifiers: EventModifiers
+
+    /// Creates a shortcut.
+    public init(extensionID: String, name: String, title: String, key: Character, modifiers: EventModifiers) {
+        self.extensionID = extensionID
+        self.name = name
+        self.title = title
+        self.key = key
+        self.modifiers = modifiers
+    }
+}
+
 /// Supplies extension toolbar buttons and runs them. AxoExtensions provides the real
 /// implementation; the app connects them.
 @MainActor
@@ -46,6 +71,18 @@ public protocol ExtensionToolbarProviding: AnyObject {
     func toolbarItems(profileID: Profile.ID, tabID: AxoCore.Tab.ID?) -> [ExtensionToolbarItem]
     /// Clicks a button: the extension shows its popup or handles the click.
     func performAction(extensionID: String, profileID: Profile.ID, tabID: AxoCore.Tab.ID?)
+    /// The keyboard shortcuts of a profile's extensions. Reading this from a view must make the
+    /// view update when they change.
+    func shortcuts(profileID: Profile.ID) -> [ExtensionShortcut]
+    /// Runs a shortcut, as pressing its keys does, with the given tab as the active one.
+    func performShortcut(_ shortcut: ExtensionShortcut, profileID: Profile.ID, tabID: AxoCore.Tab.ID?)
+}
+
+extension ExtensionToolbarProviding {
+    /// No shortcuts, for providers whose engine doesn't have them.
+    public func shortcuts(profileID: Profile.ID) -> [ExtensionShortcut] { [] }
+    /// Does nothing, for providers whose engine doesn't have shortcuts.
+    public func performShortcut(_ shortcut: ExtensionShortcut, profileID: Profile.ID, tabID: AxoCore.Tab.ID?) {}
 }
 // Mac only for now; iPhone and iPad have their own chrome.
 #if os(macOS)
