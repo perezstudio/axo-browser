@@ -20,7 +20,9 @@ public final class BrowserModel {
     /// The Space shown in the sidebar, once ``start()`` finishes.
     public private(set) var space: Space?
     /// The Space's tabs in sidebar order, kept current as the database changes.
-    public internal(set) var tabs: [AxoCore.Tab] = []
+    public internal(set) var tabs: [AxoCore.Tab] = [] {
+        didSet { syncEngineWindow() }
+    }
     /// The Space's folders, kept current as the database changes.
     public private(set) var folders: [Folder] = []
     /// The Space's split views, kept current as the database changes.
@@ -253,6 +255,20 @@ public final class BrowserModel {
             } else {
                 Task { await self.openTab(url: url, at: .after(sourceID)) }
             }
+        }
+        // Tabs the engine changed on its own (Chromium's extension APIs) follow in the sidebar.
+        pool.onEngineOpenedPage = { [weak self] opened in
+            guard let self else {
+                opened.page.close()
+                return
+            }
+            Task { await self.adoptEngineOpenedPage(opened) }
+        }
+        pool.onEngineClosedTab = { [weak self] id in
+            Task { await self?.closeTab(id) }
+        }
+        pool.onEngineActivatedTab = { [weak self] id in
+            self?.select(id)
         }
         pool.onLinkClick = { [weak self] click in
             self?.handleLinkClick(click) ?? false
@@ -536,6 +552,49 @@ public final class BrowserModel {
         }
         pool.page(for: tab, profileID: space.profileID)
         selectedPage = pool.state(for: tab.id)
+        // The selected tab may have just become live, so it joins the engine's window now.
+        syncEngineWindow()
+    }
+
+    // MARK: Engine window
+
+    /// Tells the engine which tabs the window shows (the Space's, in sidebar order) and which is
+    /// selected. Chromium's extension APIs see them as the window's tabs; WebKit ignores it.
+    func syncEngineWindow() {
+        guard let space else { return }
+        let ids = tabs.map(\.id)
+        let selected = selectedTabID.flatMap { ids.contains($0) ? $0 : nil }
+        pool.setWindowTabs(ids, selected: selected, profileID: space.profileID)
+    }
+
+    /// Makes a sidebar tab for a page the engine opened on its own (an extension's
+    /// `chrome.tabs.create`), keeping the page that's already loading. It goes right after the
+    /// tab before it in the window when that tab is an unpinned sidebar tab, at the end otherwise.
+    func adoptEngineOpenedPage(_ opened: EngineOpenedPage) async {
+        guard let space, space.profileID == opened.profileID else {
+            opened.page.close()
+            return
+        }
+        let position: TabPosition = if let after = opened.after,
+                                       tabs.contains(where: { $0.id == after && !$0.isPinned && $0.folderID == nil }) {
+            .after(after)
+        } else {
+            .end
+        }
+        do {
+            let tab = try await store.openTab(
+                url: opened.page.url ?? URL(string: "about:blank")!,
+                title: opened.page.title,
+                in: space.id,
+                at: position
+            )
+            pool.adopt(opened.page, as: tab, profileID: opened.profileID)
+            tabs = try await store.tabs(in: space.id)
+            onTabEvent?(.opened(tab.id))
+        } catch {
+            opened.page.close()
+            report(error, "Axo couldn't open the tab an extension asked for.")
+        }
     }
 
     // MARK: Tabs

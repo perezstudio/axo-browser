@@ -6,7 +6,7 @@
 // match, and AXO_ENGINE_API_VERSION says which version a framework implements.
 //
 // Classes: AXOApplication (an NSApplication subclass), AXOEngine, AXOEngineConfiguration,
-// AXOProfile, AXOPage, and AXODownload, each adopting the protocol of the same name. Every class
+// AXOProfile, AXOWindow, AXOPage, and AXODownload, each adopting the protocol of the same name. Every class
 // is main-thread only, like AppKit, and completion handlers run on the main thread.
 //
 // Every protocol is NS_SWIFT_UI_ACTOR, so Swift treats the API as main-actor isolated, which it
@@ -14,12 +14,14 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 5
+#define AXO_ENGINE_API_VERSION 6
 
 NS_ASSUME_NONNULL_BEGIN
 
 @protocol AXOPage;
 @protocol AXOPageDelegate;
+@protocol AXOWindow;
+@protocol AXOWindowDelegate;
 @protocol AXODownload;
 
 /// The domain of errors the engine reports.
@@ -141,7 +143,7 @@ NS_SWIFT_UI_ACTOR
 /// One tab's page: a Chromium `WebContents` and its view.
 NS_SWIFT_UI_ACTOR
 @protocol AXOPage <NSObject>
-/// A new, empty page in `profile`.
+/// A new, empty page in `profile`, outside any window until a window's `pages` includes it.
 + (id<AXOPage>)pageWithProfile:(id<AXOProfile>)profile NS_SWIFT_NAME(page(with:));
 
 @property(nonatomic, weak, nullable) id<AXOPageDelegate> delegate;
@@ -191,6 +193,45 @@ NS_SWIFT_UI_ACTOR
 
 /// Stops the page and releases its `WebContents`. The page is unusable afterwards.
 - (void)close;
+@end
+
+// MARK: - Windows
+
+/// What Chrome's extension APIs see as one browser window: a hidden Chrome window holding the
+/// tabs of the Space an Axo window shows. A page is in at most one window; pages in none (other
+/// Spaces) stay alive but extensions don't see them.
+NS_SWIFT_UI_ACTOR
+@protocol AXOWindow <NSObject>
+/// A new, empty window for `profile`'s pages.
++ (id<AXOWindow>)windowWithProfile:(id<AXOProfile>)profile NS_SWIFT_NAME(window(with:));
+
+/// Hears about tabs Chrome adds, closes, moves, or activates in this window (extensions,
+/// `window.open`).
+@property(nonatomic, weak, nullable) id<AXOWindowDelegate> delegate;
+
+/// The window's pages, in order. Setting it adds, removes, and reorders tabs to match; pages
+/// that leave stay alive. Pages from another profile are ignored.
+@property(nonatomic, copy) NSArray<id<AXOPage>>* pages;
+
+/// The page the person is looking at, if it's in `pages`.
+@property(nonatomic, weak, nullable) id<AXOPage> activePage;
+
+/// Closes the window. Its pages stay alive, outside any window.
+- (void)close;
+@end
+
+/// Changes Chrome makes to a window's tabs on its own, so Axo's sidebar can follow. Changes Axo
+/// makes through `pages` and `activePage` aren't reported back.
+NS_SWIFT_UI_ACTOR
+@protocol AXOWindowDelegate <NSObject>
+/// Chrome added a tab, already loading (`chrome.tabs.create`, for one). Axo should show it.
+- (void)window:(id<AXOWindow>)window didOpenPage:(id<AXOPage>)page atIndex:(NSInteger)index;
+/// Chrome closed one of the window's pages (`chrome.tabs.remove`, for one). It's unusable now.
+- (void)window:(id<AXOWindow>)window didClosePage:(id<AXOPage>)page;
+/// Chrome moved a page to `index`.
+- (void)window:(id<AXOWindow>)window didMovePage:(id<AXOPage>)page toIndex:(NSInteger)index;
+/// Chrome made a page the active one (`chrome.tabs.update({active: true})`, for one).
+- (void)window:(id<AXOWindow>)window didActivatePage:(id<AXOPage>)page;
 @end
 
 // MARK: - Downloads

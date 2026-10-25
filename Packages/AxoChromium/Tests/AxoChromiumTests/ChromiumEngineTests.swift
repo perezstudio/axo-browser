@@ -39,7 +39,7 @@ struct ChromiumEngineTests {
     @Test func classesAreFoundAndTheirAPIVersionChecked() throws {
         let fakes: [String: AnyClass] = [
             "AXOEngine": FakeAXOEngine.self, "AXOEngineConfiguration": FakeConfiguration.self,
-            "AXOProfile": FakeProfile.self, "AXOPage": FakePage.self,
+            "AXOProfile": FakeProfile.self, "AXOPage": FakePage.self, "AXOWindow": FakeWindow.self,
         ]
         let found = try ChromiumFramework.classes { fakes[$0] }.get()
         #expect(ObjectIdentifier(found.page) == ObjectIdentifier(FakePage.self))
@@ -197,6 +197,63 @@ struct ChromiumEngineTests {
         let woken = try #require(FakePage.made.last)
         #expect(woken !== first)
         #expect(woken.loads == [url], "Chromium doesn't save history yet, so it reloads the URL")
+    }
+
+    // MARK: Windows
+
+    @Test func windowListsSentBeforeTheEngineIsReadyApplyOnceItIs() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        let first = engine.makePage(profileID: profileID), second = engine.makePage(profileID: profileID)
+        engine.setWindowPages([second, first], active: first, profileID: profileID)
+        #expect(FakeWindow.made.isEmpty)
+
+        scheduled.run()
+        let window = try #require(FakeWindow.made.first)
+        #expect(window.profile.identifier == profileID)
+        let pages = FakePage.made
+        #expect(window.pages.map { ObjectIdentifier($0) } == [pages[1], pages[0]].map { ObjectIdentifier($0) })
+        #expect(window.activePage === pages[0])
+
+        engine.setWindowPages([first], active: nil, profileID: profileID)
+        #expect(FakeWindow.made.count == 1, "One window per profile")
+        #expect(window.pages.map { ObjectIdentifier($0) } == [ObjectIdentifier(pages[0])])
+    }
+
+    @Test func tabsChromeOpensClosesAndSelectsReachThePool() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine)
+        let tab = Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial)
+        pool.page(for: tab, profileID: profileID)
+        pool.setWindowTabs([tab.id], selected: tab.id, profileID: profileID)
+        let window = try #require(FakeWindow.made.first)
+        var opened: [EngineOpenedPage] = []
+        var closed: [Tab.ID] = [], activated: [Tab.ID] = []
+        pool.onEngineOpenedPage = { opened.append($0) }
+        pool.onEngineClosedTab = { closed.append($0) }
+        pool.onEngineActivatedTab = { activated.append($0) }
+
+        // An extension opens a tab: Chrome made its page, and Axo adopts it.
+        let chromePage = FakePage(profile: FakeProfile.made[profileID]!)
+        chromePage.url = URL(string: "https://example.com/opened")
+        window.delegate?.window(window, didOpen: chromePage, at: 1)
+        let event = try #require(opened.first)
+        #expect(event.after == tab.id)
+        #expect(event.profileID == profileID)
+        let adopted = Tab(spaceID: tab.spaceID, url: chromePage.url!, sortKey: SortKey.initial)
+        pool.adopt(event.page, as: adopted, profileID: profileID)
+        #expect(pool.livePage(for: adopted.id)?.view.subviews.first === chromePage.view, "Its view is the page Chrome made")
+
+        window.delegate?.window(window, didActivate: chromePage)
+        #expect(activated == [adopted.id])
+
+        window.delegate?.window(window, didClose: chromePage)
+        #expect(closed == [adopted.id])
+        #expect(!chromePage.isClosed, "Chrome already closed it")
     }
 
     @Test func profileDataGoesToTheEngine() async throws {

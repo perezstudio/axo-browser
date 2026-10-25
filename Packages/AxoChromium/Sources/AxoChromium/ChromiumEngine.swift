@@ -3,8 +3,9 @@ import AxoEngineAPI
 import AxoWeb
 import Foundation
 
-/// The Chromium engine as an AxoWeb ``WebEngine``: one Chromium profile per Axo profile, and an
-/// `AXOPage` per tab.
+/// The Chromium engine as an AxoWeb ``WebEngine``: one Chromium profile per Axo profile, an
+/// `AXOPage` per tab, and an `AXOWindow` per profile holding the current Space's tabs, which is
+/// what Chrome's extension APIs see as the window.
 ///
 /// The engine starts a moment after launch (see ``start()``), but the pool may make pages before
 /// that. Those pages show an empty view and remember what they were asked to load; they attach
@@ -35,6 +36,17 @@ public final class ChromiumEngine: WebEngine {
     private var running: (any AXOEngine)?
     /// Pages made before the engine was ready, attached once it is.
     private var waitingPages: [ChromiumPage] = []
+
+    public weak var delegate: (any WebEngineDelegate)?
+
+    /// Each profile's engine window.
+    private var windows: [Profile.ID: any AXOWindow] = [:]
+    /// Window lists sent before the engine was ready, applied once it is.
+    private var waitingWindowPages: [Profile.ID: (pages: [any EnginePage], active: (any EnginePage)?)] = [:]
+    /// The Axo page wrapping each engine page, for events about engine pages.
+    private let pagesByEnginePage = NSMapTable<AnyObject, ChromiumPage>.weakToWeakObjects()
+    /// Hears the windows' events. Kept for the engine's lifetime.
+    private lazy var windowEvents = WindowEvents(engine: self)
 
     /// Creates an engine.
     ///
@@ -83,6 +95,11 @@ public final class ChromiumEngine: WebEngine {
                     let pages = waitingPages
                     waitingPages = []
                     pages.forEach(attach)
+                    let windowPages = waitingWindowPages
+                    waitingWindowPages = [:]
+                    for (profileID, request) in windowPages {
+                        setWindowPages(request.pages, active: request.active, profileID: profileID)
+                    }
                 } else {
                     setState(.failed(error?.localizedDescription ?? "Chromium didn't start."))
                 }
@@ -98,7 +115,52 @@ public final class ChromiumEngine: WebEngine {
     private func attach(_ page: ChromiumPage) {
         guard !page.isClosed else { return }
         let profile = classes.profile.profile(withIdentifier: page.profileID)
-        page.attach(classes.page.page(with: profile))
+        let enginePage = classes.page.page(with: profile)
+        pagesByEnginePage.setObject(page, forKey: enginePage)
+        page.attach(enginePage)
+    }
+
+    /// The profile's engine window, made on first use.
+    private func window(for profileID: Profile.ID) -> any AXOWindow {
+        if let window = windows[profileID] { return window }
+        let window = classes.window.window(with: classes.profile.profile(withIdentifier: profileID))
+        window.delegate = windowEvents
+        windows[profileID] = window
+        return window
+    }
+
+    public func setWindowPages(_ pages: [any EnginePage], active: (any EnginePage)?, profileID: Profile.ID) {
+        guard state == .ready else {
+            waitingWindowPages[profileID] = (pages, active)
+            return
+        }
+        let window = window(for: profileID)
+        window.pages = pages.compactMap { ($0 as? ChromiumPage)?.page }
+        window.activePage = (active as? ChromiumPage)?.page
+    }
+
+    // MARK: Window events
+
+    fileprivate func window(_ window: any AXOWindow, didOpen enginePage: any AXOPage, at index: Int) {
+        guard let profileID = windows.first(where: { $0.value === window })?.key else {
+            enginePage.close()
+            return
+        }
+        let page = ChromiumPage(profileID: profileID)
+        pagesByEnginePage.setObject(page, forKey: enginePage)
+        page.attach(enginePage)
+        delegate?.engine(self, didOpen: page, profileID: profileID, at: index)
+    }
+
+    fileprivate func window(_ window: any AXOWindow, didClose enginePage: any AXOPage) {
+        guard let page = pagesByEnginePage.object(forKey: enginePage) else { return }
+        page.closedByEngine()
+        delegate?.engine(self, didClose: page)
+    }
+
+    fileprivate func window(_ window: any AXOWindow, didActivate enginePage: any AXOPage) {
+        guard let page = pagesByEnginePage.object(forKey: enginePage) else { return }
+        delegate?.engine(self, didActivate: page)
     }
 
     // MARK: WebEngine
@@ -123,6 +185,34 @@ public final class ChromiumEngine: WebEngine {
 
     public func removeWebsiteData(for profileID: Profile.ID) async throws {
         guard state == .ready else { return }
+        windows.removeValue(forKey: profileID)?.close()
         try await classes.profile.removeProfile(withIdentifier: profileID)
     }
+}
+
+/// Passes `AXOWindowDelegate` events to the engine. A separate object, because the protocol needs
+/// an `NSObject`.
+@MainActor
+private final class WindowEvents: NSObject, AXOWindowDelegate {
+    private weak var engine: ChromiumEngine?
+
+    init(engine: ChromiumEngine) {
+        self.engine = engine
+    }
+
+    func window(_ window: any AXOWindow, didOpen page: any AXOPage, at index: Int) {
+        engine?.window(window, didOpen: page, at: index)
+    }
+
+    func window(_ window: any AXOWindow, didClose page: any AXOPage) {
+        engine?.window(window, didClose: page)
+    }
+
+    func window(_ window: any AXOWindow, didActivate page: any AXOPage) {
+        engine?.window(window, didActivate: page)
+    }
+
+    /// Not passed on yet: placing an extension's move among Axo's pinned tabs, folders, and splits
+    /// needs its own design.
+    func window(_ window: any AXOWindow, didMove page: any AXOPage, to index: Int) {}
 }

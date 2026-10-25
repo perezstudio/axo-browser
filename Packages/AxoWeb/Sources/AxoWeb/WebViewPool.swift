@@ -85,6 +85,20 @@ public final class WebViewPool {
     /// `target="_blank"` or `window.open`). The second argument is the tab that asked.
     public var onOpenInNewTab: ((URL, Tab.ID) -> Void)?
 
+    /// Called when the engine opened a page on its own (an extension's `chrome.tabs.create`).
+    /// Make a tab for it and call ``adopt(_:as:profileID:)``; without a handler the page closes.
+    public var onEngineOpenedPage: ((EngineOpenedPage) -> Void)?
+
+    /// Called when the engine closed a tab's page on its own (an extension's `chrome.tabs.remove`).
+    /// The page is already gone; close the tab.
+    public var onEngineClosedTab: ((Tab.ID) -> Void)?
+
+    /// Called when the engine selected a tab on its own (an extension's `chrome.tabs.update`).
+    public var onEngineActivatedTab: ((Tab.ID) -> Void)?
+
+    /// The tabs each profile's window last showed, as sent to ``setWindowTabs(_:selected:profileID:)``.
+    private var windowTabs: [Profile.ID: [Tab.ID]] = [:]
+
     private let now: () -> Date
     private var live: [Tab.ID: LiveTab] = [:]
     private var hibernated: [Tab.ID: HibernatedTab] = [:]
@@ -117,6 +131,7 @@ public final class WebViewPool {
         self.configuration = configuration
         self.downloads = downloads
         self.now = now
+        engine.delegate = self
     }
 
     isolated deinit {
@@ -150,6 +165,34 @@ public final class WebViewPool {
             page.load(tab.url)
         }
         return page
+    }
+
+    /// Makes `page`, which the engine opened on its own, the live page of `tab`, without
+    /// loading anything. Call it from ``onEngineOpenedPage`` once the tab exists.
+    public func adopt(_ page: any EnginePage, as tab: Tab, profileID: Profile.ID) {
+        if let existing = live[tab.id], existing.page !== page {
+            existing.tearDown()
+        }
+        hibernated[tab.id] = nil
+        live[tab.id] = LiveTab(tabID: tab.id, profileID: profileID, page: page, pool: self, lastUsed: now())
+    }
+
+    /// Tells the engine which tabs a window shows, in sidebar order, and which is selected: the
+    /// Space's tabs. Only live tabs are passed on; the others have no page. Engines with a window
+    /// model (Chromium's extension APIs) show them as that window's tabs.
+    public func setWindowTabs(_ tabIDs: [Tab.ID], selected: Tab.ID?, profileID: Profile.ID) {
+        let liveIDs = tabIDs.filter { live[$0] != nil }
+        windowTabs[profileID] = liveIDs
+        engine.setWindowPages(
+            liveIDs.compactMap { live[$0]?.page },
+            active: selected.flatMap { live[$0]?.page },
+            profileID: profileID
+        )
+    }
+
+    /// The tab whose live page is `page`.
+    private func tabID(of page: any EnginePage) -> Tab.ID? {
+        live.first { $0.value.page === page }?.key
     }
 
     /// The tab's page if it is live, without creating one.
@@ -417,6 +460,51 @@ public final class WebViewPool {
             discard(tabID)
         }
         try? await engine.removeWebsiteData(for: profileID)
+    }
+}
+
+// MARK: - Engine events
+
+extension WebViewPool: WebEngineDelegate {
+    public func engine(_ engine: any WebEngine, didOpen page: any EnginePage, profileID: Profile.ID, at index: Int) {
+        guard let handler = onEngineOpenedPage else {
+            page.close()
+            return
+        }
+        let window = windowTabs[profileID] ?? []
+        let previous = index > 0 && index - 1 < window.count ? window[index - 1] : nil
+        handler(EngineOpenedPage(page: page, profileID: profileID, after: previous))
+    }
+
+    public func engine(_ engine: any WebEngine, didClose page: any EnginePage) {
+        guard let tabID = tabID(of: page) else { return }
+        // The engine already closed the page; forget it without closing it again.
+        live[tabID] = nil
+        hibernated[tabID] = nil
+        visibleCounts[tabID] = nil
+        onEngineClosedTab?(tabID)
+    }
+
+    public func engine(_ engine: any WebEngine, didActivate page: any EnginePage) {
+        guard let tabID = tabID(of: page) else { return }
+        onEngineActivatedTab?(tabID)
+    }
+}
+
+/// A page the engine opened on its own, for ``WebViewPool/onEngineOpenedPage``.
+public struct EngineOpenedPage {
+    /// The page, already loading. Pass it to ``WebViewPool/adopt(_:as:profileID:)``.
+    public let page: any EnginePage
+    /// The profile whose window it opened in.
+    public let profileID: Profile.ID
+    /// The tab before it in the window, if any, so it can go next to it in the sidebar.
+    public let after: Tab.ID?
+
+    /// Creates the description of an opened page.
+    public init(page: any EnginePage, profileID: Profile.ID, after: Tab.ID?) {
+        self.page = page
+        self.profileID = profileID
+        self.after = after
     }
 }
 

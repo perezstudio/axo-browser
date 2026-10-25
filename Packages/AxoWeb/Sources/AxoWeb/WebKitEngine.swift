@@ -22,6 +22,9 @@ public final class WebKitEngine: WebEngine {
     private let pages = NSHashTable<WebKitPage>.weakObjects()
     private let downloads = WebKitDownloads()
 
+    /// WebKit never changes tabs on its own, so it never calls this.
+    public weak var delegate: (any WebEngineDelegate)?
+
     /// Deletes a profile's stored website data for good. Replace it in tests. WebKit requires the
     /// main thread here (it crashes otherwise), hence `@MainActor`.
     public var removeDataStore: @MainActor (Profile.ID) async throws -> Void = { try await WKWebsiteDataStore.remove(forIdentifier: $0) }

@@ -24,6 +24,7 @@ Axo never links the engine. The framework is around 500 MB, and only machines th
   - `makePage(profileID:)` works before the engine is ready. Those pages show an empty view and remember the URL or history they were asked to load. They attach to Chromium once it is ready; pages closed before then never attach.
   - `clearWebsiteData(for:)` and `removeWebsiteData(for:)` go to the engine's profiles. Deleting profiles isn't supported by the engine yet, so `removeWebsiteData` throws. Before the engine is ready, both do nothing.
   - `setSiteCustomizations(_:)` is ignored until the engine supports them (Phase 3).
+- **Windows.** `setWindowPages(_:active:profileID:)` puts the pages into the profile's `AXOWindow`, made on first use, which is what Chrome's extension APIs see as the window. Lists sent before the engine is ready apply once it is. The window's events (a tab Chrome opened, closed, or activated) reach the pool through the engine's `delegate`; a page Chrome opened is wrapped in a new `ChromiumPage` for the pool to adopt. Moves aren't passed on yet: placing an extension's move among Axo's pinned tabs, folders, and splits needs its own design.
 - **`ChromiumPage`** (internal) is the `EnginePage`:
   - It maps `AXOPageDelegate` events to `EnginePageDelegate`: state, loads, focus, link clicks (`AXOLinkModifiers` uses the same bits as `LinkModifiers`), new tabs, permissions, dialogs and file pickers.
   - It reports downloads to the pool's `DownloadItem`s through a `DownloadObserver`.

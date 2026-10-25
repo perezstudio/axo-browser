@@ -15,6 +15,28 @@ public final class FakeEngine: WebEngine {
     public private(set) var siteCustomizations: [SiteCustomization] = []
     public private(set) var clearedProfiles: [Profile.ID] = []
     public private(set) var removedProfiles: [Profile.ID] = []
+    public weak var delegate: (any WebEngineDelegate)?
+    /// The last window pages and active page the pool sent, by profile.
+    public private(set) var windowPages: [Profile.ID: (pages: [any EnginePage], active: (any EnginePage)?)] = [:]
+
+    public func setWindowPages(_ pages: [any EnginePage], active: (any EnginePage)?, profileID: Profile.ID) {
+        windowPages[profileID] = (pages, active)
+    }
+
+    /// Plays the engine opening `page` on its own, as an extension's `chrome.tabs.create` would.
+    public func openPageOnItsOwn(_ page: any EnginePage, profileID: Profile.ID, at index: Int) {
+        delegate?.engine(self, didOpen: page, profileID: profileID, at: index)
+    }
+
+    /// Plays the engine closing `page` on its own, as `chrome.tabs.remove` would.
+    public func closePageOnItsOwn(_ page: any EnginePage) {
+        delegate?.engine(self, didClose: page)
+    }
+
+    /// Plays the engine selecting `page` on its own.
+    public func activatePageOnItsOwn(_ page: any EnginePage) {
+        delegate?.engine(self, didActivate: page)
+    }
 
     /// Creates an engine with no pages.
     public init() {}

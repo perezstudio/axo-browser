@@ -9,7 +9,7 @@ import Foundation
 @MainActor
 enum FakeEngine {
     static var classes: ChromiumEngineClasses {
-        ChromiumEngineClasses(engine: FakeAXOEngine.self, configuration: FakeConfiguration.self, profile: FakeProfile.self, page: FakePage.self)
+        ChromiumEngineClasses(engine: FakeAXOEngine.self, configuration: FakeConfiguration.self, profile: FakeProfile.self, page: FakePage.self, window: FakeWindow.self)
     }
 
     static func reset() {
@@ -18,6 +18,7 @@ enum FakeEngine {
         FakeAXOEngine.configurations = []
         FakeProfile.made = [:]
         FakePage.made = []
+        FakeWindow.made = []
     }
 }
 
@@ -138,6 +139,28 @@ final class FakePage: NSObject, AXOPage {
 
     func printOperation(with printInfo: NSPrintInfo) -> NSPrintOperation {
         NSPrintOperation(view: view, printInfo: printInfo)
+    }
+
+    func close() { isClosed = true }
+}
+
+final class FakeWindow: NSObject, AXOWindow {
+    static var made: [FakeWindow] = []
+
+    let profile: FakeProfile
+    weak var delegate: (any AXOWindowDelegate)?
+    var pages: [any AXOPage] = []
+    weak var activePage: (any AXOPage)?
+    private(set) var isClosed = false
+
+    init(profile: FakeProfile) {
+        self.profile = profile
+    }
+
+    static func window(with profile: any AXOProfile) -> any AXOWindow {
+        let window = FakeWindow(profile: profile as! FakeProfile)
+        made.append(window)
+        return window
     }
 
     func close() { isClosed = true }

@@ -108,6 +108,16 @@ final class ChromiumPage: NSObject, EnginePage {
         page?.printOperation(with: printInfo) ?? NSPrintOperation(view: view, printInfo: printInfo)
     }
 
+    /// The engine closed the page itself (an extension's `chrome.tabs.remove`). Lets go of it
+    /// without closing it again.
+    func closedByEngine() {
+        isClosed = true
+        page?.delegate = nil
+        page?.view.removeFromSuperview()
+        page = nil
+        pendingLoad = nil
+    }
+
     func close() {
         isClosed = true
         page?.delegate = nil

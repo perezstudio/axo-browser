@@ -17,13 +17,22 @@ public struct ChromiumEngineClasses {
     public var profile: any AXOProfile.Type
     /// Pages (`AXOPage`).
     public var page: any AXOPage.Type
+    /// Windows (`AXOWindow`): what Chrome's extension APIs see as a window's tabs.
+    public var window: any AXOWindow.Type
 
     /// Creates the set of classes.
-    public init(engine: any AXOEngine.Type, configuration: NSObject.Type, profile: any AXOProfile.Type, page: any AXOPage.Type) {
+    public init(
+        engine: any AXOEngine.Type,
+        configuration: NSObject.Type,
+        profile: any AXOProfile.Type,
+        page: any AXOPage.Type,
+        window: any AXOWindow.Type
+    ) {
         self.engine = engine
         self.configuration = configuration
         self.profile = profile
         self.page = page
+        self.window = window
     }
 }
 
@@ -81,10 +90,11 @@ public enum ChromiumFramework {
         else { return .failure(.missingClass("AXOEngineConfiguration")) }
         guard let profile = lookUp("AXOProfile") as? any AXOProfile.Type else { return .failure(.missingClass("AXOProfile")) }
         guard let page = lookUp("AXOPage") as? any AXOPage.Type else { return .failure(.missingClass("AXOPage")) }
+        guard let window = lookUp("AXOWindow") as? any AXOWindow.Type else { return .failure(.missingClass("AXOWindow")) }
         guard engine.apiVersion == apiVersion else {
             return .failure(.apiVersionMismatch(framework: engine.apiVersion, axo: apiVersion))
         }
-        return .success(ChromiumEngineClasses(engine: engine, configuration: configuration, profile: profile, page: page))
+        return .success(ChromiumEngineClasses(engine: engine, configuration: configuration, profile: profile, page: page, window: window))
     }
 
     /// Creates `NSApp` as the engine's `AXOApplication`, which Chromium requires. Call it before

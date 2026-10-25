@@ -26,6 +26,31 @@ public protocol WebEngine: AnyObject {
     /// Deletes a deleted profile's website data for good. The pool closes the profile's pages
     /// first.
     func removeWebsiteData(for profileID: Profile.ID) async throws
+
+    /// Hears about tabs the engine changes on its own. ``WebViewPool`` sets it.
+    var delegate: (any WebEngineDelegate)? { get set }
+
+    /// The pages of the tabs a window shows (its Space's), in sidebar order, and the selected one,
+    /// for engines with a window model of their own. Chromium's extension APIs see these as one
+    /// window's tabs. WebKit has no such model and ignores it.
+    func setWindowPages(_ pages: [any EnginePage], active: (any EnginePage)?, profileID: Profile.ID)
+}
+
+extension WebEngine {
+    public func setWindowPages(_ pages: [any EnginePage], active: (any EnginePage)?, profileID: Profile.ID) {}
+}
+
+/// Tabs an engine changed on its own, such as through Chromium's extension APIs
+/// (`chrome.tabs.create`, `chrome.tabs.remove`). ``WebViewPool`` implements it and passes the
+/// changes on as tab IDs.
+@MainActor
+public protocol WebEngineDelegate: AnyObject {
+    /// The engine opened `page`, already loading, at `index` in `profileID`'s window.
+    func engine(_ engine: any WebEngine, didOpen page: any EnginePage, profileID: Profile.ID, at index: Int)
+    /// The engine closed `page`, which can't be used anymore.
+    func engine(_ engine: any WebEngine, didClose page: any EnginePage)
+    /// The engine made `page` the selected one.
+    func engine(_ engine: any WebEngine, didActivate page: any EnginePage)
 }
 
 /// One tab's page in a ``WebEngine``. Owned by ``WebViewPool``.

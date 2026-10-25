@@ -216,6 +216,66 @@ struct WebEngineTests {
         #expect(engine.siteCustomizations.map(\.domain) == ["example.com"])
     }
 
+    // MARK: Windows
+
+    @Test func onlyLiveTabsReachTheEnginesWindowInOrder() throws {
+        let first = Tab.testTab(url: url), unloaded = Tab.testTab(url: url), second = Tab.testTab(url: url)
+        pool.page(for: first, profileID: profileID)
+        pool.page(for: second, profileID: profileID)
+
+        pool.setWindowTabs([second.id, unloaded.id, first.id], selected: first.id, profileID: profileID)
+
+        let window = try #require(engine.windowPages[profileID])
+        #expect(window.pages.map { ObjectIdentifier($0) } == [second, first].map { ObjectIdentifier(pool.livePage(for: $0.id)!) })
+        #expect(window.active === pool.livePage(for: first.id))
+    }
+
+    @Test func pagesTheEngineOpensAreAdoptedWithoutReloading() throws {
+        let existing = Tab.testTab(url: url)
+        pool.page(for: existing, profileID: profileID)
+        pool.setWindowTabs([existing.id], selected: existing.id, profileID: profileID)
+        var opened: [EngineOpenedPage] = []
+        pool.onEngineOpenedPage = { opened.append($0) }
+        let page = FakePage(profileID: profileID)
+        page.navigate(to: URL(string: "https://example.com/from-an-extension")!, title: "New")
+
+        engine.openPageOnItsOwn(page, profileID: profileID, at: 1)
+        let event = try #require(opened.first)
+        #expect(event.page === page)
+        #expect(event.after == existing.id, "It goes after the tab before it in the window")
+
+        let tab = Tab.testTab(url: page.url!)
+        pool.adopt(page, as: tab, profileID: profileID)
+        #expect(pool.livePage(for: tab.id) === page)
+        #expect(pool.state(for: tab.id)?.title == "New")
+        #expect(page.loads.isEmpty, "Adopting doesn't reload it")
+        #expect(pool.page(for: tab, profileID: profileID) === page)
+    }
+
+    @Test func pagesTheEngineOpensCloseWithoutAHandler() {
+        let page = FakePage(profileID: profileID)
+        engine.openPageOnItsOwn(page, profileID: profileID, at: 0)
+        #expect(page.isClosed)
+    }
+
+    @Test func tabsTheEngineClosesOrSelectsAreReported() throws {
+        let tab = Tab.testTab(url: url), other = Tab.testTab(url: url)
+        pool.page(for: tab, profileID: profileID)
+        pool.page(for: other, profileID: profileID)
+        let page = try livePage(for: tab)
+        var closed: [Tab.ID] = [], activated: [Tab.ID] = []
+        pool.onEngineClosedTab = { closed.append($0) }
+        pool.onEngineActivatedTab = { activated.append($0) }
+
+        engine.activatePageOnItsOwn(try livePage(for: other))
+        engine.closePageOnItsOwn(page)
+
+        #expect(activated == [other.id])
+        #expect(closed == [tab.id])
+        #expect(!pool.isLive(tab.id), "The pool forgets it")
+        #expect(!page.isClosed, "The engine already closed it, so the pool doesn't again")
+    }
+
     @Test func webKitOnlyAccessorsAreEmptyWithAnotherEngine() {
         let tab = Tab.testTab(url: url)
         pool.page(for: tab, profileID: profileID)

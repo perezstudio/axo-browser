@@ -59,6 +59,52 @@ struct EngineNeutralModelTests {
         #expect(model.findHasNoMatches)
     }
 
+    // MARK: The engine's window
+
+    @Test func theEnginesWindowFollowsTheSidebarAndSelection() async throws {
+        let first = try await openPage(URL(string: "https://example.com/1")!)
+        let second = try await openPage(URL(string: "https://example.com/2")!)
+        let profileID = try #require(model.space?.profileID)
+
+        let window = try #require(engine.windowPages[profileID])
+        #expect(window.pages.map { ObjectIdentifier($0) } == [first, second].map { ObjectIdentifier($0) })
+        #expect(window.active === second)
+
+        model.select(model.tabs.first?.id)
+        #expect(engine.windowPages[profileID]?.active === first)
+    }
+
+    @Test func pagesTheEngineOpensBecomeSidebarTabs() async throws {
+        let first = try await openPage(URL(string: "https://example.com/1")!)
+        _ = try await openPage(URL(string: "https://example.com/2")!)
+        let firstID = try #require(model.tabs.first?.id)
+        let profileID = try #require(model.space?.profileID)
+        let opened = FakePage(profileID: profileID)
+        opened.navigate(to: URL(string: "https://example.com/from-an-extension")!, title: "Extension")
+
+        engine.openPageOnItsOwn(opened, profileID: profileID, at: 1)
+        try await waitUntil { model.tabs.count == 3 }
+
+        #expect(model.tabs.map(\.url.lastPathComponent) == ["1", "from-an-extension", "2"], "Right after the tab before it")
+        let adoptedID = model.tabs[1].id
+        #expect(model.pool.livePage(for: adoptedID) === opened, "It keeps the page that's already loading")
+        #expect(opened.loads.isEmpty)
+        #expect(model.pool.livePage(for: firstID) === first)
+    }
+
+    @Test func tabsTheEngineClosesOrSelectsFollowInTheSidebar() async throws {
+        let first = try await openPage(URL(string: "https://example.com/1")!)
+        let second = try await openPage(URL(string: "https://example.com/2")!)
+        let firstID = try #require(model.tabs.first?.id)
+
+        engine.activatePageOnItsOwn(first)
+        #expect(model.selectedTabID == firstID)
+
+        engine.closePageOnItsOwn(second)
+        try await waitUntil { model.tabs.count == 1 }
+        #expect(model.tabs.map(\.id) == [firstID])
+    }
+
     @Test func closingATabClosesItsPage() async throws {
         let page = try await openPage(URL(string: "https://example.com/")!)
 
