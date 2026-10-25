@@ -24,6 +24,17 @@ enum ChromiumSupport {
             : URL.applicationSupportDirectory.appending(path: "Axo/Chromium", directoryHint: .isDirectory)
     }
 
+    /// Where else the engine finds native messaging hosts: Google Chrome's folders, where apps
+    /// like 1Password register the hosts their extensions talk to (they don't know Axo). None in
+    /// UI testing mode, so tests never start the person's real hosts.
+    static func nativeMessagingHostFolders(isUITesting: Bool, home: URL = URL.homeDirectory) -> [URL] {
+        guard !isUITesting else { return [] }
+        return [
+            home.appending(path: "Library/Application Support/Google/Chrome/NativeMessagingHosts", directoryHint: .isDirectory),
+            URL(fileURLWithPath: "/Library/Google/Chrome/NativeMessagingHosts", isDirectory: true),
+        ]
+    }
+
     /// Whether this launch runs on Chromium: always, except in test runs. Unit tests host in Axo
     /// (XCTest sets `XCTestConfigurationFilePath`) and stay on WebKit, so they never start the
     /// engine on the person's website data; UI tests use it only when they opt in.
@@ -70,7 +81,10 @@ enum ChromiumSupport {
     /// The pool's engine: Chromium, started, if it loaded at launch.
     static func makeEngine() -> ChromiumEngine? {
         guard let classes else { return nil }
-        let engine = ChromiumEngine(classes: classes, userDataDirectory: userDataDirectory)
+        let engine = ChromiumEngine(
+            classes: classes, userDataDirectory: userDataDirectory,
+            nativeMessagingHostFolders: nativeMessagingHostFolders(isUITesting: AppEnvironment.isUITesting)
+        )
         engine.start()
         return engine
     }

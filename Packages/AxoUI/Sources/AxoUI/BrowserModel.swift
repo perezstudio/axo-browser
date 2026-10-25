@@ -95,7 +95,9 @@ public final class BrowserModel {
     @ObservationIgnored private var spacesObservationTask: Task<Void, Never>?
     @ObservationIgnored var profilesObservationTask: Task<Void, Never>?
     /// The current Space's profile's favorites, in grid order.
-    public internal(set) var favorites: [Favorite] = []
+    public internal(set) var favorites: [Favorite] = [] {
+        didSet { syncEngineWindow() }
+    }
     @ObservationIgnored var favoritesObservationTask: Task<Void, Never>?
     /// The profile whose favorites are being observed.
     @ObservationIgnored var favoritesProfileID: Profile.ID?
@@ -558,11 +560,13 @@ public final class BrowserModel {
 
     // MARK: Engine window
 
-    /// Tells the engine which tabs the window shows (the Space's, in sidebar order) and which is
-    /// selected. Chromium's extension APIs see them as the window's tabs; WebKit ignores it.
+    /// Tells the engine which tabs the window shows (the profile's favorites, then the Space's
+    /// tabs, in sidebar order) and which is selected, a favorite included. Chromium's extension
+    /// APIs see them as the window's tabs; WebKit ignores it.
     func syncEngineWindow() {
         guard let space else { return }
-        let ids = tabs.map(\.id)
+        let favoriteIDs = favoritesProfileID == space.profileID ? favorites.map(\.id) : []
+        let ids = favoriteIDs + tabs.map(\.id)
         let selected = selectedTabID.flatMap { ids.contains($0) ? $0 : nil }
         pool.setWindowTabs(ids, selected: selected, profileID: space.profileID)
     }

@@ -74,6 +74,36 @@ struct EngineNeutralModelTests {
         #expect(engine.windowPages[profileID]?.active === first)
     }
 
+    @Test func aSelectedPinnedTabIsTheWindowsActiveTab() async throws {
+        let pinned = try await openPage(URL(string: "https://example.com/pinned")!)
+        let pinnedID = try #require(model.selectedTabID)
+        await model.setPinned(true, tabID: pinnedID)
+        let other = try await openPage(URL(string: "https://example.com/other")!)
+        let profileID = try #require(model.space?.profileID)
+        #expect(engine.windowPages[profileID]?.active === other)
+
+        model.select(pinnedID)
+        let window = try #require(engine.windowPages[profileID])
+        #expect(window.active === pinned)
+        #expect(window.pages.contains { $0 === pinned })
+    }
+
+    @Test func favoritesAreInTheWindowFirstAndCanBeItsActiveTab() async throws {
+        let favorite = try await openPage(URL(string: "https://example.com/favorite")!)
+        let favoriteID = try #require(model.selectedTabID)
+        await model.addToFavorites(favoriteID)
+        let tab = try await openPage(URL(string: "https://example.com/tab")!)
+        let profileID = try #require(model.space?.profileID)
+
+        var window = try #require(engine.windowPages[profileID])
+        #expect(window.pages.map { ObjectIdentifier($0) } == [favorite, tab].map { ObjectIdentifier($0) }, "Favorites first, as in the sidebar")
+        #expect(window.active === tab)
+
+        model.select(favoriteID)
+        window = try #require(engine.windowPages[profileID])
+        #expect(window.active === favorite, "Extensions see the favorite as the active tab")
+    }
+
     @Test func pagesTheEngineOpensBecomeSidebarTabs() async throws {
         let first = try await openPage(URL(string: "https://example.com/1")!)
         _ = try await openPage(URL(string: "https://example.com/2")!)

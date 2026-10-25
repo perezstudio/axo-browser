@@ -49,6 +49,7 @@ public final class FakeAXOEngine: NSObject, AXOEngine {
 public final class FakeConfiguration: NSObject, AXOEngineConfiguration {
     public var userDataDirectory = URL(fileURLWithPath: "/")
     public var ephemeral = false
+    public var nativeMessagingHostFolders: [URL] = []
 }
 
 public final class FakeProfile: NSObject, AXOProfile {

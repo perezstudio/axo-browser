@@ -32,6 +32,7 @@ public final class ChromiumEngine: WebEngine {
 
     private let classes: ChromiumEngineClasses
     private let userDataDirectory: URL
+    private let nativeMessagingHostFolders: [URL]
     private let schedule: (@escaping @MainActor () -> Void) -> Void
     private var running: (any AXOEngine)?
     /// Pages made before the engine was ready, attached once it is.
@@ -61,14 +62,18 @@ public final class ChromiumEngine: WebEngine {
     /// - Parameters:
     ///   - classes: The engine's classes, from ``ChromiumFramework/load(from:)``.
     ///   - userDataDirectory: Where profiles keep their data, one folder per profile.
+    ///   - nativeMessagingHostFolders: More folders to find native messaging hosts in, after
+    ///     Chromium's own, such as Google Chrome's, where apps like 1Password register theirs.
     ///   - schedule: Runs a block on a later turn of the main run loop. Tests replace it.
     public init(
         classes: ChromiumEngineClasses,
         userDataDirectory: URL,
+        nativeMessagingHostFolders: [URL] = [],
         schedule: @escaping (@escaping @MainActor () -> Void) -> Void = ChromiumEngine.onNextRunLoopTurn
     ) {
         self.classes = classes
         self.userDataDirectory = userDataDirectory
+        self.nativeMessagingHostFolders = nativeMessagingHostFolders
         self.schedule = schedule
     }
 
@@ -96,6 +101,7 @@ public final class ChromiumEngine: WebEngine {
                 return
             }
             configuration.userDataDirectory = userDataDirectory
+            configuration.nativeMessagingHostFolders = nativeMessagingHostFolders
             classes.engine.run(with: configuration) { [self] engine, error in
                 if let engine {
                     running = engine

@@ -71,9 +71,21 @@ struct ChromiumEngineTests {
         #expect(engine.state == .ready)
         #expect(states == [.starting, .ready])
         #expect(FakeAXOEngine.configurations.first?.userDataDirectory == directory)
+        #expect(FakeAXOEngine.configurations.first?.nativeMessagingHostFolders == [], "None unless the app asks")
 
         engine.start()
         #expect(FakeAXOEngine.configurations.count == 1, "Starting twice does nothing")
+    }
+
+    @Test func nativeMessagingFoldersReachTheEngine() {
+        let scheduled = Scheduled()
+        let folders = [URL(fileURLWithPath: "/tmp/AxoChromiumTests-hosts", isDirectory: true)]
+        let engine = ChromiumEngine(classes: FakeEngine.classes, userDataDirectory: directory, nativeMessagingHostFolders: folders) {
+            scheduled.blocks.append($0)
+        }
+        engine.start()
+        scheduled.run()
+        #expect(FakeAXOEngine.configurations.first?.nativeMessagingHostFolders == folders)
     }
 
     @Test func aFailedStartReportsWhy() {

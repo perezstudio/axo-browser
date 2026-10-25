@@ -325,11 +325,13 @@ Each milestone should be usable as a daily driver before the next one starts.
   - [x] Decided: real, hidden Chrome `Browser` windows holding the current Space's tabs, and hibernation by Chrome's discarding (see `docs/chromium-engine.md`).
   - [x] Pages live in a hidden Chrome window's tab strip (one per profile for now), and an unpacked Manifest V3 extension loaded into the profile finds the page through `chrome.tabs.query` (the fork's `scripts/test_extension_tabs.sh`).
   - [x] Axo's windows and Spaces in the engine API: one hidden window per profile holding the current Space's live tabs, switching with the Space, and two-way sync with the sidebar. A tab an extension opens becomes a sidebar tab that keeps its page; one it closes closes; one it selects is selected. Checked in the fork's `scripts/test_engine.sh` and Axo's package tests.
-  - [ ] Still to sync: extensions moving tabs (placing them among pinned tabs, folders, and splits), favorites in the window, and hibernated tabs (Chrome's discarding, so extensions still see them).
+  - [x] Favorites in the window: the profile's favorites come first, so extensions see a selected favorite as the active tab.
+  - [ ] Still to sync: extensions moving tabs (placing them among pinned tabs, folders, and splits), and hibernated tabs (Chrome's discarding, so extensions still see them).
   - [x] Toolbar buttons and popups through the engine (API version 7): Axo's toolbar shows Chromium extensions' buttons with badges, and their popups open in Axo's popover sized to fit. The Extensions window lists, turns on and off, and removes them, and installs unpacked folders. `ChromiumEngineUITests` checks a badge and a popup with the real engine.
   - [x] `.crx` installs (API version 8): the Extensions window checks a package and shows what it can do in Axo's install prompt, as with WebKit, then Chrome's installer installs it and turns it on with the approved permissions.
   - [x] Popups extensions open themselves (`chrome.action.openPopup`, API version 9), which 1Password uses from its click handler.
-  - [ ] Still to come for extensions: the Chrome Web Store, site access settings, inspecting background pages, and native messaging.
+  - [x] Native messaging (API version 10): the engine also finds hosts registered for Google Chrome, where apps like 1Password register theirs.
+  - [ ] Still to come for extensions: the Chrome Web Store, site access settings, inspecting background pages, extension keyboard shortcuts, `chrome.windows.create`, and the dialogs extensions open (optional permissions, `chrome.identity`, capture pickers).
   - [ ] Bitwarden and uBlock Origin Lite passing the real-extension tests on Chromium. So far, both real packages install enabled, show their toolbar buttons, and open their popups in the fork's test shell (`--package-test`); a test of their features in Axo is still to come.
 - [ ] Phase 3: permissions, downloads, dialogs, DevTools, Widevine, packaging, and performance against the WebKit build.
 - [ ] Phase 4: prove one Chromium update, then ship the Mac on Chromium and remove WebKit, AxoExtensions, and AxoInspector from it.

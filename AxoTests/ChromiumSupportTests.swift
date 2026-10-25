@@ -21,6 +21,15 @@ struct ChromiumSupportTests {
         #expect(ChromiumSupport.isRequired(isUITesting: true, environment: [ChromiumSupport.uiTestingKey: "1"]))
     }
 
+    @Test func nativeMessagingUsesChromesHostFoldersOutsideUITests() {
+        let home = URL(fileURLWithPath: "/Users/someone", isDirectory: true)
+        #expect(ChromiumSupport.nativeMessagingHostFolders(isUITesting: false, home: home).map(\.path) == [
+            "/Users/someone/Library/Application Support/Google/Chrome/NativeMessagingHosts",
+            "/Library/Google/Chrome/NativeMessagingHosts",
+        ])
+        #expect(ChromiumSupport.nativeMessagingHostFolders(isUITesting: true, home: home).isEmpty, "UI tests never start real hosts")
+    }
+
     @Test func unitTestsRunOnWebKit() {
         #expect(ChromiumSupport.classes == nil)
     }

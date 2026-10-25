@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 9
+#define AXO_ENGINE_API_VERSION 10
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -40,6 +40,10 @@ NS_SWIFT_UI_ACTOR
 @property(nonatomic, copy) NSURL* userDataDirectory;
 /// When `YES`, nothing is written to disk (tests).
 @property(nonatomic) BOOL ephemeral;
+/// More folders to find native messaging hosts in (`<name>.json` manifests), after Chromium's
+/// own. Apps like 1Password register their hosts for Google Chrome, not for Axo. Empty by
+/// default.
+@property(nonatomic, copy) NSArray<NSURL*>* nativeMessagingHostFolders;
 @end
 
 /// The Chromium browser process inside the app. The `AXOEngine` class adopts it.
