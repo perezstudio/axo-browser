@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 12
+#define AXO_ENGINE_API_VERSION 13
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -27,6 +27,26 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol AXOExtensionAction;
 @protocol AXOExtensionPopup;
 @protocol AXOExtensionCommand;
+@protocol AXOExtensionPrompt;
+
+typedef NS_ENUM(NSInteger, AXOExtensionPromptKind) {
+  /// More permissions (`chrome.permissions.request`, or turning on an extension that asked for
+  /// more in an update). `details` lists them.
+  AXOExtensionPromptKindPermissions,
+  /// Installing an extension. `details` lists its permissions.
+  AXOExtensionPromptKindInstall,
+  /// Removing an extension, maybe at another's request (`requestingExtensionName`).
+  AXOExtensionPromptKindUninstall,
+  /// Recording the screen: answer Screen or Window (`allowsScreen`, `allowsWindow`), or Cancel.
+  AXOExtensionPromptKindScreenCapture,
+};
+
+typedef NS_ENUM(NSInteger, AXOExtensionPromptAnswer) {
+  AXOExtensionPromptAnswerCancel,
+  AXOExtensionPromptAnswerAccept,
+  AXOExtensionPromptAnswerScreen,
+  AXOExtensionPromptAnswerWindow,
+};
 @protocol AXODownload;
 
 /// The domain of errors the engine reports.
@@ -138,6 +158,15 @@ NS_SWIFT_UI_ACTOR
                          window:(id<AXOWindow>)window
                      completion:(void (^)(id<AXOExtensionPopup> _Nullable popup))completion
     NS_SWIFT_NAME(performExtensionCommand(_:extension:on:window:completion:));
+
+/// Called when something needs the person's answer that Chrome would ask in its own dialog:
+/// an extension asking for more permissions (`chrome.permissions.request`) or being installed,
+/// an extension being removed (`chrome.management.uninstall`), or, when a page or extension
+/// wants to record the screen and may have a screen or a window, which of the two (macOS's own
+/// picker then opens for that kind). Ask in the app's own UI and call `answer` once. Without a
+/// handler, every prompt is answered Cancel.
+@property(nonatomic, copy, nullable) void (^onExtensionPrompt)
+    (id<AXOExtensionPrompt> prompt, void (^answer)(AXOExtensionPromptAnswer answer));
 
 /// Called when an extension opens a popup window (`chrome.windows.create` with `type: "popup"`),
 /// such as a password manager's pop-out. Show the window's first page in a small window of
@@ -286,6 +315,11 @@ NS_SWIFT_UI_ACTOR
 /// `window.open`).
 @property(nonatomic, weak, nullable) id<AXOWindowDelegate> delegate;
 
+/// Whether the window is the one the person is using; set it as the app becomes active and
+/// inactive. Extension calls that need the active window (`chrome.permissions.request`,
+/// `chrome.action.openPopup`) only work while it is. `NO` at first.
+@property(nonatomic, getter=isActive) BOOL active;
+
 /// The window's pages, in order. Setting it adds, removes, and reorders tabs to match; pages
 /// that leave stay alive. Pages from another profile are ignored.
 @property(nonatomic, copy) NSArray<id<AXOPage>>* pages;
@@ -338,6 +372,25 @@ NS_SWIFT_UI_ACTOR
 @property(nonatomic, readonly, getter=isEnabled) BOOL enabled;
 /// Whether clicking it opens a popup.
 @property(nonatomic, readonly) BOOL hasPopup;
+@end
+
+/// Something to ask the person, for `AXOProfile.onExtensionPrompt`.
+NS_SWIFT_UI_ACTOR
+@protocol AXOExtensionPrompt <NSObject>
+@property(nonatomic, readonly) AXOExtensionPromptKind kind;
+/// The extension it's about, or empty for screen recording a page asked for.
+@property(nonatomic, readonly) NSString* extensionIdentifier;
+/// The extension's name, or for screen recording, who asked.
+@property(nonatomic, readonly) NSString* extensionName;
+/// Chrome's title for the prompt, which the app may use or replace, or empty.
+@property(nonatomic, readonly) NSString* title;
+/// What the extension can do, one line each (Chrome's permission descriptions).
+@property(nonatomic, readonly) NSArray<NSString*>* details;
+/// For an uninstall another extension asked for, that extension's name.
+@property(nonatomic, readonly, copy, nullable) NSString* requestingExtensionName;
+/// For screen recording, what may be shared.
+@property(nonatomic, readonly) BOOL allowsScreen;
+@property(nonatomic, readonly) BOOL allowsWindow;
 @end
 
 /// A keyboard shortcut an extension declares, as `NSMenuItem` takes it.

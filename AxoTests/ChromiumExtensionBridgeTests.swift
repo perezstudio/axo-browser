@@ -7,6 +7,7 @@ import AppKit
 import AxoChromium
 import AxoChromiumTestSupport
 import AxoCore
+import AxoEngineAPI
 import AxoExtensions
 import AxoUI
 import AxoWeb
@@ -82,6 +83,36 @@ struct ChromiumExtensionBridgeTests {
         try await waitUntil { !profile.performedCommands.isEmpty }
         #expect(profile.performedCommands.map(\.name) == ["lock"])
         #expect(profile.performedCommands.first?.page === FakePage.made.last, "On the selected tab's page")
+    }
+
+    @Test func chromesPromptsAreAxosAlerts() async throws {
+        await model.openTab(url: URL(string: "https://example.com/")!)
+        _ = bridge.toolbarItems(profileID: profileID, tabID: model.selectedTabID)
+        let profile = try #require(FakeProfile.made[profileID])
+        var shown: [ChromiumExtensionBridge.PromptAlert] = []
+        var chosen = 0
+        bridge.presentAlert = { alert, answer in
+            shown.append(alert)
+            answer(chosen)
+        }
+        let ask = try #require(profile.onExtensionPrompt)
+        var answers: [AXOExtensionPromptAnswer] = []
+
+        ask(FakeExtensionPrompt(kind: .permissions, extensionName: "Notes", details: ["Read your clipboard"]), { answers.append($0) })
+        #expect(shown.last?.title == "“Notes” wants more access")
+        #expect(shown.last?.message == "If you allow it, it can:\n• Read your clipboard")
+        #expect(shown.last?.buttons == ["Allow", "Don’t Allow"])
+
+        chosen = 1
+        ask(FakeExtensionPrompt(kind: .uninstall, extensionName: "Notes", requestingExtensionName: "Cleaner"), { answers.append($0) })
+        #expect(shown.last?.title == "Remove “Notes”?")
+        #expect(shown.last?.message == "“Cleaner” asked to remove it. Its data in Axo is deleted too.")
+        #expect(shown.last?.isDestructive == true)
+
+        ask(FakeExtensionPrompt(kind: .screenCapture, extensionName: "meet.example.com"), { answers.append($0) })
+        #expect(shown.last?.buttons == ["Entire Screen", "A Window", "Cancel"])
+
+        #expect(answers == [.accept, .cancel, .window], "Each button gives its answer")
     }
 
     @Test func popupsExtensionsOpenThemselvesShowLikeClickedOnes() async throws {

@@ -67,6 +67,67 @@ public struct ChromiumExtensionCommand: Equatable {
     }
 }
 
+/// Something Chrome would ask in its own dialog, for Axo to ask in its own UI.
+public struct ChromiumExtensionPrompt: Equatable {
+    /// What's being asked.
+    public enum Kind: Equatable {
+        /// More permissions (`chrome.permissions.request`); ``details`` lists them.
+        case permissions
+        /// Installing an extension; ``details`` lists what it can do.
+        case install
+        /// Removing an extension, maybe because another extension asked.
+        case uninstall(requestedBy: String?)
+        /// Recording the screen, where a screen or a window may be shared.
+        case screenCapture
+    }
+
+    /// The person's answer.
+    public enum Answer: Equatable {
+        case cancel, accept, screen, window
+    }
+
+    public var kind: Kind
+    /// The extension's ID, or empty when a page asked to record the screen.
+    public var extensionID: String
+    /// The extension's name, or the page that asked to record the screen.
+    public var extensionName: String
+    /// Chrome's title for the prompt, which Axo may ignore, or empty.
+    public var title: String
+    /// What the extension can do, one line each.
+    public var details: [String]
+
+    /// Creates a prompt.
+    public init(kind: Kind, extensionID: String, extensionName: String, title: String = "", details: [String] = []) {
+        self.kind = kind
+        self.extensionID = extensionID
+        self.extensionName = extensionName
+        self.title = title
+        self.details = details
+    }
+
+    init(_ prompt: any AXOExtensionPrompt) {
+        let kind: Kind = switch prompt.kind {
+        case .permissions: .permissions
+        case .install: .install
+        case .uninstall: .uninstall(requestedBy: prompt.requestingExtensionName)
+        case .screenCapture: .screenCapture
+        @unknown default: .permissions
+        }
+        self.init(kind: kind, extensionID: prompt.extensionIdentifier, extensionName: prompt.extensionName, title: prompt.title, details: prompt.details)
+    }
+}
+
+extension ChromiumExtensionPrompt.Answer {
+    var engineAnswer: AXOExtensionPromptAnswer {
+        switch self {
+        case .cancel: .cancel
+        case .accept: .accept
+        case .screen: .screen
+        case .window: .window
+        }
+    }
+}
+
 /// An extension's popup, open. Show ``view`` in a popover sized to ``preferredSize``.
 @MainActor
 public final class ChromiumExtensionPopup {

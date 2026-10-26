@@ -86,6 +86,7 @@ public final class FakeProfile: NSObject, AXOProfile {
     public var onExtensionsChange: (() -> Void)?
     public var onExtensionPopupRequest: ((any AXOExtensionPopup) -> Void)?
     public var onExtensionWindowOpen: ((any AXOWindow, NSSize) -> Void)?
+    public var onExtensionPrompt: ((any AXOExtensionPrompt, @escaping (AXOExtensionPromptAnswer) -> Void) -> Void)?
     public var extensionCommands: [any AXOExtensionCommand] = []
     public private(set) var performedCommands: [(name: String, extensionID: String, page: any AXOPage)] = []
 
@@ -183,6 +184,7 @@ public final class FakeWindow: NSObject, AXOWindow {
     public weak var delegate: (any AXOWindowDelegate)?
     public var pages: [any AXOPage] = []
     public weak var activePage: (any AXOPage)?
+    public var isActive = false
     public private(set) var isClosed = false
 
     public init(profile: FakeProfile) {
@@ -236,6 +238,28 @@ public final class FakeExtensionCommand: NSObject, AXOExtensionCommand {
         self.title = title
         self.keyEquivalent = keyEquivalent
         self.modifierFlags = modifierFlags
+    }
+}
+
+public final class FakeExtensionPrompt: NSObject, AXOExtensionPrompt {
+    public let kind: AXOExtensionPromptKind
+    public let extensionIdentifier: String
+    public let extensionName: String
+    public let title: String
+    public let details: [String]
+    public let requestingExtensionName: String?
+    public let allowsScreen: Bool
+    public let allowsWindow: Bool
+
+    public init(kind: AXOExtensionPromptKind, extensionIdentifier: String = "ext", extensionName: String, title: String = "", details: [String] = [], requestingExtensionName: String? = nil) {
+        self.kind = kind
+        self.extensionIdentifier = extensionIdentifier
+        self.extensionName = extensionName
+        self.title = title
+        self.details = details
+        self.requestingExtensionName = requestingExtensionName
+        allowsScreen = kind == .screenCapture
+        allowsWindow = kind == .screenCapture
     }
 }
 

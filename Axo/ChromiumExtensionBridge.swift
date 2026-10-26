@@ -20,6 +20,8 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
     @ObservationIgnored private let engine: ChromiumEngine
     /// Bumped when extensions or their buttons change, so views reading the toolbar update.
     private var revision = 0
+    /// Shows an alert and calls back with the index of the button chosen. Tests replace it.
+    @ObservationIgnored var presentAlert: @MainActor (PromptAlert, @escaping (Int) -> Void) -> Void = ChromiumExtensionBridge.showAlert
     /// The open popup and its popover's delegate, by extension.
     @ObservationIgnored private(set) var popups: [String: (popup: ChromiumExtensionPopup, closer: PopoverCloser)] = [:]
 
@@ -29,6 +31,15 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
         model.extensionToolbar = self
         model.extensionManagement = self
         engine.onExtensionsChange = { [weak self] _ in self?.revision += 1 }
+        // Chrome's prompts (permissions, uninstalls, what to share) are Axo's alerts.
+        engine.onExtensionPrompt = { [weak self] prompt, _, answer in
+            guard let self else {
+                answer(.cancel)
+                return
+            }
+            let alert = Self.alert(for: prompt)
+            self.presentAlert(alert) { answer(alert.answers.indices.contains($0) ? alert.answers[$0] : .cancel) }
+        }
         // Extensions that handle their own clicks (1Password) open their popup themselves.
         engine.onExtensionPopupRequest = { [weak self] popup, _ in self?.present(popup) }
         // Buttons appear once the engine is ready.
@@ -135,6 +146,64 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
             _ = try await engine.loadUnpackedExtension(at: url, profileID: profileID)
         } else {
             _ = try await engine.installPackage(at: url, profileID: profileID)
+        }
+    }
+
+    // MARK: Prompts
+
+    /// An alert for one of Chrome's prompts: its text, and buttons with the answer each gives.
+    struct PromptAlert: Equatable {
+        var title: String
+        var message: String
+        var buttons: [String]
+        var answers: [ChromiumExtensionPrompt.Answer]
+        /// Whether the first button deletes something.
+        var isDestructive = false
+    }
+
+    /// The alert for a prompt, in Axo's words.
+    static func alert(for prompt: ChromiumExtensionPrompt) -> PromptAlert {
+        let name = prompt.extensionName
+        let list = prompt.details.map { "• \($0)" }.joined(separator: "\n")
+        switch prompt.kind {
+        case .permissions:
+            return PromptAlert(
+                title: "“\(name)” wants more access", message: list.isEmpty ? "" : "If you allow it, it can:\n\(list)",
+                buttons: ["Allow", "Don’t Allow"], answers: [.accept, .cancel]
+            )
+        case .install:
+            return PromptAlert(
+                title: "Add “\(name)”?", message: list.isEmpty ? "" : "It can:\n\(list)",
+                buttons: ["Add Extension", "Cancel"], answers: [.accept, .cancel]
+            )
+        case .uninstall(let requester):
+            let reason = requester.map { "“\($0)” asked to remove it. " } ?? ""
+            return PromptAlert(
+                title: "Remove “\(name)”?", message: "\(reason)Its data in Axo is deleted too.",
+                buttons: ["Remove", "Cancel"], answers: [.accept, .cancel], isDestructive: true
+            )
+        case .screenCapture:
+            return PromptAlert(
+                title: "Share your screen with “\(name)”?",
+                message: "Choose whether to share a whole screen or one window. macOS asks which one next.",
+                buttons: ["Entire Screen", "A Window", "Cancel"], answers: [.screen, .window, .cancel]
+            )
+        }
+    }
+
+    /// Shows an alert as a sheet on Axo's window, or on its own when there's no window.
+    static func showAlert(_ prompt: PromptAlert, answer: @escaping (Int) -> Void) {
+        let alert = NSAlert()
+        alert.messageText = prompt.title
+        alert.informativeText = prompt.message
+        for button in prompt.buttons { alert.addButton(withTitle: button) }
+        alert.buttons.first?.hasDestructiveAction = prompt.isDestructive
+        // NSAlert numbers its buttons from .alertFirstButtonReturn.
+        let index = { (response: NSApplication.ModalResponse) in response.rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue }
+        if let window = NSApp.mainWindow ?? NSApp.keyWindow {
+            alert.beginSheetModal(for: window) { answer(index($0)) }
+        } else {
+            answer(index(alert.runModal()))
         }
     }
 

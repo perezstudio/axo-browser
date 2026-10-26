@@ -139,6 +139,43 @@ struct ChromiumEngineTests {
         withExtendedLifetime(page) {}
     }
 
+    @Test func promptsReachTheAppAndItsAnswerReturns() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let profile = try #require(engine.readyProfile(profileID) as? FakeProfile)
+        let ask = try #require(profile.onExtensionPrompt, "The engine handles Chrome's prompts")
+        var answers: [AXOExtensionPromptAnswer] = []
+
+        ask(FakeExtensionPrompt(kind: .permissions, extensionName: "Notes"), { answers.append($0) })
+        #expect(answers == [.cancel], "No handler: Cancel")
+
+        var asked: [ChromiumExtensionPrompt] = []
+        engine.onExtensionPrompt = { prompt, _, answer in
+            asked.append(prompt)
+            answer(prompt.kind == .screenCapture ? .window : .accept)
+        }
+        ask(FakeExtensionPrompt(kind: .uninstall, extensionName: "Notes", requestingExtensionName: "Cleaner"), { answers.append($0) })
+        ask(FakeExtensionPrompt(kind: .screenCapture, extensionName: "meet.example.com"), { answers.append($0) })
+        #expect(asked.map(\.kind) == [.uninstall(requestedBy: "Cleaner"), .screenCapture])
+        #expect(answers == [.cancel, .accept, .window])
+    }
+
+    @Test func windowsAreActiveWhileTheAppIs() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        engine.setWindowPages([], active: nil, profileID: profileID)
+        let window = try #require(FakeWindow.made.first)
+
+        engine.setWindowsActive(true)
+        #expect(window.isActive)
+        engine.setWindowsActive(false)
+        #expect(!window.isActive)
+    }
+
     @Test func aFailedStartReportsWhy() {
         FakeAXOEngine.failure = FakeEngineError()
         let scheduled = Scheduled()

@@ -51,9 +51,16 @@ public final class ChromiumEngine: WebEngine {
 
     /// Called when a profile's extensions or their toolbar buttons change, with the profile.
     public var onExtensionsChange: ((Profile.ID) -> Void)?
+    /// Called when something needs the person's answer that Chrome would ask in its own dialog:
+    /// permission requests, installs and uninstalls, and what to share when recording the screen.
+    /// Ask, then call the closure once. Without a handler, everything is answered Cancel.
+    public var onExtensionPrompt: ((ChromiumExtensionPrompt, Profile.ID, @escaping (ChromiumExtensionPrompt.Answer) -> Void) -> Void)?
+
     /// Called when an extension opens its own popup (`chrome.action.openPopup`), as some do when
     /// their toolbar button is clicked, with its profile. Show it under the extension's button.
     public var onExtensionPopupRequest: ((ChromiumExtensionPopup, Profile.ID) -> Void)?
+    /// Observers of the app becoming active and inactive, made with the first window.
+    private var activationObservers: [any NSObjectProtocol] = []
     /// Extensions' popup windows that are open, kept until Chrome closes their page.
     private var popupWindows: [any AXOWindow] = []
     /// Profiles whose extension changes are being followed.
@@ -149,6 +156,13 @@ public final class ChromiumEngine: WebEngine {
             profile.onExtensionWindowOpen = { [weak self] window, size in
                 self?.popupWindowOpened(window, size: size, profileID: profileID)
             }
+            profile.onExtensionPrompt = { [weak self] prompt, answer in
+                guard let handler = self?.onExtensionPrompt else {
+                    answer(.cancel)
+                    return
+                }
+                handler(ChromiumExtensionPrompt(prompt), profileID) { answer($0.engineAnswer) }
+            }
         }
         return profile
     }
@@ -163,8 +177,26 @@ public final class ChromiumEngine: WebEngine {
         if let window = windows[profileID] { return window }
         let window = classes.window.window(with: classes.profile.profile(withIdentifier: profileID))
         window.delegate = windowEvents
+        // Extension calls that need the active window work while Axo is the active app.
+        followAppActivation()
+        window.isActive = NSApp?.isActive ?? false
         windows[profileID] = window
         return window
+    }
+
+    /// Keeps the engine's windows active while Axo is the active app, and not otherwise.
+    private func followAppActivation() {
+        guard activationObservers.isEmpty else { return }
+        for (name, active) in [(NSApplication.didBecomeActiveNotification, true), (NSApplication.didResignActiveNotification, false)] {
+            activationObservers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.setWindowsActive(active) }
+            })
+        }
+    }
+
+    /// Marks every engine window active or not, as the app becomes active or inactive.
+    func setWindowsActive(_ active: Bool) {
+        windows.values.forEach { $0.isActive = active }
     }
 
     public func setWindowPages(_ pages: [any EnginePage], active: (any EnginePage)?, profileID: Profile.ID) {
