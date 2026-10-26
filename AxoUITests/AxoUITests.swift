@@ -5,6 +5,7 @@
 //  Created by Kevin Perez on 10/2/26.
 //
 
+import AppKit
 import XCTest
 
 final class AxoUITests: XCTestCase {
@@ -40,6 +41,20 @@ final class AxoUITests: XCTestCase {
         // override, which doesn't change their saved choice).
         app.launchArguments += ["-__WebInspectorPageGroupLevel1__.WebKit2InspectorStartsAttached", "YES"]
         return app
+    }
+
+    /// Opens the browser window at a known size on the primary display, whatever the person's own
+    /// Axo last saved, for the accessibility audit, which compares elements' frames with their
+    /// window's (a window tiled one point wider than the screen made it fail). An argument-domain override, which doesn't change their saved frame. AppKit's saved
+    /// frame is the window's frame then the visible frame of the screen it's on, which must be a
+    /// real screen, or the window lands on another display.
+    @MainActor static var windowFrameArguments: [String] {
+        // The primary display (the one with the menu bar), not NSScreen.main, which follows the
+        // key window to whatever display it's on.
+        guard let screen = NSScreen.screens.first?.visibleFrame else { return [] }
+        let width = min(1100, screen.width - 80), height = min(700, screen.height - 80)
+        let frame = [screen.minX + 40, screen.minY + 40, width, height, screen.minX, screen.minY, screen.width, screen.height]
+        return ["-NSWindow Frame browser-AppWindow-1", frame.map { String(Int($0)) }.joined(separator: " ") + " "]
     }
 
     /// Waits for Axo to be the frontmost app, activating it if another app took focus during

@@ -103,6 +103,8 @@ public protocol EnginePage: AnyObject {
     /// Finds the next (or previous) occurrence of `text`, ignoring case and wrapping, highlights
     /// it, and scrolls to it. Returns whether there was a match.
     func find(_ text: String, backwards: Bool) async -> Bool
+    /// Ends find: removes the highlight it left, and the next find starts over.
+    func endFind() async
 
     /// Runs `functionBody` as the body of an async JavaScript function with `arguments` as its
     /// parameters, in the isolated world named `world`, so the page's own scripts can't see or

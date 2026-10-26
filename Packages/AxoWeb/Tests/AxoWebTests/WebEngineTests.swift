@@ -78,7 +78,7 @@ struct WebEngineTests {
         #expect(page.downloadRequests == [next])
     }
 
-    @Test func findSkipsEmptyTextAndClearFindRunsInItsOwnWorld() async throws {
+    @Test func findSkipsEmptyTextAndClearFindEndsTheEnginesFind() async throws {
         let tab = Tab.testTab(url: url)
         pool.page(for: tab, profileID: profileID)
         let page = try livePage(for: tab)
@@ -89,7 +89,7 @@ struct WebEngineTests {
 
         #expect(page.finds.map(\.text) == ["axolotl"])
         #expect(page.finds.first?.backwards == true)
-        #expect(page.scripts.map(\.world) == ["AxoFind"])
+        #expect(page.endedFinds == 1, "Each engine clears its own way")
     }
 
     // MARK: Hibernation

@@ -139,6 +139,9 @@ public final class FakePage: EnginePage {
         return findResult
     }
 
+    public private(set) var endedFinds = 0
+    public func endFind() async { endedFinds += 1 }
+
     public func callJavaScript(_ functionBody: String, arguments: [String: Any], in world: String) async throws -> Any? {
         scripts.append((functionBody, world))
         return nil

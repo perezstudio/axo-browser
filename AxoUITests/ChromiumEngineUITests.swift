@@ -433,6 +433,27 @@ final class ChromiumEngineUITests: XCTestCase {
         XCTAssertFalse(sidebar.staticTexts["127.0.0.1"].exists, "The pinned tab didn't navigate to the link")
     }
 
+    /// Find in page works on Chromium pages: a word on the page is found, one that isn't says
+    /// "No matches", and Esc closes the find bar.
+    @MainActor
+    func testFindInPage() throws {
+        let app = launchChromiumApp()
+        _ = openPage("<title>Pond</title><p>Axolotls live in lakes.</p>", titled: "Pond", in: app)
+
+        app.typeKey("f", modifierFlags: .command)
+        let field = app.textFields["findField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        app.typeText("lakes")
+        XCTAssertFalse(app.staticTexts["findNoMatches"].waitForExistence(timeout: 3), "The word on the page is found")
+
+        app.typeKey("a", modifierFlags: .command)
+        app.typeText("ocean")
+        XCTAssertTrue(app.staticTexts["findNoMatches"].waitForExistence(timeout: 5))
+
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(field.waitForNonExistence(timeout: 5))
+    }
+
     /// A tab loads its page in Chromium. The page names the engine from its user agent, which
     /// says "Chrome/" only in Chromium, so the test can't pass on WebKit.
     @MainActor
