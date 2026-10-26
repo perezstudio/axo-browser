@@ -424,10 +424,13 @@ final class ChromiumEngineUITests: XCTestCase {
         clickPage(in: app)
         let peek = app.descendants(matching: .any)["peek"]
         XCTAssertTrue(peek.waitForExistence(timeout: 10), "The link opens in Peek")
+        XCTAssertTrue(peek.staticTexts["127.0.0.1"].waitForExistence(timeout: 10), "Peek shows the clicked link")
         app.typeKey(.escape, modifierFlags: [])
         XCTAssertTrue(peek.waitForNonExistence(timeout: 5), "Esc closes Peek")
-        XCTAssertTrue(sidebar.staticTexts["Home"].waitForExistence(timeout: 5), "The pinned tab didn't navigate")
-        XCTAssertFalse(sidebar.staticTexts["127.0.0.1"].exists, "Peek never joined the sidebar")
+        // Long enough for a navigation that wasn't stopped to reach the closed port and fail.
+        sleep(2)
+        XCTAssertTrue(sidebar.staticTexts["Home"].exists, "The pinned tab stayed on its page")
+        XCTAssertFalse(sidebar.staticTexts["127.0.0.1"].exists, "The pinned tab didn't navigate to the link")
     }
 
     /// A tab loads its page in Chromium. The page names the engine from its user agent, which
