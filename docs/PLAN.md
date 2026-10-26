@@ -315,6 +315,8 @@ Each milestone should be usable as a daily driver before the next one starts.
 
 **Chromium engine on the Mac (decided October 2026; design in `docs/chromium-engine.md`)**
 
+The remaining work is tracked as GitHub issues under [#65](https://github.com/perezstudio/axo-browser/issues/65) (label `chromium`), each with its approach and when it's done.
+
 - [x] Phase 0: the `WebEngine` and `EnginePage` seam in AxoWeb, with WebKit behind it as `WebKitEngine`, no raw web views in AxoUI, downloads driven through engine-neutral `DownloadItem` calls, and a fake engine for the pool's tests.
 - [x] Phase 1: the `axo-chromium` repository and the engine framework, rendering tabs in Axo behind a debug setting (October 2026). Publishing the framework as a downloadable, versioned artifact moved to Phase 3's packaging.
   - [x] The private `perezstudio/axo-chromium` repository, pinned to Chromium 156.0.8078.48 (Extended Stable), with sync and throttled build scripts.
