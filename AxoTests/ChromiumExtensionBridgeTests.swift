@@ -25,6 +25,7 @@ struct ChromiumExtensionBridgeTests {
     let model: BrowserModel
     let bridge: ChromiumExtensionBridge
     let profileID: Profile.ID
+    let store: TabStore
 
     init() async throws {
         FakeEngine.reset()
@@ -34,10 +35,11 @@ struct ChromiumExtensionBridgeTests {
         )
         engine = ChromiumEngine(classes: classes, userDataDirectory: FileManager.default.temporaryDirectory) { $0() }
         engine.start()
-        model = BrowserModel(store: try TabStore.makeInMemory(), pool: WebViewPool(engine: engine))
+        store = try TabStore.makeInMemory()
+        model = BrowserModel(store: store, pool: WebViewPool(engine: engine))
         model.announce = { _ in }
         await model.start()
-        bridge = ChromiumExtensionBridge(model: model, engine: engine)
+        bridge = ChromiumExtensionBridge(model: model, engine: engine, store: store)
         profileID = try #require(model.space?.profileID)
     }
 
@@ -85,6 +87,34 @@ struct ChromiumExtensionBridgeTests {
         #expect(profile.performedCommands.first?.page === FakePage.made.last, "On the selected tab's page")
     }
 
+    @Test func theSidebarIsTheEnginesBookmarks() async throws {
+        await model.openTab(url: URL(string: "https://example.com/")!)
+        let profile = try #require(FakeProfile.made[profileID])
+        let mail = try await store.favorites.add(url: URL(string: "https://mail.example/")!, title: "Mail", profileID: profileID)
+        try await waitUntil { profile.bookmarkBar.map(\.identifier) == [mail.id.uuidString.lowercased()] }
+        let spaceID = try #require(model.space?.id)
+        #expect(profile.otherBookmarks.map(\.identifier) == [spaceID.uuidString.lowercased()], "Spaces are folders in the other bookmarks")
+    }
+
+    @Test func extensionsBookmarkChangesReachTheSidebarAndWhatItCantHoldIsUndone() async throws {
+        await model.openTab(url: URL(string: "https://example.com/")!)
+        let profile = try #require(FakeProfile.made[profileID])
+        let spaceID = try #require(model.space?.id)
+        let docs = UUID()
+        profile.onBookmarkChange?(FakeBookmarkChange(
+            kind: .created, identifier: docs.uuidString.lowercased(), parentIdentifier: spaceID.uuidString.lowercased(),
+            title: "Docs", url: URL(string: "https://docs.example/")!
+        ))
+        try await waitUntil { profile.otherBookmarks.first?.children.map(\.identifier) == [docs.uuidString.lowercased()] }
+        let tab = try #require(try await store.tab(id: docs))
+        #expect(tab.isPinned && tab.title == "Docs", "A bookmark in a Space is a pinned tab")
+
+        let sent = profile.bookmarkSetCount
+        profile.onBookmarkChange?(FakeBookmarkChange(kind: .created, identifier: UUID().uuidString, parentRoot: .bar, title: "A folder"))
+        try await waitUntil { profile.bookmarkSetCount > sent }
+        #expect(profile.bookmarkBar.isEmpty, "The bar holds no folders, so the engine gets the tree back without it")
+    }
+
     @Test func theUserScriptsSwitchIsOnlyForExtensionsThatUseThem() async throws {
         await model.openTab(url: URL(string: "https://example.com/")!)
         _ = bridge.toolbarItems(profileID: profileID, tabID: model.selectedTabID)
@@ -127,10 +157,12 @@ struct ChromiumExtensionBridgeTests {
         _ = bridge.toolbarItems(profileID: profileID, tabID: model.selectedTabID)
         let profile = try #require(FakeProfile.made[profileID])
         var shown: [ChromiumExtensionBridge.PromptAlert] = []
-        var chosen = 0
+        // The button the person picks, set before each question.
+        final class Choice { var index = 0 }
+        let chosen = Choice()
         bridge.presentAlert = { alert, answer in
             shown.append(alert)
-            answer(chosen)
+            answer(chosen.index)
         }
         let ask = try #require(profile.onExtensionPrompt)
         var answers: [AXOExtensionPromptAnswer] = []
@@ -140,7 +172,7 @@ struct ChromiumExtensionBridgeTests {
         #expect(shown.last?.message == "If you allow it, it can:\n• Read your clipboard")
         #expect(shown.last?.buttons == ["Allow", "Don’t Allow"])
 
-        chosen = 1
+        chosen.index = 1
         ask(FakeExtensionPrompt(kind: .uninstall, extensionName: "Notes", requestingExtensionName: "Cleaner"), { answers.append($0) })
         #expect(shown.last?.title == "Remove “Notes”?")
         #expect(shown.last?.message == "“Cleaner” asked to remove it. Its data in Axo is deleted too.")

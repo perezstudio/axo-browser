@@ -88,6 +88,15 @@ public final class FakeProfile: NSObject, AXOProfile {
     public var onExtensionWindowOpen: ((any AXOWindow, NSSize) -> Void)?
     public var onExtensionPrompt: ((any AXOExtensionPrompt, @escaping (AXOExtensionPromptAnswer) -> Void) -> Void)?
     public var onExtensionSidePanelOpen: ((any AXOExtensionSidePanel) -> Void)?
+    public var onBookmarkChange: ((any AXOBookmarkChange) -> Void)?
+    public private(set) var bookmarkBar: [any AXOBookmarkNode] = []
+    public private(set) var otherBookmarks: [any AXOBookmarkNode] = []
+    public private(set) var bookmarkSetCount = 0
+    public func setBookmarks(bar: [any AXOBookmarkNode], other: [any AXOBookmarkNode]) {
+        bookmarkBar = bar
+        otherBookmarks = other
+        bookmarkSetCount += 1
+    }
     public var extensionCommands: [any AXOExtensionCommand] = []
     public private(set) var performedCommands: [(name: String, extensionID: String, page: any AXOPage)] = []
 
@@ -353,4 +362,24 @@ public final class FakeDownload: NSObject, AXODownload {
     }
 
     public func cancel() { isCancelled = true }
+}
+
+public final class FakeBookmarkChange: NSObject, AXOBookmarkChange {
+    public let kind: AXOBookmarkChangeKind
+    public let identifier: String
+    public let parentRoot: AXOBookmarkRoot
+    public let parentIdentifier: String?
+    public let index: UInt
+    public let title: String
+    public let url: URL?
+
+    public init(kind: AXOBookmarkChangeKind, identifier: String, parentRoot: AXOBookmarkRoot = .none, parentIdentifier: String? = nil, index: UInt = 0, title: String = "", url: URL? = nil) {
+        self.kind = kind
+        self.identifier = identifier
+        self.parentRoot = parentRoot
+        self.parentIdentifier = parentIdentifier
+        self.index = index
+        self.title = title
+        self.url = url
+    }
 }

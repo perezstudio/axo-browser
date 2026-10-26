@@ -463,6 +463,47 @@ struct ChromiumEngineTests {
         #expect(changed == [profileID])
     }
 
+    @Test func bookmarksGoToTheEngineAndExtensionsChangesComeBack() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        let space = UUID(), mail = UUID(), folder = UUID()
+        let tree = BookmarkTree(
+            bar: [BookmarkItem(id: mail, title: "Mail", url: url)],
+            other: [BookmarkItem(id: space, title: "Home", children: [BookmarkItem(id: folder, title: "Team")])]
+        )
+        engine.setBookmarks(tree, profileID: profileID)
+        engine.start()
+        scheduled.run()
+        engine.setBookmarks(tree, profileID: profileID)
+        #expect(FakeProfile.made[profileID] == nil, "A profile nothing uses isn't loaded for its bookmarks")
+
+        _ = engine.extensions(profileID: profileID)
+        let profile = try #require(FakeProfile.made[profileID])
+        #expect(profile.bookmarkSetCount == 1, "Its bookmarks arrive once it's in use")
+        engine.setBookmarks(tree, profileID: profileID)
+        #expect(profile.bookmarkSetCount == 2)
+        #expect(profile.bookmarkBar.map(\.identifier) == [mail.uuidString.lowercased()])
+        #expect(profile.bookmarkBar.first?.url == url)
+        #expect(profile.otherBookmarks.first?.title == "Home")
+        #expect(profile.otherBookmarks.first?.children.first?.url == nil, "A folder")
+
+        var changes: [BookmarkChange] = []
+        engine.onBookmarkChange = { change, id in
+            #expect(id == profileID)
+            changes.append(change)
+        }
+        let made = UUID()
+        profile.onBookmarkChange?(FakeBookmarkChange(kind: .created, identifier: made.uuidString.lowercased(), parentIdentifier: folder.uuidString, index: 2, title: "Wiki", url: url))
+        profile.onBookmarkChange?(FakeBookmarkChange(kind: .moved, identifier: mail.uuidString, parentRoot: .bar, index: 1))
+        profile.onBookmarkChange?(FakeBookmarkChange(kind: .removed, identifier: space.uuidString, parentRoot: .other))
+        profile.onBookmarkChange?(FakeBookmarkChange(kind: .removed, identifier: "not-a-uuid", parentRoot: .other))
+        #expect(changes == [
+            BookmarkChange(kind: .created, id: made, place: .inside(folder), index: 2, title: "Wiki", url: url),
+            BookmarkChange(kind: .moved, id: mail, place: .bar, index: 1, title: "", url: nil),
+            BookmarkChange(kind: .removed, id: space, place: .other, index: 0, title: "", url: nil),
+        ], "Changes that name nothing Axo could have are dropped")
+    }
+
     @Test func profileDataGoesToTheEngine() async throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)

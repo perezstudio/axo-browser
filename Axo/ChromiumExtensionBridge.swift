@@ -5,6 +5,7 @@ import AxoExtensions
 import AxoUI
 import AxoWeb
 import Foundation
+import GRDB
 import Observation
 import SwiftUI
 
@@ -14,10 +15,21 @@ import SwiftUI
 /// Packages (`.crx`) install through Chrome's installer after Axo's prompt; unpacked folders
 /// load in developer mode. Not yet with Chromium: site access settings and inspecting
 /// background pages.
+///
+/// It also keeps each profile's bookmarks in the engine (`chrome.bookmarks`) in step with the
+/// sidebar (``BookmarkTree``), and applies extensions' bookmark changes to it.
 @Observable
 final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManaging {
     @ObservationIgnored private weak var model: BrowserModel?
     @ObservationIgnored private let engine: ChromiumEngine
+    @ObservationIgnored private let store: TabStore
+    /// Follows the profiles, and each profile's bookmark tree.
+    @ObservationIgnored private var profilesTask: Task<Void, Never>?
+    @ObservationIgnored private var bookmarkTasks: [Profile.ID: Task<Void, Never>] = [:]
+    /// Extensions' bookmark changes, applied one after another.
+    @ObservationIgnored private var bookmarkWork: Task<Void, Never>?
+    /// Bookmark changes being applied. Trees aren't sent meanwhile, since one could be half done.
+    @ObservationIgnored private var applyingBookmarkChanges = 0
     /// Bumped when extensions or their buttons change, so views reading the toolbar update.
     private var revision = 0
     /// Shows an alert and calls back with the index of the button chosen. Tests replace it.
@@ -25,9 +37,10 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
     /// The open popup and its popover's delegate, by extension.
     @ObservationIgnored private(set) var popups: [String: (popup: ChromiumExtensionPopup, closer: PopoverCloser)] = [:]
 
-    init(model: BrowserModel, engine: ChromiumEngine) {
+    init(model: BrowserModel, engine: ChromiumEngine, store: TabStore) {
         self.model = model
         self.engine = engine
+        self.store = store
         model.extensionToolbar = self
         model.extensionManagement = self
         engine.onExtensionsChange = { [weak self] _ in self?.revision += 1 }
@@ -56,6 +69,58 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
         engine.onStateChange = { [weak self] state in
             previous?(state)
             self?.revision += 1
+        }
+        engine.onBookmarkChange = { [weak self] change, profileID in self?.apply(change, profileID: profileID) }
+        profilesTask = Task { [weak self, store] in
+            do {
+                for try await list in store.observeProfiles() {
+                    guard let self else { return }
+                    followBookmarks(of: Set(list.map(\.id)))
+                }
+            } catch {}
+        }
+    }
+
+    // MARK: Bookmarks
+
+    /// Sends each profile's bookmark tree to the engine whenever it changes.
+    private func followBookmarks(of profileIDs: Set<Profile.ID>) {
+        for (profileID, task) in bookmarkTasks where !profileIDs.contains(profileID) {
+            task.cancel()
+            bookmarkTasks[profileID] = nil
+        }
+        for profileID in profileIDs where bookmarkTasks[profileID] == nil {
+            bookmarkTasks[profileID] = Task { [weak self, store] in
+                do {
+                    // Each value is a signal: an older one can arrive after a newer write.
+                    for try await _ in store.observeBookmarkTree(profileID: profileID) {
+                        guard let self else { return }
+                        await sendBookmarks(profileID: profileID)
+                    }
+                } catch {}
+            }
+        }
+    }
+
+    private func sendBookmarks(profileID: Profile.ID) async {
+        guard applyingBookmarkChanges == 0, let tree = try? await store.bookmarkTree(profileID: profileID) else { return }
+        engine.setBookmarks(tree, profileID: profileID)
+    }
+
+    /// Applies an extension's bookmark change to the sidebar, then sends the tree back, which
+    /// undoes in the engine what the sidebar can't hold.
+    func apply(_ change: BookmarkChange, profileID: Profile.ID) {
+        let previous = bookmarkWork
+        applyingBookmarkChanges += 1
+        bookmarkWork = Task { [store, weak model] in
+            await previous?.value
+            let spaces = (try? await store.spaces()) ?? []
+            let shown = model?.space.flatMap { $0.profileID == profileID ? $0.id : nil }
+            if let spaceID = shown ?? spaces.first(where: { $0.profileID == profileID })?.id {
+                try? await store.applyBookmarkChange(change, profileID: profileID, currentSpaceID: spaceID)
+            }
+            applyingBookmarkChanges -= 1
+            await sendBookmarks(profileID: profileID)
         }
     }
 

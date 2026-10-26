@@ -54,6 +54,9 @@ public final class ChromiumEngine: WebEngine {
     /// Called when an extension's side panel opens (`chrome.sidePanel`), with its profile. Show it
     /// beside the page.
     public var onExtensionSidePanelOpen: ((ChromiumExtensionSidePanel, Profile.ID) -> Void)?
+    /// Called with each change an extension makes to a profile's bookmarks (`chrome.bookmarks`).
+    /// Apply it, then set the tree again with ``setBookmarks(_:profileID:)``.
+    public var onBookmarkChange: ((BookmarkChange, Profile.ID) -> Void)?
 
     /// Called when something needs the person's answer that Chrome would ask in its own dialog:
     /// permission requests, installs and uninstalls, and what to share when recording the screen.
@@ -69,6 +72,8 @@ public final class ChromiumEngine: WebEngine {
     private var popupWindows: [any AXOWindow] = []
     /// Profiles whose extension changes are being followed.
     private var followedProfiles: Set<Profile.ID> = []
+    /// Each profile's bookmarks, given to its engine profile once that's in use.
+    var bookmarkTrees: [Profile.ID: BookmarkTree] = [:]
 
     /// Creates an engine.
     ///
@@ -141,14 +146,14 @@ public final class ChromiumEngine: WebEngine {
 
     private func attach(_ page: ChromiumPage) {
         guard !page.isClosed else { return }
-        let profile = classes.profile.profile(withIdentifier: page.profileID)
+        guard let profile = readyProfile(page.profileID) else { return }
         let enginePage = classes.page.page(with: profile)
         pagesByEnginePage.setObject(page, forKey: enginePage)
         page.attach(enginePage)
     }
 
     /// The engine's profile for `profileID` once the engine is ready, following its extension
-    /// changes from then on.
+    /// changes and giving it its bookmarks from then on.
     func readyProfile(_ profileID: Profile.ID) -> (any AXOProfile)? {
         guard state == .ready else { return nil }
         let profile = classes.profile.profile(withIdentifier: profileID)
@@ -163,6 +168,13 @@ public final class ChromiumEngine: WebEngine {
             profile.onExtensionSidePanelOpen = { [weak self] panel in
                 self?.onExtensionSidePanelOpen?(ChromiumExtensionSidePanel(panel), profileID)
             }
+            profile.onBookmarkChange = { [weak self] change in
+                guard let change = BookmarkChange(change) else { return }
+                self?.onBookmarkChange?(change, profileID)
+            }
+            if let tree = bookmarkTrees[profileID] {
+                profile.setBookmarks(tree)
+            }
             profile.onExtensionPrompt = { [weak self] prompt, answer in
                 guard let handler = self?.onExtensionPrompt else {
                     answer(.cancel)
@@ -172,6 +184,11 @@ public final class ChromiumEngine: WebEngine {
             }
         }
         return profile
+    }
+
+    /// Whether the profile is in use in the engine.
+    func isFollowing(_ profileID: Profile.ID) -> Bool {
+        followedProfiles.contains(profileID)
     }
 
     /// The profile's engine window, for extension popups.

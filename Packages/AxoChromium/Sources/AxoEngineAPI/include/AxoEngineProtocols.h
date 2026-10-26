@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 16
+#define AXO_ENGINE_API_VERSION 17
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -31,6 +31,8 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol AXOContextMenu;
 @protocol AXOContextMenuItem;
 @protocol AXOExtensionSidePanel;
+@protocol AXOBookmarkNode;
+@protocol AXOBookmarkChange;
 
 typedef NS_ENUM(NSInteger, AXOExtensionPromptKind) {
   /// More permissions (`chrome.permissions.request`, or turning on an extension that asked for
@@ -175,6 +177,18 @@ NS_SWIFT_UI_ACTOR
 /// handler, every prompt is answered Cancel.
 @property(nonatomic, copy, nullable) void (^onExtensionPrompt)
     (id<AXOExtensionPrompt> prompt, void (^answer)(AXOExtensionPromptAnswer answer));
+
+/// Sets the profile's bookmarks, as extensions see them (`chrome.bookmarks`): `bar` becomes the
+/// bookmarks bar and `other` the other bookmarks, replacing what was there, matched node by node
+/// by `identifier` (a UUID), so a bookmark keeps its extension-visible ID across launches. Call
+/// it whenever the app's tree changes. Applied once the bookmark model has loaded.
+- (void)setBookmarkBar:(NSArray<id<AXOBookmarkNode>>*)bar
+                 other:(NSArray<id<AXOBookmarkNode>>*)other
+    NS_SWIFT_NAME(setBookmarks(bar:other:));
+
+/// Called with each change an extension makes to the bookmarks. Apply it to the app's data and
+/// set the tree again; a change the app can't make is undone by that.
+@property(nonatomic, copy, nullable) void (^onBookmarkChange)(id<AXOBookmarkChange> change);
 
 /// Called when an extension's side panel opens (`chrome.sidePanel.open`, or its toolbar button
 /// with `openPanelOnActionClick`). Show `panel.view` beside the page; another extension's panel
@@ -510,6 +524,48 @@ NS_SWIFT_UI_ACTOR
 /// For screen recording, what may be shared.
 @property(nonatomic, readonly) BOOL allowsScreen;
 @property(nonatomic, readonly) BOOL allowsWindow;
+@end
+
+/// A bookmark or folder in the app's tree, for `setBookmarkBar:other:`.
+NS_SWIFT_UI_ACTOR
+@protocol AXOBookmarkNode <NSObject>
+/// A UUID, unique in the tree: the app's own ID for the thing the bookmark stands for.
+@property(nonatomic, readonly) NSString* identifier;
+@property(nonatomic, readonly) NSString* title;
+/// The bookmark's URL, or `nil` for a folder.
+@property(nonatomic, readonly, nullable) NSURL* url;
+/// A folder's contents, in order.
+@property(nonatomic, readonly) NSArray<id<AXOBookmarkNode>>* children;
+@end
+
+typedef NS_ENUM(NSInteger, AXOBookmarkChangeKind) {
+  AXOBookmarkChangeKindCreated,
+  AXOBookmarkChangeKindUpdated,
+  AXOBookmarkChangeKindMoved,
+  AXOBookmarkChangeKindRemoved,
+};
+
+/// Where a changed bookmark is: at the top of the bookmarks bar or the other bookmarks, or in a
+/// folder (`parentIdentifier`).
+typedef NS_ENUM(NSInteger, AXOBookmarkRoot) {
+  AXOBookmarkRootNone,
+  AXOBookmarkRootBar,
+  AXOBookmarkRootOther,
+};
+
+/// A change an extension made to the bookmarks.
+NS_SWIFT_UI_ACTOR
+@protocol AXOBookmarkChange <NSObject>
+@property(nonatomic, readonly) AXOBookmarkChangeKind kind;
+/// The bookmark's UUID; for a new one, made by the engine, for the app to use as its ID.
+@property(nonatomic, readonly) NSString* identifier;
+/// Where it is now (where it was, for a removal), and its position there.
+@property(nonatomic, readonly) AXOBookmarkRoot parentRoot;
+@property(nonatomic, readonly, copy, nullable) NSString* parentIdentifier;
+@property(nonatomic, readonly) NSUInteger index;
+@property(nonatomic, readonly) NSString* title;
+/// The bookmark's URL, or `nil` for a folder.
+@property(nonatomic, readonly, nullable) NSURL* url;
 @end
 
 /// An extension's side panel, open. Show `view` beside the page, titled `title`.

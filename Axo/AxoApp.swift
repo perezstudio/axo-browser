@@ -227,7 +227,7 @@ enum AppEnvironment {
                     guard case .failed(let reason) = state else { return }
                     model?.alertMessage = "The Chromium engine didn't start: \(reason)"
                 }
-                chromiumExtensionBridge = ChromiumExtensionBridge(model: model, engine: chromium)
+                chromiumExtensionBridge = ChromiumExtensionBridge(model: model, engine: chromium, store: store)
                 // UI tests can preinstall an unpacked extension, as with WebKit.
                 if isUITesting, let path = ProcessInfo.processInfo.environment["AXO_UI_TESTING_EXTENSION"] {
                     let previous = chromium.onStateChange

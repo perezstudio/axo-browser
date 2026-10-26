@@ -257,6 +257,41 @@ final class ChromiumEngineUITests: XCTestCase {
         waitForExpectations(timeout: 15)
     }
 
+    /// Extensions see the sidebar as bookmarks (chrome.bookmarks): the Space is a folder in the
+    /// other bookmarks, and a bookmark an extension creates there becomes a pinned tab. The
+    /// extension names the Space in its badge, then adds the bookmark, which isn't loaded.
+    @MainActor
+    func testExtensionsSeeTheSidebarAsBookmarks() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "AxoUITestBookmarks-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try """
+        {"name": "Axo Bookmarker", "version": "1.0", "manifest_version": 3, "description": "UI test extension.",
+         "permissions": ["bookmarks"], "action": {"default_title": "Axo Bookmarker"},
+         "background": {"service_worker": "bg.js"}}
+        """.write(to: folder.appending(path: "manifest.json"), atomically: true, encoding: .utf8)
+        try """
+        chrome.action.onClicked.addListener(async () => {
+          const [root] = await chrome.bookmarks.getTree();
+          const space = root.children[1].children[0];
+          await chrome.action.setBadgeText({ text: space.title });
+          await chrome.bookmarks.create({ parentId: space.id, title: 'Axo Docs', url: 'https://docs.example/' });
+        });
+        """.write(to: folder.appending(path: "bg.js"), atomically: true, encoding: .utf8)
+
+        let app = launchChromiumApp(extensionFolder: folder)
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 10))
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,<title>Page</title><p>Page</p>\n")
+        let button = app.buttons.matching(NSPredicate(format: "identifier == 'extensionButton' AND label CONTAINS 'Axo Bookmarker'")).firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 30))
+        button.click()
+
+        expectation(for: NSPredicate(format: "label CONTAINS 'Home'"), evaluatedWith: button)
+        waitForExpectations(timeout: 15)
+        XCTAssertTrue(sidebar.staticTexts["Axo Docs"].waitForExistence(timeout: 15), "The new bookmark is a pinned tab")
+    }
+
     /// A tab loads its page in Chromium. The page names the engine from its user agent, which
     /// says "Chrome/" only in Chromium, so the test can't pass on WebKit.
     @MainActor
