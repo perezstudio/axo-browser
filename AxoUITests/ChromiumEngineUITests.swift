@@ -408,6 +408,28 @@ final class ChromiumEngineUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Has opener"].waitForExistence(timeout: 15), "A tab connected to the page that opened it")
     }
 
+    /// A link leaving a pinned tab's site opens in Peek, and the pinned tab stays where it was:
+    /// Chromium asks Axo before following a link click, as WebKit does. The link points at a
+    /// closed loopback port, so nothing leaves the machine.
+    @MainActor
+    func testLinksFromPinnedTabsOpenInPeek() throws {
+        let app = launchChromiumApp()
+        let sidebar = openPage(
+            "<title>Home</title><body style='margin:0'><a href='http://127.0.0.1:9/far' style='display:block;width:100vw;height:100vh'>Far away</a></body>",
+            titled: "Home", in: app
+        )
+        app.typeKey("p", modifierFlags: [.command, .control])
+        XCTAssertTrue(sidebar.staticTexts["Pinned"].waitForExistence(timeout: 5))
+
+        clickPage(in: app)
+        let peek = app.descendants(matching: .any)["peek"]
+        XCTAssertTrue(peek.waitForExistence(timeout: 10), "The link opens in Peek")
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(peek.waitForNonExistence(timeout: 5), "Esc closes Peek")
+        XCTAssertTrue(sidebar.staticTexts["Home"].waitForExistence(timeout: 5), "The pinned tab didn't navigate")
+        XCTAssertFalse(sidebar.staticTexts["127.0.0.1"].exists, "Peek never joined the sidebar")
+    }
+
     /// A tab loads its page in Chromium. The page names the engine from its user agent, which
     /// says "Chrome/" only in Chromium, so the test can't pass on WebKit.
     @MainActor
