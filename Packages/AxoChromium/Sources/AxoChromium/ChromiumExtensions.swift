@@ -105,7 +105,7 @@ public struct ChromiumExtensionPrompt: Equatable {
         self.details = details
     }
 
-    init(_ prompt: any AXOExtensionPrompt) {
+    @MainActor init(_ prompt: any AXOExtensionPrompt) {
         let kind: Kind = switch prompt.kind {
         case .permissions: .permissions
         case .install: .install

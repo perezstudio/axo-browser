@@ -263,6 +263,48 @@ public final class FakeExtensionPrompt: NSObject, AXOExtensionPrompt {
     }
 }
 
+public final class FakeAXOContextMenuItem: NSObject, AXOContextMenuItem {
+    public let type: AXOContextMenuItemType
+    public let title: String
+    public let isEnabled = true
+    public let isChecked: Bool
+    public let children: [any AXOContextMenuItem]
+
+    public init(type: AXOContextMenuItemType = .command, title: String, checked: Bool = false, children: [any AXOContextMenuItem] = []) {
+        self.type = type
+        self.title = title
+        isChecked = checked
+        self.children = children
+    }
+}
+
+public final class FakeAXOContextMenu: NSObject, AXOContextMenu {
+    public var linkURL: URL?
+    public var linkText = ""
+    public var media = AXOContextMenuMedia.none
+    public var sourceURL: URL?
+    public var hasImageContents = false
+    public var selectionText = ""
+    public var isEditable = false
+    public var edits: AXOContextMenuEdits = []
+    public var misspelledWord = ""
+    public var suggestions: [String] = []
+    public var pageURL = URL(string: "https://example.com/")!
+    public var location = NSPoint(x: 10, y: 20)
+    public var extensionItems: [any AXOContextMenuItem] = []
+    public private(set) var performedEdits: [AXOContextMenuEdit] = []
+    public private(set) var performedItems: [any AXOContextMenuItem] = []
+    public private(set) var isClosed = false
+
+    public func perform(_ edit: AXOContextMenuEdit) { performedEdits.append(edit) }
+    public func replaceMisspelling(with word: String) {}
+    public func copyImage() {}
+    public func download(_ url: URL) {}
+    public func lookUpSelection() {}
+    public func performExtensionItem(_ item: any AXOContextMenuItem) { performedItems.append(item) }
+    public func closed(followingLink url: URL?) { isClosed = true }
+}
+
 public final class FakeExtensionPopup: NSObject, AXOExtensionPopup {
     public let extensionIdentifier: String
     public let view = NSView()

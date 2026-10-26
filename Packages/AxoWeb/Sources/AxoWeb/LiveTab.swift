@@ -74,6 +74,10 @@ final class LiveTab: EnginePageDelegate {
         pool?.onOpenInNewTab?(url, tabID)
     }
 
+    func page(_ page: any EnginePage, showContextMenu menu: any PageContextMenu) -> Bool {
+        pool?.onContextMenu?(menu, tabID) ?? false
+    }
+
     func page(_ page: any EnginePage, didStartDownloadFrom sourceURL: URL?, cancel: @escaping @MainActor () -> Void) -> DownloadItem {
         guard let pool else {
             // The pool is gone, so nothing would show the download. Stop it.

@@ -133,8 +133,8 @@ struct ChromiumEngineTests {
             context: nil, characters: "l", charactersIgnoringModifiers: "l", isARepeat: false, keyCode: 37
         ))
 
-        let used = try #require(fake.delegate?.page?(fake, didNotHandleKeyEvent: shortcut))
-        #expect(used)
+        let used = fake.delegate?.page?(fake, didNotHandleKeyEvent: shortcut)
+        #expect(used == true)
         #expect(handled == ["l"], "⌘L reaches Axo's menu while the page has focus")
         withExtendedLifetime(page) {}
     }
@@ -174,6 +174,42 @@ struct ChromiumEngineTests {
         #expect(window.isActive)
         engine.setWindowsActive(false)
         #expect(!window.isActive)
+    }
+
+    @Test func rightClicksBecomeAxosMenu() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine)
+        let tab = Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial)
+        pool.page(for: tab, profileID: profileID)
+        let fake = try #require(FakePage.made.last)
+        var menus: [(any PageContextMenu, Tab.ID)] = []
+        pool.onContextMenu = { menu, tabID in
+            menus.append((menu, tabID))
+            return true
+        }
+        let engineMenu = FakeAXOContextMenu()
+        engineMenu.linkURL = URL(string: "https://example.com/next")
+        engineMenu.isEditable = true
+        engineMenu.edits = [.copy, .paste]
+        let fill = FakeAXOContextMenuItem(title: "Fill Password")
+        engineMenu.extensionItems = [FakeAXOContextMenuItem(type: .submenu, title: "Passwords", children: [fill])]
+
+        let shown = fake.delegate?.page?(fake, showContextMenu: engineMenu)
+        #expect(shown == true)
+        let (menu, tabID) = try #require(menus.first)
+        #expect(tabID == tab.id)
+        #expect(menu.linkURL == engineMenu.linkURL)
+        #expect(menu.edits == [.copy, .paste])
+        #expect(menu.extensionItems.first?.kind == .submenu)
+        #expect(menu.extensionItems.first?.children.map(\.title) == ["Fill Password"])
+
+        menu.perform(.pasteAndMatchStyle)
+        menu.perform(try #require(menu.extensionItems.first?.children.first))
+        #expect(engineMenu.performedEdits == [.pasteAndMatchStyle])
+        #expect(engineMenu.performedItems.first === fill, "The engine runs its own item")
     }
 
     @Test func aFailedStartReportsWhy() {

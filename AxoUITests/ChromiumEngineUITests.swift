@@ -148,6 +148,41 @@ final class ChromiumEngineUITests: XCTestCase {
         waitForExpectations(timeout: 15)
     }
 
+    /// Right-clicking a page shows Axo's own menu (not Chromium's), with extensions' items, and
+    /// choosing an extension's item runs it.
+    @MainActor
+    func testRightClickShowsAxosMenuWithExtensionItems() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "AxoUITestMenu-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try """
+        {"name": "Axo Marker", "version": "1.0", "manifest_version": 3, "description": "UI test extension.",
+         "permissions": ["contextMenus"], "action": {"default_title": "Axo Marker"},
+         "background": {"service_worker": "bg.js"}}
+        """.write(to: folder.appending(path: "manifest.json"), atomically: true, encoding: .utf8)
+        try """
+        chrome.runtime.onInstalled.addListener(() =>
+          chrome.contextMenus.create({ id: 'mark', title: 'Mark This Page', contexts: ['all'] }));
+        chrome.contextMenus.onClicked.addListener(() => chrome.action.setBadgeText({ text: 'OK' }));
+        """.write(to: folder.appending(path: "bg.js"), atomically: true, encoding: .utf8)
+
+        let app = launchChromiumApp(extensionFolder: folder)
+        XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 10))
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,<title>Page</title><p style='font-size:60px'>Right-click me</p>\n")
+        let button = app.buttons.matching(NSPredicate(format: "identifier == 'extensionButton' AND label CONTAINS 'Axo Marker'")).firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 30))
+
+        // The page column's middle, away from the sidebar.
+        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.5)).rightClick()
+        let mark = app.menuItems["Mark This Page"]
+        XCTAssertTrue(mark.waitForExistence(timeout: 10), "Axo's menu has the extension's item")
+        XCTAssertTrue(app.menuItems["Reload"].exists, "and Axo's own items")
+        mark.click()
+
+        expectation(for: NSPredicate(format: "label CONTAINS 'OK'"), evaluatedWith: button)
+        waitForExpectations(timeout: 15)
+    }
+
     /// A tab loads its page in Chromium. The page names the engine from its user agent, which
     /// says "Chrome/" only in Chromium, so the test can't pass on WebKit.
     @MainActor

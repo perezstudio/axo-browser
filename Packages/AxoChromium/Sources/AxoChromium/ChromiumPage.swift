@@ -230,6 +230,11 @@ extension ChromiumPage: AXOPageDelegate {
         download.observer = observer
     }
 
+    /// A right-click: Axo shows its own menu for it.
+    func page(_ page: any AXOPage, showContextMenu menu: any AXOContextMenu) -> Bool {
+        delegate?.page(self, showContextMenu: ChromiumContextMenu(menu)) ?? false
+    }
+
     /// Key presses the page didn't use, such as ⌘ shortcuts, go to the app's menu, so Axo's
     /// shortcuts (and extensions' shortcuts in it) work while the page has keyboard focus.
     func page(_ page: any AXOPage, didNotHandleKeyEvent event: NSEvent) -> Bool {

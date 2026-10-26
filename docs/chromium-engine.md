@@ -88,6 +88,10 @@ Rules that keep updates cheap:
 
 Electron embeds only Chromium's content layer and its extension support is partial, which would bring back the gaps this move is meant to fix. `chrome.tabs`, Chrome Web Store installs, native messaging, `declarativeNetRequest`, and `sidePanel` live in Chromium's `//chrome` layer, so Axo builds on `//chrome` and replaces Chrome's Views interface with SwiftUI.
 
+### Native UI, a thin engine, small patches
+
+Decided in October 2026, and the rule for every Chrome feature that has UI: Axo draws it natively, and the engine only reports what's needed and runs actions. Chrome's Views UI never shows in Axo (it doesn't fit, and it pulls in code Axo doesn't need). When Chrome would show a menu, dialog, bubble, or window, the engine hands Axo the data through the `AxoEngineProtocols.h` API, and Axo builds the native control, as with the toolbar's popups, extension shortcuts in the menu bar, permission and install prompts, macOS's own screen-sharing picker, and the page's context menu. Prefer a delegate or observer Chromium already offers (`WebContentsDelegate::HandleContextMenu`, `HandleKeyboardEvent`) over changing Chromium; when there's none, patch only the factory or call site, a few lines that call into `axo/` (`patches/0003`–`0007`). That keeps a Chromium update to rebasing small patches, and keeps Axo lean.
+
 ## Hard parts
 
 - **The hidden tab model.** Chrome's extension APIs read tabs from `Browser` and `TabStripModel`. `axo/` keeps hidden ones that mirror Axo's windows, Spaces, tabs, splits, and favorites, so `chrome.tabs.query` agrees with the sidebar. This is the largest piece of work and the biggest risk. Decided in October 2026, from reading Chromium 156:

@@ -152,4 +152,7 @@ public protocol EnginePageDelegate: AnyObject {
     func page(_ page: any EnginePage, showsDialog kind: JavaScriptDialog.Kind, message: String, origin: PageOrigin) async -> JavaScriptDialogResult
     /// The page's file input wants files. Return them, or `nil` to cancel.
     func page(_ page: any EnginePage, selectsFilesAllowingMultiple allowsMultipleSelection: Bool, directories allowsDirectories: Bool) async -> [URL]?
+    /// A right-click, for engines that leave the menu to Axo. Show Axo's menu and return `true`,
+    /// or return `false` to show none.
+    func page(_ page: any EnginePage, showContextMenu menu: any PageContextMenu) -> Bool
 }

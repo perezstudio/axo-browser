@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 13
+#define AXO_ENGINE_API_VERSION 14
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -28,6 +28,8 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol AXOExtensionPopup;
 @protocol AXOExtensionCommand;
 @protocol AXOExtensionPrompt;
+@protocol AXOContextMenu;
+@protocol AXOContextMenuItem;
 
 typedef NS_ENUM(NSInteger, AXOExtensionPromptKind) {
   /// More permissions (`chrome.permissions.request`, or turning on an extension that asked for
@@ -240,6 +242,11 @@ NS_SWIFT_UI_ACTOR
 /// A download started. Report its progress through `download.observer`, which the delegate sets.
 - (void)page:(id<AXOPage>)page didStartDownload:(id<AXODownload>)download;
 @optional
+/// A right-click (or Control-click) in the page. Show the app's own menu for `menu` at
+/// `menu.location`, and call `-[AXOContextMenu closedFollowingLink:]` when it closes. Return
+/// `NO` to show nothing.
+- (BOOL)page:(id<AXOPage>)page showContextMenu:(id<AXOContextMenu>)menu
+    NS_SWIFT_NAME(page(_:showContextMenu:));
 /// A key press the page didn't use, such as a ⌘ shortcut: the page sees key presses first while
 /// it has keyboard focus. Return `YES` if the app used it, for example as a menu shortcut
 /// (`-[NSMenu performKeyEquivalent:]`). Without this, unused key presses are dropped.
@@ -372,6 +379,102 @@ NS_SWIFT_UI_ACTOR
 @property(nonatomic, readonly, getter=isEnabled) BOOL enabled;
 /// Whether clicking it opens a popup.
 @property(nonatomic, readonly) BOOL hasPopup;
+@end
+
+// MARK: - Context menus
+
+/// What a right-click hit, when it's media.
+typedef NS_ENUM(NSInteger, AXOContextMenuMedia) {
+  AXOContextMenuMediaNone,
+  AXOContextMenuMediaImage,
+  AXOContextMenuMediaVideo,
+  AXOContextMenuMediaAudio,
+  AXOContextMenuMediaCanvas,
+  AXOContextMenuMediaOther,
+};
+
+/// The editing commands that apply where the right-click was.
+typedef NS_OPTIONS(NSUInteger, AXOContextMenuEdits) {
+  AXOContextMenuEditsUndo = 1 << 0,
+  AXOContextMenuEditsRedo = 1 << 1,
+  AXOContextMenuEditsCut = 1 << 2,
+  AXOContextMenuEditsCopy = 1 << 3,
+  AXOContextMenuEditsPaste = 1 << 4,
+  AXOContextMenuEditsDelete = 1 << 5,
+  AXOContextMenuEditsSelectAll = 1 << 6,
+};
+
+/// An editing command for `-[AXOContextMenu performEdit:]`.
+typedef NS_ENUM(NSInteger, AXOContextMenuEdit) {
+  AXOContextMenuEditUndo,
+  AXOContextMenuEditRedo,
+  AXOContextMenuEditCut,
+  AXOContextMenuEditCopy,
+  AXOContextMenuEditPaste,
+  AXOContextMenuEditPasteAndMatchStyle,
+  AXOContextMenuEditDelete,
+  AXOContextMenuEditSelectAll,
+};
+
+typedef NS_ENUM(NSInteger, AXOContextMenuItemType) {
+  AXOContextMenuItemTypeCommand,
+  AXOContextMenuItemTypeCheckbox,
+  AXOContextMenuItemTypeRadio,
+  AXOContextMenuItemTypeSeparator,
+  AXOContextMenuItemTypeSubmenu,
+};
+
+/// An extension's context menu item (`chrome.contextMenus`).
+NS_SWIFT_UI_ACTOR
+@protocol AXOContextMenuItem <NSObject>
+@property(nonatomic, readonly) AXOContextMenuItemType type;
+@property(nonatomic, readonly) NSString* title;
+@property(nonatomic, readonly, getter=isEnabled) BOOL enabled;
+@property(nonatomic, readonly, getter=isChecked) BOOL checked;
+/// A submenu's items.
+@property(nonatomic, readonly) NSArray<id<AXOContextMenuItem>>* children;
+@end
+
+/// A right-click in a page: what it hit, extensions' items for it, and the actions a menu for
+/// it can run on the page.
+NS_SWIFT_UI_ACTOR
+@protocol AXOContextMenu <NSObject>
+/// The link clicked, if any, and its text.
+@property(nonatomic, readonly, nullable) NSURL* linkURL;
+@property(nonatomic, readonly) NSString* linkText;
+/// The media clicked, and its source (an image's URL, say).
+@property(nonatomic, readonly) AXOContextMenuMedia media;
+@property(nonatomic, readonly, nullable) NSURL* sourceURL;
+/// Whether an image's pixels are loaded, so it can be copied.
+@property(nonatomic, readonly) BOOL hasImageContents;
+/// The selected text, or empty.
+@property(nonatomic, readonly) NSString* selectionText;
+/// Whether the click was in a text field or editable content, and which edits apply there.
+@property(nonatomic, readonly, getter=isEditable) BOOL editable;
+@property(nonatomic, readonly) AXOContextMenuEdits edits;
+/// A misspelled word clicked, and the spelling checker's suggestions for it.
+@property(nonatomic, readonly) NSString* misspelledWord;
+@property(nonatomic, readonly) NSArray<NSString*>* suggestions;
+/// The page's URL.
+@property(nonatomic, readonly) NSURL* pageURL;
+/// Where the click was, in the page view's coordinates with the origin at its top left.
+@property(nonatomic, readonly) NSPoint location;
+/// Extensions' items for this click, grouped as Chrome groups them: an extension's only item
+/// at the top level, several in a submenu named for the extension.
+@property(nonatomic, readonly) NSArray<id<AXOContextMenuItem>>* extensionItems;
+
+- (void)performEdit:(AXOContextMenuEdit)edit;
+- (void)replaceMisspellingWith:(NSString*)word;
+/// Copies the clicked image.
+- (void)copyImage;
+/// Downloads a link's target or an image, as the page would.
+- (void)download:(NSURL*)url;
+/// Shows the selection's definition (Look Up).
+- (void)lookUpSelection;
+/// Runs an extension's item, one of `extensionItems` or their children.
+- (void)performExtensionItem:(id<AXOContextMenuItem>)item;
+/// Tells the page the menu closed, and which link it followed, if any. Call it once.
+- (void)closedFollowingLink:(nullable NSURL*)url;
 @end
 
 /// Something to ask the person, for `AXOProfile.onExtensionPrompt`.

@@ -258,6 +258,12 @@ public final class BrowserModel {
                 Task { await self.openTab(url: url, at: .after(sourceID)) }
             }
         }
+        // Right-clicks in pages whose engine leaves the menu to Axo (Chromium) get Axo's menu.
+        #if os(macOS)
+        pool.onContextMenu = { [weak self] menu, tabID in
+            self?.showPageMenu(menu, tabID: tabID) ?? false
+        }
+        #endif
         // Extensions' popup windows open as mini windows.
         pool.onEnginePopupWindow = { [weak self] popup in
             guard let self else {

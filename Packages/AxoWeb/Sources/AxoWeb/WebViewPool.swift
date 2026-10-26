@@ -85,6 +85,10 @@ public final class WebViewPool {
     /// `target="_blank"` or `window.open`). The second argument is the tab that asked.
     public var onOpenInNewTab: ((URL, Tab.ID) -> Void)?
 
+    /// Called when a page is right-clicked, for engines that leave the menu to Axo (Chromium).
+    /// Show the menu and return `true`; without a handler, no menu shows.
+    public var onContextMenu: ((any PageContextMenu, Tab.ID) -> Bool)?
+
     /// Called when the engine opened a page on its own (an extension's `chrome.tabs.create`).
     /// Make a tab for it and call ``adopt(_:as:profileID:)``; without a handler the page closes.
     public var onEngineOpenedPage: ((EngineOpenedPage) -> Void)?

@@ -123,6 +123,12 @@ public final class FakePage: EnginePage {
         loads.append(url)
     }
 
+    /// Plays a right-click in the page, as an engine that leaves the menu to Axo reports it.
+    @discardableResult
+    public func rightClick(_ menu: any PageContextMenu) -> Bool {
+        delegate?.page(self, showContextMenu: menu) ?? false
+    }
+
     public func goBack() { navigation.append("back") }
     public func goForward() { navigation.append("forward") }
     public func reload() { navigation.append("reload") }
@@ -155,4 +161,35 @@ public final class FakePage: EnginePage {
     public func close() {
         isClosed = true
     }
+}
+
+/// A right-click for tests: what was clicked is set directly, and actions are recorded.
+@MainActor
+public final class FakeContextMenu: PageContextMenu {
+    public var linkURL: URL?
+    public var linkText = ""
+    public var media = PageContextMenuMedia.none
+    public var sourceURL: URL?
+    public var hasImageContents = false
+    public var selectionText = ""
+    public var isEditable = false
+    public var edits: PageEdits = []
+    public var misspelledWord = ""
+    public var suggestions: [String] = []
+    public var location = CGPoint(x: 10, y: 10)
+    public var extensionItems: [PageContextMenuItem] = []
+
+    /// What the menu did, in order, such as "copy", "replace teh", or "item Mark".
+    public private(set) var performed: [String] = []
+    public private(set) var closedLink: URL??
+
+    public init() {}
+
+    public func perform(_ edit: PageEdit) { performed.append("\(edit)") }
+    public func replaceMisspelling(with word: String) { performed.append("replace \(word)") }
+    public func copyImage() { performed.append("copy image") }
+    public func download(_ url: URL) { performed.append("download \(url.absoluteString)") }
+    public func lookUpSelection() { performed.append("look up") }
+    public func perform(_ item: PageContextMenuItem) { performed.append("item \(item.title)") }
+    public func closed(followingLink url: URL?) { closedLink = .some(url) }
 }
