@@ -57,6 +57,14 @@ struct PeekTests {
         #expect(model.peek == nil)
     }
 
+    @Test func onlyTheTabShowingOpensPeek() async throws {
+        let pinned = try await tab()
+        let other = try await tab(pinned: false)
+        #expect(model.selectedTabID == other.id)
+        #expect(!click(elsewhere, in: pinned), "A pinned tab in the background can't pop Peek over the page showing")
+        #expect(model.peek == nil)
+    }
+
     @Test func newWindowLinksFromPinnedTabsOpenInPeek() async throws {
         let pinned = try await tab()
         pool.onOpenInNewTab?(elsewhere, pinned.id)

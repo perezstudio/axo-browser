@@ -142,7 +142,8 @@ public protocol EnginePageDelegate: AnyObject {
     func pageDidTakeFocus(_ page: any EnginePage)
 
     /// The person clicked a link in the main frame. Return `true` to take the click, so the page
-    /// doesn't navigate.
+    /// doesn't navigate. Answer right away, without closing or navigating this page from inside
+    /// the call: engines ask in the middle of the navigation.
     func page(_ page: any EnginePage, shouldHandleLinkTo url: URL, modifiers: LinkModifiers) -> Bool
     /// The page asked to open `url` in a new tab or window (`target="_blank"`, `window.open`).
     func page(_ page: any EnginePage, wantsToOpenInNewTab url: URL)

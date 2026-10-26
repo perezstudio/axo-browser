@@ -17,10 +17,16 @@ public struct Peek: Identifiable, Equatable {
 }
 
 extension BrowserModel {
-    /// Decides what a link click in a page does. In a pinned tab, a plain click on a link to
-    /// another site opens Peek instead of leaving the pinned page. Returns whether it was taken.
+    /// Decides what a link click in a page does. In the pinned tab showing, a plain click on a
+    /// link to another site opens Peek instead of leaving the pinned page. Returns whether it was
+    /// taken. It's called while the engine navigates, so it must not close or navigate that page
+    /// itself.
     func handleLinkClick(_ click: LinkClick) -> Bool {
-        guard click.modifiers.intersection([.command, .shift, .option, .control]).isEmpty,
+        // Only the tab showing: a page in the background can "click" its links from script
+        // (both engines count a script's link.click() as a link click), and mustn't pop Peek
+        // over the page the person is reading.
+        guard click.tabID == selectedTabID,
+              click.modifiers.intersection([.command, .shift, .option, .control]).isEmpty,
               let scheme = click.url.scheme?.lowercased(), scheme == "http" || scheme == "https",
               tabs.first(where: { $0.id == click.tabID })?.isPinned == true,
               click.leavesSite else { return false }

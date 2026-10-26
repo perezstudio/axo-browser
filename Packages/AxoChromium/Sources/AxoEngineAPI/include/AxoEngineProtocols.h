@@ -258,7 +258,9 @@ NS_SWIFT_UI_ACTOR
 - (void)pageDidFinishLoad:(id<AXOPage>)page;
 - (void)pageDidFailLoad:(id<AXOPage>)page;
 - (void)pageDidTakeFocus:(id<AXOPage>)page;
-/// A link click in the main frame. Return `YES` to take it, so the page doesn't navigate.
+/// A link click in the main frame, asked again at each redirect. Return `YES` to take it, so the
+/// page doesn't navigate. Answer right away: it's called in the middle of the navigation, so
+/// don't close or navigate this page from inside the call; do that work afterwards.
 - (BOOL)page:(id<AXOPage>)page shouldHandleLinkToURL:(NSURL*)url modifiers:(AXOLinkModifiers)modifiers;
 /// `target="_blank"`, `window.open`, and the like.
 - (void)page:(id<AXOPage>)page wantsToOpenURLInNewTab:(NSURL*)url;
