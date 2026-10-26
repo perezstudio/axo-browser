@@ -160,12 +160,12 @@ extension BrowserModel {
         let pool = pool
         // Wait a turn, so SwiftUI has removed the overlay that had focus.
         Task { @MainActor in
-            guard let webView = pool.liveWebView(for: selectedTabID), let window = webView.window else { return }
+            guard let pageView = pool.livePage(for: selectedTabID)?.view, let window = pageView.window else { return }
             #if os(macOS)
-            window.makeFirstResponder(webView)
+            window.makeFirstResponder(pageView)
             #else
             _ = window
-            webView.becomeFirstResponder()
+            pageView.becomeFirstResponder()
             #endif
         }
     }

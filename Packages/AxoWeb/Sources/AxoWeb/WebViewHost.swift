@@ -1,7 +1,6 @@
 import AxoCore
 import ScreenTime
 import SwiftUI
-import WebKit
 #if os(macOS)
 import AppKit
 
@@ -14,10 +13,10 @@ import UIKit
 public typealias PlatformView = UIView
 #endif
 
-/// Shows a tab's web view in SwiftUI.
+/// Shows a tab's page in SwiftUI.
 ///
-/// The host never creates or destroys web views: it asks ``WebViewPool`` for the tab's web view
-/// and mounts it. Switching tabs swaps which pooled web view is mounted, so pages keep their
+/// The host never creates or destroys pages: it asks ``WebViewPool`` for the tab's page and
+/// mounts its view. Switching tabs swaps which pooled page is mounted, so pages keep their
 /// state. The host also tells the pool which tab is visible, so it never hibernates.
 @MainActor
 public struct WebViewHost {
@@ -30,7 +29,7 @@ public struct WebViewHost {
     /// - Parameters:
     ///   - tab: The tab to show.
     ///   - profileID: The profile of the tab's Space.
-    ///   - pool: The pool that owns the tab's web view.
+    ///   - pool: The pool that owns the tab's page.
     public init(tab: AxoCore.Tab, profileID: Profile.ID, pool: WebViewPool) {
         self.tab = tab
         self.profileID = profileID
@@ -57,7 +56,8 @@ public struct WebViewHost {
                 pool.beginShowing(tab.id)
                 shownTabID = tab.id
             }
-            container.mount(pool.webView(for: tab, profileID: profileID))
+            let page = pool.page(for: tab, profileID: profileID)
+            container.mount(page.view, state: pool.state(for: tab.id))
             container.configureScreenTime(profileID: profileID, recordsUsage: pool.reportsScreenTimeUsage)
         }
 
@@ -99,37 +99,46 @@ extension WebViewHost: UIViewRepresentable {
 }
 #endif
 
-/// The view that holds whichever pooled web view is mounted, with Screen Time's webpage
+/// The view that holds whichever pooled page's view is mounted, with Screen Time's webpage
 /// controller on top of it.
 public final class WebViewContainer: PlatformView {
-    /// The web view currently mounted, if any.
-    public private(set) var mountedWebView: WKWebView?
+    /// The page view currently mounted, if any.
+    public private(set) var mountedView: PlatformView?
 
     /// Reports the mounted page's URL to Screen Time and shows Screen Time's block screen over it
     /// when the site is over its limit or blocked by a parent. Created on first mount.
     public private(set) var screenTime: STWebpageController?
-    private var urlObservation: NSKeyValueObservation?
+    /// The mounted page's state, whose URL Screen Time follows.
+    private var mountedState: WebTabState?
+    private var urlUpdates: Task<Void, Never>?
 
-    /// Mounts `webView`, filling the container, and unmounts any other web view.
+    /// Mounts a page's view, filling the container, and unmounts any other. Screen Time follows
+    /// `state`'s URL.
     ///
-    /// The web view resizes with the container through its autoresizing mask, not Auto Layout.
-    /// When the Web Inspector docks, WebKit shrinks the web view's frame and puts the inspector
-    /// beside it in this container; constraints would fight that, leaving the page's content at
-    /// full size, drawn over the inspector.
-    func mount(_ webView: WKWebView) {
-        guard mountedWebView !== webView else { return }
+    /// The view resizes with the container through its autoresizing mask, not Auto Layout.
+    /// When WebKit's Web Inspector docks, WebKit shrinks the web view's frame and puts the
+    /// inspector beside it in this container; constraints would fight that, leaving the page's
+    /// content at full size, drawn over the inspector.
+    func mount(_ view: PlatformView, state: WebTabState?) {
+        guard mountedView !== view else { return }
         unmount()
-        webView.translatesAutoresizingMaskIntoConstraints = true
-        webView.frame = bounds
-        webView.autoresizingMask = Self.fillingMask
+        view.translatesAutoresizingMaskIntoConstraints = true
+        view.frame = bounds
+        view.autoresizingMask = Self.fillingMask
         if let screenTimeView = screenTime?.view {
-            insert(webView, below: screenTimeView)
+            insert(view, below: screenTimeView)
         } else {
-            addSubview(webView)
+            addSubview(view)
         }
-        mountedWebView = webView
-        urlObservation = webView.observe(\.url, options: [.initial, .new]) { [weak self] webView, _ in
-            MainActor.assumeIsolated { self?.screenTime?.url = webView.url }
+        mountedView = view
+        mountedState = state
+        screenTime?.url = state?.url
+        if let state {
+            urlUpdates = Task { [weak self] in
+                for await url in Observations({ state.url }) {
+                    self?.screenTime?.url = url
+                }
+            }
         }
     }
 
@@ -140,7 +149,7 @@ public final class WebViewContainer: PlatformView {
         controller.suppressUsageRecording = !recordsUsage
         let identifier = STWebHistory.ProfileIdentifier(rawValue: profileID.uuidString)
         if controller.profileIdentifier != identifier { controller.profileIdentifier = identifier }
-        controller.url = mountedWebView?.url
+        controller.url = mountedState?.url
     }
 
     private func makeScreenTimeController() -> STWebpageController {
@@ -168,12 +177,17 @@ public final class WebViewContainer: PlatformView {
     }
     #endif
 
-    /// Removes the mounted web view without destroying it; the pool still owns it.
+    /// Removes the mounted view without destroying its page; the pool still owns it. A view
+    /// another container took meanwhile stays there: SwiftUI can dismantle the old host after the
+    /// new one mounted the page (a page moving to full screen and back).
     func unmount() {
-        urlObservation?.invalidate()
-        urlObservation = nil
-        mountedWebView?.removeFromSuperview()
-        mountedWebView = nil
+        urlUpdates?.cancel()
+        urlUpdates = nil
+        mountedState = nil
+        if mountedView?.superview === self {
+            mountedView?.removeFromSuperview()
+        }
+        mountedView = nil
         screenTime?.url = nil
     }
 }

@@ -13,6 +13,9 @@
 		11D4C12730705F800027735E /* AxoIntegration in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C12630705F800027735E /* AxoIntegration */; };
 		11D4C12930705F800027735E /* AxoExtensions in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C12830705F800027735E /* AxoExtensions */; };
 		11D4C12B30705F800027735E /* AxoInspector in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C12A30705F800027735E /* AxoInspector */; };
+		11D4C1C130705F800027735E /* AxoChromium in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C1C030705F800027735E /* AxoChromium */; };
+		11D4C1C530705F800027735E /* AxoChromiumTestSupport in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C1C430705F800027735E /* AxoChromiumTestSupport */; };
+		11D4C1D130705F800027735E /* AxoExtensionsTestSupport in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C1D030705F800027735E /* AxoExtensionsTestSupport */; };
 		11D4C1A330705F800027735E /* AxoImport in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C1A230705F800027735E /* AxoImport */; };
 		11D4C1B330705F800027735E /* AxoSync in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C1B230705F800027735E /* AxoSync */; };
 		11D4C21530705F800027735E /* AxoUI in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C21830705F800027735E /* AxoUI */; };
@@ -99,6 +102,7 @@
 			files = (
 				11D4C12130705F800027735E /* AxoUI in Frameworks */,
 				11D4C12B30705F800027735E /* AxoInspector in Frameworks */,
+				11D4C1C130705F800027735E /* AxoChromium in Frameworks */,
 				11D4C12930705F800027735E /* AxoExtensions in Frameworks */,
 				11D4C12730705F800027735E /* AxoIntegration in Frameworks */,
 				11D4C1A330705F800027735E /* AxoImport in Frameworks */,
@@ -110,6 +114,8 @@
 		11D4C06F30705F800027735E /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				11D4C1C530705F800027735E /* AxoChromiumTestSupport in Frameworks */,
+				11D4C1D130705F800027735E /* AxoExtensionsTestSupport in Frameworks */,
 			);
 		};
 		11D4C07930705F800027735E /* Frameworks */ = {
@@ -167,6 +173,7 @@
 				11D4C05D30705F7E0027735E /* Sources */,
 				11D4C05E30705F7E0027735E /* Frameworks */,
 				11D4C05F30705F7E0027735E /* Resources */,
+				11D4C1C330705F800027735E /* Embed Chromium Engine */,
 			);
 			buildRules = (
 			);
@@ -177,6 +184,7 @@
 			packageProductDependencies = (
 				11D4C12030705F800027735E /* AxoUI */,
 				11D4C12A30705F800027735E /* AxoInspector */,
+				11D4C1C030705F800027735E /* AxoChromium */,
 				11D4C12830705F800027735E /* AxoExtensions */,
 				11D4C12630705F800027735E /* AxoIntegration */,
 				11D4C1A230705F800027735E /* AxoImport */,
@@ -205,6 +213,10 @@
 				11D4C07530705F800027735E /* AxoTests */,
 			);
 			name = AxoTests;
+			packageProductDependencies = (
+				11D4C1C430705F800027735E /* AxoChromiumTestSupport */,
+				11D4C1D030705F800027735E /* AxoExtensionsTestSupport */,
+			);
 			productName = AxoTests;
 			productReference = 11D4C07230705F800027735E /* AxoTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -319,6 +331,7 @@
 				11D4C10230705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoWeb" */,
 				11D4C10330705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoExtensions" */,
 				11D4C10430705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoInspector" */,
+				11D4C1C230705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoChromium" */,
 				11D4C10530705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoPersistence" */,
 				11D4C10630705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoSync" */,
 				11D4C10730705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoIntegration" */,
@@ -365,6 +378,29 @@
 			);
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		11D4C1C330705F800027735E /* Embed Chromium Engine */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed Chromium Engine";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"$SRCROOT/scripts/embed-chromium-engine.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		11D4C05D30705F7E0027735E /* Sources */ = {
@@ -424,6 +460,7 @@
 				DEVELOPMENT_TEAM = YPGUL25V6H;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Axo/Info.plist;
@@ -459,6 +496,7 @@
 				DEVELOPMENT_TEAM = YPGUL25V6H;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Axo/Info.plist;
@@ -911,6 +949,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/AxoImport;
 		};
+		11D4C1C230705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoChromium" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/AxoChromium;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -968,6 +1010,21 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 11D4C10230705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoWeb" */;
 			productName = AxoWeb;
+		};
+		11D4C1C030705F800027735E /* AxoChromium */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 11D4C1C230705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoChromium" */;
+			productName = AxoChromium;
+		};
+		11D4C1C430705F800027735E /* AxoChromiumTestSupport */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 11D4C1C230705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoChromium" */;
+			productName = AxoChromiumTestSupport;
+		};
+		11D4C1D030705F800027735E /* AxoExtensionsTestSupport */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 11D4C10330705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoExtensions" */;
+			productName = AxoExtensionsTestSupport;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

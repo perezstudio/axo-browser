@@ -2,7 +2,7 @@
 
 ## Vision
 
-Axo is a native, lean, open source browser for the Apple ecosystem, inspired by Arc's sidebar and Spaces model. It runs on WebKit and SwiftUI, starts on macOS, and promises long-term maintenance, with the full codebase open sourced by the end of 2028.
+Axo is a native, lean, open source browser for the Apple ecosystem, inspired by Arc's sidebar and Spaces model. It is built with SwiftUI, starts on macOS, runs on WebKit today, and is moving to a Chromium fork on the Mac (iPhone and iPad stay on WebKit; see `docs/chromium-engine.md`), and promises long-term maintenance, with the full codebase open sourced by the end of 2028.
 
 Three pillars guide every decision:
 
@@ -38,7 +38,7 @@ Axo targets macOS 27 and later. `WKWebExtension` has been public since macOS 15.
 | --- | --- |
 | Language | Swift 6 with strict concurrency |
 | UI | SwiftUI for browser chrome, AppKit `WKWebView` for web content |
-| Engine | WebKit (`WKWebView`, `WKWebExtensionController`) |
+| Engine | WebKit (`WKWebView`, `WKWebExtensionController`) today. The Mac moves to a Chromium fork behind AxoWeb's `WebEngine` seam; iPhone and iPad stay on WebKit (`docs/chromium-engine.md`) |
 | Storage | SQLite through GRDB, one database for everything |
 | Sync | CloudKit via `CKSyncEngine` |
 | Distribution | Notarized DMG outside the Mac App Store, Sparkle for updates |
@@ -67,7 +67,7 @@ Arrows point from a package to what it depends on; AxoCore sits at the center.
 | --- | --- |
 | AxoUI | Windows, sidebar, command bar, settings, mascot. Never creates or destroys web views. |
 | AxoCore | Profiles, spaces, folders, tabs, windows, and the TabStore. Tabs reference a web view but don't require one. |
-| AxoWeb | Web view pool, `NSViewRepresentable` host, navigation and UI delegates, downloads, permissions, hibernation, Screen Time's webpage controller over each page. One `WKWebsiteDataStore(forIdentifier:)` per profile. |
+| AxoWeb | Web view pool and the `WebEngine` and `EnginePage` protocols it talks to (`WebKitEngine` implements them today), `NSViewRepresentable` host, navigation and UI delegates, downloads, permissions, hibernation, Screen Time's webpage controller over each page. One `WKWebsiteDataStore(forIdentifier:)` per profile. |
 | AxoExtensions | One `WKWebExtensionController` per profile, CRX install (verify, strip CRX3 header, unzip, load), `WKWebExtensionTab` and `WKWebExtensionWindow` adapters, `unsupportedAPIs` surfaced in the extension manager. |
 | AxoInspector | All private WebKit API behind runtime checks: the inspector (`developerExtrasEnabled`, `_WKInspector`, with public `isInspectable` as the fallback) and picture in picture (`_allowsPictureInPictureMediaPlayback`). |
 | AxoPersistence | The single GRDB database: sidebar model, history, bookmarks, and an FTS5 index for the command bar. `DatabasePool` for concurrent reads, `DatabaseMigrator` for schema changes, `ValueObservation` plus GRDBQuery for reactive SwiftUI. |
@@ -109,7 +109,7 @@ The long-term goal is a WebKit browser on every platform, starting with the Mac.
 | Linux | WebKitGTK and WPE, with a public C API (`webkit2/webkit2.h`) | No public extension layer; Axo would implement the WebExtensions runtime itself |
 | Windows | WebKit's Windows port exists (Playwright uses it) but is not production grade | Same as Linux, on a weaker engine |
 
-So the Mac, then iPhone and iPad, get a strong story; Linux is possible but expensive; Windows is weak. If full cross-platform Chrome extension support ever becomes a hard requirement, the alternative is Chromium (CEF or a fork), which trades WebKit's efficiency and native feel for extensions that just work. Axo stays on WebKit and validates the product on the Mac before committing to the hard platforms.
+So the Mac, then iPhone and iPad, get a strong story; Linux is possible but expensive; Windows is weak. If full cross-platform Chrome extension support ever becomes a hard requirement, the alternative is Chromium (CEF or a fork), which trades WebKit's efficiency and native feel for extensions that just work. Axo first stayed on WebKit to validate the product on the Mac. In October 2026 extension gaps and site compatibility made that trade worth it on the Mac: the Mac moves to a Chromium fork, while iPhone and iPad stay on WebKit, where the App Store requires it outside the EU. The design, phases, and the way Chromium updates stay cheap are in `docs/chromium-engine.md`.
 
 Competitive context: The Browser Company stopped active Arc development in 2025 to focus on Dia, leaving Arc users looking for a maintained alternative. Native open source Arc alternatives already exist (Ora, Aura), so Axo differentiates on real Chrome extension support, built-in DevTools, and deep Apple ecosystem integration.
 
@@ -313,6 +313,42 @@ Each milestone should be usable as a daily driver before the next one starts.
 - [x] Settings: General (navigation bar in the sidebar or above the page), Profiles, and Spaces (name, profile, color, icon, order).
 - [x] Favorites: a profile-wide grid above the pinned tabs (decided in October 2026: favorites are new and separate; pinned tabs and folders stay per Space as bookmarks).
 
+**Chromium engine on the Mac (decided October 2026; design in `docs/chromium-engine.md`)**
+
+The remaining work is tracked as GitHub issues under [#65](https://github.com/perezstudio/axo-browser/issues/65) (label `chromium`), each with its approach and when it's done.
+
+- [x] Phase 0: the `WebEngine` and `EnginePage` seam in AxoWeb, with WebKit behind it as `WebKitEngine`, no raw web views in AxoUI, downloads driven through engine-neutral `DownloadItem` calls, and a fake engine for the pool's tests.
+- [x] Phase 1: the `axo-chromium` repository and the engine framework, rendering tabs in Axo behind a debug setting (October 2026). Publishing the framework as a downloadable, versioned artifact moved to Phase 3's packaging.
+  - [x] The private `perezstudio/axo-chromium` repository, pinned to Chromium 156.0.8078.48 (Extended Stable), with sync and throttled build scripts.
+  - [x] The engine runs inside an AppKit app: `AXOApplication`, `AXOEngine` (Chromium's loop nested in AppKit's), `AXOProfile`, and `AXOPage` load a page in the fork's test shell and quit cleanly. One small Chromium patch.
+  - [x] The `AxoChromium` Swift package with `ChromiumEngine`, and the `ChromiumEngine` debug setting: Debug builds embed the engine from a sibling `axo-chromium` checkout, and every tab then runs on Chromium. `ChromiumEngineUITests` (opt-in) loads a tab and checks it ran in Chromium.
+- [x] Decided in October 2026: the Mac runs only on Chromium, with no WebKit fallback or debug setting. If the engine can't load, Axo says why and quits. Axo declares the usage descriptions and app entitlements Chrome does (Bluetooth, USB, printing, Photos, audio capture, passkeys), because the engine runs in Axo's process. Test runs stay on WebKit until Phase 4.
+- [ ] Phase 2: the hidden tab model and Chrome extensions (Bitwarden, uBlock Origin Lite, native messaging, Chrome Web Store installs).
+  - [x] Decided: real, hidden Chrome `Browser` windows holding the current Space's tabs, and hibernation by Chrome's discarding (see `docs/chromium-engine.md`).
+  - [x] Pages live in a hidden Chrome window's tab strip (one per profile for now), and an unpacked Manifest V3 extension loaded into the profile finds the page through `chrome.tabs.query` (the fork's `scripts/test_extension_tabs.sh`).
+  - [x] Axo's windows and Spaces in the engine API: one hidden window per profile holding the current Space's live tabs, switching with the Space, and two-way sync with the sidebar. A tab an extension opens becomes a sidebar tab that keeps its page; one it closes closes; one it selects is selected. Checked in the fork's `scripts/test_engine.sh` and Axo's package tests.
+  - [x] Favorites in the window: the profile's favorites come first, so extensions see a selected favorite as the active tab.
+  - [ ] Still to sync: extensions moving tabs (placing them among pinned tabs, folders, and splits), and hibernated tabs (Chrome's discarding, so extensions still see them).
+  - [x] Toolbar buttons and popups through the engine (API version 7): Axo's toolbar shows Chromium extensions' buttons with badges, and their popups open in Axo's popover sized to fit. The Extensions window lists, turns on and off, and removes them, and installs unpacked folders. `ChromiumEngineUITests` checks a badge and a popup with the real engine.
+  - [x] `.crx` installs (API version 8): the Extensions window checks a package and shows what it can do in Axo's install prompt, as with WebKit, then Chrome's installer installs it and turns it on with the approved permissions.
+  - [x] Popups extensions open themselves (`chrome.action.openPopup`, API version 9), which 1Password uses from its click handler.
+  - [x] Bookmarks are the sidebar (API version 17): `chrome.bookmarks` sees the favorites as the bookmarks bar and each Space as a folder of its pinned tabs and folders, and extensions' changes (create, rename, move, remove) change the sidebar. Axo's database stays the only copy; the engine mirrors it into Chrome's bookmark model with no patch.
+  - [x] History (API version 18): the engine keeps Chrome's own history as a hidden copy of Axo's, recording page visits itself, because visited links (partitioned per site, rebuilt from it at launch) and `chrome.history` and `chrome.topSites` come from it. Decided in October 2026 over saving none and feeding visited links from Axo, which needed a migration, a launch-time replay, and a patch. What changes Chrome's copy without a page visit (`chrome.history.addUrl`, deletions from `chrome.history` or `chrome.browsingData`) reaches Axo's history; Chrome's expiry of old visits doesn't. Axo has no way to delete history yet; when it does, it must delete Chrome's copy too. Clearing a profile's website data keeps both.
+  - [ ] Still to map: downloads to Axo's Downloads, sessions to Axo's archive, and tab groups to folders.
+  - [x] The Allow User Scripts switch (API version 16): the Extensions window shows it for extensions that use `chrome.userScripts`, as Chrome does.
+  - [x] Extensions' side panels (API version 15): `chrome.sidePanel` panels show natively beside the page, opened by the API or the extension's toolbar button.
+  - [x] Axo's own context menu on Chromium pages (API version 14): links, images, selections, editing and spelling, Back/Forward/Reload, and extensions' `chrome.contextMenus` items, as a native menu.
+  - [x] Axo's prompts instead of Chrome's dialogs (API version 13): permission requests, installs, and uninstall confirmations are Axo alerts; screen sharing (extensions' and pages') asks screen or window, then opens macOS's own picker; OAuth sign-in pages open in an Axo window.
+  - [x] Extension keyboard shortcuts (API version 12): `chrome.commands` shortcuts are menu items under Tabs › Extension Shortcuts and work while a page has focus; key presses a page doesn't use reach Axo's menu, which also fixed Axo's own shortcuts on Chromium pages.
+  - [x] Extensions' windows (API version 11): `chrome.windows.create` popups open as Axo mini windows sized as asked, and normal windows open their tabs in the sidebar, instead of Chrome's own windows.
+  - [x] Native messaging (API version 10): the engine also finds hosts registered for Google Chrome, where apps like 1Password register theirs.
+  - [ ] Still to come for extensions: the Chrome Web Store, site access settings, and inspecting background pages.
+  - [ ] Bitwarden and uBlock Origin Lite passing the real-extension tests on Chromium. So far, both real packages install enabled, show their toolbar buttons, and open their popups in the fork's test shell (`--package-test`); a test of their features in Axo is still to come.
+- [ ] Phase 3: permissions, downloads, dialogs, DevTools, Widevine, packaging, and performance against the WebKit build.
+  - [x] Chromium pages' camera and microphone, screen sharing, file uploads (folders too), JavaScript dialogs (`alert`, `confirm`, `prompt`, and "Leave this page?"), and page full screen, through Axo's own prompts, Open panel, alerts, and window (API version 20). Pages a page opens (`window.open`, `target="_blank"`) keep their opener and request: a tab after the opener, or a mini window for a sized popup. Popups need a click or key press, as in Safari.
+  - Still to do, from PR #38's red-team review (October 2026): tabs Chrome moves between windows (`chrome.tabs.move`), and `chrome.windows.create` reusing the Space's window, aren't followed yet; Axo's link handling (`shouldHandleLinkTo`) isn't called by the Chromium engine yet; saving files a page asks to save (`showSaveFilePicker`) is cancelled; and deleting history in Axo must also delete the engine's copy, once Axo can delete history.
+- [ ] Phase 4: prove one Chromium update, then ship the Mac on Chromium and remove WebKit, AxoExtensions, and AxoInspector from it.
+
 **Milestone 7: Sync and iOS**
 
 - [ ] CloudKit sync of spaces, folders, and pinned tabs. Built in AxoSync (profiles, Spaces, folders, and pinned tabs; last change wins per record; an untouched Home Space merges into the synced ones on a device's first sync) with an iCloud pane in Settings, on by default. Waiting on the iCloud container `iCloud.com.perezstudio.Axo` and a signed Release build to check with real devices.
@@ -353,6 +389,9 @@ This runs alongside development, not after it, because code nobody can see does 
 | Scope creep | Each milestone must be a usable daily driver before moving on |
 | No passwords or autofill means users won't switch | Support 1Password and Bitwarden extensions with native messaging early, plus Apple's passkey API |
 | No WebExtension layer on Linux or Windows | Prove the product on Apple platforms first; revisit Linux only if demand justifies building the runtime |
+| Chromium updates become a treadmill | Axo's code lives in `axo/` and behind a stable framework API, with patches as a last resort; track Extended Stable; build against Beta in CI |
+| The hidden tab model drifts from the sidebar, so extensions see the wrong tabs | One owner (`axo/`) for the mirror, tested through `chrome.tabs` in `RealExtensionTests` |
+| Chromium uses more memory and energy than WebKit | Keep hibernation and the performance budgets; compare against the WebKit build before Phase 4 |
 | Sponsorships don't cover the work | Near-zero running costs, a founding supporter tier, and optional paid extras later |
 
 ## Decisions and open questions
@@ -366,10 +405,12 @@ This runs alongside development, not after it, because code nobody can see does 
 | macOS 27 minimum | Keeps the code simple with no availability checks; `WKWebExtension` is public since 15.4 |
 | Solid head symbol for logo and app icon | One mark everywhere; holds up down to 16 px |
 | Nunito with SF Pro | Rounded display type that echoes the symbol, system font keeps the app native |
+| Chromium fork on the Mac, WebKit on iPhone and iPad (October 2026) | Extension gaps and site compatibility. iOS keeps WebKit because the App Store requires it outside the EU |
 
 Open questions:
 
 - [ ] Final license and which packages to release first
+- [ ] Chromium fork: repository hosting and CI, Widevine licensing, and the other questions in `docs/chromium-engine.md`
 - [x] Raise the minimum target to the latest macOS for newer APIs? (Yes: macOS 27, October 2026)
 - [ ] Sponsorship setup and a possible supporter tier
 - [x] Mascot design and visual identity (settled, see Brand)

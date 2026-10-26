@@ -35,8 +35,12 @@ public struct ExtensionSummary: Identifiable, Equatable, Sendable {
     public var lines: [String]
     /// Why it couldn't load, if it couldn't.
     public var loadError: String?
+    /// For an extension that runs user scripts (`chrome.userScripts`, as script managers do),
+    /// whether the person allowed it to; `nil` for others.
+    public var allowsUserScripts: Bool?
 
-    public init(id: String, name: String, version: String, isEnabled: Bool, isUnpacked: Bool, reachesAllRequestedSites: Bool, lines: [String], loadError: String?) {
+    public init(id: String, name: String, version: String, isEnabled: Bool, isUnpacked: Bool, reachesAllRequestedSites: Bool, lines: [String], loadError: String?, allowsUserScripts: Bool? = nil) {
+        self.allowsUserScripts = allowsUserScripts
         self.id = id
         self.name = name
         self.version = version
@@ -77,9 +81,16 @@ public protocol ExtensionManaging: AnyObject {
     func setEnabled(_ enabled: Bool, extensionID: String, profileID: Profile.ID) async throws
     /// Lets an extension reach every site it asked for, or only where it's clicked.
     func setReachesAllRequestedSites(_ all: Bool, extensionID: String, profileID: Profile.ID) async throws
+    /// Gives or takes away an extension's permission to run user scripts.
+    func setAllowsUserScripts(_ allowed: Bool, extensionID: String, profileID: Profile.ID) async throws
     /// Opens the Web Inspector for an extension's background page, loading it first if needed.
     /// Returns whether it could.
     func inspectBackgroundPage(_ extensionID: String, profileID: Profile.ID) async -> Bool
+}
+
+extension ExtensionManaging {
+    /// Does nothing, for extension systems without user scripts.
+    public func setAllowsUserScripts(_ allowed: Bool, extensionID: String, profileID: Profile.ID) async throws {}
 }
 
 extension BrowserModel {
@@ -274,6 +285,21 @@ private struct ExtensionRow: View {
             .fixedSize()
             if !item.lines.isEmpty {
                 Text(item.lines.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary)
+            }
+            if let allowed = item.allowsUserScripts {
+                Toggle(isOn: Binding(
+                    get: { allowed },
+                    set: { on in change { try await $0.setAllowsUserScripts(on, extensionID: item.id, profileID: $1) } }
+                )) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Allow User Scripts")
+                        Text("Lets it run scripts you add to it on the sites they're for.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.checkbox)
+                .accessibilityLabel("Allow User Scripts for \(item.name)")
+                .accessibilityIdentifier("allowUserScripts")
             }
             HStack {
                 Button("Inspect Background Page") {

@@ -18,9 +18,18 @@ public final class BrowserModel {
     /// Every Space, in switcher order.
     public private(set) var spaces: [Space] = []
     /// The Space shown in the sidebar, once ``start()`` finishes.
-    public private(set) var space: Space?
+    public private(set) var space: Space? {
+        // An extension's side panel belongs to its profile's Spaces.
+        didSet {
+            if let profileID = extensionSidePanel?.profileID, profileID != space?.profileID {
+                closeExtensionSidePanel()
+            }
+        }
+    }
     /// The Space's tabs in sidebar order, kept current as the database changes.
-    public internal(set) var tabs: [AxoCore.Tab] = []
+    public internal(set) var tabs: [AxoCore.Tab] = [] {
+        didSet { syncEngineWindow() }
+    }
     /// The Space's folders, kept current as the database changes.
     public private(set) var folders: [Folder] = []
     /// The Space's split views, kept current as the database changes.
@@ -92,8 +101,18 @@ public final class BrowserModel {
     @ObservationIgnored private var observationTask: Task<Void, Never>?
     @ObservationIgnored private var spacesObservationTask: Task<Void, Never>?
     @ObservationIgnored var profilesObservationTask: Task<Void, Never>?
+    /// The extension side panel showing beside the page, if any.
+    public internal(set) var extensionSidePanel: ExtensionSidePanel?
+    /// The tab whose page fills the screen (`element.requestFullscreen()`), if any. The window
+    /// shows only it meanwhile.
+    public internal(set) var fullscreenTabID: AxoCore.Tab.ID?
+    /// A tab the engine selected (an extension's `chrome.tabs.create`) before it joined the
+    /// sidebar. It's selected once it does, and the engine's window keeps it selected meanwhile.
+    @ObservationIgnored var engineSelectionAwaitingAdoption: AxoCore.Tab.ID?
     /// The current Space's profile's favorites, in grid order.
-    public internal(set) var favorites: [Favorite] = []
+    public internal(set) var favorites: [Favorite] = [] {
+        didSet { syncEngineWindow() }
+    }
     @ObservationIgnored var favoritesObservationTask: Task<Void, Never>?
     /// The profile whose favorites are being observed.
     @ObservationIgnored var favoritesProfileID: Profile.ID?
@@ -243,6 +262,16 @@ public final class BrowserModel {
         }
         dismissMiniWindow = { id in MiniWindowController.dismiss(id) }
         #endif
+        pool.onPageOpened = { [weak self] opened, sourceID in
+            guard let self else {
+                opened.page.close()
+                return
+            }
+            self.showOpenedPage(opened, from: sourceID)
+        }
+        pool.onPageFullscreen = { [weak self] tabID, fullscreen in
+            self?.pageSetsFullscreen(tabID, fullscreen)
+        }
         pool.onOpenInNewTab = { [weak self] url, sourceID in
             guard let self else { return }
             if self.peek?.tab.id == sourceID || self.miniWindows.contains(where: { $0.id == sourceID }) {
@@ -252,6 +281,42 @@ public final class BrowserModel {
                 self.openPeek(url, from: sourceID)
             } else {
                 Task { await self.openTab(url: url, at: .after(sourceID)) }
+            }
+        }
+        // Right-clicks in pages whose engine leaves the menu to Axo (Chromium) get Axo's menu.
+        #if os(macOS)
+        pool.onContextMenu = { [weak self] menu, tabID in
+            self?.showPageMenu(menu, tabID: tabID) ?? false
+        }
+        #endif
+        // Extensions' popup windows open as mini windows.
+        pool.onEnginePopupWindow = { [weak self] popup in
+            guard let self else {
+                popup.page.close()
+                return
+            }
+            self.showEnginePopupWindow(popup)
+        }
+        // Tabs the engine changed on its own (Chromium's extension APIs) follow in the sidebar.
+        pool.onEngineOpenedPage = { [weak self] opened in
+            guard let self else {
+                opened.page.close()
+                return
+            }
+            Task { await self.adoptEngineOpenedPage(opened) }
+        }
+        pool.onEngineClosedTab = { [weak self] id in
+            Task { await self?.closeTab(id) }
+        }
+        // Only tabs this window shows; another profile's window can't change the selection here.
+        // A tab the engine opened a moment ago is selected once it joins the sidebar.
+        pool.onEngineActivatedTab = { [weak self] id in
+            guard let self else { return }
+            if tabs.contains(where: { $0.id == id }) || favorites.contains(where: { $0.id == id }) {
+                select(id)
+            } else if pool.isAwaitingAdoption(id) {
+                engineSelectionAwaitingAdoption = id
+                syncEngineWindow()
             }
         }
         pool.onLinkClick = { [weak self] click in
@@ -515,6 +580,10 @@ public final class BrowserModel {
         if id != selectedTabID, isFindBarVisible {
             closeFindBar()
         }
+        // Another tab can't show while a page fills the screen.
+        if let fullscreenTabID, id != fullscreenTabID {
+            exitPageFullscreen()
+        }
         if let peek, id != peek.sourceTabID {
             closePeek()
         }
@@ -528,14 +597,66 @@ public final class BrowserModel {
         activateSelectedTab()
     }
 
-    /// Asks the pool for the selected tab's web view, so its state is ready for the toolbar.
+    /// Asks the pool for the selected tab's page, so its state is ready for the toolbar.
     func activateSelectedTab() {
         guard let tab = shownTab, let space else {
             selectedPage = nil
             return
         }
-        _ = pool.webView(for: tab, profileID: space.profileID)
+        pool.page(for: tab, profileID: space.profileID)
         selectedPage = pool.state(for: tab.id)
+        // The selected tab may have just become live, so it joins the engine's window now.
+        syncEngineWindow()
+    }
+
+    // MARK: Engine window
+
+    /// Tells the engine which tabs the window shows (the profile's favorites, then the Space's
+    /// tabs, in sidebar order) and which is selected, a favorite included. Chromium's extension
+    /// APIs see them as the window's tabs; WebKit ignores it.
+    func syncEngineWindow() {
+        guard let space else { return }
+        let favoriteIDs = favoritesProfileID == space.profileID ? favorites.map(\.id) : []
+        let ids = favoriteIDs + tabs.map(\.id)
+        let selected = engineSelectionAwaitingAdoption ?? selectedTabID.flatMap { ids.contains($0) ? $0 : nil }
+        pool.setWindowTabs(ids, selected: selected, profileID: space.profileID)
+    }
+
+    /// Makes a sidebar tab for a page the engine opened on its own (an extension's
+    /// `chrome.tabs.create`), keeping the page that's already loading. It goes right after the
+    /// tab before it in the window when that tab is an unpinned sidebar tab, at the end otherwise.
+    func adoptEngineOpenedPage(_ opened: EngineOpenedPage) async {
+        guard let space, space.profileID == opened.profileID else {
+            if engineSelectionAwaitingAdoption == opened.tabID { engineSelectionAwaitingAdoption = nil }
+            pool.discard(opened.tabID)
+            return
+        }
+        let position: TabPosition = if let after = opened.after,
+                                       tabs.contains(where: { $0.id == after && !$0.isPinned && $0.folderID == nil }) {
+            .after(after)
+        } else {
+            .end
+        }
+        do {
+            let tab = try await store.openTab(
+                id: opened.tabID,
+                url: opened.page.url ?? URL(string: "about:blank")!,
+                title: opened.page.title,
+                in: space.id,
+                at: position
+            )
+            pool.adopt(opened.page, as: tab, profileID: opened.profileID)
+            tabs = try await store.tabs(in: space.id)
+            onTabEvent?(.opened(tab.id))
+            if engineSelectionAwaitingAdoption == tab.id {
+                engineSelectionAwaitingAdoption = nil
+                select(tab.id)
+            }
+        } catch {
+            if engineSelectionAwaitingAdoption == opened.tabID { engineSelectionAwaitingAdoption = nil }
+            pool.discard(opened.tabID)
+            report(error, "Axo couldn't open the tab an extension asked for.")
+        }
     }
 
     // MARK: Tabs
@@ -578,6 +699,10 @@ public final class BrowserModel {
     /// it back), and a pinned tab stays in the sidebar but unloads and returns to its home page.
     /// If the tab was selected, the tab below it (or above, if it was last) is selected.
     public func closeTab(_ id: AxoCore.Tab.ID) async {
+        if miniWindows.contains(where: { $0.id == id }) {
+            closeMiniWindowForEngine(id)
+            return
+        }
         if isFavorite(id) {
             closeFavorite(id)
             return
@@ -905,7 +1030,7 @@ public final class BrowserModel {
         panel.canChooseFiles = true
         panel.prompt = "Choose"
         let response: NSApplication.ModalResponse
-        if let window = pool.liveWebView(for: request.tabID)?.window {
+        if let window = pool.livePage(for: request.tabID)?.view.window {
             response = await panel.beginSheetModal(for: window)
         } else {
             response = await withCheckedContinuation { continuation in
@@ -1157,7 +1282,7 @@ public final class BrowserModel {
         #if os(macOS)
         guard let selectedTabID,
               let operation = pool.printOperation(for: selectedTabID),
-              let window = pool.liveWebView(for: selectedTabID)?.window else { return }
+              let window = pool.livePage(for: selectedTabID)?.view.window else { return }
         operation.runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
         #endif
     }

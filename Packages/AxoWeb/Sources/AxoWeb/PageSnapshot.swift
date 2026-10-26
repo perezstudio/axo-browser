@@ -1,4 +1,4 @@
-import WebKit
+import Foundation
 #if os(macOS)
 import AppKit
 #else
@@ -12,11 +12,9 @@ enum PageSnapshot {
     /// stand in for the page while it restores.
     static let width: CGFloat = 640
 
-    /// Captures the visible part of `webView` as JPEG data, or `nil` if WebKit can't snapshot it.
-    static func capture(_ webView: WKWebView) async -> Data? {
-        let configuration = WKSnapshotConfiguration()
-        configuration.snapshotWidth = NSNumber(value: Double(width))
-        guard let image = try? await webView.takeSnapshot(configuration: configuration) else { return nil }
+    /// Captures the visible part of `page` as JPEG data, or `nil` if its engine can't snapshot it.
+    static func capture(_ page: any EnginePage) async -> Data? {
+        guard let image = await page.snapshot(width: width) else { return nil }
         return jpegData(from: image)
     }
 
@@ -26,7 +24,7 @@ enum PageSnapshot {
         guard let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff) else { return nil }
         return bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.7])
         #else
-        // Redraw at 1x: WebKit returns an image at the screen's scale, which would make each
+        // Redraw at 1x: engines return an image at the screen's scale, which would make each
         // hibernated tab's snapshot several times larger.
         let scale = min(1, width / max(image.size.width, 1))
         let size = CGSize(width: (image.size.width * scale).rounded(), height: (image.size.height * scale).rounded())

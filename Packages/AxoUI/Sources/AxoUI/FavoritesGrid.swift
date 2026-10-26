@@ -105,7 +105,7 @@ private struct FavoriteTile: View {
             .disabled(model.favorites.last?.id == favorite.id)
         Divider()
         Button("Unload") { Task { await model.closeTab(favorite.id) } }
-            .disabled(model.pool.liveWebView(for: favorite.id) == nil)
+            .disabled(!model.pool.isLive(favorite.id))
         Button("Remove from Favorites") { Task { await model.removeFavorite(favorite.id) } }
     }
 

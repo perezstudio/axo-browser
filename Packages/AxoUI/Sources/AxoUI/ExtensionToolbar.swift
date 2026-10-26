@@ -37,6 +37,66 @@ public struct ExtensionToolbarItem: Identifiable, Equatable {
     }
 }
 
+/// An extension's keyboard shortcut (`chrome.commands`), shown as a menu item with its keys.
+public struct ExtensionShortcut: Identifiable, Equatable {
+    /// The extension and command, together.
+    public var id: String { "\(extensionID)/\(name)" }
+    /// The extension the shortcut belongs to.
+    public var extensionID: String
+    /// The command's name, which the provider runs.
+    public var name: String
+    /// The menu item's title.
+    public var title: String
+    /// The key, lowercase for letters (Shift is in ``modifiers``).
+    public var key: Character
+    /// The modifier keys.
+    public var modifiers: EventModifiers
+
+    /// Creates a shortcut.
+    public init(extensionID: String, name: String, title: String, key: Character, modifiers: EventModifiers) {
+        self.extensionID = extensionID
+        self.name = name
+        self.title = title
+        self.key = key
+        self.modifiers = modifiers
+    }
+}
+
+#if os(macOS)
+extension ExtensionShortcut {
+    /// The menu holding extensions' shortcuts, whose items don't count as Axo's own.
+    static let menuTitle = "Extension Shortcuts"
+
+    /// Whether one of Axo's own menu items in `menu` (the main menu) already uses these keys.
+    /// Axo's shortcut wins: an extension's shortcut that clashes stays in the menu without them.
+    func clashes(with menu: NSMenu?) -> Bool {
+        guard let menu else { return false }
+        var flags: NSEvent.ModifierFlags = []
+        if modifiers.contains(.command) { flags.insert(.command) }
+        if modifiers.contains(.option) { flags.insert(.option) }
+        if modifiers.contains(.control) { flags.insert(.control) }
+        if modifiers.contains(.shift) { flags.insert(.shift) }
+        return Self.usesKeys(String(key).lowercased(), flags, in: menu)
+    }
+
+    private static func usesKeys(_ key: String, _ flags: NSEvent.ModifierFlags, in menu: NSMenu) -> Bool {
+        let relevant: NSEvent.ModifierFlags = [.command, .option, .control, .shift]
+        for item in menu.items {
+            if let submenu = item.submenu {
+                if item.title != menuTitle, usesKeys(key, flags, in: submenu) { return true }
+                continue
+            }
+            guard !item.keyEquivalent.isEmpty else { continue }
+            var itemFlags = item.keyEquivalentModifierMask.intersection(relevant)
+            // AppKit writes Shift as an uppercase letter.
+            if item.keyEquivalent != item.keyEquivalent.lowercased() { itemFlags.insert(.shift) }
+            if item.keyEquivalent.lowercased() == key, itemFlags == flags { return true }
+        }
+        return false
+    }
+}
+#endif
+
 /// Supplies extension toolbar buttons and runs them. AxoExtensions provides the real
 /// implementation; the app connects them.
 @MainActor
@@ -46,6 +106,18 @@ public protocol ExtensionToolbarProviding: AnyObject {
     func toolbarItems(profileID: Profile.ID, tabID: AxoCore.Tab.ID?) -> [ExtensionToolbarItem]
     /// Clicks a button: the extension shows its popup or handles the click.
     func performAction(extensionID: String, profileID: Profile.ID, tabID: AxoCore.Tab.ID?)
+    /// The keyboard shortcuts of a profile's extensions. Reading this from a view must make the
+    /// view update when they change.
+    func shortcuts(profileID: Profile.ID) -> [ExtensionShortcut]
+    /// Runs a shortcut, as pressing its keys does, with the given tab as the active one.
+    func performShortcut(_ shortcut: ExtensionShortcut, profileID: Profile.ID, tabID: AxoCore.Tab.ID?)
+}
+
+extension ExtensionToolbarProviding {
+    /// No shortcuts, for providers whose engine doesn't have them.
+    public func shortcuts(profileID: Profile.ID) -> [ExtensionShortcut] { [] }
+    /// Does nothing, for providers whose engine doesn't have shortcuts.
+    public func performShortcut(_ shortcut: ExtensionShortcut, profileID: Profile.ID, tabID: AxoCore.Tab.ID?) {}
 }
 // Mac only for now; iPhone and iPad have their own chrome.
 #if os(macOS)

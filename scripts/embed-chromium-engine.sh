@@ -1,0 +1,62 @@
+#!/bin/bash
+# Run by the Axo target's "Embed Chromium Engine" build phase. Copies the Chromium engine
+# framework built by the axo-chromium fork into Axo.app/Contents/Frameworks and signs it with
+# Axo's identity. The Mac runs every tab on it, with no WebKit fallback (see
+# docs/chromium-engine.md), so a build without an engine warns: it builds, but the app says the
+# engine is missing and quits (test runs still use WebKit).
+#
+# The engine comes from $AXO_CHROMIUM_OUT, or from a sibling checkout of axo-chromium:
+#   ../axo-chromium/chromium/src/out/Axo
+# (next to the main checkout when building from a git worktree).
+set -euo pipefail
+
+DEST="$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH"
+FRAMEWORK_NAME="Chromium Framework.framework"
+OUT="${AXO_CHROMIUM_OUT:-$SRCROOT/../axo-chromium/chromium/src/out/Axo}"
+# In a git worktree, the sibling checkout sits next to the main checkout instead.
+if [[ -z "${AXO_CHROMIUM_OUT:-}" && ! -d "$OUT" ]]; then
+  COMMON="$(git -C "$SRCROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+  if [[ -n "$COMMON" ]]; then
+    OUT="$(dirname "$(dirname "$COMMON")")/axo-chromium/chromium/src/out/Axo"
+  fi
+fi
+SOURCE="$OUT/Chromium.app/Contents/Frameworks/$FRAMEWORK_NAME"
+
+# Axo's copy of the engine's API header must match the fork's (CLAUDE.md, "The API header").
+FORK_HEADER="$OUT/../../../../axo/public/AxoEngineProtocols.h"
+AXO_HEADER="$SRCROOT/Packages/AxoChromium/Sources/AxoEngineAPI/include/AxoEngineProtocols.h"
+if [[ -f "$FORK_HEADER" ]] && ! cmp -s "$FORK_HEADER" "$AXO_HEADER"; then
+  echo "error: $AXO_HEADER differs from the fork's $FORK_HEADER. Copy the fork's over it."
+  exit 1
+fi
+
+if [[ ! -d "$SOURCE" ]]; then
+  rm -rf "$DEST/$FRAMEWORK_NAME"
+  echo "warning: No Chromium engine at $SOURCE. Build axo-chromium next to Axo (or set AXO_CHROMIUM_OUT); without it Axo can't open."
+  exit 0
+fi
+
+# The copy is about 500 MB, so skip it when neither the engine nor the signing identity changed.
+IDENTITY="${EXPANDED_CODE_SIGN_IDENTITY:--}"
+STAMP="$DERIVED_FILE_DIR/chromium-engine.stamp"
+BINARY="$SOURCE/Versions/Current/Chromium Framework"
+CURRENT="$(stat -f %m "$BINARY") $IDENTITY"
+if [[ -d "$DEST/$FRAMEWORK_NAME" && -f "$STAMP" && "$(cat "$STAMP")" == "$CURRENT" ]]; then
+  exit 0
+fi
+
+mkdir -p "$DEST" "$DERIVED_FILE_DIR"
+rsync -a --delete "$SOURCE" "$DEST/"
+
+# Hardened Runtime's library validation only loads code signed by Axo's team, so re-sign the
+# framework and everything inside it, innermost first. The helpers keep running without
+# Hardened Runtime (they need JIT); shipping builds will sign them with Chrome's helper
+# entitlements instead (Phase 3).
+FRAMEWORK="$DEST/$FRAMEWORK_NAME/Versions/Current"
+sign() { codesign --force --sign "$IDENTITY" --timestamp=none "$@"; }
+find "$FRAMEWORK/Libraries" -type f -name '*.dylib' 2>/dev/null | while read -r library; do sign "$library"; done
+for helper in "$FRAMEWORK/Helpers"/*; do sign "$helper"; done
+sign "$DEST/$FRAMEWORK_NAME"
+
+echo "$CURRENT" > "$STAMP"
+echo "note: Embedded the Chromium engine from $SOURCE."

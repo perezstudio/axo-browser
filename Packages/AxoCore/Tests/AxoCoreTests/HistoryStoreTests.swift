@@ -90,6 +90,43 @@ struct HistoryStoreTests {
         #expect(try await history.search("bank", profileID: profileID).isEmpty)
     }
 
+    @Test func pagesAreDeletedPerProfile() async throws {
+        let other = try await store.createProfile(name: "Work").id
+        for page in ["https://a.example/", "https://b.example/", "https://c.example/"] {
+            try await history.recordVisit(to: url(page), title: "", profileID: profileID)
+        }
+        try await history.recordVisit(to: url("https://a.example/"), title: "", profileID: other)
+
+        try await history.delete([url("https://a.example/"), url("https://c.example/")], profileID: profileID)
+        #expect(try await history.recent(profileID: profileID).map(\.url) == [url("https://b.example/")])
+        #expect(try await history.recent(profileID: other).count == 1, "Other profiles keep theirs")
+
+        try await history.clear(profileID: profileID)
+        #expect(try await history.recent(profileID: profileID).isEmpty)
+        #expect(try await history.recent(profileID: other).count == 1)
+    }
+
+    @Test func deletingByRangeKeepsPagesVisitedOutsideIt() async throws {
+        let now = Date()
+        try await history.recordVisit(to: url("https://old.example/"), title: "", profileID: profileID, at: now.addingTimeInterval(-86_400 * 30))
+        try await history.recordVisit(to: url("https://new.example/"), title: "", profileID: profileID, at: now)
+        try await history.delete(
+            [url("https://old.example/"), url("https://new.example/")],
+            lastVisitedIn: now.addingTimeInterval(-3_600)...now.addingTimeInterval(1), profileID: profileID
+        )
+        #expect(try await history.recent(profileID: profileID).map(\.url) == [url("https://old.example/")])
+    }
+
+    @Test func deletingManyPagesAtOnceWorks() async throws {
+        let pages = (0..<40_000).map { url("https://site\($0).example/") }
+        _ = try await history.importItems(
+            pages.map { HistoryItem(profileID: profileID, url: $0, title: "", visitCount: 1, lastVisitedAt: Date()) },
+            profileID: profileID
+        )
+        try await history.delete(pages, profileID: profileID)
+        #expect(try await history.recent(profileID: profileID).isEmpty)
+    }
+
     @Test func searchingFiftyThousandPagesStaysFast() async throws {
         // Seed 50,000 pages in one transaction, then time searches the way the command bar runs
         // them: one per keystroke.

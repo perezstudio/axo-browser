@@ -539,9 +539,11 @@ public final class TabStore: Sendable {
 
     /// Creates a folder at the end of a level of a Space's pinned section.
     ///
-    /// - Parameter parent: The folder to create it in, or `nil` for the top level.
+    /// - Parameters:
+    ///   - parent: The folder to create it in, or `nil` for the top level.
+    ///   - id: The new folder's ID, such as one an extension's bookmark folder already has.
     @discardableResult
-    public func createFolder(named name: String, in spaceID: Space.ID, parent: Folder.ID? = nil) async throws -> Folder {
+    public func createFolder(named name: String, in spaceID: Space.ID, parent: Folder.ID? = nil, id: Folder.ID = UUID()) async throws -> Folder {
         try await database.writer.write { db in
             guard try Space.exists(db, id: spaceID) else { throw TabStoreError.spaceNotFound(spaceID) }
             if let parent {
@@ -549,7 +551,7 @@ public final class TabStore: Sendable {
                 guard parentFolder.spaceID == spaceID else { throw TabStoreError.folderInDifferentSpace(parent) }
             }
             let keys = try Self.pinnedLevelKeys(in: spaceID, parent: parent, excluding: nil, db)
-            let folder = Folder(spaceID: spaceID, parentID: parent, name: name, sortKey: try SortKey.between(keys.last, nil))
+            let folder = Folder(id: id, spaceID: spaceID, parentID: parent, name: name, sortKey: try SortKey.between(keys.last, nil))
             try folder.insert(db)
             return folder
         }

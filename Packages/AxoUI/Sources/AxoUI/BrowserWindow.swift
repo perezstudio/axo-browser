@@ -15,11 +15,53 @@ public struct BrowserWindow: View {
     }
 
     public var body: some View {
+        ZStack {
+            // Puts the window in full screen while a page fills it.
+            PageFullscreenWindow(isFullscreen: model.fullscreenTabID != nil) { model.exitPageFullscreen() }
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
+            // A page filling the screen (element.requestFullscreen()) shows alone, in place of the
+            // split view, so the sidebar's own state is left alone.
+            if model.fullscreenTabID != nil, let tab = model.shownTab, let space = model.space {
+                ZStack { WebViewHost(tab: tab, profileID: space.profileID, pool: model.pool) }
+                    .ignoresSafeArea()
+                    .toolbar(.hidden, for: .windowToolbar)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("fullscreenPage")
+            } else {
+                splitView
+            }
+        }
+        .focusedSceneValue(\.browserModel, model)
+        .modifier(HandoffActivity(model: model))
+        .pagePrompts(model: model)
+        .task { await model.start() }
+        .alert(
+            "Something went wrong",
+            isPresented: Binding(
+                get: { model.alertMessage != nil },
+                set: { if !$0 { model.alertMessage = nil } }
+            ),
+            presenting: model.alertMessage
+        ) { _ in
+            Button("OK") { model.alertMessage = nil }
+        } message: { message in
+            Text(message)
+        }
+    }
+
+    private var splitView: some View {
         NavigationSplitView {
             SidebarView(model: model)
                 .navigationSplitViewColumnWidth(min: 180, ideal: 240, max: 400)
         } detail: {
-            content
+            HStack(spacing: 0) {
+                content
+                if let panel = model.extensionSidePanel {
+                    Divider()
+                    ExtensionSidePanelView(model: model, panel: panel)
+                }
+            }
                 // In the page column: an overlay on the split view itself couldn't take focus.
                 .overlay {
                     if let peek = model.peek, let space = model.space {
@@ -40,22 +82,6 @@ public struct BrowserWindow: View {
                 .toolbar { NavigationToolbar(model: model, placement: navigationBarPlacement) }
                 // The address field already shows where you are.
                 .toolbar(removing: .title)
-        }
-        .focusedSceneValue(\.browserModel, model)
-        .modifier(HandoffActivity(model: model))
-        .pagePrompts(model: model)
-        .task { await model.start() }
-        .alert(
-            "Something went wrong",
-            isPresented: Binding(
-                get: { model.alertMessage != nil },
-                set: { if !$0 { model.alertMessage = nil } }
-            ),
-            presenting: model.alertMessage
-        ) { _ in
-            Button("OK") { model.alertMessage = nil }
-        } message: { message in
-            Text(message)
         }
     }
 

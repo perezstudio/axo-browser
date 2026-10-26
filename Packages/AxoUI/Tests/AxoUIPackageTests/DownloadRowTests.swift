@@ -1,7 +1,6 @@
 import AxoCore
 import Foundation
 import Testing
-import WebKit
 @testable import AxoUI
 @testable import AxoWeb
 
@@ -10,7 +9,7 @@ import WebKit
 @MainActor
 struct DownloadRowTests {
     private func item(_ state: DownloadState, completed: Int64 = 0, total: Int64? = nil) -> DownloadItem {
-        let item = DownloadItem(download: nil, sourceURL: URL(string: "https://example.com/file.zip"), sourceTabID: nil)
+        let item = DownloadManager().begin(sourceURL: URL(string: "https://example.com/file.zip"), sourceTabID: nil) {}
         item.state = state
         item.completedBytes = completed
         item.totalBytes = total
@@ -29,9 +28,9 @@ struct DownloadRowTests {
         #expect(DownloadRow.status(for: item(.cancelled)) == "Cancelled")
     }
 
-    @Test func itemsNameThemselvesFromTheirSourceUntilWebKitSuggestsAName() {
+    @Test func itemsNameThemselvesFromTheirSourceUntilTheEngineSuggestsAName() {
         #expect(item(.inProgress).filename == "file.zip")
-        let unnamed = DownloadItem(download: nil, sourceURL: nil, sourceTabID: nil)
+        let unnamed = DownloadManager().begin(sourceURL: nil, sourceTabID: nil) {}
         #expect(unnamed.filename == "Download")
     }
 }

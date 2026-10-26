@@ -2,6 +2,7 @@ import AxoCore
 import Foundation
 import WebKit
 @testable import AxoWeb
+import AxoWebTestSupport
 
 /// Local HTML pages in a temporary folder, so tests never touch the network.
 struct TestPages {
@@ -75,5 +76,27 @@ func waitUntil(
     while !condition() {
         guard ContinuousClock.now < deadline else { throw TimeoutError(description: "Timed out waiting for \(what)") }
         try await Task.sleep(for: .milliseconds(20))
+    }
+}
+
+@MainActor
+extension WebViewPool {
+    /// A pool on a ``FakeEngine``, with a controllable clock and downloads saved to a temporary
+    /// folder.
+    static func withFakeEngine(
+        _ engine: FakeEngine,
+        clock: TestClock = TestClock(),
+        timeout: TimeInterval = 60,
+        downloadsDirectory: URL = FileManager.default.temporaryDirectory
+            .appending(path: "AxoWebTests-Downloads-\(UUID().uuidString)", directoryHint: .isDirectory)
+    ) -> WebViewPool {
+        let pool = WebViewPool(
+            engine: engine,
+            configuration: .init(hibernationTimeout: timeout),
+            downloads: DownloadManager(directory: downloadsDirectory),
+            now: { clock.now }
+        )
+        pool.reportsScreenTimeUsage = false
+        return pool
     }
 }

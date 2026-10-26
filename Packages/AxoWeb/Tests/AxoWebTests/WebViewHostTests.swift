@@ -19,7 +19,7 @@ struct WebViewHostTests {
     @Test func mountedWebViewsFillTheContainerAndLeaveRoomForADockedInspector() {
         let container = WebViewContainer(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
         let webView = WKWebView()
-        container.mount(webView)
+        container.mount(webView, state: nil)
         #expect(webView.frame == container.bounds)
 
         container.setFrameSize(NSSize(width: 1000, height: 700))
@@ -38,17 +38,30 @@ struct WebViewHostTests {
         let first = WKWebView()
         let second = WKWebView()
 
-        container.mount(first)
-        container.mount(first)
+        container.mount(first, state: nil)
+        container.mount(first, state: nil)
         #expect(container.subviews == [first])
 
-        container.mount(second)
+        container.mount(second, state: nil)
         #expect(container.subviews == [second])
         #expect(first.superview == nil)
 
         container.unmount()
         #expect(container.subviews.isEmpty)
-        #expect(container.mountedWebView == nil)
+        #expect(container.mountedView == nil)
+    }
+
+    @Test func aPageMovedToAnotherContainerStaysThereWhenTheOldOneGoes() {
+        let old = WebViewContainer(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
+        let new = WebViewContainer(frame: NSRect(x: 0, y: 0, width: 1200, height: 800))
+        let page = NSView()
+        old.mount(page, state: nil)
+        // SwiftUI mounts the page in the new host, then dismantles the old one.
+        new.mount(page, state: nil)
+        old.unmount()
+        #expect(page.superview === new, "The old host doesn't take the page out of the new one")
+        new.unmount()
+        #expect(page.superview == nil)
     }
 
     @Test func coordinatorMountsThePooledWebViewAndTracksVisibility() throws {
@@ -60,17 +73,17 @@ struct WebViewHostTests {
 
         coordinator.show(one, profileID: profileID, in: container)
         coordinator.show(one, profileID: profileID, in: container)
-        #expect(container.mountedWebView === pool.liveWebView(for: one.id))
+        #expect(container.mountedView === pool.liveWebView(for: one.id))
         #expect(pool.isVisible(one.id))
 
         coordinator.show(two, profileID: profileID, in: container)
-        #expect(container.mountedWebView === pool.liveWebView(for: two.id))
+        #expect(container.mountedView === pool.liveWebView(for: two.id))
         #expect(!pool.isVisible(one.id))
         #expect(pool.isVisible(two.id))
         #expect(pool.isLive(one.id), "Switching tabs must not destroy the previous web view")
 
         coordinator.hide(from: container)
-        #expect(container.mountedWebView == nil)
+        #expect(container.mountedView == nil)
         #expect(!pool.isVisible(two.id))
         #expect(pool.isLive(two.id))
     }
@@ -83,8 +96,11 @@ struct WebViewHostTests {
         defer { window.close() }
         let container = WebViewContainer(frame: window.contentView!.bounds)
         window.contentView?.addSubview(container)
-        let webView = WKWebView()
-        container.mount(webView)
+        // Screen Time follows the page through the pool's state for it.
+        let pool = WebViewPool.forTesting()
+        let tab = Tab.testTab(url: try pages.page("blank"))
+        let webView = pool.webView(for: tab, profileID: profileID)
+        container.mount(webView, state: pool.state(for: tab.id))
         let profile = UUID()
         container.configureScreenTime(profileID: profile, recordsUsage: false)
 
@@ -107,11 +123,11 @@ struct WebViewHostTests {
 
     @Test func remountingKeepsOneScreenTimeControllerBelowNothing() {
         let container = WebViewContainer(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
-        container.mount(WKWebView())
+        container.mount(WKWebView(), state: nil)
         container.configureScreenTime(profileID: UUID(), recordsUsage: true)
         let controller = container.screenTime
         let second = WKWebView()
-        container.mount(second)
+        container.mount(second, state: nil)
         container.configureScreenTime(profileID: UUID(), recordsUsage: true)
         #expect(container.screenTime === controller)
         #expect(container.subviews == [second, controller!.view], "The new page goes under Screen Time's view")
@@ -131,7 +147,7 @@ struct WebViewContainerTests {
     @Test func mountedWebViewsFillTheContainerAndFollowItsSize() {
         let container = WebViewContainer(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
         let webView = WKWebView(frame: .zero)
-        container.mount(webView)
+        container.mount(webView, state: nil)
         #expect(webView.superview === container)
         #expect(webView.frame == container.bounds)
 
@@ -141,7 +157,7 @@ struct WebViewContainerTests {
 
         container.unmount()
         #expect(webView.superview == nil)
-        #expect(container.mountedWebView == nil)
+        #expect(container.mountedView == nil)
     }
 }
 #endif

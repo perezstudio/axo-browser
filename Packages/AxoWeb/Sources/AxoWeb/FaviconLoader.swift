@@ -1,5 +1,4 @@
 import Foundation
-import WebKit
 #if os(macOS)
 import AppKit
 #else
@@ -27,16 +26,15 @@ enum FaviconLoader {
 
     private static let session = URLSession(configuration: .ephemeral)
 
-    /// Reads the icon `<link>` elements of the page in `webView`.
+    /// Reads the icon `<link>` elements of `page`.
     @MainActor
-    static func candidates(in webView: WKWebView) async -> [Candidate] {
+    static func candidates(in page: any EnginePage) async -> [Candidate] {
         let script = """
         return Array.from(document.querySelectorAll('link[rel]'))
             .filter(link => /(^|\\s)(icon|apple-touch-icon)(\\s|$)/i.test(link.rel))
             .map(link => [link.href, link.rel.toLowerCase(), link.getAttribute('sizes') || '', link.type || '']);
         """
-        let contentWorld = WKContentWorld.world(name: "AxoFavicons")
-        guard let result = try? await webView.callAsyncJavaScript(script, contentWorld: contentWorld),
+        guard let result = try? await page.callJavaScript(script, arguments: [:], in: "AxoFavicons"),
               let rows = result as? [[String]] else { return [] }
         return rows.compactMap { row in
             guard row.count == 4 else { return nil }
@@ -62,7 +60,7 @@ enum FaviconLoader {
         return components.url
     }
 
-    /// Parses an `href` that WebKit already resolved. Unlike plain `URL(string:)`, this never
+    /// Parses an `href` that the engine already resolved. Unlike plain `URL(string:)`, this never
     /// re-encodes existing `%` escapes, which would corrupt inline `data:` icons that contain
     /// literal spaces.
     static func iconURL(from href: String) -> URL? {

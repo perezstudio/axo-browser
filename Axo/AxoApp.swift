@@ -5,6 +5,7 @@
 //  Created by Kevin Perez on 10/2/26.
 //
 
+import AxoChromium
 import AxoCore
 import AxoExtensions
 import AxoImport
@@ -19,7 +20,7 @@ import Foundation
 import SwiftUI
 import WebKit
 
-@main
+/// The app's scenes. ``AxoMain`` starts it.
 struct AxoApp: App {
     @State private var model = AppEnvironment.makeBrowserModel()
 
@@ -120,6 +121,8 @@ enum AppEnvironment {
     static var extensionManager: ExtensionManager?
     /// Connects the window model and the extension manager. Kept for the app's lifetime.
     static var extensionBridge: ExtensionBridge?
+    /// Connects the window model and the Chromium engine's extensions, when that engine runs.
+    static var chromiumExtensionBridge: ChromiumExtensionBridge?
 
     /// Where installed extensions live.
     static var extensionsFolder: URL {
@@ -199,17 +202,50 @@ enum AppEnvironment {
 
     private static func makeModel() -> BrowserModel {
         let lastSpaceID = isUITesting ? nil : UserDefaults.standard.string(forKey: lastSpaceKey).flatMap(UUID.init(uuidString:))
-        let pool = isUITesting
-            ? WebViewPool(
+        let chromium = ChromiumSupport.makeEngine()
+        let pool = if let chromium {
+            WebViewPool(engine: chromium)
+        } else if isUITesting {
+            WebViewPool(
                 makeDataStore: { _ in .nonPersistent() },
                 downloads: DownloadManager(directory: uiTestingDownloadsDirectory)
             )
-            : WebViewPool()
+        } else {
+            WebViewPool()
+        }
         do {
             let store = isUITesting ? try TabStore.makeInMemory() : try TabStore.openOnDisk(at: databaseURL)
-            let manager = startExtensions(store: store, pool: pool)
+            // WebKit's extensions (WKWebExtension) run only in test runs, which use WebKit. On
+            // Chromium, ChromiumExtensionBridge connects the engine's own extensions.
+            let manager = chromium == nil ? startExtensions(store: store, pool: pool) : nil
             let model = BrowserModel(store: store, pool: pool, initialSpaceID: lastSpaceID)
-            extensionBridge = ExtensionBridge(model: model, manager: manager)
+            if let manager {
+                extensionBridge = ExtensionBridge(model: model, manager: manager)
+            }
+            if let chromium {
+                chromium.onStateChange = { [weak model] (state: ChromiumEngine.State) in
+                    guard case .failed(let reason) = state else { return }
+                    // Pages can't load without it, and there's no other engine on the Mac.
+                    if isUITesting {
+                        model?.alertMessage = "The Chromium engine didn't start: \(reason)"
+                    } else {
+                        ChromiumSupport.failToLaunch(reason: reason)
+                    }
+                }
+                chromiumExtensionBridge = ChromiumExtensionBridge(model: model, engine: chromium, store: store)
+                // UI tests can preinstall an unpacked extension, as with WebKit.
+                if isUITesting, let path = ProcessInfo.processInfo.environment["AXO_UI_TESTING_EXTENSION"] {
+                    let previous = chromium.onStateChange
+                    chromium.onStateChange = { [weak chromium] state in
+                        previous?(state)
+                        guard state == .ready, let chromium else { return }
+                        Task {
+                            guard let profileID = try? await store.bootstrap().profileID else { return }
+                            _ = try? await chromium.loadUnpackedExtension(at: URL(fileURLWithPath: path, isDirectory: true), profileID: profileID)
+                        }
+                    }
+                }
+            }
             // Focus filters and other App Intents reach the store and window through this.
             IntentBridge.current = IntentBridge(store: store, window: BrowserIntentWindow(model: model))
             // UI tests use an in-memory database, which must never reach the system's Spotlight index.

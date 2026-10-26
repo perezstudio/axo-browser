@@ -1,0 +1,121 @@
+import AppKit
+import AxoChromium
+import Foundation
+import SwiftUI
+
+/// The Mac's web engine: Chromium (see `docs/chromium-engine.md`).
+///
+/// Every Mac launch runs its tabs on the Chromium engine that the build embedded (see
+/// `scripts/embed-chromium-engine.sh`). There's no WebKit fallback: if the engine can't load,
+/// Axo says why and quits. Test runs are the exception, for now: unit tests and UI testing mode
+/// use WebKit, except UI tests that opt in with `AXO_UI_TESTING_CHROMIUM=1`
+/// (`ChromiumEngineUITests`).
+enum ChromiumSupport {
+    /// The engine's classes, once the engine loaded at launch.
+    private(set) static var classes: ChromiumEngineClasses?
+
+    /// Set by UI tests that exercise the Chromium engine.
+    static let uiTestingKey = "AXO_UI_TESTING_CHROMIUM"
+
+    /// Where Chromium keeps profiles' website data: in UI testing mode, one temporary folder that
+    /// each launch empties first, so test runs don't pile up profiles.
+    static func userDataDirectory(isUITesting: Bool) -> URL {
+        isUITesting
+            ? FileManager.default.temporaryDirectory.appending(path: "AxoUITests-Chromium", directoryHint: .isDirectory)
+            : URL.applicationSupportDirectory.appending(path: "Axo/Chromium", directoryHint: .isDirectory)
+    }
+
+    /// Where else the engine finds native messaging hosts: Google Chrome's folders, where apps
+    /// like 1Password register the hosts their extensions talk to (they don't know Axo). None in
+    /// UI testing mode, so tests never start the person's real hosts.
+    static func nativeMessagingHostFolders(isUITesting: Bool, home: URL = URL.homeDirectory) -> [URL] {
+        guard !isUITesting else { return [] }
+        return [
+            home.appending(path: "Library/Application Support/Google/Chrome/NativeMessagingHosts", directoryHint: .isDirectory),
+            URL(fileURLWithPath: "/Library/Google/Chrome/NativeMessagingHosts", isDirectory: true),
+        ]
+    }
+
+    /// Whether this launch runs on Chromium: always, except in test runs. Unit tests host in Axo
+    /// (XCTest sets `XCTestConfigurationFilePath`) and stay on WebKit, so they never start the
+    /// engine on the person's website data; UI tests use it only when they opt in.
+    static func isRequired(isUITesting: Bool, environment: [String: String]) -> Bool {
+        if isUITesting { return environment[uiTestingKey] == "1" }
+        return environment["XCTestConfigurationFilePath"] == nil
+    }
+
+    /// Loads the engine and makes `NSApp` its `AXOApplication`, which Chromium requires. Called
+    /// from ``AxoMain`` before SwiftUI starts, because `NSApp` must be an `AXOApplication` from
+    /// the start. When the engine can't load, explains why and quits.
+    static func prepare() {
+        guard isRequired(isUITesting: AppEnvironment.isUITesting, environment: ProcessInfo.processInfo.environment) else { return }
+        switch ChromiumFramework.load() {
+        case .success(let loaded):
+            guard ChromiumFramework.makeApplication() != nil else {
+                failToLaunch(reason: "The Chromium engine has no application class.")
+            }
+            classes = loaded
+        case .failure(let error):
+            failToLaunch(reason: "\(error)")
+        }
+    }
+
+    /// The message shown when the engine can't load, said plainly.
+    static func launchFailureMessage(reason: String) -> String {
+        "\(reason) Axo runs its pages on this engine, so it can't open without it. Reinstall Axo, or if you built it yourself, build axo-chromium next to it."
+    }
+
+    /// Explains why Axo can't run and quits: the Mac has no other engine. Also for an engine
+    /// that loaded but then failed to start.
+    static func failToLaunch(reason: String) -> Never {
+        // SwiftUI hasn't made `NSApp` yet; the alert needs one.
+        let application = NSApplication.shared
+        application.setActivationPolicy(.regular)
+        application.activate()
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = "Axo can't open"
+        alert.informativeText = launchFailureMessage(reason: reason)
+        alert.addButton(withTitle: "Quit")
+        alert.runModal()
+        exit(1)
+    }
+
+    /// Extra Chromium switches for debugging, from `AXO_ENGINE_ARGS` (such as
+    /// `--enable-logging=stderr --v=1`). Debug builds only: in a release build, another process
+    /// could set the variable for Axo's next launch.
+    static var debugEngineArguments: [String] {
+        #if DEBUG
+        (ProcessInfo.processInfo.environment["AXO_ENGINE_ARGS"] ?? "").split(separator: " ").map(String.init)
+        #else
+        []
+        #endif
+    }
+
+    /// The pool's engine: Chromium, started, if it loaded at launch.
+    static func makeEngine() -> ChromiumEngine? {
+        guard let classes else { return nil }
+        let isUITesting = AppEnvironment.isUITesting
+        let directory = userDataDirectory(isUITesting: isUITesting)
+        if isUITesting { try? FileManager.default.removeItem(at: directory) }
+        let engine = ChromiumEngine(
+            classes: classes, userDataDirectory: directory,
+            nativeMessagingHostFolders: nativeMessagingHostFolders(isUITesting: isUITesting),
+            // Tests never reach the person's keychain or Google's servers.
+            isEphemeral: isUITesting,
+            additionalArguments: debugEngineArguments
+        )
+        engine.start()
+        return engine
+    }
+}
+
+/// Axo's entry point. It loads the Chromium engine, which has to happen before SwiftUI creates
+/// `NSApp`, then runs the app.
+@main
+enum AxoMain {
+    static func main() {
+        ChromiumSupport.prepare()
+        AxoApp.main()
+    }
+}

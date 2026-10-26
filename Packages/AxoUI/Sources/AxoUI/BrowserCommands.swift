@@ -243,6 +243,24 @@ public struct BrowserCommands: Commands {
                     }
                 }
             }
+            // Extensions' keyboard shortcuts work as menu items, so they also work while a page
+            // has keyboard focus, and the menu shows which keys do what.
+            if let model, let profileID = model.space?.profileID,
+               let shortcuts = model.extensionToolbar?.shortcuts(profileID: profileID), !shortcuts.isEmpty {
+                Menu(ExtensionShortcut.menuTitle) {
+                    ForEach(shortcuts) { shortcut in
+                        let button = Button(shortcut.title) {
+                            model.extensionToolbar?.performShortcut(shortcut, profileID: profileID, tabID: model.selectedTabID)
+                        }
+                        // Axo's own shortcuts win over an extension's.
+                        if shortcut.clashes(with: NSApp?.mainMenu) {
+                            button
+                        } else {
+                            button.keyboardShortcut(KeyEquivalent(shortcut.key), modifiers: shortcut.modifiers)
+                        }
+                    }
+                }
+            }
         }
         CommandMenu("Spaces") {
             Button("New Space…") { model?.isCreatingSpace = true }

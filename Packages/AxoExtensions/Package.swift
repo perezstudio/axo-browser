@@ -9,6 +9,8 @@ let package = Package(
         .library(name: "AxoExtensions", targets: ["AxoExtensions"]),
         // Standalone and open-sourceable: no Axo dependencies.
         .library(name: "AxoCRX", targets: ["AxoCRX"]),
+        // Package and zip builders and a loopback web server, for tests (the app's too).
+        .library(name: "AxoExtensionsTestSupport", targets: ["AxoExtensionsTestSupport"]),
     ],
     dependencies: [
         .package(path: "../AxoCore"),
