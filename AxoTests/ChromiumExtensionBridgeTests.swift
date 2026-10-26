@@ -85,6 +85,23 @@ struct ChromiumExtensionBridgeTests {
         #expect(profile.performedCommands.first?.page === FakePage.made.last, "On the selected tab's page")
     }
 
+    @Test func theUserScriptsSwitchIsOnlyForExtensionsThatUseThem() async throws {
+        await model.openTab(url: URL(string: "https://example.com/")!)
+        _ = bridge.toolbarItems(profileID: profileID, tabID: model.selectedTabID)
+        let profile = try #require(FakeProfile.made[profileID])
+        profile.extensions = [
+            FakeExtension(identifier: "manager", name: "Script Manager", usesUserScripts: true, userScriptsAllowed: false),
+            FakeExtension(identifier: "notes", name: "Notes"),
+        ]
+
+        let installed = await bridge.installedExtensions(profileID: profileID)
+        #expect(installed.map(\.allowsUserScripts) == [false, nil])
+
+        try await bridge.setAllowsUserScripts(true, extensionID: "manager", profileID: profileID)
+        #expect(profile.userScriptChanges.map(\.0) == ["manager"])
+        #expect(profile.userScriptChanges.map(\.1) == [true])
+    }
+
     @Test func sidePanelsShowBesideThePageAndCloseInTheEngine() async throws {
         await model.openTab(url: URL(string: "https://example.com/")!)
         _ = bridge.toolbarItems(profileID: profileID, tabID: model.selectedTabID)

@@ -218,6 +218,45 @@ final class ChromiumEngineUITests: XCTestCase {
         waitForExpectations(timeout: 10)
     }
 
+    /// The Extensions window's Allow User Scripts switch, shown for an extension that uses
+    /// chrome.userScripts, makes the API available to it.
+    @MainActor
+    func testAllowUserScriptsTurnsOnTheAPI() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "AxoUITestScripts-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try """
+        {"name": "Axo Scripter", "version": "1.0", "manifest_version": 3, "description": "UI test extension.",
+         "permissions": ["userScripts"], "action": {"default_title": "Axo Scripter"},
+         "background": {"service_worker": "bg.js"}}
+        """.write(to: folder.appending(path: "manifest.json"), atomically: true, encoding: .utf8)
+        try "chrome.action.onClicked.addListener(() => chrome.action.setBadgeText({ text: chrome.userScripts ? 'YES' : 'NO' }));"
+            .write(to: folder.appending(path: "bg.js"), atomically: true, encoding: .utf8)
+
+        let app = launchChromiumApp(extensionFolder: folder)
+        XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 10))
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,<title>Page</title><p>Page</p>\n")
+        let button = app.buttons.matching(NSPredicate(format: "identifier == 'extensionButton' AND label CONTAINS 'Axo Scripter'")).firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 30))
+        button.click()
+        expectation(for: NSPredicate(format: "label CONTAINS 'NO'"), evaluatedWith: button)
+        waitForExpectations(timeout: 15)
+
+        app.typeKey("e", modifierFlags: [.command, .shift])
+        let window = app.descendants(matching: .any)["extensionsWindow"]
+        XCTAssertTrue(window.waitForExistence(timeout: 10))
+        let allow = window.checkBoxes["allowUserScripts"]
+        XCTAssertTrue(allow.waitForExistence(timeout: 10), "Shown for an extension that uses user scripts")
+        allow.click()
+        let done = app.sheets.firstMatch.buttons["Done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 5), "The Extensions window stays open")
+        done.click()
+
+        button.click()
+        expectation(for: NSPredicate(format: "label CONTAINS 'YES'"), evaluatedWith: button)
+        waitForExpectations(timeout: 15)
+    }
+
     /// A tab loads its page in Chromium. The page names the engine from its user agent, which
     /// says "Chrome/" only in Chromium, so the test can't pass on WebKit.
     @MainActor

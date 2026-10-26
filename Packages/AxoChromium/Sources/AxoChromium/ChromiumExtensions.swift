@@ -13,14 +13,20 @@ public struct ChromiumExtension: Equatable, Sendable {
     public var isEnabled: Bool
     /// Loaded from a folder in developer mode.
     public var isUnpacked: Bool
+    /// Whether it uses `chrome.userScripts`, which needs the person's permission, and whether
+    /// that's given.
+    public var usesUserScripts: Bool
+    public var userScriptsAllowed: Bool
 
     /// Creates the description of an extension.
-    public init(id: String, name: String, version: String, isEnabled: Bool, isUnpacked: Bool) {
+    public init(id: String, name: String, version: String, isEnabled: Bool, isUnpacked: Bool, usesUserScripts: Bool = false, userScriptsAllowed: Bool = false) {
         self.id = id
         self.name = name
         self.version = version
         self.isEnabled = isEnabled
         self.isUnpacked = isUnpacked
+        self.usesUserScripts = usesUserScripts
+        self.userScriptsAllowed = userScriptsAllowed
     }
 }
 
@@ -200,13 +206,21 @@ extension ChromiumEngine {
     public func extensions(profileID: Profile.ID) -> [ChromiumExtension] {
         guard let profile = readyProfile(profileID) else { return [] }
         return profile.extensions.map {
-            ChromiumExtension(id: $0.identifier, name: $0.name, version: $0.version, isEnabled: $0.isEnabled, isUnpacked: $0.isUnpacked)
+            ChromiumExtension(
+                id: $0.identifier, name: $0.name, version: $0.version, isEnabled: $0.isEnabled, isUnpacked: $0.isUnpacked,
+                usesUserScripts: $0.usesUserScripts, userScriptsAllowed: $0.userScriptsAllowed
+            )
         }
     }
 
     /// Turns an extension on or off.
     public func setExtension(_ extensionID: String, enabled: Bool, profileID: Profile.ID) {
         readyProfile(profileID)?.setExtension(extensionID, enabled: enabled)
+    }
+
+    /// Gives or takes away an extension's permission to run user scripts (`chrome.userScripts`).
+    public func setUserScriptsAllowed(_ allowed: Bool, extensionID: String, profileID: Profile.ID) {
+        readyProfile(profileID)?.setUserScriptsAllowed(allowed, forExtension: extensionID)
     }
 
     /// Uninstalls an extension and deletes its data.

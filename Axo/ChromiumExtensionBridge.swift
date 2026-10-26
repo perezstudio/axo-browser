@@ -229,13 +229,18 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
             // Chrome grants the sites an extension asks for when it installs.
             ExtensionSummary(
                 id: $0.id, name: $0.name, version: $0.version, isEnabled: $0.isEnabled, isUnpacked: $0.isUnpacked,
-                reachesAllRequestedSites: true, lines: [], loadError: nil
+                reachesAllRequestedSites: true, lines: [], loadError: nil,
+                allowsUserScripts: $0.usesUserScripts ? $0.userScriptsAllowed : nil
             )
         }
     }
 
     func setEnabled(_ enabled: Bool, extensionID: String, profileID: Profile.ID) async throws {
         engine.setExtension(extensionID, enabled: enabled, profileID: profileID)
+    }
+
+    func setAllowsUserScripts(_ allowed: Bool, extensionID: String, profileID: Profile.ID) async throws {
+        engine.setUserScriptsAllowed(allowed, extensionID: extensionID, profileID: profileID)
     }
 
     func setReachesAllRequestedSites(_ all: Bool, extensionID: String, profileID: Profile.ID) async throws {

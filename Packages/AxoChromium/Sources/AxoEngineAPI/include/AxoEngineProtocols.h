@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 15
+#define AXO_ENGINE_API_VERSION 16
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -116,6 +116,11 @@ NS_SWIFT_UI_ACTOR
 
 /// The profile's installed extensions, enabled or not.
 @property(nonatomic, readonly) NSArray<id<AXOExtension>>* extensions;
+
+/// Gives or takes away an extension's permission to run user scripts (`chrome.userScripts`),
+/// as Chrome's "Allow User Scripts" switch does.
+- (void)setUserScriptsAllowed:(BOOL)allowed forExtension:(NSString*)extensionID
+    NS_SWIFT_NAME(setUserScriptsAllowed(_:forExtension:));
 
 /// Turns an extension on or off.
 - (void)setExtension:(NSString*)extensionID enabled:(BOOL)enabled
@@ -369,6 +374,11 @@ NS_SWIFT_UI_ACTOR
 @property(nonatomic, readonly, getter=isEnabled) BOOL enabled;
 /// Loaded from a folder in developer mode rather than installed from a package.
 @property(nonatomic, readonly, getter=isUnpacked) BOOL unpacked;
+/// Whether the extension uses `chrome.userScripts`, which needs the person's permission
+/// (Chrome's "Allow User Scripts" switch).
+@property(nonatomic, readonly) BOOL usesUserScripts;
+/// Whether that permission is given.
+@property(nonatomic, readonly) BOOL userScriptsAllowed;
 @end
 
 /// An extension's toolbar button for one page.

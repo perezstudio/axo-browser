@@ -101,6 +101,8 @@ public final class FakeProfile: NSObject, AXOProfile {
     public var nextPopup: FakeExtensionPopup?
 
     public func setExtension(_ extensionID: String, enabled: Bool) { enabledChanges.append((extensionID, enabled)) }
+    public private(set) var userScriptChanges: [(String, Bool)] = []
+    public func setUserScriptsAllowed(_ allowed: Bool, forExtension extensionID: String) { userScriptChanges.append((extensionID, allowed)) }
     public func uninstallExtension(_ extensionID: String) { uninstalled.append(extensionID) }
     public func extensionActions(for page: any AXOPage) -> [any AXOExtensionAction] { actions }
 
@@ -204,13 +206,16 @@ public final class FakeWindow: NSObject, AXOWindow {
 public final class FakeExtension: NSObject, AXOExtension {
     public let identifier: String, name: String, version: String
     public let isEnabled: Bool, isUnpacked: Bool
+    public let usesUserScripts: Bool, userScriptsAllowed: Bool
 
-    public init(identifier: String, name: String, version: String = "1.0", isEnabled: Bool = true, isUnpacked: Bool = true) {
+    public init(identifier: String, name: String, version: String = "1.0", isEnabled: Bool = true, isUnpacked: Bool = true, usesUserScripts: Bool = false, userScriptsAllowed: Bool = false) {
         self.identifier = identifier
         self.name = name
         self.version = version
         self.isEnabled = isEnabled
         self.isUnpacked = isUnpacked
+        self.usesUserScripts = usesUserScripts
+        self.userScriptsAllowed = userScriptsAllowed
     }
 }
 
