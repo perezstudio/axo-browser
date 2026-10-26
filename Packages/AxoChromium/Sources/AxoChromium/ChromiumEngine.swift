@@ -57,6 +57,10 @@ public final class ChromiumEngine: WebEngine {
     /// Called with each change an extension makes to a profile's bookmarks (`chrome.bookmarks`).
     /// Apply it, then set the tree again with ``setBookmarks(_:profileID:)``.
     public var onBookmarkChange: ((BookmarkChange, Profile.ID) -> Void)?
+    /// Called when a profile's history changes other than by a page visit: an extension added a
+    /// visit or deleted history. The engine keeps its own copy of history, for visited links and
+    /// extensions; apply these to Axo's so the two stay in step.
+    public var onHistoryChange: ((ChromiumHistoryChange, Profile.ID) -> Void)?
 
     /// Called when something needs the person's answer that Chrome would ask in its own dialog:
     /// permission requests, installs and uninstalls, and what to share when recording the screen.
@@ -171,6 +175,9 @@ public final class ChromiumEngine: WebEngine {
             profile.onBookmarkChange = { [weak self] change in
                 guard let change = BookmarkChange(change) else { return }
                 self?.onBookmarkChange?(change, profileID)
+            }
+            profile.onHistoryChange = { [weak self] change in
+                self?.onHistoryChange?(ChromiumHistoryChange(change), profileID)
             }
             if let tree = bookmarkTrees[profileID] {
                 profile.setBookmarks(tree)

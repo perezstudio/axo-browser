@@ -166,6 +166,17 @@ public final class HistoryStore: Sendable {
         }
     }
 
+    /// Deletes pages from a profile's history.
+    public func delete(_ urls: [URL], profileID: Profile.ID) async throws {
+        guard !urls.isEmpty else { return }
+        _ = try await database.writer.write { db in
+            try HistoryItem
+                .filter(HistoryItem.Columns.profileID == profileID)
+                .filter(urls.contains(HistoryItem.Columns.url))
+                .deleteAll(db)
+        }
+    }
+
     /// Deletes a profile's history.
     public func clear(profileID: Profile.ID) async throws {
         _ = try await database.writer.write { db in

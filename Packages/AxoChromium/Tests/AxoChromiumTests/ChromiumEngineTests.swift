@@ -504,6 +504,25 @@ struct ChromiumEngineTests {
         ], "Changes that name nothing Axo could have are dropped")
     }
 
+    @Test func historyChangesComeBackFromTheEngine() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        var changes: [ChromiumHistoryChange] = []
+        engine.onHistoryChange = { change, id in
+            #expect(id == profileID)
+            changes.append(change)
+        }
+        _ = engine.extensions(profileID: profileID)
+        let profile = try #require(FakeProfile.made[profileID])
+        let date = Date(timeIntervalSince1970: 1_000)
+        profile.onHistoryChange?(FakeHistoryChange(kind: .visited, urls: [url], title: "Added", date: date))
+        profile.onHistoryChange?(FakeHistoryChange(kind: .deleted, urls: [url]))
+        profile.onHistoryChange?(FakeHistoryChange(kind: .deletedAll))
+        #expect(changes == [.visited(url, title: "Added", at: date), .deleted([url]), .deletedAll])
+    }
+
     @Test func profileDataGoesToTheEngine() async throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)

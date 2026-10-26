@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 17
+#define AXO_ENGINE_API_VERSION 18
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -33,6 +33,7 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol AXOExtensionSidePanel;
 @protocol AXOBookmarkNode;
 @protocol AXOBookmarkChange;
+@protocol AXOHistoryChange;
 
 typedef NS_ENUM(NSInteger, AXOExtensionPromptKind) {
   /// More permissions (`chrome.permissions.request`, or turning on an extension that asked for
@@ -189,6 +190,13 @@ NS_SWIFT_UI_ACTOR
 /// Called with each change an extension makes to the bookmarks. Apply it to the app's data and
 /// set the tree again; a change the app can't make is undone by that.
 @property(nonatomic, copy, nullable) void (^onBookmarkChange)(id<AXOBookmarkChange> change);
+
+/// Called when history changes other than by a page visit: an extension added a visit
+/// (`chrome.history.addUrl`) or deleted history (`chrome.history` or `chrome.browsingData`). The
+/// engine keeps its own copy of history, recording page visits itself, because visited links,
+/// `chrome.history`, and `chrome.topSites` come from it; apply these to the app's history so the
+/// two stay in step. The engine's expiry of old visits isn't reported.
+@property(nonatomic, copy, nullable) void (^onHistoryChange)(id<AXOHistoryChange> change);
 
 /// Called when an extension's side panel opens (`chrome.sidePanel.open`, or its toolbar button
 /// with `openPanelOnActionClick`). Show `panel.view` beside the page; another extension's panel
@@ -566,6 +574,24 @@ NS_SWIFT_UI_ACTOR
 @property(nonatomic, readonly) NSString* title;
 /// The bookmark's URL, or `nil` for a folder.
 @property(nonatomic, readonly, nullable) NSURL* url;
+@end
+
+typedef NS_ENUM(NSInteger, AXOHistoryChangeKind) {
+  /// A visit to the one page in `urls`, titled `title`, at `date`.
+  AXOHistoryChangeKindVisited,
+  /// The pages in `urls` have no visits left.
+  AXOHistoryChangeKindDeleted,
+  /// All history was deleted.
+  AXOHistoryChangeKindDeletedAll,
+};
+
+/// A change to history, for `onHistoryChange`.
+NS_SWIFT_UI_ACTOR
+@protocol AXOHistoryChange <NSObject>
+@property(nonatomic, readonly) AXOHistoryChangeKind kind;
+@property(nonatomic, readonly) NSArray<NSURL*>* urls;
+@property(nonatomic, readonly) NSString* title;
+@property(nonatomic, readonly, nullable) NSDate* date;
 @end
 
 /// An extension's side panel, open. Show `view` beside the page, titled `title`.

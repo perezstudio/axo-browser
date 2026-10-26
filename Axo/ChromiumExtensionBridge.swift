@@ -17,7 +17,9 @@ import SwiftUI
 /// background pages.
 ///
 /// It also keeps each profile's bookmarks in the engine (`chrome.bookmarks`) in step with the
-/// sidebar (``BookmarkTree``), and applies extensions' bookmark changes to it.
+/// sidebar (``BookmarkTree``), and applies extensions' bookmark changes to it, and applies the
+/// history changes the engine makes without a page visit (extensions adding visits or deleting
+/// history) to Axo's history.
 @Observable
 final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManaging {
     @ObservationIgnored private weak var model: BrowserModel?
@@ -71,6 +73,9 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
             self?.revision += 1
         }
         engine.onBookmarkChange = { [weak self] change, profileID in self?.apply(change, profileID: profileID) }
+        engine.onHistoryChange = { [store] change, profileID in
+            Task { try? await Self.apply(change, to: store.history, profileID: profileID) }
+        }
         profilesTask = Task { [weak self, store] in
             do {
                 for try await list in store.observeProfiles() {
@@ -78,6 +83,20 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
                     followBookmarks(of: Set(list.map(\.id)))
                 }
             } catch {}
+        }
+    }
+
+    // MARK: History
+
+    /// Applies a history change the engine made to Axo's history.
+    static func apply(_ change: ChromiumHistoryChange, to history: HistoryStore, profileID: Profile.ID) async throws {
+        switch change {
+        case .visited(let url, let title, let date):
+            try await history.recordVisit(to: url, title: title, profileID: profileID, at: date)
+        case .deleted(let urls):
+            try await history.delete(urls, profileID: profileID)
+        case .deletedAll:
+            try await history.clear(profileID: profileID)
         }
     }
 

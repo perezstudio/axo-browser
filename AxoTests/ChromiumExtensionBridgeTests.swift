@@ -115,6 +115,24 @@ struct ChromiumExtensionBridgeTests {
         #expect(profile.bookmarkBar.isEmpty, "The bar holds no folders, so the engine gets the tree back without it")
     }
 
+    @Test func extensionsHistoryChangesReachAxosHistory() async throws {
+        await model.openTab(url: URL(string: "https://example.com/")!)
+        let profile = try #require(FakeProfile.made[profileID])
+        let history = store.history
+        let added = URL(string: "https://added.example/")!
+        try await history.recordVisit(to: URL(string: "https://kept.example/")!, title: "Kept", profileID: profileID, at: .distantPast)
+
+        profile.onHistoryChange?(FakeHistoryChange(kind: .visited, urls: [added], title: "Added", date: Date()))
+        try await waitUntil(async: { try await history.recent(profileID: profileID).first?.url == added })
+        #expect(try await history.recent(profileID: profileID).first?.title == "Added")
+
+        profile.onHistoryChange?(FakeHistoryChange(kind: .deleted, urls: [added]))
+        try await waitUntil(async: { try await history.recent(profileID: profileID).map(\.url) == [URL(string: "https://kept.example/")!] })
+
+        profile.onHistoryChange?(FakeHistoryChange(kind: .deletedAll))
+        try await waitUntil(async: { try await history.recent(profileID: profileID).isEmpty })
+    }
+
     @Test func theUserScriptsSwitchIsOnlyForExtensionsThatUseThem() async throws {
         await model.openTab(url: URL(string: "https://example.com/")!)
         _ = bridge.toolbarItems(profileID: profileID, tabID: model.selectedTabID)
@@ -240,6 +258,14 @@ struct ChromiumExtensionBridgeTests {
 
 /// Waits up to five seconds for `condition`.
 @MainActor
+private func waitUntil(async condition: () async throws -> Bool) async throws {
+    let deadline = ContinuousClock.now + .seconds(5)
+    while try await !condition() {
+        guard ContinuousClock.now < deadline else { throw CancellationError() }
+        try await Task.sleep(for: .milliseconds(20))
+    }
+}
+
 private func waitUntil(_ condition: () -> Bool) async throws {
     let deadline = ContinuousClock.now + .seconds(5)
     while !condition() {

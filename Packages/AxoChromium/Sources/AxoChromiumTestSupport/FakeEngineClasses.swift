@@ -89,6 +89,7 @@ public final class FakeProfile: NSObject, AXOProfile {
     public var onExtensionPrompt: ((any AXOExtensionPrompt, @escaping (AXOExtensionPromptAnswer) -> Void) -> Void)?
     public var onExtensionSidePanelOpen: ((any AXOExtensionSidePanel) -> Void)?
     public var onBookmarkChange: ((any AXOBookmarkChange) -> Void)?
+    public var onHistoryChange: ((any AXOHistoryChange) -> Void)?
     public private(set) var bookmarkBar: [any AXOBookmarkNode] = []
     public private(set) var otherBookmarks: [any AXOBookmarkNode] = []
     public private(set) var bookmarkSetCount = 0
@@ -381,5 +382,19 @@ public final class FakeBookmarkChange: NSObject, AXOBookmarkChange {
         self.index = index
         self.title = title
         self.url = url
+    }
+}
+
+public final class FakeHistoryChange: NSObject, AXOHistoryChange {
+    public let kind: AXOHistoryChangeKind
+    public let urls: [URL]
+    public let title: String
+    public let date: Date?
+
+    public init(kind: AXOHistoryChangeKind, urls: [URL] = [], title: String = "", date: Date? = nil) {
+        self.kind = kind
+        self.urls = urls
+        self.title = title
+        self.date = date
     }
 }

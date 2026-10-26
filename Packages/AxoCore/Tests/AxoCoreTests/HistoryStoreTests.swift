@@ -90,6 +90,22 @@ struct HistoryStoreTests {
         #expect(try await history.search("bank", profileID: profileID).isEmpty)
     }
 
+    @Test func pagesAreDeletedPerProfile() async throws {
+        let other = try await store.createProfile(name: "Work").id
+        for page in ["https://a.example/", "https://b.example/", "https://c.example/"] {
+            try await history.recordVisit(to: url(page), title: "", profileID: profileID)
+        }
+        try await history.recordVisit(to: url("https://a.example/"), title: "", profileID: other)
+
+        try await history.delete([url("https://a.example/"), url("https://c.example/")], profileID: profileID)
+        #expect(try await history.recent(profileID: profileID).map(\.url) == [url("https://b.example/")])
+        #expect(try await history.recent(profileID: other).count == 1, "Other profiles keep theirs")
+
+        try await history.clear(profileID: profileID)
+        #expect(try await history.recent(profileID: profileID).isEmpty)
+        #expect(try await history.recent(profileID: other).count == 1)
+    }
+
     @Test func searchingFiftyThousandPagesStaysFast() async throws {
         // Seed 50,000 pages in one transaction, then time searches the way the command bar runs
         // them: one per keystroke.
