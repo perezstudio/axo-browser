@@ -542,6 +542,37 @@ struct ChromiumEngineTests {
         ])
     }
 
+    @Test func pagesAPageOpensArriveConnectedAndFullScreenRequestsPassThrough() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine)
+        let tab = Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial)
+        pool.page(for: tab, profileID: profileID)
+        let fake = try #require(FakePage.made.first)
+        var opened: [OpenedPage] = []
+        pool.onPageOpened = { page, source in
+            #expect(source == tab.id)
+            opened.append(page)
+        }
+        var fullscreen: [Bool] = []
+        pool.onPageFullscreen = { _, on in fullscreen.append(on) }
+
+        let chromePage = FakePage(profile: FakeProfile.made[profileID]!)
+        let target = URL(string: "https://accounts.example.com/")!
+        try #require(fake.delegate).page?(fake, didOpen: chromePage, url: target, popup: true, size: NSSize(width: 400, height: 500), inBackground: false)
+        let event = try #require(opened.first)
+        #expect(event.url == target)
+        #expect(event.kind == .popup(size: CGSize(width: 400, height: 500)))
+        #expect(event.page.view.subviews.first === chromePage.view, "The page Chromium made, with its opener")
+
+        try #require(fake.delegate).page?(fake, setsFullscreen: true)
+        #expect(fullscreen == [true])
+        pool.exitFullscreen(tab.id)
+        #expect(fake.exitedFullscreen == 1)
+    }
+
     @Test func profileDataGoesToTheEngine() async throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)

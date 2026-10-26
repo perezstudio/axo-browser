@@ -3,6 +3,7 @@
 //  AxoUITests
 //
 
+import AppKit
 import XCTest
 
 /// Axo running its tabs on the Chromium engine (Phase 1 of docs/chromium-engine.md).
@@ -325,6 +326,86 @@ final class ChromiumEngineUITests: XCTestCase {
         let result = app.descendants(matching: .any)["commandBar"].buttons
             .matching(NSPredicate(format: "label CONTAINS 'axo-historian.example'")).firstMatch
         XCTAssertTrue(result.waitForExistence(timeout: 10), "The command bar finds the page in Axo's history")
+    }
+
+    /// Clicks the middle of the page, right of the sidebar. (Chromium's page view has its own
+    /// accessibility, so it doesn't keep Axo's "webContent" identifier.)
+    @MainActor
+    private func clickPage(in app: XCUIApplication) {
+        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.6)).click()
+    }
+
+    /// Opens a page in a new tab and waits for its title in the sidebar.
+    @MainActor
+    private func openPage(_ html: String, titled title: String, in app: XCUIApplication) -> XCUIElement {
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 10))
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,\(html)\n")
+        XCTAssertTrue(sidebar.staticTexts[title].waitForExistence(timeout: 30))
+        return sidebar
+    }
+
+    /// A page's confirm() is Axo's alert, and the answer reaches the page.
+    @MainActor
+    func testJavaScriptDialogsAreAxosAlerts() throws {
+        let app = launchChromiumApp()
+        let sidebar = openPage(
+            "<title>Asking</title><script>setTimeout(() => document.title = confirm('Keep going?') ? 'Confirmed' : 'Declined', 300)</script>",
+            titled: "Asking", in: app
+        )
+        let ok = app.sheets.firstMatch.buttons["OK"]
+        XCTAssertTrue(ok.waitForExistence(timeout: 15), "Axo's alert shows the dialog")
+        XCTAssertTrue(app.sheets.firstMatch.staticTexts["Keep going?"].exists)
+        ok.click()
+        XCTAssertTrue(sidebar.staticTexts["Confirmed"].waitForExistence(timeout: 10))
+    }
+
+    /// A page's file field opens Axo's Open panel; cancelling reaches the page.
+    @MainActor
+    func testFileUploadsUseAxosOpenPanel() throws {
+        let app = launchChromiumApp()
+        let sidebar = openPage(
+            "<title>Upload</title><label style='display:block;width:100vw;height:100vh'><input type=file id=f style='width:100%;height:100%' oncancel=\"document.title='Cancelled'\" onchange=\"document.title='Chosen'\"></label>",
+            titled: "Upload", in: app
+        )
+        clickPage(in: app)
+        let cancel = app.sheets.firstMatch.buttons["Cancel"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 15), "Axo's Open panel appears")
+        cancel.click()
+        XCTAssertTrue(sidebar.staticTexts["Cancelled"].waitForExistence(timeout: 10))
+    }
+
+    /// A page asking to fill the screen shows alone, without the sidebar or toolbar; Esc ends it,
+    /// and the page knows. (The window going full screen isn't checked: macOS doesn't make
+    /// windows full screen while UI tests drive the app, even from the green button.)
+    @MainActor
+    func testPagesFillTheWindowUntilEscape() throws {
+        let app = launchChromiumApp()
+        let sidebar = openPage(
+            "<title>Video</title><body style='margin:0' onclick='document.documentElement.requestFullscreen()'><div style='width:100vw;height:100vh'></div><script>document.onfullscreenchange = () => document.title = document.fullscreenElement ? 'Full' : 'Back'</script></body>",
+            titled: "Video", in: app
+        )
+        clickPage(in: app)
+        XCTAssertTrue(app.descendants(matching: .any)["fullscreenPage"].waitForExistence(timeout: 15), "Only the page shows")
+        XCTAssertFalse(sidebar.exists)
+        XCTAssertFalse(app.buttons["backButton"].exists, "The toolbar is hidden too")
+
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(sidebar.staticTexts["Back"].waitForExistence(timeout: 15), "The page left full screen, and the sidebar is back")
+    }
+
+    /// window.open keeps the new page connected to its opener: it's a sidebar tab whose page can
+    /// reach window.opener.
+    @MainActor
+    func testWindowOpenKeepsTheOpener() throws {
+        let app = launchChromiumApp()
+        let sidebar = openPage(
+            "<title>Opener</title><script>function go() { const w = window.open(''); w.document.title = w.opener === window ? 'Has opener' : 'No opener' }</script><body style='margin:0' onclick='go()'><div style='width:100vw;height:100vh'></div></body>",
+            titled: "Opener", in: app
+        )
+        clickPage(in: app)
+        XCTAssertTrue(sidebar.staticTexts["Has opener"].waitForExistence(timeout: 15), "A tab connected to the page that opened it")
     }
 
     /// A tab loads its page in Chromium. The page names the engine from its user agent, which

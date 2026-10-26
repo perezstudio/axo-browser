@@ -13,12 +13,13 @@ import Foundation
 final class ChromiumPage: NSObject, EnginePage {
     let profileID: Profile.ID
     weak var delegate: (any EnginePageDelegate)?
+    /// The engine, which wraps the pages this one opens.
+    weak var engine: ChromiumEngine?
     let view: PlatformView = NSView()
     private(set) var page: (any AXOPage)?
     private(set) var isClosed = false
     /// What to load once attached: the last URL or history asked for before the engine was ready.
     private var pendingLoad: PendingLoad?
-    /// Downloads still running, kept so their observers live as long as they do.
     /// The observers of downloads in progress. The engine holds observers weakly, and a download
     /// outlives its page (the tab can close or hibernate while it runs), so they're kept here
     /// until the download ends.
@@ -105,6 +106,10 @@ final class ChromiumPage: NSObject, EnginePage {
 
     func startDownload(_ url: URL) {
         page?.startDownload(from: url)
+    }
+
+    func exitFullscreen() {
+        page?.exitFullscreen()
     }
 
     func printOperation(with printInfo: NSPrintInfo) -> NSPrintOperation {
@@ -236,6 +241,22 @@ extension ChromiumPage: AXOPageDelegate {
     /// A right-click: Axo shows its own menu for it.
     func page(_ page: any AXOPage, showContextMenu menu: any AXOContextMenu) -> Bool {
         delegate?.page(self, showContextMenu: ChromiumContextMenu(menu)) ?? false
+    }
+
+    func page(_ page: any AXOPage, setsFullscreen fullscreen: Bool) {
+        delegate?.page(self, setsFullscreen: fullscreen)
+    }
+
+    /// A page this one opened (`window.open`, `target="_blank"`), already loading and connected
+    /// to it.
+    func page(_ page: any AXOPage, didOpen newPage: any AXOPage, url: URL, popup: Bool, size: NSSize, inBackground: Bool) {
+        guard let engine, let delegate else {
+            newPage.close()
+            return
+        }
+        let opened = engine.wrap(newPage, profileID: profileID)
+        let kind: OpenedPage.Kind = popup ? .popup(size: CGSize(width: size.width, height: size.height)) : .tab(inBackground: inBackground)
+        delegate.page(self, didOpen: OpenedPage(page: opened, url: url, kind: kind))
     }
 
     /// Key presses the page didn't use, such as ⌘ shortcuts, go to the app's menu, so Axo's

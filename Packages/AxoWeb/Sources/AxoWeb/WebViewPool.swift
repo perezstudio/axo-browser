@@ -84,6 +84,13 @@ public final class WebViewPool {
     /// Called when a page asks to open a link in a new tab or window (for example
     /// `target="_blank"` or `window.open`). The second argument is the tab that asked.
     public var onOpenInNewTab: ((URL, Tab.ID) -> Void)?
+    /// Called when a page opened another that's already loading and connected to it (Chromium's
+    /// `window.open`), with the tab that opened it. Without a handler, the new page closes and
+    /// its URL goes to ``onOpenInNewTab``.
+    public var onPageOpened: ((OpenedPage, Tab.ID) -> Void)?
+    /// Called when a tab's page asks to fill the screen, or to stop (Chromium's
+    /// `element.requestFullscreen()`).
+    public var onPageFullscreen: ((Tab.ID, Bool) -> Void)?
 
     /// Called when a page is right-clicked, for engines that leave the menu to Axo (Chromium).
     /// Show the menu and return `true`; without a handler, no menu shows.
@@ -403,6 +410,11 @@ public final class WebViewPool {
     public func stopHibernationTimer() {
         hibernationTask?.cancel()
         hibernationTask = nil
+    }
+
+    /// Takes a tab's page out of full screen (it asked for it; the person left another way).
+    public func exitFullscreen(_ tabID: Tab.ID) {
+        live[tabID]?.page.exitFullscreen()
     }
 
     /// Forgets a tab entirely, for example when it closes. Its page and saved history are

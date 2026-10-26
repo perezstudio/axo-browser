@@ -177,12 +177,16 @@ public final class WebViewContainer: PlatformView {
     }
     #endif
 
-    /// Removes the mounted view without destroying its page; the pool still owns it.
+    /// Removes the mounted view without destroying its page; the pool still owns it. A view
+    /// another container took meanwhile stays there: SwiftUI can dismantle the old host after the
+    /// new one mounted the page (a page moving to full screen and back).
     func unmount() {
         urlUpdates?.cancel()
         urlUpdates = nil
         mountedState = nil
-        mountedView?.removeFromSuperview()
+        if mountedView?.superview === self {
+            mountedView?.removeFromSuperview()
+        }
         mountedView = nil
         screenTime?.url = nil
     }

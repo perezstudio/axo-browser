@@ -193,6 +193,9 @@ public final class WebKitPage: NSObject, EnginePage {
         }
     }
 
+    /// WebKit shows element full screen in a window of its own and leaves it itself.
+    public func exitFullscreen() {}
+
     #if os(macOS)
     public func printOperation(with printInfo: NSPrintInfo) -> NSPrintOperation {
         let operation = webView.printOperation(with: printInfo)

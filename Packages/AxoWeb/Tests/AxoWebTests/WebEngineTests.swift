@@ -255,6 +255,26 @@ struct WebEngineTests {
         #expect(pool.page(for: tab, profileID: profileID) === page)
     }
 
+    @Test func openedPagesWithoutAHandlerOpenTheirURL() throws {
+        let tab = Tab.testTab(url: url)
+        pool.page(for: tab, profileID: profileID)
+        let source = try livePage(for: tab)
+        var newTabs: [URL] = []
+        pool.onOpenInNewTab = { url, _ in newTabs.append(url) }
+        var fullscreen: [Bool] = []
+        pool.onPageFullscreen = { _, on in fullscreen.append(on) }
+
+        let opened = FakePage(profileID: profileID)
+        source.open(opened, url: URL(string: "https://example.com/opened")!, as: .tab(inBackground: false))
+        #expect(opened.isClosed, "Nothing takes the page, so it closes")
+        #expect(newTabs == [URL(string: "https://example.com/opened")!], "Its URL opens the old way")
+
+        source.setFullscreen(true)
+        pool.exitFullscreen(tab.id)
+        #expect(fullscreen == [true])
+        #expect(source.exitedFullscreen == 1)
+    }
+
     @Test func aPageAdoptedUnderAnotherIDMovesThere() throws {
         var opened: [EngineOpenedPage] = []
         pool.onEngineOpenedPage = { opened.append($0) }

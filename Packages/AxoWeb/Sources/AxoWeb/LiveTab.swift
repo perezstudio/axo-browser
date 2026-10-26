@@ -78,6 +78,19 @@ final class LiveTab: EnginePageDelegate {
         pool?.onContextMenu?(menu, tabID) ?? false
     }
 
+    func page(_ page: any EnginePage, setsFullscreen fullscreen: Bool) {
+        pool?.onPageFullscreen?(tabID, fullscreen)
+    }
+
+    func page(_ page: any EnginePage, didOpen opened: OpenedPage) {
+        guard let handler = pool?.onPageOpened else {
+            opened.page.close()
+            pool?.onOpenInNewTab?(opened.url, tabID)
+            return
+        }
+        handler(opened, tabID)
+    }
+
     func page(_ page: any EnginePage, didStartDownloadFrom sourceURL: URL?, cancel: @escaping @MainActor () -> Void) -> DownloadItem {
         guard let pool else {
             // The pool is gone, so nothing would show the download. Stop it.

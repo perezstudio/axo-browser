@@ -202,6 +202,8 @@ public final class FakePage: NSObject, AXOPage {
         NSPrintOperation(view: view, printInfo: printInfo)
     }
 
+    public private(set) var exitedFullscreen = 0
+    public func exitFullscreen() { exitedFullscreen += 1 }
     public func close() { isClosed = true }
 }
 

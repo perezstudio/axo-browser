@@ -40,6 +40,8 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
 - **Mini windows:** each link from another app opens in its own small window (`MiniWindow`, shown by `MiniWindowController`, an AppKit window hosting SwiftUI), using the current Space's profile.
   - **Open in Axo** (⌘O) moves the page into the current Space as a tab with the same ID, so it doesn't reload, and closes the window. Closing the window lets the page go.
   - New-window links inside a mini window stay in it, and its pages count as history.
+  - Popups a page opens (`window.open` with a size, as sign-in pages use) open as mini windows sized as asked, connected to their opener (`showOpenedPage`).
+- **Page full screen:** a page asking to fill the screen (`fullscreenTabID`) shows alone in the window, in place of the split view, and the window goes full screen (`PageFullscreenWindow`); Esc, switching tabs, or leaving full screen ends it.
   - `presentMiniWindow` and `dismissMiniWindow` are replaceable, so tests don't open real windows.
 - **Peek:** in a pinned tab, a plain click on a link to another site, or a link that opens a new window, opens the page in Peek instead of leaving the pinned page. Peek is a card over the page, and new-window links inside it stay in it.
   - **Leaving Peek:** Open as Tab (⌘↩), Open in Split View next to the pinned tab, or close it (Esc, the close button, or clicking outside). Switching tabs also closes it.

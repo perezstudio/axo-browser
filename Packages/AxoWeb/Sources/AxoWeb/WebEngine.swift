@@ -120,6 +120,10 @@ public protocol EnginePage: AnyObject {
     func printOperation(with printInfo: NSPrintInfo) -> NSPrintOperation
     #endif
 
+    /// Leaves page full screen (``EnginePageDelegate/page(_:setsFullscreen:)``), when the person
+    /// leaves full screen some other way than the page.
+    func exitFullscreen()
+
     /// Stops the page and releases what it holds. The pool never uses it again.
     func close()
 }
@@ -156,4 +160,36 @@ public protocol EnginePageDelegate: AnyObject {
     /// A right-click, for engines that leave the menu to Axo. Show Axo's menu and return `true`,
     /// or return `false` to show none.
     func page(_ page: any EnginePage, showContextMenu menu: any PageContextMenu) -> Bool
+    /// The page asked to fill the screen (`element.requestFullscreen()`), or to stop, for engines
+    /// that leave that to Axo.
+    func page(_ page: any EnginePage, setsFullscreen fullscreen: Bool)
+    /// The page opened another page that's already loading (`window.open`, a `target="_blank"`
+    /// link), for engines that keep the new page connected to its opener.
+    func page(_ page: any EnginePage, didOpen opened: OpenedPage)
+}
+
+/// A page another page opened, already loading, with its opener (`window.opener`) and the
+/// request it carried. Show it, or close it.
+public struct OpenedPage {
+    /// Where the page shows.
+    public enum Kind: Hashable, Sendable {
+        /// A tab, in the background when the person asked for that (⌘-click).
+        case tab(inBackground: Bool)
+        /// A small window (`window.open` with a size, as sign-in pages use), of `size` when the
+        /// page gave one.
+        case popup(size: CGSize)
+    }
+
+    /// The new page.
+    public let page: any EnginePage
+    /// What it's loading.
+    public let url: URL
+    public let kind: Kind
+
+    /// Creates the description of an opened page.
+    public init(page: any EnginePage, url: URL, kind: Kind) {
+        self.page = page
+        self.url = url
+        self.kind = kind
+    }
 }

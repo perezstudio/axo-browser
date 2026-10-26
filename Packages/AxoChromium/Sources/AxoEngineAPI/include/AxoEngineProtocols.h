@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 19
+#define AXO_ENGINE_API_VERSION 20
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -288,6 +288,23 @@ NS_SWIFT_UI_ACTOR
 /// it has keyboard focus. Return `YES` if the app used it, for example as a menu shortcut
 /// (`-[NSMenu performKeyEquivalent:]`). Without this, unused key presses are dropped.
 - (BOOL)page:(id<AXOPage>)page didNotHandleKeyEvent:(NSEvent*)event;
+/// The page asked to fill the screen (`element.requestFullscreen()`, a video's full-screen
+/// button), or to stop. Show only the page, filling the screen, or go back. When the person
+/// leaves full screen another way, call `-[AXOPage exitFullscreen]`. Without this, pages can't
+/// go full screen.
+- (void)page:(id<AXOPage>)page setsFullscreen:(BOOL)fullscreen NS_SWIFT_NAME(page(_:setsFullscreen:));
+/// The page opened another page (`window.open`, a `target="_blank"` link, a link opened in a new
+/// tab): `newPage` is already loading `url`, with what the request carried (its opener, form
+/// data, referrer). Show it as a tab after this one, in the background when `inBackground`, or as
+/// a small window of `size` (zero when unspecified) when `isPopup`. Close it to drop it (and
+/// load `url` some other way if you like). Without this, only the URL arrives, through
+/// `page:wantsToOpenURLInNewTab:`.
+- (void)page:(id<AXOPage>)page
+    didOpenPage:(id<AXOPage>)newPage
+            url:(NSURL*)url
+          popup:(BOOL)isPopup
+           size:(NSSize)size
+   inBackground:(BOOL)inBackground NS_SWIFT_NAME(page(_:didOpen:url:popup:size:inBackground:));
 @end
 
 /// One tab's page: a Chromium `WebContents` and its view.
@@ -340,6 +357,8 @@ NS_SWIFT_UI_ACTOR
 
 /// A print operation for the page.
 - (NSPrintOperation*)printOperationWithPrintInfo:(NSPrintInfo*)printInfo;
+/// Leaves page full screen, when the person leaves full screen some other way than the page.
+- (void)exitFullscreen;
 
 /// Stops the page and releases its `WebContents`. The page is unusable afterwards.
 - (void)close;

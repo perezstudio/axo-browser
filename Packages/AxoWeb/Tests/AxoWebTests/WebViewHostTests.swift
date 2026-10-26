@@ -51,6 +51,19 @@ struct WebViewHostTests {
         #expect(container.mountedView == nil)
     }
 
+    @Test func aPageMovedToAnotherContainerStaysThereWhenTheOldOneGoes() {
+        let old = WebViewContainer(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
+        let new = WebViewContainer(frame: NSRect(x: 0, y: 0, width: 1200, height: 800))
+        let page = NSView()
+        old.mount(page, state: nil)
+        // SwiftUI mounts the page in the new host, then dismantles the old one.
+        new.mount(page, state: nil)
+        old.unmount()
+        #expect(page.superview === new, "The old host doesn't take the page out of the new one")
+        new.unmount()
+        #expect(page.superview == nil)
+    }
+
     @Test func coordinatorMountsThePooledWebViewAndTracksVisibility() throws {
         let pool = WebViewPool.forTesting()
         let coordinator = WebViewHost.Coordinator(pool: pool)

@@ -293,7 +293,7 @@ public final class ChromiumEngine: WebEngine {
         window.pages.dropFirst().forEach { $0.close() }
         window.delegate = windowEvents
         popupWindows.append(window)
-        let page = ChromiumPage(profileID: profileID)
+        let page = makeChromiumPage(profileID: profileID)
         pagesByEnginePage.setObject(page, forKey: first)
         page.attach(first)
         delegate?.engine(self, didOpenPopupWindowWith: page, size: CGSize(width: size.width, height: size.height), profileID: profileID)
@@ -304,10 +304,21 @@ public final class ChromiumEngine: WebEngine {
             enginePage.close()
             return
         }
-        let page = ChromiumPage(profileID: profileID)
+        delegate?.engine(self, didOpen: wrap(enginePage, profileID: profileID), profileID: profileID, at: index)
+    }
+
+    /// A ``ChromiumPage`` for a page the engine made itself, attached to it.
+    func wrap(_ enginePage: any AXOPage, profileID: Profile.ID) -> ChromiumPage {
+        let page = makeChromiumPage(profileID: profileID)
         pagesByEnginePage.setObject(page, forKey: enginePage)
         page.attach(enginePage)
-        delegate?.engine(self, didOpen: page, profileID: profileID, at: index)
+        return page
+    }
+
+    private func makeChromiumPage(profileID: Profile.ID) -> ChromiumPage {
+        let page = ChromiumPage(profileID: profileID)
+        page.engine = self
+        return page
     }
 
     fileprivate func window(_ window: any AXOWindow, didClose enginePage: any AXOPage) {
@@ -326,7 +337,7 @@ public final class ChromiumEngine: WebEngine {
     // MARK: WebEngine
 
     public func makePage(profileID: Profile.ID) -> any EnginePage {
-        let page = ChromiumPage(profileID: profileID)
+        let page = makeChromiumPage(profileID: profileID)
         if state == .ready {
             attach(page)
         } else {

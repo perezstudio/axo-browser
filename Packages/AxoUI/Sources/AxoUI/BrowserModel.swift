@@ -103,6 +103,9 @@ public final class BrowserModel {
     @ObservationIgnored var profilesObservationTask: Task<Void, Never>?
     /// The extension side panel showing beside the page, if any.
     public internal(set) var extensionSidePanel: ExtensionSidePanel?
+    /// The tab whose page fills the screen (`element.requestFullscreen()`), if any. The window
+    /// shows only it meanwhile.
+    public internal(set) var fullscreenTabID: AxoCore.Tab.ID?
     /// A tab the engine selected (an extension's `chrome.tabs.create`) before it joined the
     /// sidebar. It's selected once it does, and the engine's window keeps it selected meanwhile.
     @ObservationIgnored var engineSelectionAwaitingAdoption: AxoCore.Tab.ID?
@@ -259,6 +262,16 @@ public final class BrowserModel {
         }
         dismissMiniWindow = { id in MiniWindowController.dismiss(id) }
         #endif
+        pool.onPageOpened = { [weak self] opened, sourceID in
+            guard let self else {
+                opened.page.close()
+                return
+            }
+            self.showOpenedPage(opened, from: sourceID)
+        }
+        pool.onPageFullscreen = { [weak self] tabID, fullscreen in
+            self?.pageSetsFullscreen(tabID, fullscreen)
+        }
         pool.onOpenInNewTab = { [weak self] url, sourceID in
             guard let self else { return }
             if self.peek?.tab.id == sourceID || self.miniWindows.contains(where: { $0.id == sourceID }) {
@@ -566,6 +579,10 @@ public final class BrowserModel {
     public func select(_ id: AxoCore.Tab.ID?) {
         if id != selectedTabID, isFindBarVisible {
             closeFindBar()
+        }
+        // Another tab can't show while a page fills the screen.
+        if let fullscreenTabID, id != fullscreenTabID {
+            exitPageFullscreen()
         }
         if let peek, id != peek.sourceTabID {
             closePeek()

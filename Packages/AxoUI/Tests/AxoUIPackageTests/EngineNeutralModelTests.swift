@@ -192,6 +192,78 @@ struct EngineNeutralModelTests {
         #expect(dismissed == [mini.id], "chrome.windows.remove closes the window")
     }
 
+    @Test func pagesAPageOpensKeepTheirConnection() async throws {
+        let source = try await openPage(URL(string: "https://example.com/source")!)
+        _ = try await openPage(URL(string: "https://example.com/other")!)
+        let sourceID = try #require(model.tabs.first?.id)
+        model.select(sourceID)
+        let profileID = try #require(model.space?.profileID)
+
+        // window.open from a click: a tab right after its opener, keeping the page Chromium made.
+        let opened = FakePage(profileID: profileID)
+        source.open(opened, url: URL(string: "https://example.com/opened")!, as: .tab(inBackground: false))
+        try await waitUntil { model.tabs.count == 3 }
+        #expect(model.tabs.map(\.url.lastPathComponent) == ["source", "opened", "other"])
+        let openedID = model.tabs[1].id
+        #expect(model.pool.livePage(for: openedID) === opened, "The same page, so window.opener still works")
+        #expect(opened.loads.isEmpty, "It isn't loaded again")
+        #expect(model.selectedTabID == openedID)
+
+        // ⌘-click: in the background.
+        model.select(sourceID)
+        let background = FakePage(profileID: profileID)
+        source.open(background, url: URL(string: "https://example.com/later")!, as: .tab(inBackground: true))
+        try await waitUntil { model.tabs.count == 4 }
+        #expect(model.selectedTabID == sourceID)
+
+        // A sign-in popup: a mini window, sized as it asked.
+        let popup = FakePage(profileID: profileID)
+        source.open(popup, url: URL(string: "https://accounts.example.com/")!, as: .popup(size: CGSize(width: 500, height: 600)))
+        let mini = try #require(model.miniWindows.last)
+        #expect(mini.contentSize == CGSize(width: 500, height: 600))
+        #expect(model.pool.livePage(for: mini.tab.id) === popup)
+        #expect(model.tabs.count == 4)
+    }
+
+    @Test func pagesPinnedTabsOpenGoToPeek() async throws {
+        let pinnedPage = try await openPage(URL(string: "https://example.com/pinned")!)
+        let pinnedID = try #require(model.selectedTabID)
+        try await model.store.setPinned(true, tabID: pinnedID)
+        try await waitUntil { model.tabs.first?.isPinned == true }
+        let profileID = try #require(model.space?.profileID)
+
+        let opened = FakePage(profileID: profileID)
+        pinnedPage.open(opened, url: URL(string: "https://example.com/elsewhere")!, as: .tab(inBackground: false))
+        #expect(opened.isClosed, "Peek loads the link itself")
+        #expect(model.peek?.tab.url == URL(string: "https://example.com/elsewhere")!)
+    }
+
+    @Test func aPageCanFillTheScreenUntilItOrThePersonStops() async throws {
+        let shown = try await openPage(URL(string: "https://example.com/video")!)
+        let shownID = try #require(model.selectedTabID)
+
+        shown.setFullscreen(true)
+        #expect(model.fullscreenTabID == shownID)
+        shown.setFullscreen(false)
+        #expect(model.fullscreenTabID == nil, "The page left full screen (Esc, or its own button)")
+
+        shown.setFullscreen(true)
+        model.exitPageFullscreen()
+        #expect(model.fullscreenTabID == nil)
+        #expect(shown.exitedFullscreen == 1, "Leaving full screen another way tells the page")
+
+        shown.setFullscreen(true)
+        let other = try await openPage(URL(string: "https://example.com/other")!)
+        #expect(model.fullscreenTabID == nil, "Switching tabs ends it")
+        #expect(shown.exitedFullscreen == 2)
+
+        // A page that isn't showing can't take over the screen.
+        shown.setFullscreen(true)
+        #expect(model.fullscreenTabID == nil)
+        #expect(shown.exitedFullscreen == 3)
+        _ = other
+    }
+
     @Test func extensionWindowSizesMustBeUsable() {
         #expect(BrowserModel.extensionWindowSize(CGSize(width: 380, height: 600)) == CGSize(width: 380, height: 600))
         #expect(BrowserModel.extensionWindowSize(CGSize(width: 10, height: 600)) == CGSize(width: 100, height: 600))

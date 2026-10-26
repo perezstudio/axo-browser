@@ -158,6 +158,20 @@ public final class FakePage: EnginePage {
     }
     #endif
 
+    public private(set) var exitedFullscreen = 0
+    public func exitFullscreen() { exitedFullscreen += 1 }
+
+    /// Asks to fill the screen, or to stop, as a page's `requestFullscreen()` would.
+    public func setFullscreen(_ fullscreen: Bool) {
+        delegate?.page(self, setsFullscreen: fullscreen)
+    }
+
+    /// Opens another page, as a page's `window.open` would.
+    public func open(_ opened: FakePage, url: URL, as kind: OpenedPage.Kind) {
+        opened.url = url
+        delegate?.page(self, didOpen: OpenedPage(page: opened, url: url, kind: kind))
+    }
+
     public func close() {
         isClosed = true
     }
