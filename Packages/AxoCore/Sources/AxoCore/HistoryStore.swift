@@ -166,14 +166,23 @@ public final class HistoryStore: Sendable {
         }
     }
 
-    /// Deletes pages from a profile's history.
-    public func delete(_ urls: [URL], profileID: Profile.ID) async throws {
+    /// Deletes pages from a profile's history, in one transaction.
+    ///
+    /// - Parameter lastVisitedIn: Deletes only pages last visited in this range, such as the
+    ///   range of visits another copy of history deleted; `nil` deletes them whenever visited.
+    public func delete(_ urls: [URL], lastVisitedIn range: ClosedRange<Date>? = nil, profileID: Profile.ID) async throws {
         guard !urls.isEmpty else { return }
-        _ = try await database.writer.write { db in
-            try HistoryItem
-                .filter(HistoryItem.Columns.profileID == profileID)
-                .filter(urls.contains(HistoryItem.Columns.url))
-                .deleteAll(db)
+        try await database.writer.write { db in
+            // In batches, below SQLite's limit on a statement's arguments.
+            for start in stride(from: 0, to: urls.count, by: 500) {
+                var request = HistoryItem
+                    .filter(HistoryItem.Columns.profileID == profileID)
+                    .filter(urls[start..<min(start + 500, urls.count)].contains(HistoryItem.Columns.url))
+                if let range {
+                    request = request.filter(range.contains(HistoryItem.Columns.lastVisitedAt))
+                }
+                try request.deleteAll(db)
+            }
         }
     }
 

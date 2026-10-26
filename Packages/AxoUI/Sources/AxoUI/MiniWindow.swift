@@ -45,10 +45,17 @@ extension BrowserModel {
         let tab = AxoCore.Tab(spaceID: space.id, url: popup.page.url ?? URL(string: "about:blank")!, sortKey: SortKey.initial)
         var mini = MiniWindow(tab: tab, profileID: popup.profileID)
         mini.isExtensionWindow = true
-        mini.contentSize = popup.size.width > 0 && popup.size.height > 0 ? popup.size : nil
+        mini.contentSize = Self.extensionWindowSize(popup.size)
         pool.adopt(popup.page, as: tab, profileID: popup.profileID)
         miniWindows.append(mini)
         presentMiniWindow?(mini)
+    }
+
+    /// The size an extension asked for its window, if it's a usable one, at least 100 points on
+    /// each side. The window fits it to the screen.
+    static func extensionWindowSize(_ size: CGSize) -> CGSize? {
+        guard size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0 else { return nil }
+        return CGSize(width: max(size.width, 100), height: max(size.height, 100))
     }
 
     /// Closes a mini window whose page the engine closed (an extension's `chrome.windows.remove`).

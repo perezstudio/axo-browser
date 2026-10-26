@@ -17,10 +17,11 @@ enum ChromiumSupport {
     /// Set by UI tests that exercise the Chromium engine.
     static let uiTestingKey = "AXO_UI_TESTING_CHROMIUM"
 
-    /// Where Chromium keeps profiles' website data: a temporary folder in UI testing mode.
-    static var userDataDirectory: URL {
-        AppEnvironment.isUITesting
-            ? FileManager.default.temporaryDirectory.appending(path: "AxoUITests-Chromium-\(UUID().uuidString)", directoryHint: .isDirectory)
+    /// Where Chromium keeps profiles' website data: in UI testing mode, one temporary folder that
+    /// each launch empties first, so test runs don't pile up profiles.
+    static func userDataDirectory(isUITesting: Bool) -> URL {
+        isUITesting
+            ? FileManager.default.temporaryDirectory.appending(path: "AxoUITests-Chromium", directoryHint: .isDirectory)
             : URL.applicationSupportDirectory.appending(path: "Axo/Chromium", directoryHint: .isDirectory)
     }
 
@@ -64,7 +65,9 @@ enum ChromiumSupport {
         "\(reason) Axo runs its pages on this engine, so it can't open without it. Reinstall Axo, or if you built it yourself, build axo-chromium next to it."
     }
 
-    private static func failToLaunch(reason: String) -> Never {
+    /// Explains why Axo can't run and quits: the Mac has no other engine. Also for an engine
+    /// that loaded but then failed to start.
+    static func failToLaunch(reason: String) -> Never {
         // SwiftUI hasn't made `NSApp` yet; the alert needs one.
         let application = NSApplication.shared
         application.setActivationPolicy(.regular)
@@ -78,12 +81,29 @@ enum ChromiumSupport {
         exit(1)
     }
 
+    /// Extra Chromium switches for debugging, from `AXO_ENGINE_ARGS` (such as
+    /// `--enable-logging=stderr --v=1`). Debug builds only: in a release build, another process
+    /// could set the variable for Axo's next launch.
+    static var debugEngineArguments: [String] {
+        #if DEBUG
+        (ProcessInfo.processInfo.environment["AXO_ENGINE_ARGS"] ?? "").split(separator: " ").map(String.init)
+        #else
+        []
+        #endif
+    }
+
     /// The pool's engine: Chromium, started, if it loaded at launch.
     static func makeEngine() -> ChromiumEngine? {
         guard let classes else { return nil }
+        let isUITesting = AppEnvironment.isUITesting
+        let directory = userDataDirectory(isUITesting: isUITesting)
+        if isUITesting { try? FileManager.default.removeItem(at: directory) }
         let engine = ChromiumEngine(
-            classes: classes, userDataDirectory: userDataDirectory,
-            nativeMessagingHostFolders: nativeMessagingHostFolders(isUITesting: AppEnvironment.isUITesting)
+            classes: classes, userDataDirectory: directory,
+            nativeMessagingHostFolders: nativeMessagingHostFolders(isUITesting: isUITesting),
+            // Tests never reach the person's keychain or Google's servers.
+            isEphemeral: isUITesting,
+            additionalArguments: debugEngineArguments
         )
         engine.start()
         return engine

@@ -62,6 +62,41 @@ public struct ExtensionShortcut: Identifiable, Equatable {
     }
 }
 
+#if os(macOS)
+extension ExtensionShortcut {
+    /// The menu holding extensions' shortcuts, whose items don't count as Axo's own.
+    static let menuTitle = "Extension Shortcuts"
+
+    /// Whether one of Axo's own menu items in `menu` (the main menu) already uses these keys.
+    /// Axo's shortcut wins: an extension's shortcut that clashes stays in the menu without them.
+    func clashes(with menu: NSMenu?) -> Bool {
+        guard let menu else { return false }
+        var flags: NSEvent.ModifierFlags = []
+        if modifiers.contains(.command) { flags.insert(.command) }
+        if modifiers.contains(.option) { flags.insert(.option) }
+        if modifiers.contains(.control) { flags.insert(.control) }
+        if modifiers.contains(.shift) { flags.insert(.shift) }
+        return Self.usesKeys(String(key).lowercased(), flags, in: menu)
+    }
+
+    private static func usesKeys(_ key: String, _ flags: NSEvent.ModifierFlags, in menu: NSMenu) -> Bool {
+        let relevant: NSEvent.ModifierFlags = [.command, .option, .control, .shift]
+        for item in menu.items {
+            if let submenu = item.submenu {
+                if item.title != menuTitle, usesKeys(key, flags, in: submenu) { return true }
+                continue
+            }
+            guard !item.keyEquivalent.isEmpty else { continue }
+            var itemFlags = item.keyEquivalentModifierMask.intersection(relevant)
+            // AppKit writes Shift as an uppercase letter.
+            if item.keyEquivalent != item.keyEquivalent.lowercased() { itemFlags.insert(.shift) }
+            if item.keyEquivalent.lowercased() == key, itemFlags == flags { return true }
+        }
+        return false
+    }
+}
+#endif
+
 /// Supplies extension toolbar buttons and runs them. AxoExtensions provides the real
 /// implementation; the app connects them.
 @MainActor

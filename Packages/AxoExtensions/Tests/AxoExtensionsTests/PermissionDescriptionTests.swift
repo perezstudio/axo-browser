@@ -19,4 +19,19 @@ struct PermissionDescriptionTests {
         let lines = PermissionDescriptions.lines(permissions: ["storage", "alarms", "tabs", "nativeMessaging"], matchPatterns: [])
         #expect(lines == ["Talk to apps installed on this Mac", "See your open tabs and their addresses"])
     }
+
+    @Test func chromeOnlyPermissionsAreDescribed() {
+        let lines = PermissionDescriptions.lines(permissions: ["history", "debugger", "bookmarks"], matchPatterns: ["<all_urls>"])
+        #expect(lines == [
+            "Read and change your data on all websites",
+            "Control your tabs with developer tools, including what they load and send",
+            "Read and change your browsing history",
+            "Read and change your favorites and pinned tabs",
+        ])
+    }
+
+    @Test func permissionsWithoutADescriptionAreStillListed() {
+        let lines = PermissionDescriptions.lines(permissions: ["storage", "someNewAPI", "anotherAPI"], matchPatterns: [])
+        #expect(lines == ["Use “anotherAPI”", "Use “someNewAPI”"], "A prompt never hides a permission")
+    }
 }

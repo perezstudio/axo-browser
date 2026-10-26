@@ -18,7 +18,14 @@ public final class BrowserModel {
     /// Every Space, in switcher order.
     public private(set) var spaces: [Space] = []
     /// The Space shown in the sidebar, once ``start()`` finishes.
-    public private(set) var space: Space?
+    public private(set) var space: Space? {
+        // An extension's side panel belongs to its profile's Spaces.
+        didSet {
+            if let profileID = extensionSidePanel?.profileID, profileID != space?.profileID {
+                closeExtensionSidePanel()
+            }
+        }
+    }
     /// The Space's tabs in sidebar order, kept current as the database changes.
     public internal(set) var tabs: [AxoCore.Tab] = [] {
         didSet { syncEngineWindow() }
@@ -96,6 +103,9 @@ public final class BrowserModel {
     @ObservationIgnored var profilesObservationTask: Task<Void, Never>?
     /// The extension side panel showing beside the page, if any.
     public internal(set) var extensionSidePanel: ExtensionSidePanel?
+    /// A tab the engine selected (an extension's `chrome.tabs.create`) before it joined the
+    /// sidebar. It's selected once it does, and the engine's window keeps it selected meanwhile.
+    @ObservationIgnored var engineSelectionAwaitingAdoption: AxoCore.Tab.ID?
     /// The current Space's profile's favorites, in grid order.
     public internal(set) var favorites: [Favorite] = [] {
         didSet { syncEngineWindow() }
@@ -285,8 +295,16 @@ public final class BrowserModel {
         pool.onEngineClosedTab = { [weak self] id in
             Task { await self?.closeTab(id) }
         }
+        // Only tabs this window shows; another profile's window can't change the selection here.
+        // A tab the engine opened a moment ago is selected once it joins the sidebar.
         pool.onEngineActivatedTab = { [weak self] id in
-            self?.select(id)
+            guard let self else { return }
+            if tabs.contains(where: { $0.id == id }) || favorites.contains(where: { $0.id == id }) {
+                select(id)
+            } else if pool.isAwaitingAdoption(id) {
+                engineSelectionAwaitingAdoption = id
+                syncEngineWindow()
+            }
         }
         pool.onLinkClick = { [weak self] click in
             self?.handleLinkClick(click) ?? false
@@ -583,7 +601,7 @@ public final class BrowserModel {
         guard let space else { return }
         let favoriteIDs = favoritesProfileID == space.profileID ? favorites.map(\.id) : []
         let ids = favoriteIDs + tabs.map(\.id)
-        let selected = selectedTabID.flatMap { ids.contains($0) ? $0 : nil }
+        let selected = engineSelectionAwaitingAdoption ?? selectedTabID.flatMap { ids.contains($0) ? $0 : nil }
         pool.setWindowTabs(ids, selected: selected, profileID: space.profileID)
     }
 
@@ -592,7 +610,8 @@ public final class BrowserModel {
     /// tab before it in the window when that tab is an unpinned sidebar tab, at the end otherwise.
     func adoptEngineOpenedPage(_ opened: EngineOpenedPage) async {
         guard let space, space.profileID == opened.profileID else {
-            opened.page.close()
+            if engineSelectionAwaitingAdoption == opened.tabID { engineSelectionAwaitingAdoption = nil }
+            pool.discard(opened.tabID)
             return
         }
         let position: TabPosition = if let after = opened.after,
@@ -603,6 +622,7 @@ public final class BrowserModel {
         }
         do {
             let tab = try await store.openTab(
+                id: opened.tabID,
                 url: opened.page.url ?? URL(string: "about:blank")!,
                 title: opened.page.title,
                 in: space.id,
@@ -611,8 +631,13 @@ public final class BrowserModel {
             pool.adopt(opened.page, as: tab, profileID: opened.profileID)
             tabs = try await store.tabs(in: space.id)
             onTabEvent?(.opened(tab.id))
+            if engineSelectionAwaitingAdoption == tab.id {
+                engineSelectionAwaitingAdoption = nil
+                select(tab.id)
+            }
         } catch {
-            opened.page.close()
+            if engineSelectionAwaitingAdoption == opened.tabID { engineSelectionAwaitingAdoption = nil }
+            pool.discard(opened.tabID)
             report(error, "Axo couldn't open the tab an extension asked for.")
         }
     }

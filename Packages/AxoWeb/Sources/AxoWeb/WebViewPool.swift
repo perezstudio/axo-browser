@@ -8,7 +8,7 @@ import AppKit
 ///
 /// SwiftUI never creates or destroys pages; it asks the pool for a tab's page and mounts its view
 /// with ``WebViewHost``. That keeps pages alive across view updates. The pool's ``engine`` makes
-/// the pages (WebKit today; see `docs/chromium-engine.md`) and keeps each profile's website data
+/// the pages (Chromium on the Mac, WebKit on iPhone and iPad; see `docs/chromium-engine.md`) and keeps each profile's website data
 /// separate, so cookies and storage never leak between profiles.
 ///
 /// A tab is in one of three states:
@@ -107,6 +107,9 @@ public final class WebViewPool {
 
     /// The tabs each profile's window last showed, as sent to ``setWindowTabs(_:selected:profileID:)``.
     private var windowTabs: [Profile.ID: [Tab.ID]] = [:]
+    /// Pages the engine opened that are live under their tab ID but not yet adopted into the
+    /// sidebar, with their profile. They stay in the engine's window meanwhile.
+    private var awaitingAdoption: [Tab.ID: Profile.ID] = [:]
 
     private let now: () -> Date
     private var live: [Tab.ID: LiveTab] = [:]
@@ -179,18 +182,33 @@ public final class WebViewPool {
     /// Makes `page`, which the engine opened on its own, the live page of `tab`, without
     /// loading anything. Call it from ``onEngineOpenedPage`` once the tab exists.
     public func adopt(_ page: any EnginePage, as tab: Tab, profileID: Profile.ID) {
-        if let existing = live[tab.id], existing.page !== page {
+        awaitingAdoption[tab.id] = nil
+        hibernated[tab.id] = nil
+        if let existing = live[tab.id] {
+            // A page the engine opened is already live under its tab's ID.
+            if existing.page === page { return }
             existing.tearDown()
         }
-        hibernated[tab.id] = nil
+        // The page live under another ID (adopted under a new one) moves, without closing.
+        for (otherID, other) in live where other.page === page {
+            live[otherID] = nil
+            awaitingAdoption[otherID] = nil
+        }
         live[tab.id] = LiveTab(tabID: tab.id, profileID: profileID, page: page, pool: self, lastUsed: now())
+    }
+
+    /// Whether `tabID` is a page the engine opened that isn't in the sidebar yet.
+    public func isAwaitingAdoption(_ tabID: Tab.ID) -> Bool {
+        awaitingAdoption[tabID] != nil
     }
 
     /// Tells the engine which tabs a window shows, in sidebar order, and which is selected: the
     /// Space's tabs. Only live tabs are passed on; the others have no page. Engines with a window
     /// model (Chromium's extension APIs) show them as that window's tabs.
     public func setWindowTabs(_ tabIDs: [Tab.ID], selected: Tab.ID?, profileID: Profile.ID) {
-        let liveIDs = tabIDs.filter { live[$0] != nil }
+        // Pages waiting to join the sidebar stay in the window until they do.
+        let waiting = awaitingAdoption.filter { $0.value == profileID && !tabIDs.contains($0.key) }.keys.sorted { $0.uuidString < $1.uuidString }
+        let liveIDs = (tabIDs + waiting).filter { live[$0] != nil }
         windowTabs[profileID] = liveIDs
         engine.setWindowPages(
             liveIDs.compactMap { live[$0]?.page },
@@ -390,6 +408,7 @@ public final class WebViewPool {
     /// Forgets a tab entirely, for example when it closes. Its page and saved history are
     /// discarded.
     public func discard(_ tabID: Tab.ID) {
+        awaitingAdoption[tabID] = nil
         hibernated[tabID] = nil
         visibleCounts[tabID] = nil
         live.removeValue(forKey: tabID)?.tearDown()
@@ -482,12 +501,18 @@ extension WebViewPool: WebEngineDelegate {
         }
         let window = windowTabs[profileID] ?? []
         let previous = index > 0 && index - 1 < window.count ? window[index - 1] : nil
-        handler(EngineOpenedPage(page: page, profileID: profileID, after: previous))
+        // Live under its tab's ID at once, so the engine activating it next (as it does for a new
+        // active tab) finds it.
+        let tabID = Tab.ID()
+        live[tabID] = LiveTab(tabID: tabID, profileID: profileID, page: page, pool: self, lastUsed: now())
+        awaitingAdoption[tabID] = profileID
+        handler(EngineOpenedPage(page: page, profileID: profileID, after: previous, tabID: tabID))
     }
 
     public func engine(_ engine: any WebEngine, didClose page: any EnginePage) {
         guard let tabID = tabID(of: page) else { return }
         // The engine already closed the page; forget it without closing it again.
+        awaitingAdoption[tabID] = nil
         live[tabID] = nil
         hibernated[tabID] = nil
         visibleCounts[tabID] = nil
@@ -533,12 +558,16 @@ public struct EngineOpenedPage {
     public let profileID: Profile.ID
     /// The tab before it in the window, if any, so it can go next to it in the sidebar.
     public let after: Tab.ID?
+    /// The ID its sidebar tab must have: the page is already live under it. If it doesn't join
+    /// the sidebar, ``WebViewPool/discard(_:)`` it.
+    public let tabID: Tab.ID
 
     /// Creates the description of an opened page.
-    public init(page: any EnginePage, profileID: Profile.ID, after: Tab.ID?) {
+    public init(page: any EnginePage, profileID: Profile.ID, after: Tab.ID?, tabID: Tab.ID = Tab.ID()) {
         self.page = page
         self.profileID = profileID
         self.after = after
+        self.tabID = tabID
     }
 }
 

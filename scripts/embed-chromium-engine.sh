@@ -21,6 +21,15 @@ if [[ -z "${AXO_CHROMIUM_OUT:-}" && ! -d "$OUT" ]]; then
   fi
 fi
 SOURCE="$OUT/Chromium.app/Contents/Frameworks/$FRAMEWORK_NAME"
+
+# Axo's copy of the engine's API header must match the fork's (CLAUDE.md, "The API header").
+FORK_HEADER="$OUT/../../../../axo/public/AxoEngineProtocols.h"
+AXO_HEADER="$SRCROOT/Packages/AxoChromium/Sources/AxoEngineAPI/include/AxoEngineProtocols.h"
+if [[ -f "$FORK_HEADER" ]] && ! cmp -s "$FORK_HEADER" "$AXO_HEADER"; then
+  echo "error: $AXO_HEADER differs from the fork's $FORK_HEADER. Copy the fork's over it."
+  exit 1
+fi
+
 if [[ ! -d "$SOURCE" ]]; then
   rm -rf "$DEST/$FRAMEWORK_NAME"
   echo "warning: No Chromium engine at $SOURCE. Build axo-chromium next to Axo (or set AXO_CHROMIUM_OUT); without it Axo can't open."

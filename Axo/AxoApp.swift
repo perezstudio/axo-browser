@@ -225,7 +225,12 @@ enum AppEnvironment {
             if let chromium {
                 chromium.onStateChange = { [weak model] (state: ChromiumEngine.State) in
                     guard case .failed(let reason) = state else { return }
-                    model?.alertMessage = "The Chromium engine didn't start: \(reason)"
+                    // Pages can't load without it, and there's no other engine on the Mac.
+                    if isUITesting {
+                        model?.alertMessage = "The Chromium engine didn't start: \(reason)"
+                    } else {
+                        ChromiumSupport.failToLaunch(reason: reason)
+                    }
                 }
                 chromiumExtensionBridge = ChromiumExtensionBridge(model: model, engine: chromium, store: store)
                 // UI tests can preinstall an unpacked extension, as with WebKit.

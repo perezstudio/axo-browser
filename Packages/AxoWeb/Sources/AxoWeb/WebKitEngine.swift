@@ -8,8 +8,8 @@ import AppKit
 /// The WebKit engine: a `WKWebView` per page and one `WKWebsiteDataStore(forIdentifier:)` per
 /// profile, so cookies and storage never leak between profiles.
 ///
-/// iPhone and iPad always use it. The Mac uses it until the Chromium engine is ready (see
-/// `docs/chromium-engine.md`).
+/// iPhone and iPad use it. The Mac runs on Chromium; it still uses WebKit in test runs until
+/// Phase 4 removes it there (see `docs/chromium-engine.md`).
 @MainActor
 public final class WebKitEngine: WebEngine {
     private let makeDataStore: (Profile.ID) -> WKWebsiteDataStore

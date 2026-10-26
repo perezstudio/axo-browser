@@ -44,7 +44,7 @@ Known WebKit gap: `runtime.onInstalled` doesn't fire (see `docs/webkit-gaps.md`)
 - **Install prompt:** `prepareInstall(from:for:)` verifies and saves a `.crx` file or an unpacked folder *turned off*, and returns an `InstallSummary` describing what it can do. Then `confirmInstall` turns it on, or `uninstall` removes it if the person declines. Updating an installed extension keeps it on.
 - **Site access:** `setSiteAccess(.all / .click, …)` grants the requested sites, or denies them so the extension reaches a page only through `activeTab` when its button is clicked. The choice is saved and reapplied at load.
 - **Optional permissions:** when an extension calls `permissions.request`, the controller delegate asks `onPermissionRequest` with a `PermissionRequest` (extension name and plain-language lines). Approvals are saved (`grantedOptional`) and restored at load. `grantedDescription(for:profileID:)` describes what a loaded extension can do now.
-- **`PermissionDescriptions`** turns WebKit permission names and match patterns into plain lines ("Read and change your data on all websites", "See your open tabs and their addresses", …), with the most significant first. Quiet permissions such as `storage` and `alarms` are left out.
+- **`PermissionDescriptions`** turns WebKit permission names and match patterns into plain lines ("Read and change your data on all websites", "See your open tabs and their addresses", …), with the most significant first. Quiet permissions such as `storage` and `alarms` are left out. Chrome's other permissions (`debugger`, `history`, `bookmarks`, `management`, and so on) are described too, and any it has no description for is still listed by name, so a prompt never hides one.
 
 ## Real extensions
 
@@ -81,4 +81,4 @@ It verifies each package's Chrome Web Store signature and ID, installs it, loads
 swift test
 ```
 
-Content scripts don't run on `file:` pages, so tests serve pages from `LoopbackWebServer` (127.0.0.1 only). The `AxoExtensionsTestSupport` target builds fixtures in code: zip archives (including malicious ones) and CRX3 files signed with freshly generated RSA keys. Its CRC-32 is independent of the code under test. It isn't a product.
+Content scripts don't run on `file:` pages, so tests serve pages from `LoopbackWebServer` (127.0.0.1 only). The `AxoExtensionsTestSupport` target builds fixtures in code: zip archives (including malicious ones) and CRX3 files signed with freshly generated RSA keys. Its CRC-32 is independent of the code under test. It's a product so the app's tests can build packages too.

@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 18
+#define AXO_ENGINE_API_VERSION 19
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -65,8 +65,12 @@ NS_SWIFT_UI_ACTOR
 @protocol AXOEngineConfiguration <NSObject>
 /// Where profiles keep their data, one folder per profile.
 @property(nonatomic, copy) NSURL* userDataDirectory;
-/// When `YES`, nothing is written to disk (tests).
+/// For tests: when `YES`, the engine uses a stand-in keychain (never the person's) and makes no
+/// background requests of its own (component updates and the like).
 @property(nonatomic) BOOL ephemeral;
+/// More Chromium switches, such as `--enable-logging=stderr`, for debugging. The engine never
+/// reads them from the environment; the app decides (Axo only in debug builds).
+@property(nonatomic, copy) NSArray<NSString*>* additionalArguments;
 /// More folders to find native messaging hosts in (`<name>.json` manifests), after Chromium's
 /// own. Apps like 1Password register their hosts for Google Chrome, not for Axo. Empty by
 /// default.
@@ -579,7 +583,9 @@ NS_SWIFT_UI_ACTOR
 typedef NS_ENUM(NSInteger, AXOHistoryChangeKind) {
   /// A visit to the one page in `urls`, titled `title`, at `date`.
   AXOHistoryChangeKindVisited,
-  /// The pages in `urls` have no visits left.
+  /// The pages in `urls` have no visits left. When `date` and `endDate` are set, the deletion
+  /// was of the visits in that range only, so the app's record of an earlier visit to one of
+  /// those pages (from before the engine kept history, or imported) is still right.
   AXOHistoryChangeKindDeleted,
   /// All history was deleted.
   AXOHistoryChangeKindDeletedAll,
@@ -592,6 +598,8 @@ NS_SWIFT_UI_ACTOR
 @property(nonatomic, readonly) NSArray<NSURL*>* urls;
 @property(nonatomic, readonly) NSString* title;
 @property(nonatomic, readonly, nullable) NSDate* date;
+/// For a deletion of a range of visits, the range's end (`date` is its start).
+@property(nonatomic, readonly, nullable) NSDate* endDate;
 @end
 
 /// An extension's side panel, open. Show `view` beside the page, titled `title`.

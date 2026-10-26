@@ -947,7 +947,8 @@ final class AxoUITests: XCTestCase {
         let picker = app.popUpButtons["importSourcePicker"]
         XCTAssertTrue(picker.waitForExistence(timeout: 5))
         picker.click()
-        app.menuItems["Google Chrome"].click()
+        // The picker's own menu: the Apple menu's Recent Items can list Google Chrome too.
+        picker.menuItems["Google Chrome"].click()
         XCTAssertTrue(app.checkBoxes["importPart-bookmarks"].waitForExistence(timeout: 10))
         app.buttons["importButton"].click()
         XCTAssertTrue(app.staticTexts["importResult"].waitForExistence(timeout: 10))

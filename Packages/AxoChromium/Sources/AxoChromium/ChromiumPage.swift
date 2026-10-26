@@ -19,7 +19,10 @@ final class ChromiumPage: NSObject, EnginePage {
     /// What to load once attached: the last URL or history asked for before the engine was ready.
     private var pendingLoad: PendingLoad?
     /// Downloads still running, kept so their observers live as long as they do.
-    private var downloads: [ObjectIdentifier: DownloadObserver] = [:]
+    /// The observers of downloads in progress. The engine holds observers weakly, and a download
+    /// outlives its page (the tab can close or hibernate while it runs), so they're kept here
+    /// until the download ends.
+    private static var downloads: [ObjectIdentifier: DownloadObserver] = [:]
 
     private enum PendingLoad {
         case url(URL)
@@ -225,8 +228,8 @@ extension ChromiumPage: AXOPageDelegate {
         }
         let item = delegate.page(self, didStartDownloadFrom: download.sourceURL) { download.cancel() }
         let key = ObjectIdentifier(download)
-        let observer = DownloadObserver(item: item) { [weak self] in self?.downloads[key] = nil }
-        downloads[key] = observer
+        let observer = DownloadObserver(item: item) { Self.downloads[key] = nil }
+        Self.downloads[key] = observer
         download.observer = observer
     }
 

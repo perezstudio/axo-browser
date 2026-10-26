@@ -343,6 +343,7 @@ Each milestone should be usable as a daily driver before the next one starts.
   - [ ] Still to come for extensions: the Chrome Web Store, site access settings, and inspecting background pages.
   - [ ] Bitwarden and uBlock Origin Lite passing the real-extension tests on Chromium. So far, both real packages install enabled, show their toolbar buttons, and open their popups in the fork's test shell (`--package-test`); a test of their features in Axo is still to come.
 - [ ] Phase 3: permissions, downloads, dialogs, DevTools, Widevine, packaging, and performance against the WebKit build.
+  - Found by PR #38's red-team review (October 2026), still to do on Chromium pages: camera and microphone (`getUserMedia`), pages' screen sharing, file uploads, JavaScript dialogs (`alert`, `confirm`, `prompt`), and page fullscreen, whose page delegate calls the engine doesn't handle yet; links that open a new tab or window arrive as plain URLs, losing the opener (`window.open` returns null), POST bodies, and the referrer; tabs Chrome moves between windows (`chrome.tabs.move`), and `chrome.windows.create` reusing the Space's window, aren't followed yet; and deleting history in Axo must also delete the engine's copy, once Axo can delete history.
 - [ ] Phase 4: prove one Chromium update, then ship the Mac on Chromium and remove WebKit, AxoExtensions, and AxoInspector from it.
 
 **Milestone 7: Sync and iOS**

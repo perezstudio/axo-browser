@@ -10,23 +10,25 @@ import Foundation
 public enum ChromiumHistoryChange: Hashable, Sendable {
     /// An extension added a visit (`chrome.history.addUrl`).
     case visited(URL, title: String, at: Date)
-    /// These pages have no visits left.
-    case deleted([URL])
+    /// These pages have no visits left in the engine's copy. With a range, only visits in it
+    /// were deleted, so a page Axo last saw outside it keeps its history.
+    case deleted([URL], in: ClosedRange<Date>?)
     /// All history was deleted.
     case deletedAll
 
-    @MainActor init(_ change: any AXOHistoryChange) {
+    /// The engine's change, or `nil` for one Axo doesn't know, which it leaves alone.
+    @MainActor init?(_ change: any AXOHistoryChange) {
         switch change.kind {
         case .visited:
-            if let url = change.urls.first {
-                self = .visited(url, title: change.title, at: change.date ?? Date())
-            } else {
-                self = .deleted([])
-            }
+            guard let url = change.urls.first else { return nil }
+            self = .visited(url, title: change.title, at: change.date ?? Date())
+        case .deleted:
+            let range = change.date.flatMap { start in change.endDate.map { end in min(start, end)...max(start, end) } }
+            self = .deleted(change.urls, in: range)
         case .deletedAll:
             self = .deletedAll
-        default:
-            self = .deleted(change.urls)
+        @unknown default:
+            return nil
         }
     }
 }

@@ -28,16 +28,21 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
     /// Follows the profiles, and each profile's bookmark tree.
     @ObservationIgnored private var profilesTask: Task<Void, Never>?
     @ObservationIgnored private var bookmarkTasks: [Profile.ID: Task<Void, Never>] = [:]
-    /// Extensions' bookmark changes, applied one after another.
-    @ObservationIgnored private var bookmarkWork: Task<Void, Never>?
-    /// Bookmark changes being applied. Trees aren't sent meanwhile, since one could be half done.
-    @ObservationIgnored private var applyingBookmarkChanges = 0
+    /// Bookmark trees to send and the engine's bookmark and history changes to apply, one after
+    /// another, so a tree is never read while a change is half applied and changes apply in the
+    /// order they came.
+    @ObservationIgnored private var dataWork: Task<Void, Never>?
+    /// Profiles whose tree is waiting in `dataWork` to be sent.
+    @ObservationIgnored private var pendingBookmarkSends: Set<Profile.ID> = []
     /// Bumped when extensions or their buttons change, so views reading the toolbar update.
     private var revision = 0
     /// Shows an alert and calls back with the index of the button chosen. Tests replace it.
     @ObservationIgnored var presentAlert: @MainActor (PromptAlert, @escaping (Int) -> Void) -> Void = ChromiumExtensionBridge.showAlert
     /// The open popup and its popover's delegate, by extension.
-    @ObservationIgnored private(set) var popups: [String: (popup: ChromiumExtensionPopup, closer: PopoverCloser)] = [:]
+    /// Installs the person was asked about, by prompt ID: what to install. A package is a private
+    /// copy of the file the prompt described, so changing the file meanwhile changes nothing.
+    @ObservationIgnored private var preparedInstalls: [String: (url: URL, isUnpacked: Bool)] = [:]
+    @ObservationIgnored private(set) var popups: [String: (popup: ChromiumExtensionPopup, closer: PopoverCloser, popover: NSPopover)] = [:]
 
     init(model: BrowserModel, engine: ChromiumEngine, store: TabStore) {
         self.model = model
@@ -56,13 +61,13 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
             self.presentAlert(alert) { answer(alert.answers.indices.contains($0) ? alert.answers[$0] : .cancel) }
         }
         // Extensions' side panels show beside the page.
-        engine.onExtensionSidePanelOpen = { [weak model] panel, _ in
+        engine.onExtensionSidePanelOpen = { [weak model] panel, profileID in
             guard let model else {
                 panel.close()
                 return
             }
             panel.onClose = { [weak model] in model?.extensionSidePanelDidClose(panel.extensionID) }
-            model.showExtensionSidePanel(ExtensionSidePanel(id: panel.extensionID, title: panel.title, view: panel.view) { panel.close() })
+            model.showExtensionSidePanel(ExtensionSidePanel(id: panel.extensionID, title: panel.title, view: panel.view, profileID: profileID) { panel.close() })
         }
         // Extensions that handle their own clicks (1Password) open their popup themselves.
         engine.onExtensionPopupRequest = { [weak self] popup, _ in self?.present(popup) }
@@ -73,8 +78,8 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
             self?.revision += 1
         }
         engine.onBookmarkChange = { [weak self] change, profileID in self?.apply(change, profileID: profileID) }
-        engine.onHistoryChange = { [store] change, profileID in
-            Task { try? await Self.apply(change, to: store.history, profileID: profileID) }
+        engine.onHistoryChange = { [weak self, store] change, profileID in
+            self?.enqueue { try? await Self.apply(change, to: store.history, profileID: profileID) }
         }
         profilesTask = Task { [weak self, store] in
             do {
@@ -93,8 +98,8 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
         switch change {
         case .visited(let url, let title, let date):
             try await history.recordVisit(to: url, title: title, profileID: profileID, at: date)
-        case .deleted(let urls):
-            try await history.delete(urls, profileID: profileID)
+        case .deleted(let urls, let range):
+            try await history.delete(urls, lastVisitedIn: range, profileID: profileID)
         case .deletedAll:
             try await history.clear(profileID: profileID)
         }
@@ -114,33 +119,51 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
                     // Each value is a signal: an older one can arrive after a newer write.
                     for try await _ in store.observeBookmarkTree(profileID: profileID) {
                         guard let self else { return }
-                        await sendBookmarks(profileID: profileID)
+                        scheduleBookmarkSend(profileID: profileID)
                     }
                 } catch {}
             }
         }
     }
 
-    private func sendBookmarks(profileID: Profile.ID) async {
-        guard applyingBookmarkChanges == 0, let tree = try? await store.bookmarkTree(profileID: profileID) else { return }
-        engine.setBookmarks(tree, profileID: profileID)
+    /// Runs `work` after everything already in `dataWork`.
+    private func enqueue(_ work: @escaping @MainActor () async -> Void) {
+        let previous = dataWork
+        dataWork = Task {
+            await previous?.value
+            await work()
+        }
+    }
+
+    /// Sends a profile's tree once the work before it is done, reading it then.
+    private func scheduleBookmarkSend(profileID: Profile.ID) {
+        guard pendingBookmarkSends.insert(profileID).inserted else { return }
+        enqueue { [weak self] in
+            guard let self else { return }
+            pendingBookmarkSends.remove(profileID)
+            guard let tree = try? await store.bookmarkTree(profileID: profileID) else { return }
+            engine.setBookmarks(tree, profileID: profileID)
+        }
     }
 
     /// Applies an extension's bookmark change to the sidebar, then sends the tree back, which
     /// undoes in the engine what the sidebar can't hold.
     func apply(_ change: BookmarkChange, profileID: Profile.ID) {
-        let previous = bookmarkWork
-        applyingBookmarkChanges += 1
-        bookmarkWork = Task { [store, weak model] in
-            await previous?.value
+        enqueue { [store, weak model] in
             let spaces = (try? await store.spaces()) ?? []
             let shown = model?.space.flatMap { $0.profileID == profileID ? $0.id : nil }
             if let spaceID = shown ?? spaces.first(where: { $0.profileID == profileID })?.id {
                 try? await store.applyBookmarkChange(change, profileID: profileID, currentSpaceID: spaceID)
             }
-            applyingBookmarkChanges -= 1
-            await sendBookmarks(profileID: profileID)
         }
+        // A send already queued runs before the change; this one runs after it.
+        pendingBookmarkSends.remove(profileID)
+        scheduleBookmarkSend(profileID: profileID)
+    }
+
+    /// Waits for the queued bookmark and history work, for tests.
+    func dataWorkFinished() async {
+        await dataWork?.value
     }
 
     // MARK: ExtensionToolbarProviding
@@ -206,7 +229,11 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
     /// Shows a popup under its toolbar button in a popover that follows the popup's size.
     private func present(_ popup: ChromiumExtensionPopup) {
         let extensionID = popup.extensionID
-        popups.removeValue(forKey: extensionID)?.popup.close()
+        // The extension's open popup, if any, goes away first: its page and its popover.
+        if let previous = popups.removeValue(forKey: extensionID) {
+            previous.popup.close()
+            previous.popover.close()
+        }
         let controller = NSViewController()
         controller.view = popup.view
         let popover = NSPopover()
@@ -215,30 +242,48 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
         popover.contentSize = popup.preferredSize
         popup.onResize = { [weak popover] size in popover?.contentSize = size }
         popup.onClose = { [weak popover] in popover?.close() }
-        let closer = PopoverCloser { [weak self] in
-            self?.popups.removeValue(forKey: extensionID)?.popup.close()
+        // Only this popup's entry: a newer popup of the same extension may have replaced it.
+        let closer = PopoverCloser { [weak self, weak popup] in
+            guard let self, let popup, popups[extensionID]?.popup === popup else { return }
+            popups.removeValue(forKey: extensionID)
+            popup.close()
         }
         popover.delegate = closer
-        popups[extensionID] = (popup, closer)
+        popups[extensionID] = (popup, closer, popover)
         model?.presentExtensionPopup(popover, extensionID: extensionID)
     }
 
     // MARK: ExtensionManaging
 
     func prepareInstall(from url: URL, profileID: Profile.ID) async throws -> ExtensionInstallPrompt {
-        let preview = try InstallPreview(url: url, profileID: profileID)
-        // The file's path is the install's ID until Chrome assigns one.
-        return ExtensionInstallPrompt(
-            id: url.path, name: preview.name, version: preview.version, lines: preview.lines, isUnpacked: preview.isUnpacked
-        )
+        var source = url
+        if !Self.isFolder(url) {
+            source = FileManager.default.temporaryDirectory.appending(path: "AxoPendingInstall-\(UUID().uuidString).crx")
+            try FileManager.default.copyItem(at: url, to: source)
+        }
+        do {
+            let preview = try InstallPreview(url: source, displayName: url, profileID: profileID)
+            let id = UUID().uuidString
+            preparedInstalls[id] = (source, preview.isUnpacked)
+            return ExtensionInstallPrompt(
+                id: id, name: preview.name, version: preview.version, lines: preview.lines, isUnpacked: preview.isUnpacked
+            )
+        } catch {
+            if source != url { try? FileManager.default.removeItem(at: source) }
+            throw error
+        }
     }
 
+    /// Installs what a prompt described, once. Anything else is refused.
     func confirmInstall(_ extensionID: String, profileID: Profile.ID) async throws {
-        let url = URL(fileURLWithPath: extensionID)
-        if Self.isFolder(url) {
-            _ = try await engine.loadUnpackedExtension(at: url, profileID: profileID)
+        guard let prepared = preparedInstalls.removeValue(forKey: extensionID) else {
+            throw ChromiumExtensionError.notPrepared
+        }
+        if prepared.isUnpacked {
+            _ = try await engine.loadUnpackedExtension(at: prepared.url, profileID: profileID)
         } else {
-            _ = try await engine.installPackage(at: url, profileID: profileID)
+            defer { try? FileManager.default.removeItem(at: prepared.url) }
+            _ = try await engine.installPackage(at: prepared.url, profileID: profileID)
         }
     }
 
@@ -336,14 +381,18 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
     }
 }
 
-/// What the Chromium engine can't do with extensions yet, said plainly.
+/// What the Chromium engine can't or won't do with extensions, said plainly.
 enum ChromiumExtensionError: Error, LocalizedError {
     case siteAccessNotSupported
+    /// An install that no prompt described.
+    case notPrepared
 
     var errorDescription: String? {
         switch self {
         case .siteAccessNotSupported:
             "The Chromium engine can't change which sites an extension reaches yet."
+        case .notPrepared:
+            "Axo can only add an extension after showing what it can do."
         }
     }
 }
@@ -360,9 +409,13 @@ struct InstallPreview {
     var lines: [String]
     var isUnpacked: Bool
 
-    init(url: URL, profileID: Profile.ID) throws {
+    /// - Parameters:
+    ///   - url: The package or folder to describe.
+    ///   - displayName: The file the person chose, whose name stands in for a localized one.
+    init(url: URL, displayName: URL, profileID: Profile.ID) throws {
         let folder: URL
         var temporary: URL?
+        defer { temporary.map { try? FileManager.default.removeItem(at: $0) } }
         if ChromiumExtensionBridge.isFolder(url) {
             folder = try ExtensionInstaller(root: url.deletingLastPathComponent()).inspectUnpacked(at: url).folder
             isUnpacked = true
@@ -372,13 +425,12 @@ struct InstallPreview {
             folder = try ExtensionInstaller(root: root).install(crx: Data(contentsOf: url), for: profileID).folder
             isUnpacked = false
         }
-        defer { temporary.map { try? FileManager.default.removeItem(at: $0) } }
 
         // The installer already checked the manifest; read what the prompt shows from it.
         let json = (try? JSONSerialization.jsonObject(with: Data(contentsOf: folder.appending(path: "manifest.json")))) as? [String: Any] ?? [:]
         let declared = json["name"] as? String ?? ""
         // Localized names ("__MSG_name__") need the extension's locales; the file name will do.
-        name = declared.isEmpty || declared.hasPrefix("__MSG_") ? url.deletingPathExtension().lastPathComponent : declared
+        name = declared.isEmpty || declared.hasPrefix("__MSG_") ? displayName.deletingPathExtension().lastPathComponent : declared
         version = json["version"] as? String ?? ""
         let permissions = json["permissions"] as? [String] ?? []
         let contentScriptMatches = (json["content_scripts"] as? [[String: Any]] ?? []).flatMap { $0["matches"] as? [String] ?? [] }

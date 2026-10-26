@@ -122,6 +122,39 @@ struct EngineNeutralModelTests {
         #expect(model.pool.livePage(for: firstID) === first)
     }
 
+    @Test func aTabTheEngineOpensAndSelectsIsSelectedInTheSidebar() async throws {
+        let first = try await openPage(URL(string: "https://example.com/1")!)
+        let profileID = try #require(model.space?.profileID)
+        let opened = FakePage(profileID: profileID)
+        opened.navigate(to: URL(string: "https://example.com/options")!, title: "Options")
+
+        // chrome.tabs.create: Chrome reports the new tab, then makes it active, at once.
+        engine.openPageOnItsOwn(opened, profileID: profileID, at: 1)
+        engine.activatePageOnItsOwn(opened)
+        #expect(engine.windowPages[profileID]?.active === opened, "The engine's window keeps it active meanwhile")
+        #expect(engine.windowPages[profileID]?.pages.contains { $0 === opened } == true, "And keeps it in its tabs")
+
+        try await waitUntil { model.tabs.count == 2 }
+        let openedID = try #require(model.tabs.last?.id)
+        #expect(model.selectedTabID == openedID)
+        #expect(model.pool.livePage(for: openedID) === opened)
+        #expect(engine.windowPages[profileID]?.active === opened)
+        _ = first
+    }
+
+    @Test func anotherProfilesWindowCantChangeTheSelection() async throws {
+        let shown = try await openPage(URL(string: "https://example.com/shown")!)
+        let shownID = try #require(model.selectedTabID)
+        let profile = try await model.store.createProfile(name: "Other")
+        let otherTab = AxoCore.Tab(spaceID: UUID(), url: URL(string: "https://example.com/other")!, sortKey: SortKey.initial)
+        model.pool.page(for: otherTab, profileID: profile.id)
+        let otherPage = try #require(model.pool.livePage(for: otherTab.id))
+
+        engine.activatePageOnItsOwn(otherPage)
+        #expect(model.selectedTabID == shownID)
+        _ = shown
+    }
+
     @Test func tabsTheEngineClosesOrSelectsFollowInTheSidebar() async throws {
         let first = try await openPage(URL(string: "https://example.com/1")!)
         let second = try await openPage(URL(string: "https://example.com/2")!)
@@ -157,6 +190,14 @@ struct EngineNeutralModelTests {
         engine.closePageOnItsOwn(popup)
         try await waitUntil { model.miniWindows.isEmpty }
         #expect(dismissed == [mini.id], "chrome.windows.remove closes the window")
+    }
+
+    @Test func extensionWindowSizesMustBeUsable() {
+        #expect(BrowserModel.extensionWindowSize(CGSize(width: 380, height: 600)) == CGSize(width: 380, height: 600))
+        #expect(BrowserModel.extensionWindowSize(CGSize(width: 10, height: 600)) == CGSize(width: 100, height: 600))
+        #expect(BrowserModel.extensionWindowSize(CGSize(width: 0, height: 600)) == nil)
+        #expect(BrowserModel.extensionWindowSize(CGSize(width: CGFloat.infinity, height: 600)) == nil)
+        #expect(BrowserModel.extensionWindowSize(CGSize(width: CGFloat.nan, height: 600)) == nil)
     }
 
     @Test func closingATabClosesItsPage() async throws {

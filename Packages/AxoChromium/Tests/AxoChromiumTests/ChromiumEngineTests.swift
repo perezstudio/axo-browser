@@ -72,9 +72,21 @@ struct ChromiumEngineTests {
         #expect(states == [.starting, .ready])
         #expect(FakeAXOEngine.configurations.first?.userDataDirectory == directory)
         #expect(FakeAXOEngine.configurations.first?.nativeMessagingHostFolders == [], "None unless the app asks")
+        #expect(FakeAXOEngine.configurations.first?.ephemeral == false)
 
         engine.start()
         #expect(FakeAXOEngine.configurations.count == 1, "Starting twice does nothing")
+    }
+
+    @Test func testEnginesAreEphemeral() {
+        let scheduled = Scheduled()
+        let engine = ChromiumEngine(
+            classes: FakeEngine.classes, userDataDirectory: directory, isEphemeral: true, additionalArguments: ["--v=1"]
+        ) { scheduled.blocks.append($0) }
+        engine.start()
+        scheduled.run()
+        #expect(FakeAXOEngine.configurations.first?.ephemeral == true, "Tests use a stand-in keychain and make no background requests")
+        #expect(FakeAXOEngine.configurations.first?.additionalArguments == ["--v=1"])
     }
 
     @Test func nativeMessagingFoldersReachTheEngine() {
@@ -303,19 +315,22 @@ struct ChromiumEngineTests {
 
         fake.delegate?.page(fake, didStart: download)
         let item = try #require(pool.downloads.items.first)
-        let observer = try #require(download.observer)
         #expect(item.sourceTabID == tab.id)
-        let destination = try #require(observer.download(download, destinationForSuggestedFilename: "report.pdf", expectedLength: 10))
+        let destination = try #require(download.observer?.download(download, destinationForSuggestedFilename: "report.pdf", expectedLength: 10))
         #expect(destination.deletingLastPathComponent().standardizedFileURL == directory.standardizedFileURL)
-        observer.download(download, didReceiveBytes: 5, ofTotal: 10)
-        #expect(item.fractionCompleted == 0.5)
-        observer.download(download, didFailWithMessage: "The network went away.")
-        #expect(item.state == .failed("The network went away."))
 
         let second = FakeDownload(sourceURL: nil)
         fake.delegate?.page(fake, didStart: second)
         pool.downloads.cancel(try #require(pool.downloads.items.first))
         #expect(second.isCancelled, "Cancelling in Axo cancels Chromium's download")
+
+        // A download outlives its tab: the engine holds its observer weakly, so Axo must keep it.
+        pool.discard(tab.id)
+        download.observer?.download(download, didReceiveBytes: 5, ofTotal: 10)
+        #expect(item.fractionCompleted == 0.5, "Progress still arrives after the tab closed")
+        download.observer?.download(download, didFailWithMessage: "The network went away.")
+        #expect(item.state == .failed("The network went away."))
+        #expect(download.observer == nil, "The observer goes once the download ends")
     }
 
     @Test func hibernatedPagesWithoutSavedHistoryReloadTheirURL() async throws {
@@ -381,7 +396,7 @@ struct ChromiumEngineTests {
         let event = try #require(opened.first)
         #expect(event.after == tab.id)
         #expect(event.profileID == profileID)
-        let adopted = Tab(spaceID: tab.spaceID, url: chromePage.url!, sortKey: SortKey.initial)
+        let adopted = Tab(id: event.tabID, spaceID: tab.spaceID, url: chromePage.url!, sortKey: SortKey.initial)
         pool.adopt(event.page, as: adopted, profileID: profileID)
         #expect(pool.livePage(for: adopted.id)?.view.subviews.first === chromePage.view, "Its view is the page Chrome made")
 
@@ -520,20 +535,62 @@ struct ChromiumEngineTests {
         profile.onHistoryChange?(FakeHistoryChange(kind: .visited, urls: [url], title: "Added", date: date))
         profile.onHistoryChange?(FakeHistoryChange(kind: .deleted, urls: [url]))
         profile.onHistoryChange?(FakeHistoryChange(kind: .deletedAll))
-        #expect(changes == [.visited(url, title: "Added", at: date), .deleted([url]), .deletedAll])
+        profile.onHistoryChange?(FakeHistoryChange(kind: .deleted, urls: [url], date: date, endDate: date.addingTimeInterval(60)))
+        #expect(changes == [
+            .visited(url, title: "Added", at: date), .deleted([url], in: nil), .deletedAll,
+            .deleted([url], in: date...date.addingTimeInterval(60)),
+        ])
     }
 
     @Test func profileDataGoesToTheEngine() async throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)
         await engine.clearWebsiteData(for: profileID)
-        #expect(FakeProfile.made.isEmpty, "Nothing to clear before the engine runs")
+        #expect(FakeProfile.made.isEmpty, "Nothing to clear when the engine never runs")
 
+        // Clearing while the engine starts waits for it.
         engine.start()
+        let clearing = Task { await engine.clearWebsiteData(for: profileID) }
+        await Task.yield()
         scheduled.run()
-        await engine.clearWebsiteData(for: profileID)
+        await clearing.value
         #expect(FakeProfile.made[profileID]?.clearCount == 1)
         await #expect(throws: FakeEngineError.self) { try await engine.removeWebsiteData(for: profileID) }
+    }
+
+    @Test func aRemovedProfileIsNeverLoadedAgain() async throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let tree = BookmarkTree(bar: [], other: [])
+        engine.setBookmarks(tree, profileID: profileID)
+        _ = engine.extensions(profileID: profileID)
+        #expect(FakeProfile.made[profileID] != nil)
+
+        FakeProfile.removalError = nil
+        try await engine.removeWebsiteData(for: profileID)
+        #expect(FakeProfile.removed == [profileID])
+
+        // Late calls for the profile, such as a bookmark send already on its way.
+        engine.setBookmarks(tree, profileID: profileID)
+        #expect(engine.extensions(profileID: profileID).isEmpty)
+        await engine.clearWebsiteData(for: profileID)
+        #expect(FakeProfile.made[profileID] == nil, "It isn't created again")
+    }
+
+    @Test func historyKindsAxoDoesntKnowAreIgnored() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        var changes: [ChromiumHistoryChange] = []
+        engine.onHistoryChange = { change, _ in changes.append(change) }
+        _ = engine.extensions(profileID: profileID)
+        let profile = try #require(FakeProfile.made[profileID])
+        profile.onHistoryChange?(FakeHistoryChange(kind: AXOHistoryChangeKind(rawValue: 99)!, urls: [url]))
+        profile.onHistoryChange?(FakeHistoryChange(kind: .visited))
+        #expect(changes.isEmpty, "Never a deletion Axo didn't understand")
     }
 }
 

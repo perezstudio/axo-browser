@@ -9,6 +9,7 @@ import AxoChromiumTestSupport
 import AxoCore
 import AxoEngineAPI
 import AxoExtensions
+import AxoExtensionsTestSupport
 import AxoUI
 import AxoWeb
 import Foundation
@@ -58,12 +59,16 @@ struct ChromiumExtensionBridgeTests {
     }
 
     @Test func clickingAButtonRunsItOnTheSelectedPage() async throws {
-        await model.openTab(url: URL(string: "https://example.com/")!)
+        await model.openTab(url: URL(string: "https://example.com/first")!)
+        let firstID = try #require(model.selectedTabID)
+        await model.openTab(url: URL(string: "https://example.com/second")!)
+        model.select(firstID)
         let profile = try #require(FakeProfile.made[profileID])
+        let firstPage = try #require(FakePage.made.first { $0.loads.last?.lastPathComponent == "first" })
         bridge.performAction(extensionID: "abc", profileID: profileID, tabID: model.selectedTabID)
         try await waitUntil { !profile.performed.isEmpty }
         #expect(profile.performed.first?.extensionID == "abc")
-        #expect(profile.performed.first?.page === FakePage.made.last)
+        #expect(profile.performed.first?.page === firstPage, "The selected tab's page, not the newest")
     }
 
     @Test func extensionShortcutsBecomeMenuShortcutsAndRunOnTheSelectedPage() async throws {
@@ -109,10 +114,32 @@ struct ChromiumExtensionBridgeTests {
         let tab = try #require(try await store.tab(id: docs))
         #expect(tab.isPinned && tab.title == "Docs", "A bookmark in a Space is a pinned tab")
 
+        // The bar holds no folders. Nothing in the sidebar changes, so only the bridge sending the
+        // tree back undoes it in the engine.
+        let mail = try await store.favorites.add(url: URL(string: "https://mail.example/")!, title: "Mail", profileID: profileID)
+        try await waitUntil { profile.bookmarkBar.count == 1 }
+        await bridge.dataWorkFinished()
         let sent = profile.bookmarkSetCount
-        profile.onBookmarkChange?(FakeBookmarkChange(kind: .created, identifier: UUID().uuidString, parentRoot: .bar, title: "A folder"))
-        try await waitUntil { profile.bookmarkSetCount > sent }
-        #expect(profile.bookmarkBar.isEmpty, "The bar holds no folders, so the engine gets the tree back without it")
+        profile.onBookmarkChange?(FakeBookmarkChange(kind: .created, identifier: UUID().uuidString, parentRoot: .bar, index: 1, title: "A folder"))
+        await bridge.dataWorkFinished()
+        #expect(profile.bookmarkSetCount == sent + 1, "The tree goes back after the change")
+        #expect(profile.bookmarkBar.map(\.identifier) == [mail.id.uuidString.lowercased()])
+        #expect(try await store.folders(in: spaceID).isEmpty)
+    }
+
+    @Test func aTreeIsNeverSentHalfwayThroughAChange() async throws {
+        await model.openTab(url: URL(string: "https://example.com/")!)
+        let profile = try #require(FakeProfile.made[profileID])
+        let spaceID = try #require(model.space?.id)
+        try await waitUntil { profile.bookmarkSetCount > 0 }
+        // A sidebar change queues a send, then an extension's change arrives before it runs.
+        _ = try await store.favorites.add(url: URL(string: "https://mail.example/")!, title: "Mail", profileID: profileID)
+        let docs = UUID()
+        profile.onBookmarkChange?(FakeBookmarkChange(
+            kind: .created, identifier: docs.uuidString, parentIdentifier: spaceID.uuidString, title: "Docs", url: URL(string: "https://docs.example/")!
+        ))
+        await bridge.dataWorkFinished()
+        #expect(profile.otherBookmarks.first?.children.map(\.identifier) == [docs.uuidString.lowercased()], "The last tree sent has the new bookmark")
     }
 
     @Test func extensionsHistoryChangesReachAxosHistory() async throws {
@@ -126,11 +153,30 @@ struct ChromiumExtensionBridgeTests {
         try await waitUntil(async: { try await history.recent(profileID: profileID).first?.url == added })
         #expect(try await history.recent(profileID: profileID).first?.title == "Added")
 
-        profile.onHistoryChange?(FakeHistoryChange(kind: .deleted, urls: [added]))
+        // An extension deletes the last minute: the page Axo last saw long ago keeps its history.
+        let kept = URL(string: "https://kept.example/")!
+        profile.onHistoryChange?(FakeHistoryChange(
+            kind: .deleted, urls: [kept, added], date: Date().addingTimeInterval(-60), endDate: Date().addingTimeInterval(60)
+        ))
         try await waitUntil(async: { try await history.recent(profileID: profileID).map(\.url) == [URL(string: "https://kept.example/")!] })
 
         profile.onHistoryChange?(FakeHistoryChange(kind: .deletedAll))
         try await waitUntil(async: { try await history.recent(profileID: profileID).isEmpty })
+    }
+
+    @Test func historyChangesApplyInTheOrderTheyCame() async throws {
+        await model.openTab(url: URL(string: "https://example.com/")!)
+        let profile = try #require(FakeProfile.made[profileID])
+        let page = URL(string: "https://added.example/")!
+        for _ in 0..<20 {
+            profile.onHistoryChange?(FakeHistoryChange(kind: .visited, urls: [page], title: "Added", date: Date()))
+            profile.onHistoryChange?(FakeHistoryChange(kind: .deletedAll))
+        }
+        profile.onHistoryChange?(FakeHistoryChange(kind: .visited, urls: [page], title: "Last", date: Date()))
+        await bridge.dataWorkFinished()
+        let items = try await store.history.recent(profileID: profileID)
+        #expect(items.map(\.title) == ["Last"])
+        #expect(items.first?.visitCount == 1, "Every earlier visit was deleted after it")
     }
 
     @Test func theUserScriptsSwitchIsOnlyForExtensionsThatUseThem() async throws {
@@ -211,6 +257,13 @@ struct ChromiumExtensionBridgeTests {
         let request = try #require(profile.onExtensionPopupRequest, "The engine passes chrome.action.openPopup on")
         request(popup)
         #expect(Array(bridge.popups.keys) == ["onepassword"])
+
+        // Opened again (its shortcut, or openPopup) while the first is open.
+        let second = FakeExtensionPopup(extensionIdentifier: "onepassword")
+        request(second)
+        #expect(popup.isClosed, "The first popup's page closes")
+        #expect(!second.isClosed)
+        #expect(bridge.popups["onepassword"]?.popup.view === second.view, "The new one is the extension's popup")
     }
 
     @Test func unpackedFoldersShowWhatTheyCanDoThenLoad() async throws {
@@ -229,14 +282,35 @@ struct ChromiumExtensionBridgeTests {
     }
 
     @Test func packagesAreCheckedBeforeThePromptAndInstallThroughTheEngine() async throws {
-        let bogus = FileManager.default.temporaryDirectory.appending(path: "AxoTests-\(UUID().uuidString).crx")
+        _ = bridge.toolbarItems(profileID: profileID, tabID: nil)
+        let folder = FileManager.default.temporaryDirectory.appending(path: "AxoTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let bogus = folder.appending(path: "bogus.crx")
         try Data("not a package".utf8).write(to: bogus)
         await #expect(throws: (any Error).self, "A file that isn't a signed CRX3 package never reaches the prompt") {
             try await bridge.prepareInstall(from: bogus, profileID: profileID)
         }
+        await #expect(throws: ChromiumExtensionError.self, "Nothing installs without a prompt describing it") {
+            try await bridge.confirmInstall(bogus.path, profileID: profileID)
+        }
 
-        try await bridge.confirmInstall(bogus.path, profileID: profileID)
-        #expect(FakeProfile.made[profileID]?.installedPackages.map(\.path) == [bogus.path], "Confirmed packages go to Chrome's installer")
+        let package = folder.appending(path: "Notes.crx")
+        let packageData = try CRXBuilder().build(zip: sampleExtensionZip(name: "Notes"))
+        try packageData.write(to: package)
+        let prompt = try await bridge.prepareInstall(from: package, profileID: profileID)
+        #expect(prompt.name == "Notes")
+        // The file changes while the prompt is open.
+        try Data("something else".utf8).write(to: package)
+        try await bridge.confirmInstall(prompt.id, profileID: profileID)
+
+        let installed = try #require(FakeProfile.made[profileID]?.installedPackages.first)
+        #expect(installed != package, "Chrome's installer gets Axo's copy of what the prompt described")
+        #expect(FakeProfile.made[profileID]?.installedPackageData == [packageData], "Exactly the package the prompt described")
+        #expect(!FileManager.default.fileExists(atPath: installed.path), "The copy is deleted afterwards")
+        await #expect(throws: ChromiumExtensionError.self, "A prompt installs once") {
+            try await bridge.confirmInstall(prompt.id, profileID: profileID)
+        }
     }
 
     @Test func installedExtensionsListAndToggle() async throws {
@@ -256,20 +330,26 @@ struct ChromiumExtensionBridgeTests {
     }
 }
 
+/// A wait that ran out of time, naming where it was.
+private struct WaitTimedOut: Error, CustomStringConvertible {
+    let location: SourceLocation
+    var description: String { "Waited five seconds at \(location) and the condition never held." }
+}
+
 /// Waits up to five seconds for `condition`.
 @MainActor
-private func waitUntil(async condition: () async throws -> Bool) async throws {
+private func waitUntil(async condition: () async throws -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async throws {
     let deadline = ContinuousClock.now + .seconds(5)
     while try await !condition() {
-        guard ContinuousClock.now < deadline else { throw CancellationError() }
+        guard ContinuousClock.now < deadline else { throw WaitTimedOut(location: sourceLocation) }
         try await Task.sleep(for: .milliseconds(20))
     }
 }
 
-private func waitUntil(_ condition: () -> Bool) async throws {
+private func waitUntil(_ condition: () -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async throws {
     let deadline = ContinuousClock.now + .seconds(5)
     while !condition() {
-        guard ContinuousClock.now < deadline else { throw CancellationError() }
+        guard ContinuousClock.now < deadline else { throw WaitTimedOut(location: sourceLocation) }
         try await Task.sleep(for: .milliseconds(20))
     }
 }

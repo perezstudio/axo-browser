@@ -11,9 +11,11 @@
 	<true/>
 	<key>com.apple.security.personal-information.location</key>
 	<true/>
-	<!-- The rest of Chrome's app entitlements (chrome/app/app-entitlements.plist), for the
-	     Chromium engine running in Axo's process: Web Bluetooth, WebUSB and WebHID, printing,
-	     and the Photos library in file pickers. -->
+	<!-- The rest of Chrome's app entitlements (chrome/app/app-entitlements.plist), kept the
+	     same as Chrome's for the Chromium engine running in Axo's process. These are App Sandbox
+	     entitlements, so with the sandbox off they change nothing today; Web Bluetooth, WebUSB,
+	     and printing work without them, and the Photos library is reached only through the
+	     system's file picker, which runs outside Axo. -->
 	<key>com.apple.security.device.bluetooth</key>
 	<true/>
 	<key>com.apple.security.device.usb</key>

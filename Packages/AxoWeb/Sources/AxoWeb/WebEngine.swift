@@ -4,12 +4,13 @@ import Foundation
 import AppKit
 #endif
 
-/// The browser engine behind ``WebViewPool``: WebKit today, and a Chromium fork on the Mac later
-/// (see `docs/chromium-engine.md`).
+/// The browser engine behind ``WebViewPool``: a Chromium fork on the Mac and WebKit on iPhone
+/// and iPad (see `docs/chromium-engine.md`).
 ///
-/// An engine makes pages for a profile and owns each profile's website data. It never decides
-/// when pages live or die; the pool does, so an engine's pages are created only by
-/// ``WebViewPool`` and closed by it.
+/// An engine makes pages for a profile and owns each profile's website data. The pool decides
+/// when Axo's pages live or die. An engine with its own window model (Chromium's extension APIs)
+/// can also open and close pages itself; it reports those to its ``delegate``, and the pool adopts
+/// or forgets them.
 @MainActor
 public protocol WebEngine: AnyObject {
     /// Creates an empty page for a tab in `profileID`'s profile. The pool sets its delegate, then

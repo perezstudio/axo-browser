@@ -15,6 +15,8 @@ public enum FakeEngine {
         FakeAXOEngine.failure = nil
         FakeAXOEngine.configurations = []
         FakeProfile.made = [:]
+        FakeProfile.removalError = FakeEngineError()
+        FakeProfile.removed = []
         FakePage.made = []
         FakeWindow.made = []
     }
@@ -50,6 +52,7 @@ public final class FakeConfiguration: NSObject, AXOEngineConfiguration {
     public var userDataDirectory = URL(fileURLWithPath: "/")
     public var ephemeral = false
     public var nativeMessagingHostFolders: [URL] = []
+    public var additionalArguments: [String] = []
 }
 
 public final class FakeProfile: NSObject, AXOProfile {
@@ -77,8 +80,12 @@ public final class FakeProfile: NSObject, AXOProfile {
     public private(set) var loadedExtensions: [URL] = []
     public private(set) var installedPackages: [URL] = []
 
+    /// Each installed package's contents when it was installed.
+    public private(set) var installedPackageData: [Data] = []
+
     public func installPackage(at url: URL, completion: @escaping (String?, (any Error)?) -> Void) {
         installedPackages.append(url)
+        installedPackageData.append((try? Data(contentsOf: url)) ?? Data())
         completion("fake-package-id", nil)
     }
     public var extensions: [any AXOExtension] = []
@@ -126,8 +133,16 @@ public final class FakeProfile: NSObject, AXOProfile {
         completion("fake-extension-id", nil)
     }
 
+    /// What removing a profile answers; `nil` succeeds.
+    public static var removalError: (any Error)? = FakeEngineError()
+    public static var removed: [UUID] = []
+
     public static func removeProfile(withIdentifier identifier: UUID, completion: @escaping ((any Error)?) -> Void) {
-        completion(FakeEngineError())
+        if removalError == nil {
+            removed.append(identifier)
+            made[identifier] = nil
+        }
+        completion(removalError)
     }
 }
 
@@ -390,11 +405,13 @@ public final class FakeHistoryChange: NSObject, AXOHistoryChange {
     public let urls: [URL]
     public let title: String
     public let date: Date?
+    public let endDate: Date?
 
-    public init(kind: AXOHistoryChangeKind, urls: [URL] = [], title: String = "", date: Date? = nil) {
+    public init(kind: AXOHistoryChangeKind, urls: [URL] = [], title: String = "", date: Date? = nil, endDate: Date? = nil) {
         self.kind = kind
         self.urls = urls
         self.title = title
         self.date = date
+        self.endDate = endDate
     }
 }

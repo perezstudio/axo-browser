@@ -8,6 +8,7 @@ extension ChromiumEngine {
     /// (it has pages or extensions), so profiles nobody uses aren't loaded for it. The engine
     /// updates only what changed, and bookmarks keep their IDs.
     public func setBookmarks(_ tree: BookmarkTree, profileID: Profile.ID) {
+        guard readyProfileIsAllowed(profileID) else { return }
         bookmarkTrees[profileID] = tree
         guard isFollowing(profileID) else { return }
         readyProfile(profileID)?.setBookmarks(tree)

@@ -133,11 +133,13 @@ extension TabStore {
     /// Bookmarks in the bar are favorites, and bookmarks and folders in a Space's folder are its
     /// pinned tabs and folders. What the sidebar can't hold is left out: folders in the bar,
     /// bookmarks among the Spaces (they go to the end of `currentSpaceID`'s pinned section
-    /// instead), moves between Spaces, and new or removed Spaces. Show the tree again afterwards,
+    /// instead), moves between Spaces, new or removed Spaces, and pages other than http and https
+    /// ones. Changes naming another profile's items are ignored. Show the tree again afterwards,
     /// so the extension sees what the sidebar did. Removing a folder keeps what's inside it, as
     /// deleting one in the sidebar does.
     public func applyBookmarkChange(_ change: BookmarkChange, profileID: Profile.ID, currentSpaceID: Space.ID) async throws {
-        let target = try await bookmarkTarget(of: change.place, currentSpaceID: currentSpaceID)
+        let target = try await bookmarkTarget(of: change.place, profileID: profileID)
+        let pageURL = change.url.flatMap { HistoryStore.records($0) ? $0 : nil }
         let thing = try await bookmarkThing(change.id, profileID: profileID)
         switch change.kind {
         case .created:
@@ -145,20 +147,14 @@ extension TabStore {
             // The sidebar has no place among the Spaces, so those go to the current Space.
             let target: BookmarkTarget? = if case .spaces = target { .pinned(currentSpaceID, nil) } else { target }
             let index = if case .other = change.place { Int.max } else { change.index }
+            if change.url != nil && pageURL == nil { return }
             switch target {
             case .bar:
-                guard let url = change.url else { return }
-                try await favorites.add(url: url, title: change.title, profileID: profileID, id: change.id)
+                guard let pageURL else { return }
+                try await favorites.add(url: pageURL, title: change.title, profileID: profileID, id: change.id)
                 try await moveFavorite(change.id, to: index, profileID: profileID)
             case .pinned(let spaceID, let folderID):
-                if let url = change.url {
-                    try await openTab(id: change.id, url: url, title: change.title, in: spaceID)
-                    try await setPinned(true, tabID: change.id)
-                    try await moveToPinnedLevel(.tab(change.id), spaceID: spaceID, folderID: folderID, index: index)
-                } else {
-                    try await createFolder(named: change.title, in: spaceID, parent: folderID, id: change.id)
-                    try await moveToPinnedLevel(.folder(change.id), spaceID: spaceID, folderID: folderID, index: index)
-                }
+                try await addPinnedBookmark(change, url: pageURL, spaceID: spaceID, folderID: folderID, index: index)
             default:
                 return
             }
@@ -166,10 +162,14 @@ extension TabStore {
         case .updated:
             switch thing {
             case .favorite(let favorite):
-                try await favorites.setHome(change.url ?? favorite.url, title: change.title, for: favorite.id)
+                try await favorites.setHome(pageURL ?? favorite.url, title: change.title, for: favorite.id)
             case .tab(let tab):
-                try await updateTab(id: tab.id, url: tab.url, title: change.title)
-                if let url = change.url { try await setHomeURL(url, tabID: tab.id) }
+                // The title and home page only; the page showing stays.
+                try await database.writer.write { db in
+                    var columns = [Column("title").set(to: change.title)]
+                    if let pageURL { columns.append(Column("homeURL").set(to: pageURL)) }
+                    _ = try Tab.filter(id: tab.id).updateAll(db, columns)
+                }
             case .folder(let folder):
                 try await renameFolder(id: folder.id, to: change.title)
             case .space(let space):
@@ -224,7 +224,7 @@ extension TabStore {
             }
             let spaceID: Space.ID
             let thing: BookmarkThing
-            if let tab = try Tab.fetchOne(db, id: id), tab.isPinned {
+            if let tab = try Tab.fetchOne(db, id: id), tab.isPinned, tab.archivedAt == nil {
                 (spaceID, thing) = (tab.spaceID, .tab(tab))
             } else if let folder = try Folder.fetchOne(db, id: id) {
                 (spaceID, thing) = (folder.spaceID, .folder(folder))
@@ -245,7 +245,7 @@ extension TabStore {
         case pinned(Space.ID, Folder.ID?)
     }
 
-    private func bookmarkTarget(of place: BookmarkPlace, currentSpaceID: Space.ID) async throws -> BookmarkTarget? {
+    private func bookmarkTarget(of place: BookmarkPlace, profileID: Profile.ID) async throws -> BookmarkTarget? {
         switch place {
         case .bar:
             return .bar
@@ -253,11 +253,56 @@ extension TabStore {
             return .spaces
         case .inside(let id):
             return try await database.writer.read { db in
-                if try Space.exists(db, id: id) { return .pinned(id, nil) }
-                if let folder = try Folder.fetchOne(db, id: id) { return .pinned(folder.spaceID, folder.id) }
-                return nil
+                let target: BookmarkTarget
+                let spaceID: Space.ID
+                if try Space.exists(db, id: id) {
+                    (target, spaceID) = (.pinned(id, nil), id)
+                } else if let folder = try Folder.fetchOne(db, id: id) {
+                    (target, spaceID) = (.pinned(folder.spaceID, folder.id), folder.spaceID)
+                } else {
+                    return nil
+                }
+                return try Space.fetchOne(db, id: spaceID)?.profileID == profileID ? target : nil
             }
         }
+    }
+
+    /// Adds a pinned tab (`url`) or a folder (`nil`) at `index` in a level of a Space's pinned
+    /// section, in one write, so the sidebar never shows it anywhere else first.
+    private func addPinnedBookmark(_ change: BookmarkChange, url: URL?, spaceID: Space.ID, folderID: Folder.ID?, index: Int) async throws {
+        try await database.writer.write { db in
+            if let folderID {
+                guard try Folder.fetchOne(db, id: folderID)?.spaceID == spaceID else { return }
+            }
+            let level = try Self.shownPinnedLevel(spaceID: spaceID, folderID: folderID, db)
+            let index = min(index, level.count)
+            let key = try SortKey.between(index > 0 ? level[index - 1].key : nil, index < level.count ? level[index].key : nil)
+            if let url {
+                try Tab(id: change.id, spaceID: spaceID, url: url, title: change.title, sortKey: key, isPinned: true, homeURL: url, folderID: folderID).insert(db)
+            } else {
+                try Folder(id: change.id, spaceID: spaceID, parentID: folderID, name: change.title, sortKey: key).insert(db)
+            }
+        }
+    }
+
+    /// A level of a Space's pinned section as the bookmark tree shows it: unarchived pinned tabs
+    /// and folders, in order.
+    private static func shownPinnedLevel(spaceID: Space.ID, folderID: Folder.ID?, _ db: Database) throws -> [(key: String, item: PinnedItem)] {
+        let tabs = try Tab
+            .filter(Tab.Columns.spaceID == spaceID)
+            .filter(Tab.Columns.isPinned == true)
+            .filter(Tab.Columns.archivedAt == nil)
+            .filter(Tab.Columns.folderID == folderID)
+            .fetchAll(db)
+            .map { (key: $0.sortKey, item: PinnedItem.tab($0.id), id: $0.id) }
+        let folders = try Folder
+            .filter(Folder.Columns.spaceID == spaceID)
+            .filter(Folder.Columns.parentID == folderID)
+            .fetchAll(db)
+            .map { (key: $0.sortKey, item: PinnedItem.folder($0.id), id: $0.id) }
+        return (tabs + folders)
+            .sorted { ($0.key, $0.id.uuidString) < ($1.key, $1.id.uuidString) }
+            .map { (key: $0.key, item: $0.item) }
     }
 
     /// Moves a favorite to `index` in its profile's grid.
@@ -269,18 +314,7 @@ extension TabStore {
     /// Moves a tab or folder to `index` in a level of a Space's pinned section.
     private func moveToPinnedLevel(_ item: PinnedItem, spaceID: Space.ID, folderID: Folder.ID?, index: Int) async throws {
         let others = try await database.writer.read { db in
-            let tabs = try Tab
-                .filter(Tab.Columns.spaceID == spaceID)
-                .filter(Tab.Columns.isPinned == true)
-                .filter(Tab.Columns.folderID == folderID)
-                .fetchAll(db)
-                .map { ($0.sortKey, PinnedItem.tab($0.id)) }
-            let folders = try Folder
-                .filter(Folder.Columns.spaceID == spaceID)
-                .filter(Folder.Columns.parentID == folderID)
-                .fetchAll(db)
-                .map { ($0.sortKey, PinnedItem.folder($0.id)) }
-            return (tabs + folders).sorted { $0.0 < $1.0 }.map(\.1).filter { $0 != item }
+            try Self.shownPinnedLevel(spaceID: spaceID, folderID: folderID, db).map(\.item).filter { $0 != item }
         }
         try await movePinnedItem(item, into: folderID, after: Self.anchor(at: index, in: others))
     }

@@ -136,4 +136,28 @@ struct PageMenuTests {
         #expect(model.extensionSidePanel == nil)
         #expect(closed == ["notes"], "The extension closed it already")
     }
+
+    @Test func sidePanelsStayWithTheirProfile() async throws {
+        let store = try TabStore.makeInMemory()
+        let model = BrowserModel(store: store, pool: WebViewPool(engine: FakeEngine()))
+        model.announce = { _ in }
+        await model.start()
+        let home = try #require(model.space)
+        let work = try await store.createProfile(name: "Work")
+        let workSpace = try await store.createSpace(name: "Work", profileID: work.id)
+        var closed: [String] = []
+        let panel = { (id: String, profileID: Profile.ID) in
+            ExtensionSidePanel(id: id, title: "Notes", view: PlatformView(), profileID: profileID) { closed.append(id) }
+        }
+
+        model.showExtensionSidePanel(panel("theirs", work.id))
+        #expect(model.extensionSidePanel == nil, "Another profile's panel doesn't show here")
+        #expect(closed == ["theirs"])
+
+        model.showExtensionSidePanel(panel("mine", home.profileID))
+        try await waitUntil { model.spaces.contains { $0.id == workSpace.id } }
+        await model.selectSpace(workSpace.id)
+        #expect(model.extensionSidePanel == nil, "Switching to another profile's Space closes it")
+        #expect(closed == ["theirs", "mine"])
+    }
 }

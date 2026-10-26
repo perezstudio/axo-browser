@@ -244,12 +244,30 @@ struct WebEngineTests {
         #expect(event.page === page)
         #expect(event.after == existing.id, "It goes after the tab before it in the window")
 
-        let tab = Tab.testTab(url: page.url!)
+        #expect(pool.livePage(for: event.tabID) === page, "Live under its tab's ID at once")
+        #expect(pool.isAwaitingAdoption(event.tabID))
+        let tab = Tab(id: event.tabID, spaceID: UUID(), url: page.url!, sortKey: SortKey.initial)
         pool.adopt(page, as: tab, profileID: profileID)
+        #expect(!pool.isAwaitingAdoption(tab.id))
         #expect(pool.livePage(for: tab.id) === page)
         #expect(pool.state(for: tab.id)?.title == "New")
         #expect(page.loads.isEmpty, "Adopting doesn't reload it")
         #expect(pool.page(for: tab, profileID: profileID) === page)
+    }
+
+    @Test func aPageAdoptedUnderAnotherIDMovesThere() throws {
+        var opened: [EngineOpenedPage] = []
+        pool.onEngineOpenedPage = { opened.append($0) }
+        let page = FakePage(profileID: profileID)
+        engine.openPageOnItsOwn(page, profileID: profileID, at: 0)
+        let event = try #require(opened.first)
+
+        let tab = Tab.testTab(url: url)
+        pool.adopt(page, as: tab, profileID: profileID)
+        #expect(pool.livePage(for: tab.id) === page)
+        #expect(pool.livePage(for: event.tabID) == nil, "Not live twice")
+        #expect(!pool.isAwaitingAdoption(event.tabID))
+        #expect(!page.isClosed)
     }
 
     @Test func pagesTheEngineOpensCloseWithoutAHandler() {

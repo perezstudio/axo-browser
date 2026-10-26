@@ -33,6 +33,8 @@ public final class ChromiumEngine: WebEngine {
     private let classes: ChromiumEngineClasses
     private let userDataDirectory: URL
     private let nativeMessagingHostFolders: [URL]
+    private let isEphemeral: Bool
+    private let additionalArguments: [String]
     private let schedule: (@escaping @MainActor () -> Void) -> Void
     private var running: (any AXOEngine)?
     /// Pages made before the engine was ready, attached once it is.
@@ -78,6 +80,11 @@ public final class ChromiumEngine: WebEngine {
     private var followedProfiles: Set<Profile.ID> = []
     /// Each profile's bookmarks, given to its engine profile once that's in use.
     var bookmarkTrees: [Profile.ID: BookmarkTree] = [:]
+    /// Profiles whose data was removed. They're never loaded again, so a late call can't bring
+    /// one back.
+    private var removedProfiles: Set<Profile.ID> = []
+    /// Calls waiting for the engine to be ready or to fail, with whether it's ready.
+    private var readyWaiters: [CheckedContinuation<Bool, Never>] = []
 
     /// Creates an engine.
     ///
@@ -86,16 +93,23 @@ public final class ChromiumEngine: WebEngine {
     ///   - userDataDirectory: Where profiles keep their data, one folder per profile.
     ///   - nativeMessagingHostFolders: More folders to find native messaging hosts in, after
     ///     Chromium's own, such as Google Chrome's, where apps like 1Password register theirs.
+    ///   - isEphemeral: For tests: the engine uses a stand-in keychain (never the person's) and
+    ///     makes no background requests of its own.
+    ///   - additionalArguments: More Chromium switches, for debugging.
     ///   - schedule: Runs a block on a later turn of the main run loop. Tests replace it.
     public init(
         classes: ChromiumEngineClasses,
         userDataDirectory: URL,
         nativeMessagingHostFolders: [URL] = [],
+        isEphemeral: Bool = false,
+        additionalArguments: [String] = [],
         schedule: @escaping (@escaping @MainActor () -> Void) -> Void = ChromiumEngine.onNextRunLoopTurn
     ) {
         self.classes = classes
         self.userDataDirectory = userDataDirectory
         self.nativeMessagingHostFolders = nativeMessagingHostFolders
+        self.isEphemeral = isEphemeral
+        self.additionalArguments = additionalArguments
         self.schedule = schedule
     }
 
@@ -124,6 +138,8 @@ public final class ChromiumEngine: WebEngine {
             }
             configuration.userDataDirectory = userDataDirectory
             configuration.nativeMessagingHostFolders = nativeMessagingHostFolders
+            configuration.ephemeral = isEphemeral
+            configuration.additionalArguments = additionalArguments
             classes.engine.run(with: configuration) { [self] engine, error in
                 if let engine {
                     running = engine
@@ -146,6 +162,23 @@ public final class ChromiumEngine: WebEngine {
     private func setState(_ newState: State) {
         state = newState
         onStateChange?(newState)
+        switch newState {
+        case .notStarted, .starting:
+            break
+        case .ready, .failed:
+            let waiters = readyWaiters
+            readyWaiters = []
+            waiters.forEach { $0.resume(returning: newState == .ready) }
+        }
+    }
+
+    /// Waits until the engine is ready, returning `false` if it failed or never started.
+    private func whenReady() async -> Bool {
+        switch state {
+        case .ready: return true
+        case .failed, .notStarted: return false
+        case .starting: return await withCheckedContinuation { readyWaiters.append($0) }
+        }
     }
 
     private func attach(_ page: ChromiumPage) {
@@ -159,7 +192,7 @@ public final class ChromiumEngine: WebEngine {
     /// The engine's profile for `profileID` once the engine is ready, following its extension
     /// changes and giving it its bookmarks from then on.
     func readyProfile(_ profileID: Profile.ID) -> (any AXOProfile)? {
-        guard state == .ready else { return nil }
+        guard state == .ready, !removedProfiles.contains(profileID) else { return nil }
         let profile = classes.profile.profile(withIdentifier: profileID)
         if followedProfiles.insert(profileID).inserted {
             profile.onExtensionsChange = { [weak self] in self?.onExtensionsChange?(profileID) }
@@ -177,7 +210,8 @@ public final class ChromiumEngine: WebEngine {
                 self?.onBookmarkChange?(change, profileID)
             }
             profile.onHistoryChange = { [weak self] change in
-                self?.onHistoryChange?(ChromiumHistoryChange(change), profileID)
+                guard let change = ChromiumHistoryChange(change) else { return }
+                self?.onHistoryChange?(change, profileID)
             }
             if let tree = bookmarkTrees[profileID] {
                 profile.setBookmarks(tree)
@@ -198,6 +232,11 @@ public final class ChromiumEngine: WebEngine {
         followedProfiles.contains(profileID)
     }
 
+    /// Whether the profile can still be loaded (its data wasn't removed).
+    func readyProfileIsAllowed(_ profileID: Profile.ID) -> Bool {
+        !removedProfiles.contains(profileID)
+    }
+
     /// The profile's engine window, for extension popups.
     func engineWindow(for profileID: Profile.ID) -> any AXOWindow {
         window(for: profileID)
@@ -206,7 +245,9 @@ public final class ChromiumEngine: WebEngine {
     /// The profile's engine window, made on first use.
     private func window(for profileID: Profile.ID) -> any AXOWindow {
         if let window = windows[profileID] { return window }
-        let window = classes.window.window(with: classes.profile.profile(withIdentifier: profileID))
+        // Through readyProfile, so the profile's callbacks and bookmarks are set before its
+        // extensions start.
+        let window = classes.window.window(with: readyProfile(profileID) ?? classes.profile.profile(withIdentifier: profileID))
         window.delegate = windowEvents
         // Extension calls that need the active window work while Axo is the active app.
         followAppActivation()
@@ -297,13 +338,21 @@ public final class ChromiumEngine: WebEngine {
     /// Not supported by the Chromium engine yet (Phase 3); customizations are ignored.
     public func setSiteCustomizations(_ customizations: [SiteCustomization]) {}
 
+    /// Clears a profile's website data (not its history, which is Axo's), once the engine is
+    /// ready.
     public func clearWebsiteData(for profileID: Profile.ID) async {
-        guard state == .ready else { return }
-        await classes.profile.profile(withIdentifier: profileID).clearWebsiteData()
+        guard await whenReady(), let profile = readyProfile(profileID) else { return }
+        await profile.clearWebsiteData()
     }
 
+    /// Deletes a profile's engine data for good, once the engine is ready. The profile is never
+    /// loaded again.
     public func removeWebsiteData(for profileID: Profile.ID) async throws {
-        guard state == .ready else { return }
+        removedProfiles.insert(profileID)
+        followedProfiles.remove(profileID)
+        bookmarkTrees[profileID] = nil
+        waitingWindowPages[profileID] = nil
+        guard await whenReady() else { return }
         windows.removeValue(forKey: profileID)?.close()
         try await classes.profile.removeProfile(withIdentifier: profileID)
     }

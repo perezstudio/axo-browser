@@ -138,6 +138,53 @@ struct BookmarkTests {
         #expect(describe(tree.other) == "Home[Wiki]", "A removed folder's contents stay")
     }
 
+    @Test func extensionsCantReachAnotherProfilesSpaces() async throws {
+        let otherProfile = try await store.createProfile(name: "Other")
+        let theirs = try await store.createSpace(name: "Theirs", profileID: otherProfile.id)
+        let theirFolder = try await store.createFolder(named: "Their Folder", in: theirs.id)
+        let docs = try await pinnedTab("Docs", in: home.id)
+        let mail = try await store.favorites.add(url: url("mail"), title: "Mail", profileID: home.profileID)
+
+        try await apply(change(.created, UUID(), in: .inside(theirs.id), title: "Sneaky", url: url("sneaky")))
+        try await apply(change(.created, UUID(), in: .inside(theirFolder.id), title: "Sneaky folder"))
+        try await apply(change(.moved, docs.id, in: .inside(theirs.id), at: 0))
+        try await apply(change(.moved, mail.id, in: .inside(theirFolder.id), at: 0))
+
+        let theirTree = try await store.bookmarkTree(profileID: otherProfile.id)
+        #expect(describe(theirTree.other) == "Theirs[Their Folder[]]", "Nothing reaches the other profile")
+        #expect(describe(try await tree.other) == "Home[Docs]")
+        #expect(try await tree.bar.map(\.id) == [mail.id])
+    }
+
+    @Test func archivedPinnedTabsAreLeftOut() async throws {
+        let a = try await pinnedTab("A", in: home.id)
+        let hidden = try await pinnedTab("Hidden", in: home.id)
+        let b = try await pinnedTab("B", in: home.id)
+        try await store.archiveTab(id: hidden.id)
+        #expect(describe(try await tree.other) == "Home[A, B]")
+
+        let c = UUID()
+        try await apply(change(.created, c, in: .inside(home.id), at: 2, title: "C", url: url("c")))
+        #expect(try await tree.other[0].children.map(\.id) == [a.id, b.id, c], "Placed by what the extension sees")
+        try await apply(change(.moved, a.id, in: .inside(home.id), at: 2))
+        #expect(try await tree.other[0].children.map(\.id) == [b.id, c, a.id])
+
+        try await apply(change(.updated, hidden.id, in: .inside(home.id), title: "Renamed"))
+        try await apply(change(.removed, hidden.id, in: .inside(home.id)))
+        #expect(try await store.tab(id: hidden.id)?.title == "Hidden", "Extensions can't see or change archived tabs")
+    }
+
+    @Test func onlyWebPagesBecomeBookmarks() async throws {
+        let mail = try await store.favorites.add(url: url("mail"), title: "Mail", profileID: home.profileID)
+        try await apply(change(.created, UUID(), in: .bar, title: "Script", url: URL(string: "javascript:alert(1)")!))
+        try await apply(change(.created, UUID(), in: .inside(home.id), title: "File", url: URL(string: "file:///etc/hosts")!))
+        try await apply(change(.updated, mail.id, in: .bar, title: "Mail", url: URL(string: "chrome://settings")!))
+
+        let tree = try await self.tree
+        #expect(tree.bar == [BookmarkItem(id: mail.id, title: "Mail", url: url("mail"))])
+        #expect(describe(tree.other) == "Home[]")
+    }
+
     @Test func otherProfilesBookmarksAreLeftAlone() async throws {
         let otherProfile = try await store.createProfile(name: "Other")
         let theirs = try await store.favorites.add(url: url("theirs"), profileID: otherProfile.id)

@@ -247,12 +247,17 @@ public struct BrowserCommands: Commands {
             // has keyboard focus, and the menu shows which keys do what.
             if let model, let profileID = model.space?.profileID,
                let shortcuts = model.extensionToolbar?.shortcuts(profileID: profileID), !shortcuts.isEmpty {
-                Menu("Extension Shortcuts") {
+                Menu(ExtensionShortcut.menuTitle) {
                     ForEach(shortcuts) { shortcut in
-                        Button(shortcut.title) {
+                        let button = Button(shortcut.title) {
                             model.extensionToolbar?.performShortcut(shortcut, profileID: profileID, tabID: model.selectedTabID)
                         }
-                        .keyboardShortcut(KeyEquivalent(shortcut.key), modifiers: shortcut.modifiers)
+                        // Axo's own shortcuts win over an extension's.
+                        if shortcut.clashes(with: NSApp?.mainMenu) {
+                            button
+                        } else {
+                            button.keyboardShortcut(KeyEquivalent(shortcut.key), modifiers: shortcut.modifiers)
+                        }
                     }
                 }
             }

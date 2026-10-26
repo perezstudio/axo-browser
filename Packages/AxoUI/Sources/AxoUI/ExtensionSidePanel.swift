@@ -1,3 +1,4 @@
+import AxoCore
 import AxoWeb
 import SwiftUI
 
@@ -9,21 +10,29 @@ public struct ExtensionSidePanel: Identifiable {
     public var title: String
     /// The view that draws the panel's page.
     public var view: PlatformView
+    /// The profile whose extension it is. It shows only beside that profile's Spaces.
+    public var profileID: Profile.ID?
     /// Closes the panel in the engine.
     public var close: @MainActor () -> Void
 
     /// Creates a panel.
-    public init(id: String, title: String, view: PlatformView, close: @escaping @MainActor () -> Void) {
+    public init(id: String, title: String, view: PlatformView, profileID: Profile.ID? = nil, close: @escaping @MainActor () -> Void) {
         self.id = id
         self.title = title
         self.view = view
+        self.profileID = profileID
         self.close = close
     }
 }
 
 extension BrowserModel {
-    /// Shows an extension's side panel, replacing any other.
+    /// Shows an extension's side panel, replacing any other. A panel from a profile other than
+    /// the current Space's is closed instead.
     public func showExtensionSidePanel(_ panel: ExtensionSidePanel) {
+        if let profileID = panel.profileID, profileID != space?.profileID {
+            panel.close()
+            return
+        }
         extensionSidePanel = panel
         announce("\(panel.title) side panel opened")
     }

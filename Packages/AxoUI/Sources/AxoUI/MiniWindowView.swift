@@ -21,7 +21,11 @@ final class MiniWindowController: NSObject, NSWindowDelegate {
     private init(mini: MiniWindow, model: BrowserModel) {
         id = mini.id
         self.model = model
-        let size = mini.contentSize ?? CGSize(width: 880, height: 620)
+        var size = mini.contentSize ?? CGSize(width: 880, height: 620)
+        // No bigger than the screen, whatever an extension asked for.
+        if let screen = NSScreen.main?.visibleFrame.size {
+            size = CGSize(width: min(size.width, screen.width), height: min(size.height, screen.height))
+        }
         window = NSWindow(
             contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
