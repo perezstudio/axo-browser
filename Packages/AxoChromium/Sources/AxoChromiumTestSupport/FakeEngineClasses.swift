@@ -87,6 +87,7 @@ public final class FakeProfile: NSObject, AXOProfile {
     public var onExtensionPopupRequest: ((any AXOExtensionPopup) -> Void)?
     public var onExtensionWindowOpen: ((any AXOWindow, NSSize) -> Void)?
     public var onExtensionPrompt: ((any AXOExtensionPrompt, @escaping (AXOExtensionPromptAnswer) -> Void) -> Void)?
+    public var onExtensionSidePanelOpen: ((any AXOExtensionSidePanel) -> Void)?
     public var extensionCommands: [any AXOExtensionCommand] = []
     public private(set) var performedCommands: [(name: String, extensionID: String, page: any AXOPage)] = []
 
@@ -303,6 +304,21 @@ public final class FakeAXOContextMenu: NSObject, AXOContextMenu {
     public func lookUpSelection() {}
     public func performExtensionItem(_ item: any AXOContextMenuItem) { performedItems.append(item) }
     public func closed(followingLink url: URL?) { isClosed = true }
+}
+
+public final class FakeExtensionSidePanel: NSObject, AXOExtensionSidePanel {
+    public let extensionIdentifier: String
+    public let title: String
+    public let view = NSView()
+    public var onClose: (() -> Void)?
+    public private(set) var isClosed = false
+
+    public init(extensionIdentifier: String, title: String) {
+        self.extensionIdentifier = extensionIdentifier
+        self.title = title
+    }
+
+    public func close() { isClosed = true }
 }
 
 public final class FakeExtensionPopup: NSObject, AXOExtensionPopup {

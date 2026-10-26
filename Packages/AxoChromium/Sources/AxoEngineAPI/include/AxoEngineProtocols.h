@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 14
+#define AXO_ENGINE_API_VERSION 15
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -30,6 +30,7 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol AXOExtensionPrompt;
 @protocol AXOContextMenu;
 @protocol AXOContextMenuItem;
+@protocol AXOExtensionSidePanel;
 
 typedef NS_ENUM(NSInteger, AXOExtensionPromptKind) {
   /// More permissions (`chrome.permissions.request`, or turning on an extension that asked for
@@ -169,6 +170,11 @@ NS_SWIFT_UI_ACTOR
 /// handler, every prompt is answered Cancel.
 @property(nonatomic, copy, nullable) void (^onExtensionPrompt)
     (id<AXOExtensionPrompt> prompt, void (^answer)(AXOExtensionPromptAnswer answer));
+
+/// Called when an extension's side panel opens (`chrome.sidePanel.open`, or its toolbar button
+/// with `openPanelOnActionClick`). Show `panel.view` beside the page; another extension's panel
+/// that was open has already closed. Without a handler, side panels don't open.
+@property(nonatomic, copy, nullable) void (^onExtensionSidePanelOpen)(id<AXOExtensionSidePanel> panel);
 
 /// Called when an extension opens a popup window (`chrome.windows.create` with `type: "popup"`),
 /// such as a password manager's pop-out. Show the window's first page in a small window of
@@ -494,6 +500,21 @@ NS_SWIFT_UI_ACTOR
 /// For screen recording, what may be shared.
 @property(nonatomic, readonly) BOOL allowsScreen;
 @property(nonatomic, readonly) BOOL allowsWindow;
+@end
+
+/// An extension's side panel, open. Show `view` beside the page, titled `title`.
+NS_SWIFT_UI_ACTOR
+@protocol AXOExtensionSidePanel <NSObject>
+@property(nonatomic, readonly) NSString* extensionIdentifier;
+/// The extension's name.
+@property(nonatomic, readonly) NSString* title;
+/// The view that draws the panel's page.
+@property(nonatomic, readonly) NSView* view;
+/// Called when the panel closes without the app asking: the extension closed it
+/// (`chrome.sidePanel.close`, `window.close()`, or turned it off), or another opened.
+@property(nonatomic, copy, nullable) void (^onClose)(void);
+/// Closes the panel, as its close button does.
+- (void)close;
 @end
 
 /// A keyboard shortcut an extension declares, as `NSMenuItem` takes it.

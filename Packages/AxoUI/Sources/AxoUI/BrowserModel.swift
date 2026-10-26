@@ -94,6 +94,8 @@ public final class BrowserModel {
     @ObservationIgnored private var observationTask: Task<Void, Never>?
     @ObservationIgnored private var spacesObservationTask: Task<Void, Never>?
     @ObservationIgnored var profilesObservationTask: Task<Void, Never>?
+    /// The extension side panel showing beside the page, if any.
+    public internal(set) var extensionSidePanel: ExtensionSidePanel?
     /// The current Space's profile's favorites, in grid order.
     public internal(set) var favorites: [Favorite] = [] {
         didSet { syncEngineWindow() }

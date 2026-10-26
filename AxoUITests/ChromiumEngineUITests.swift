@@ -183,6 +183,41 @@ final class ChromiumEngineUITests: XCTestCase {
         waitForExpectations(timeout: 15)
     }
 
+    /// An extension's side panel (chrome.sidePanel) shows beside the page in Axo's window when
+    /// its toolbar button is clicked, and its close button hides it.
+    @MainActor
+    func testExtensionSidePanelShowsBesideThePage() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "AxoUITestPanel-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try """
+        {"name": "Axo Panel", "version": "1.0", "manifest_version": 3, "description": "UI test extension.",
+         "permissions": ["sidePanel"], "action": {"default_title": "Axo Panel"},
+         "side_panel": {"default_path": "panel.html"}, "background": {"service_worker": "bg.js"}}
+        """.write(to: folder.appending(path: "manifest.json"), atomically: true, encoding: .utf8)
+        try "chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });"
+            .write(to: folder.appending(path: "bg.js"), atomically: true, encoding: .utf8)
+        try "<!doctype html><title>Panel</title><p>Hello from the side panel</p>"
+            .write(to: folder.appending(path: "panel.html"), atomically: true, encoding: .utf8)
+
+        let app = launchChromiumApp(extensionFolder: folder)
+        XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 10))
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,<title>Page</title><p>Page</p>\n")
+        let button = app.buttons.matching(NSPredicate(format: "identifier == 'extensionButton' AND label CONTAINS 'Axo Panel'")).firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 30))
+
+        button.click()
+        let panel = app.descendants(matching: .any)["extensionSidePanel"]
+        XCTAssertTrue(panel.waitForExistence(timeout: 15), "The panel shows in Axo's window")
+        XCTAssertTrue(panel.staticTexts["Axo Panel"].exists, "Titled with the extension's name")
+        XCTAssertTrue(panel.staticTexts["Hello from the side panel"].waitForExistence(timeout: 15), "Showing its page")
+
+        panel.buttons["closeExtensionSidePanel"].click()
+        let gone = NSPredicate(format: "exists == false")
+        expectation(for: gone, evaluatedWith: panel)
+        waitForExpectations(timeout: 10)
+    }
+
     /// A tab loads its page in Chromium. The page names the engine from its user agent, which
     /// says "Chrome/" only in Chromium, so the test can't pass on WebKit.
     @MainActor

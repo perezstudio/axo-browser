@@ -40,6 +40,15 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
             let alert = Self.alert(for: prompt)
             self.presentAlert(alert) { answer(alert.answers.indices.contains($0) ? alert.answers[$0] : .cancel) }
         }
+        // Extensions' side panels show beside the page.
+        engine.onExtensionSidePanelOpen = { [weak model] panel, _ in
+            guard let model else {
+                panel.close()
+                return
+            }
+            panel.onClose = { [weak model] in model?.extensionSidePanelDidClose(panel.extensionID) }
+            model.showExtensionSidePanel(ExtensionSidePanel(id: panel.extensionID, title: panel.title, view: panel.view) { panel.close() })
+        }
         // Extensions that handle their own clicks (1Password) open their popup themselves.
         engine.onExtensionPopupRequest = { [weak self] popup, _ in self?.present(popup) }
         // Buttons appear once the engine is ready.

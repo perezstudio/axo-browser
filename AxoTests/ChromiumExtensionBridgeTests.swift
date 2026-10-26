@@ -85,6 +85,26 @@ struct ChromiumExtensionBridgeTests {
         #expect(profile.performedCommands.first?.page === FakePage.made.last, "On the selected tab's page")
     }
 
+    @Test func sidePanelsShowBesideThePageAndCloseInTheEngine() async throws {
+        await model.openTab(url: URL(string: "https://example.com/")!)
+        _ = bridge.toolbarItems(profileID: profileID, tabID: model.selectedTabID)
+        let profile = try #require(FakeProfile.made[profileID])
+        let open = try #require(profile.onExtensionSidePanelOpen)
+        let panel = FakeExtensionSidePanel(extensionIdentifier: "notes", title: "Notes")
+
+        open(panel)
+        #expect(model.extensionSidePanel?.title == "Notes")
+        #expect(model.extensionSidePanel?.view === panel.view)
+
+        model.closeExtensionSidePanel()
+        #expect(panel.isClosed, "The close button closes it in the engine")
+
+        let second = FakeExtensionSidePanel(extensionIdentifier: "notes", title: "Notes")
+        open(second)
+        second.onClose?()
+        #expect(model.extensionSidePanel == nil, "Closing it from the extension hides it")
+    }
+
     @Test func chromesPromptsAreAxosAlerts() async throws {
         await model.openTab(url: URL(string: "https://example.com/")!)
         _ = bridge.toolbarItems(profileID: profileID, tabID: model.selectedTabID)

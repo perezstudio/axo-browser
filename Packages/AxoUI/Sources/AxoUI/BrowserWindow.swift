@@ -19,7 +19,13 @@ public struct BrowserWindow: View {
             SidebarView(model: model)
                 .navigationSplitViewColumnWidth(min: 180, ideal: 240, max: 400)
         } detail: {
-            content
+            HStack(spacing: 0) {
+                content
+                if let panel = model.extensionSidePanel {
+                    Divider()
+                    ExtensionSidePanelView(model: model, panel: panel)
+                }
+            }
                 // In the page column: an overlay on the split view itself couldn't take focus.
                 .overlay {
                     if let peek = model.peek, let space = model.space {

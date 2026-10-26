@@ -111,4 +111,29 @@ struct PageMenuTests {
         #expect(page.rightClick(FakeContextMenu()))
         #expect(clicked == [tab.id])
     }
+
+    // MARK: Side panels
+
+    @Test func sidePanelsShowAndCloseEitherWay() async throws {
+        let model = BrowserModel(store: try TabStore.makeInMemory(), pool: WebViewPool(engine: FakeEngine()))
+        var announced: [String] = []
+        model.announce = { announced.append($0) }
+        var closed: [String] = []
+        let panel = { (id: String) in ExtensionSidePanel(id: id, title: "Notes", view: PlatformView()) { closed.append(id) } }
+
+        model.showExtensionSidePanel(panel("notes"))
+        #expect(model.extensionSidePanel?.id == "notes")
+        #expect(announced == ["Notes side panel opened"])
+
+        model.closeExtensionSidePanel()
+        #expect(model.extensionSidePanel == nil)
+        #expect(closed == ["notes"], "The close button closes it in the engine")
+
+        model.showExtensionSidePanel(panel("notes"))
+        model.extensionSidePanelDidClose("other")
+        #expect(model.extensionSidePanel?.id == "notes", "Another extension's close doesn't touch it")
+        model.extensionSidePanelDidClose("notes")
+        #expect(model.extensionSidePanel == nil)
+        #expect(closed == ["notes"], "The extension closed it already")
+    }
 }

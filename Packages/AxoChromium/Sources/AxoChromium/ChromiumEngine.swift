@@ -51,6 +51,10 @@ public final class ChromiumEngine: WebEngine {
 
     /// Called when a profile's extensions or their toolbar buttons change, with the profile.
     public var onExtensionsChange: ((Profile.ID) -> Void)?
+    /// Called when an extension's side panel opens (`chrome.sidePanel`), with its profile. Show it
+    /// beside the page.
+    public var onExtensionSidePanelOpen: ((ChromiumExtensionSidePanel, Profile.ID) -> Void)?
+
     /// Called when something needs the person's answer that Chrome would ask in its own dialog:
     /// permission requests, installs and uninstalls, and what to share when recording the screen.
     /// Ask, then call the closure once. Without a handler, everything is answered Cancel.
@@ -155,6 +159,9 @@ public final class ChromiumEngine: WebEngine {
             }
             profile.onExtensionWindowOpen = { [weak self] window, size in
                 self?.popupWindowOpened(window, size: size, profileID: profileID)
+            }
+            profile.onExtensionSidePanelOpen = { [weak self] panel in
+                self?.onExtensionSidePanelOpen?(ChromiumExtensionSidePanel(panel), profileID)
             }
             profile.onExtensionPrompt = { [weak self] prompt, answer in
                 guard let handler = self?.onExtensionPrompt else {

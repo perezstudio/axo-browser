@@ -128,6 +128,35 @@ extension ChromiumExtensionPrompt.Answer {
     }
 }
 
+/// An extension's side panel, open. Show ``view`` beside the page.
+@MainActor
+public final class ChromiumExtensionSidePanel {
+    private let panel: any AXOExtensionSidePanel
+
+    init(_ panel: any AXOExtensionSidePanel) {
+        self.panel = panel
+    }
+
+    /// The extension whose panel this is.
+    public var extensionID: String { panel.extensionIdentifier }
+    /// The extension's name.
+    public var title: String { panel.title }
+    /// The view that draws the panel.
+    public var view: NSView { panel.view }
+
+    /// Called when the panel closes without Axo asking (the extension closed it, or another
+    /// extension's panel opened).
+    public var onClose: (() -> Void)? {
+        get { panel.onClose }
+        set { panel.onClose = newValue }
+    }
+
+    /// Closes the panel.
+    public func close() {
+        panel.close()
+    }
+}
+
 /// An extension's popup, open. Show ``view`` in a popover sized to ``preferredSize``.
 @MainActor
 public final class ChromiumExtensionPopup {
