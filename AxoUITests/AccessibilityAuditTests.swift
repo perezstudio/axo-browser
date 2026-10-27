@@ -2,6 +2,11 @@ import XCTest
 
 /// Runs Xcode's accessibility audit on each part of Axo's interface.
 final class AccessibilityAuditTests: XCTestCase {
+    override class func setUp() {
+        super.setUp()
+        AxoUITests.connectRunnerToWindowServer()
+    }
+
     override func setUpWithError() throws {
         continueAfterFailure = true
     }

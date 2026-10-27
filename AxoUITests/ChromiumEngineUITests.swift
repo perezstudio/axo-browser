@@ -12,6 +12,11 @@ import XCTest
 /// built axo-chromium checkout; see scripts/embed-chromium-engine.sh). Run it with
 /// `TEST_RUNNER_AXO_CHROMIUM_UI_TESTS=1 xcodebuild … test -only-testing:AxoUITests/ChromiumEngineUITests`.
 final class ChromiumEngineUITests: XCTestCase {
+    override class func setUp() {
+        super.setUp()
+        AxoUITests.connectRunnerToWindowServer()
+    }
+
     override func setUpWithError() throws {
         continueAfterFailure = false
         try XCTSkipUnless(

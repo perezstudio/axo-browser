@@ -1,0 +1,116 @@
+# Runs Axo's macOS UI tests on a GitHub-hosted Mac, so they don't take over the person's screen,
+# keyboard, and mouse (XCUITest on macOS has no headless mode). Free for this public repo.
+#
+# Start it on a pushed branch with scripts/run-ui-tests-remotely.sh, or from the Actions tab.
+#
+# The runner has no axo-chromium build, so the "Embed Chromium Engine" phase only warns and
+# ChromiumEngineUITests skips; UI testing mode runs every other test on WebKit. Run
+# ChromiumEngineUITests on a Mac with the engine built (see CLAUDE.md).
+name: UI Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      only_testing:
+        description: "Tests to run (xcodebuild -only-testing targets, space-separated), or all for the whole Axo test plan."
+        required: false
+        default: "AxoUITests"
+  pull_request:
+
+concurrency:
+  group: ui-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ui-tests:
+    # macOS 27 with Xcode 27, Apple silicon.
+    runs-on: xcode-27
+    timeout-minutes: 75
+    env:
+      # "all" runs the whole test plan. (An empty dispatch input falls back to AxoUITests, since
+      # GitHub's expressions treat '' as false.)
+      ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || 'AxoUITests' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select the newest Xcode 27
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_27*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+          sw_vers
+
+      # The project signs with the person's team, which the runner doesn't have, so sign to run
+      # locally (ad hoc). Debug uses Axo.entitlements, which needs no provisioning profile.
+      - name: Build for testing
+        run: |
+          xcodebuild build-for-testing \
+            -workspace Axo.xcworkspace -scheme Axo -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -disableAutomaticPackageResolution \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
+            > "$RUNNER_TEMP/build.log" 2>&1 \
+            || { grep -E 'error:' "$RUNNER_TEMP/build.log"; tail -50 "$RUNNER_TEMP/build.log"; exit 1; }
+          grep -E 'warning: No Chromium|BUILD SUCCEEDED|TEST BUILD SUCCEEDED' "$RUNNER_TEMP/build.log" || true
+
+      # Screenshots of the runner's whole display every 30 seconds, to see what the tests did.
+      # The test plan keeps XCTest's own captures off because on a person's Mac they include
+      # other apps; this runner has nothing but the tests on screen.
+      - name: Test
+        env:
+          # Skips the few tests that can't pass on this virtual Mac (AxoUITests.isOnHostedRunner).
+          TEST_RUNNER_AXO_HOSTED_RUNNER: "1"
+        run: |
+          mkdir -p "$RUNNER_TEMP/screenshots"
+          ( while true; do
+              screencapture -x "$RUNNER_TEMP/screenshots/$(date +%H-%M-%S).png" || true
+              sleep 30
+            done ) &
+          SCREENSHOTS_PID=$!
+          trap 'kill $SCREENSHOTS_PID 2>/dev/null || true' EXIT
+          ARGS=()
+          if [[ "$ONLY_TESTING" != "all" ]]; then
+            read -r -a TARGETS <<< "$ONLY_TESTING"
+            for target in "${TARGETS[@]}"; do ARGS+=("-only-testing:$target"); done
+          fi
+          xcodebuild test-without-building \
+            -workspace Axo.xcworkspace -scheme Axo -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -resultBundlePath "$RUNNER_TEMP/UITests.xcresult" \
+            "${ARGS[@]}" \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=
+          # A mistyped -only-testing target runs nothing and still succeeds; fail instead.
+          TOTAL="$(xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/UITests.xcresult" \
+            | python3 -c 'import json, sys; print(json.load(sys.stdin)["totalTestCount"])')"
+          if [[ "$TOTAL" -eq 0 ]]; then
+            echo "::error::No tests matched: $ONLY_TESTING"
+            exit 1
+          fi
+
+      # Crash reports and WebKit's log, for failures the result bundle doesn't explain.
+      - name: Collect diagnostics
+        if: failure()
+        run: |
+          DIAG="$RUNNER_TEMP/diagnostics"
+          mkdir -p "$DIAG"
+          system_profiler SPDisplaysDataType > "$DIAG/displays.txt" 2>&1 || true
+          cp -R ~/Library/Logs/DiagnosticReports "$DIAG/" 2>/dev/null || true
+          log show --last 90m --style compact \
+            --predicate 'subsystem BEGINSWITH "com.apple.WebKit" OR process BEGINSWITH "com.apple.WebKit" OR process == "Axo"' \
+            > "$DIAG/webkit.log" 2>&1 || true
+
+      - name: Upload the result bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: UITests-results
+          path: |
+            ${{ runner.temp }}/UITests.xcresult
+            ${{ runner.temp }}/build.log
+            ${{ runner.temp }}/screenshots
+            ${{ runner.temp }}/diagnostics
+          if-no-files-found: ignore
+          retention-days: 7
