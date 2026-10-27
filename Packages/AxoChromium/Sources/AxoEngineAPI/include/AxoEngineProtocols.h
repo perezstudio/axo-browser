@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 20
+#define AXO_ENGINE_API_VERSION 21
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -343,8 +343,13 @@ NS_SWIFT_UI_ACTOR
 - (void)findString:(NSString*)text backwards:(BOOL)backwards completion:(void (^)(BOOL found))completion;
 - (void)stopFinding;
 
-/// Runs `functionBody` as an async function's body with `arguments` as its parameters, in the
-/// isolated world named `world`. The result arrives as Foundation values (JSON types).
+/// Runs `functionBody` as an async function's body with `arguments` (JSON values, keyed by
+/// parameter name) as its parameters, in the main frame's isolated world named `world`, and
+/// waits for the promise it returns. Each name keeps its own world, which the page's and
+/// extensions' scripts can't see, for the app's lifetime; the engine has five. The result arrives
+/// as Foundation values (JSON types; nil for `undefined`). Errors are AXOEngineErrorDomain 105:
+/// the function threw, the body has a syntax error, the arguments or result aren't JSON, or the
+/// page navigated or closed first.
 - (void)callFunctionBody:(NSString*)functionBody
                arguments:(NSDictionary<NSString*, id>*)arguments
                  inWorld:(NSString*)world
