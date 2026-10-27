@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       only_testing:
-        description: "Tests to run (xcodebuild -only-testing). Empty runs the whole Axo test plan."
+        description: "Tests to run (xcodebuild -only-testing targets, space-separated), or all for the whole Axo test plan."
         required: false
         default: "AxoUITests"
   pull_request:
@@ -30,6 +30,8 @@ jobs:
     runs-on: xcode-27
     timeout-minutes: 75
     env:
+      # "all" runs the whole test plan. (An empty dispatch input falls back to AxoUITests, since
+      # GitHub's expressions treat '' as false.)
       ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || 'AxoUITests' }}
     steps:
       - uses: actions/checkout@v4
@@ -70,8 +72,9 @@ jobs:
           SCREENSHOTS_PID=$!
           trap 'kill $SCREENSHOTS_PID 2>/dev/null || true' EXIT
           ARGS=()
-          if [[ -n "$ONLY_TESTING" ]]; then
-            for target in $ONLY_TESTING; do ARGS+=("-only-testing:$target"); done
+          if [[ "$ONLY_TESTING" != "all" ]]; then
+            read -r -a TARGETS <<< "$ONLY_TESTING"
+            for target in "${TARGETS[@]}"; do ARGS+=("-only-testing:$target"); done
           fi
           xcodebuild test-without-building \
             -workspace Axo.xcworkspace -scheme Axo -destination 'platform=macOS' \
@@ -79,6 +82,13 @@ jobs:
             -resultBundlePath "$RUNNER_TEMP/UITests.xcresult" \
             "${ARGS[@]}" \
             CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=
+          # A mistyped -only-testing target runs nothing and still succeeds; fail instead.
+          TOTAL="$(xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/UITests.xcresult" \
+            | python3 -c 'import json, sys; print(json.load(sys.stdin)["totalTestCount"])')"
+          if [[ "$TOTAL" -eq 0 ]]; then
+            echo "::error::No tests matched: $ONLY_TESTING"
+            exit 1
+          fi
 
       # Crash reports and WebKit's log, for failures the result bundle doesn't explain.
       - name: Collect diagnostics
