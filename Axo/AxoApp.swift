@@ -27,6 +27,10 @@ struct AxoApp: App {
     init() {
         // Axo has its own tabs in the sidebar; macOS window tabs ("Show Tab Bar") would only confuse.
         NSWindow.allowsAutomaticWindowTabbing = false
+        if AppEnvironment.isTestRun {
+            // Start from the default window size and sidebar width, not an earlier test's.
+            TestWindows.forgetSavedFrames(in: .standard)
+        }
     }
 
     var body: some Scene {
@@ -36,6 +40,9 @@ struct AxoApp: App {
             BrowserWindow(model: model)
                 .defaultAppStorage(AppEnvironment.settings)
                 .modifier(BrowserWindowOpener(model: model))
+                .background {
+                    if AppEnvironment.isTestRun { TestWindowPlacer() }
+                }
                 // Links from other apps (as the default browser) and opened HTML files open in
                 // mini windows, not another browser window (handlesExternalEvents below).
                 .onOpenURL { url in
@@ -60,6 +67,9 @@ struct AxoApp: App {
                 }
         }
         .defaultSize(width: 1200, height: 800)
+        // Test runs share saved window state with the person's Axo, which has no scene for test
+        // windows' ID, so they neither restore nor leave windows to restore.
+        .restorationBehavior(AppEnvironment.isTestRun ? .disabled : .automatic)
 
         Settings {
             SettingsView(model: model)
@@ -133,8 +143,9 @@ enum AppEnvironment {
     /// Keeps Spotlight showing pinned tabs and history. Kept for the app's lifetime.
     static var spotlightIndexer: SpotlightIndexer?
 
-    /// The browser window group's ID, for reopening it.
-    static let browserWindowID = "browser"
+    /// The browser window group's ID, for reopening it. Test runs have their own, so AppKit saves
+    /// test windows' frames apart from the person's (``TestWindows``).
+    static let browserWindowID = TestWindows.browserWindowID(isTestRun: isTestRun)
 
     /// Runs web extensions for every profile. Kept for the app's lifetime.
     static var extensionManager: ExtensionManager?
