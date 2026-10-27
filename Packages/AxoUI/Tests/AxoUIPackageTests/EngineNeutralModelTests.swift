@@ -59,6 +59,63 @@ struct EngineNeutralModelTests {
         #expect(model.findHasNoMatches)
     }
 
+    @Test func aReplacedFindsAnswerIsIgnored() async throws {
+        let page = try await openPage(URL(string: "https://example.com/")!)
+        var announcements: [String] = []
+        model.announce = { announcements.append($0) }
+        page.holdsFinds = true
+
+        model.findText = "l"
+        let first = Task { await model.findNext() }
+        try await waitForHeldFinds(1, on: page)
+        model.findText = "la"
+        let second = Task { await model.findNext() }
+        try await waitForHeldFinds(2, on: page)
+
+        // Chromium answers the find a newer one replaced "no match".
+        page.answerHeldFind(false)
+        await first.value
+        #expect(!model.findHasNoMatches)
+        page.answerHeldFind(true)
+        await second.value
+        #expect(!model.findHasNoMatches)
+        #expect(announcements.isEmpty)
+    }
+
+    @Test func closingTheFindBarIgnoresTheFindStillWaiting() async throws {
+        let page = try await openPage(URL(string: "https://example.com/")!)
+        var announcements: [String] = []
+        model.announce = { announcements.append($0) }
+        page.holdsFinds = true
+
+        model.findText = "lakes"
+        let find = Task { await model.findNext() }
+        try await waitForHeldFinds(1, on: page)
+        model.closeFindBar()
+        page.answerHeldFind(false)
+        await find.value
+
+        #expect(!model.findHasNoMatches)
+        #expect(announcements.isEmpty)
+    }
+
+    @Test func emptyingTheFindTextClearsThePagesFind() async throws {
+        let page = try await openPage(URL(string: "https://example.com/")!)
+        model.findText = "lakes"
+        await model.findNext()
+
+        model.findText = ""
+        await model.findNext()
+
+        #expect(page.endedFinds == 1)
+        #expect(page.finds.map(\.text) == ["lakes"])
+    }
+
+    private func waitForHeldFinds(_ count: Int, on page: FakePage) async throws {
+        for _ in 0..<1000 where page.heldFindCount < count { await Task.yield() }
+        try #require(page.heldFindCount == count)
+    }
+
     // MARK: The engine's window
 
     @Test func theEnginesWindowFollowsTheSidebarAndSelection() async throws {
@@ -198,11 +255,15 @@ struct EngineNeutralModelTests {
         let sourceID = try #require(model.tabs.first?.id)
         model.select(sourceID)
         let profileID = try #require(model.space?.profileID)
+        // The sidebar's observation can show a new tab before the model selects it; the
+        // model's .opened event comes right before the selection, in the same turn.
+        var openedEvents = 0
+        model.onTabEvent = { if case .opened = $0 { openedEvents += 1 } }
 
         // window.open from a click: a tab right after its opener, keeping the page Chromium made.
         let opened = FakePage(profileID: profileID)
         source.open(opened, url: URL(string: "https://example.com/opened")!, as: .tab(inBackground: false))
-        try await waitUntil { model.tabs.count == 3 }
+        try await waitUntil { openedEvents == 1 }
         #expect(model.tabs.map(\.url.lastPathComponent) == ["source", "opened", "other"])
         let openedID = model.tabs[1].id
         #expect(model.pool.livePage(for: openedID) === opened, "The same page, so window.opener still works")
@@ -213,7 +274,8 @@ struct EngineNeutralModelTests {
         model.select(sourceID)
         let background = FakePage(profileID: profileID)
         source.open(background, url: URL(string: "https://example.com/later")!, as: .tab(inBackground: true))
-        try await waitUntil { model.tabs.count == 4 }
+        try await waitUntil { openedEvents == 2 }
+        #expect(model.tabs.count == 4)
         #expect(model.selectedTabID == sourceID)
 
         // A sign-in popup: a mini window, sized as it asked.

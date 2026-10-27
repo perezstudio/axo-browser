@@ -187,8 +187,13 @@ public final class FakePage: NSObject, AXOPage {
     public func goForward() {}
     public func reload() {}
     public func stopLoading() {}
-    public func find(_ text: String, backwards: Bool, completion: @escaping (Bool) -> Void) { completion(findResult) }
-    public func stopFinding() {}
+    public private(set) var finds: [(text: String, backwards: Bool)] = []
+    public func find(_ text: String, backwards: Bool, completion: @escaping (Bool) -> Void) {
+        finds.append((text, backwards))
+        completion(findResult)
+    }
+    public private(set) var stoppedFinding = 0
+    public func stopFinding() { stoppedFinding += 1 }
 
     public func callFunctionBody(_ functionBody: String, arguments: [String: Any], inWorld world: String, completion: @escaping (Any?, (any Error)?) -> Void) {
         completion(nil, FakeEngineError())

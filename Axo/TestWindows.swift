@@ -18,12 +18,6 @@ enum TestWindows {
     /// The browser window group's ID in test runs.
     static let browserWindowID = "browser-testing"
 
-    /// Whether this launch is a test run: UI testing mode, or hosting unit tests (XCTest sets
-    /// `XCTestConfigurationFilePath`).
-    static func isTestRun(isUITesting: Bool, environment: [String: String]) -> Bool {
-        isUITesting || environment["XCTestConfigurationFilePath"] != nil
-    }
-
     /// The browser window group's ID: the person's (`"browser"`) or test runs' own.
     static func browserWindowID(isTestRun: Bool) -> String {
         isTestRun ? browserWindowID : "browser"

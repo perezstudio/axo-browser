@@ -573,6 +573,26 @@ struct ChromiumEngineTests {
         #expect(fake.exitedFullscreen == 1)
     }
 
+    @Test func findGoesToTheEnginesPage() async throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine)
+        let tab = Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial)
+        pool.page(for: tab, profileID: profileID)
+        let fake = try #require(FakePage.made.first)
+
+        #expect(await pool.find("axolotl", in: tab.id, backwards: true))
+        fake.findResult = false
+        #expect(await pool.find("platypus", in: tab.id) == false)
+        #expect(fake.finds.map(\.text) == ["axolotl", "platypus"])
+        #expect(fake.finds.map(\.backwards) == [true, false])
+
+        await pool.clearFind(in: tab.id)
+        #expect(fake.stoppedFinding == 1, "Chromium clears its own highlight")
+    }
+
     @Test func profileDataGoesToTheEngine() async throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)

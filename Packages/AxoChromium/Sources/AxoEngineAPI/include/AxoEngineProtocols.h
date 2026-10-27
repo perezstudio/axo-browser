@@ -337,7 +337,9 @@ NS_SWIFT_UI_ACTOR
 - (void)reload;
 - (void)stopLoading;
 
-/// Finds `text` (ignoring case, wrapping), highlights and scrolls to it.
+/// Finds `text` (ignoring case, wrapping), highlights and scrolls to it. `completion` runs once,
+/// on a later turn. A find that a newer find or `stopFinding` replaces is answered NO, so callers
+/// ignore answers to finds they have replaced.
 - (void)findString:(NSString*)text backwards:(BOOL)backwards completion:(void (^)(BOOL found))completion;
 - (void)stopFinding;
 

@@ -19,12 +19,6 @@ struct TestWindowsTests {
         #expect(AppEnvironment.browserWindowID == "browser-testing", "Hosting these tests never saves the person's frame")
     }
 
-    @Test func uiTestingAndHostedUnitTestsAreTestRuns() {
-        #expect(!TestWindows.isTestRun(isUITesting: false, environment: [:]))
-        #expect(TestWindows.isTestRun(isUITesting: true, environment: [:]))
-        #expect(TestWindows.isTestRun(isUITesting: false, environment: ["XCTestConfigurationFilePath": "/tmp/x.xctestconfiguration"]))
-    }
-
     @Test func forgettingFramesRemovesOnlyTestWindowKeys() throws {
         let name = "com.perezstudio.AxoTests.TestWindows-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: name))

@@ -163,6 +163,12 @@ public final class WebKitPage: NSObject, EnginePage {
         return (try? await webView.find(text, configuration: configuration).matchFound) ?? false
     }
 
+    /// WebKit marks its match as the page's selection. Clearing it from Axo's own isolated world
+    /// doesn't run or expose anything to the page's scripts.
+    public func endFind() async {
+        _ = try? await callJavaScript("window.getSelection()?.removeAllRanges()", arguments: [:], in: "AxoFind")
+    }
+
     public func callJavaScript(_ functionBody: String, arguments: [String: Any], in world: String) async throws -> Any? {
         try await webView.callAsyncJavaScript(functionBody, arguments: arguments, contentWorld: Self.contentWorld(named: world))
     }
