@@ -95,6 +95,11 @@ final class ChromiumPage: NSObject, EnginePage {
         return await page.find(text, backwards: backwards)
     }
 
+    /// Chromium's find clears its own highlight.
+    func endFind() async {
+        page?.stopFinding()
+    }
+
     func callJavaScript(_ functionBody: String, arguments: [String: Any], in world: String) async throws -> Any? {
         guard let page else { throw ChromiumPageError.notReady }
         return try await page.callFunctionBody(functionBody, arguments: arguments, inWorld: world) as Any?

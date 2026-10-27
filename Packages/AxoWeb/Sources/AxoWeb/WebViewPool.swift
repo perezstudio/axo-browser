@@ -306,10 +306,7 @@ public final class WebViewPool {
 
     /// Removes the highlight a find left on the tab's page.
     public func clearFind(in tabID: Tab.ID) async {
-        guard let page = live[tabID]?.page else { return }
-        // Find marks its match as the page selection. Clearing it from Axo's own isolated world
-        // doesn't run or expose anything to the page's scripts.
-        _ = try? await page.callJavaScript("window.getSelection()?.removeAllRanges()", arguments: [:], in: "AxoFind")
+        await live[tabID]?.page.endFind()
     }
 
     #if os(macOS)

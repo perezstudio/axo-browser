@@ -1237,6 +1237,9 @@ public final class BrowserModel {
 
     // MARK: Find and print
 
+    /// Counts finds, so only the newest one's answer counts.
+    private var findGeneration = 0
+
     /// Shows the find bar (or focuses it if it's already showing).
     public func showFindBar() {
         guard selectedTabID != nil else { return }
@@ -1249,6 +1252,7 @@ public final class BrowserModel {
         let wasVisible = isFindBarVisible
         isFindBarVisible = false
         findHasNoMatches = false
+        findGeneration += 1
         if wasVisible { focusPage() }
         if let selectedTabID {
             let pool = pool
@@ -1267,12 +1271,18 @@ public final class BrowserModel {
     }
 
     private func find(backwards: Bool) async {
+        findGeneration += 1
+        let generation = findGeneration
         guard let selectedTabID, !findText.isEmpty else {
             findHasNoMatches = false
+            if let selectedTabID { await pool.clearFind(in: selectedTabID) }
             return
         }
         if !isFindBarVisible { showFindBar() }
         let found = await pool.find(findText, in: selectedTabID, backwards: backwards)
+        // A newer find, or closing the bar, replaced this one. Chromium answers a replaced
+        // find "no match", which mustn't show or be announced.
+        guard generation == findGeneration else { return }
         if !found, !findHasNoMatches { announce("No matches") }
         findHasNoMatches = !found
     }
