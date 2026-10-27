@@ -438,13 +438,19 @@ final class ChromiumEngineUITests: XCTestCase {
     @MainActor
     func testFindInPage() throws {
         let app = launchChromiumApp()
-        _ = openPage("<title>Pond</title><p>Axolotls live in lakes.</p>", titled: "Pond", in: app)
+        // The word is far down the page, and the page renames itself when the find scrolls to it.
+        let sidebar = openPage(
+            "<title>Pond</title><script>onscroll = () => document.title = 'Scrolled'</script><p>Axolotls</p><div style='height:4000px'></div><p>They live in lakes.</p>",
+            titled: "Pond", in: app
+        )
 
         app.typeKey("f", modifierFlags: .command)
         let field = app.textFields["findField"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         app.typeText("lakes")
-        XCTAssertFalse(app.staticTexts["findNoMatches"].waitForExistence(timeout: 3), "The word on the page is found")
+        XCTAssertTrue(sidebar.staticTexts["Scrolled"].waitForExistence(timeout: 10), "The find goes to the word")
+        // Typing replaced each earlier find, whose "no match" answers don't show.
+        XCTAssertTrue(app.staticTexts["findNoMatches"].waitForNonExistence(timeout: 3))
 
         app.typeKey("a", modifierFlags: .command)
         app.typeText("ocean")

@@ -100,6 +100,11 @@ public final class FakePage: EnginePage {
     public var snapshotImage: PlatformImage?
     /// What ``find(_:backwards:)`` returns.
     public var findResult = true
+    /// Whether finds wait for ``answerHeldFind(_:)`` instead of answering ``findResult`` at once.
+    public var holdsFinds = false
+    private var heldFinds: [CheckedContinuation<Bool, Never>] = []
+    /// How many finds are waiting for ``answerHeldFind(_:)``.
+    public var heldFindCount: Int { heldFinds.count }
 
     /// Creates a page for `profileID`'s profile.
     public init(profileID: Profile.ID) {
@@ -136,7 +141,13 @@ public final class FakePage: EnginePage {
 
     public func find(_ text: String, backwards: Bool) async -> Bool {
         finds.append((text, backwards))
-        return findResult
+        guard holdsFinds else { return findResult }
+        return await withCheckedContinuation { heldFinds.append($0) }
+    }
+
+    /// Answers the oldest held find with `found`.
+    public func answerHeldFind(_ found: Bool) {
+        heldFinds.removeFirst().resume(returning: found)
     }
 
     public private(set) var endedFinds = 0
