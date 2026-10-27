@@ -62,7 +62,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/screenshots"
           ( while true; do
               screencapture -x "$RUNNER_TEMP/screenshots/$(date +%H-%M-%S).png" || true
-              sleep 30
+              sleep "${SCREENSHOT_INTERVAL:-30}"
             done ) &
           SCREENSHOTS_PID=$!
           trap 'kill $SCREENSHOTS_PID 2>/dev/null || true' EXIT
@@ -77,6 +77,18 @@ jobs:
             "${ARGS[@]}" \
             CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=
 
+      # Crash reports and WebKit's log, for failures the result bundle doesn't explain.
+      - name: Collect diagnostics
+        if: failure()
+        run: |
+          DIAG="$RUNNER_TEMP/diagnostics"
+          mkdir -p "$DIAG"
+          system_profiler SPDisplaysDataType > "$DIAG/displays.txt" 2>&1 || true
+          cp -R ~/Library/Logs/DiagnosticReports "$DIAG/" 2>/dev/null || true
+          log show --last 90m --style compact \
+            --predicate 'subsystem BEGINSWITH "com.apple.WebKit" OR process BEGINSWITH "com.apple.WebKit" OR process == "Axo"' \
+            > "$DIAG/webkit.log" 2>&1 || true
+
       - name: Upload the result bundle
         if: always()
         uses: actions/upload-artifact@v4
@@ -86,5 +98,6 @@ jobs:
             ${{ runner.temp }}/UITests.xcresult
             ${{ runner.temp }}/build.log
             ${{ runner.temp }}/screenshots
+            ${{ runner.temp }}/diagnostics
           if-no-files-found: ignore
           retention-days: 7
