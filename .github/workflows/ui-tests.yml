@@ -54,8 +54,18 @@ jobs:
             || { grep -E 'error:' "$RUNNER_TEMP/build.log"; tail -50 "$RUNNER_TEMP/build.log"; exit 1; }
           grep -E 'warning: No Chromium|BUILD SUCCEEDED|TEST BUILD SUCCEEDED' "$RUNNER_TEMP/build.log" || true
 
+      # Screenshots of the runner's whole display every 30 seconds, to see what the tests did.
+      # The test plan keeps XCTest's own captures off because on a person's Mac they include
+      # other apps; this runner has nothing but the tests on screen.
       - name: Test
         run: |
+          mkdir -p "$RUNNER_TEMP/screenshots"
+          ( while true; do
+              screencapture -x "$RUNNER_TEMP/screenshots/$(date +%H-%M-%S).png" || true
+              sleep 30
+            done ) &
+          SCREENSHOTS_PID=$!
+          trap 'kill $SCREENSHOTS_PID 2>/dev/null || true' EXIT
           ARGS=()
           if [[ -n "$ONLY_TESTING" ]]; then
             for target in $ONLY_TESTING; do ARGS+=("-only-testing:$target"); done
@@ -71,9 +81,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: UITests-xcresult
+          name: UITests-results
           path: |
             ${{ runner.temp }}/UITests.xcresult
             ${{ runner.temp }}/build.log
+            ${{ runner.temp }}/screenshots
           if-no-files-found: ignore
           retention-days: 7
