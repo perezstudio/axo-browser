@@ -5,9 +5,23 @@
 //  Created by Kevin Perez on 10/2/26.
 //
 
+import AppKit
 import XCTest
 
 final class AxoUITests: XCTestCase {
+
+    override class func setUp() {
+        super.setUp()
+        connectRunnerToWindowServer()
+    }
+
+    /// Connects the test runner to the window server before its first event. The runner has no
+    /// `NSApplication`, and XCTest's event synthesis asserts (`CGS_REQUIRE_INIT`) when nothing in
+    /// the runner has connected yet: a fresh runner whose first test starts with a key press
+    /// crashes (seen on GitHub's Mac runners when running one test alone).
+    static func connectRunnerToWindowServer() {
+        MainActor.assumeIsolated { _ = NSApplication.shared }
+    }
 
     override func setUpWithError() throws {
         continueAfterFailure = false

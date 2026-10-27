@@ -63,6 +63,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/screenshots"
           ( while true; do
               screencapture -x "$RUNNER_TEMP/screenshots/$(date +%H-%M-%S).png" || true
+              { date; ps -axo pid,ppid,stat,%cpu,comm | grep -iE "axo|webkit|screentime|XCTest|testmanager"; } >> "$RUNNER_TEMP/screenshots/ps.txt" 2>&1 # TEMP
               sleep "${SCREENSHOT_INTERVAL:-30}"
             done ) &
           SCREENSHOTS_PID=$!
