@@ -30,8 +30,7 @@ jobs:
     runs-on: xcode-27
     timeout-minutes: 75
     env:
-      ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || 'AxoUITests/AxoUITests/testJavaScriptConfirmShowsAndReturnsTheAnswer AxoUITests/AxoUITests/testWebInspectorOpens' }}
-      SCREENSHOT_INTERVAL: 5
+      ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || 'AxoUITests' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -63,8 +62,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/screenshots"
           ( while true; do
               screencapture -x "$RUNNER_TEMP/screenshots/$(date +%H-%M-%S).png" || true
-              { date; ps -axo pid,ppid,stat,%cpu,comm | grep -iE "axo|webkit|screentime|XCTest|testmanager"; } >> "$RUNNER_TEMP/screenshots/ps.txt" 2>&1 # TEMP
-              sleep "${SCREENSHOT_INTERVAL:-30}"
+              sleep 30
             done ) &
           SCREENSHOTS_PID=$!
           trap 'kill $SCREENSHOTS_PID 2>/dev/null || true' EXIT
