@@ -92,10 +92,21 @@ enum AppEnvironment {
     /// downloads folder, so every launch starts empty and nothing touches the user's real data.
     static let isUITesting = ProcessInfo.processInfo.environment["AXO_UI_TESTING"] == "1"
 
-    /// Where the person's choices in Settings live. UI tests share user defaults with the person's
-    /// own Axo, so in UI testing mode they get a separate store, emptied at launch.
+    /// Whether this launch runs tests: UI testing mode, or hosting the app's unit tests (XCTest
+    /// sets `XCTestConfigurationFilePath`). Test runs get the same isolation as UI testing mode:
+    /// an in-memory database, non-persistent website data, separate settings, and no system
+    /// integrations, so nothing in a test run touches the person's real data.
+    static let isTestRun = isTestRun(isUITesting: isUITesting, environment: ProcessInfo.processInfo.environment)
+
+    /// Whether a launch with `environment` runs tests. See ``isTestRun``.
+    static func isTestRun(isUITesting: Bool, environment: [String: String]) -> Bool {
+        isUITesting || environment["XCTestConfigurationFilePath"] != nil
+    }
+
+    /// Where the person's choices in Settings live. Tests share user defaults with the person's
+    /// own Axo, so test runs get a separate store, emptied at launch.
     static let settings: UserDefaults = {
-        guard isUITesting else { return .standard }
+        guard isTestRun else { return .standard }
         let name = "com.perezstudio.Axo.UITesting"
         let store = UserDefaults(suiteName: name)!
         store.removePersistentDomain(forName: name)
@@ -107,6 +118,14 @@ enum AppEnvironment {
         URL.applicationSupportDirectory.appending(path: "Axo/Axo.sqlite")
     }
 
+
+    /// The store the app opened at launch. Tests check that hosting them never opens the
+    /// on-disk database.
+    private(set) static var store: TabStore?
+
+    /// The window model the app made at launch. Tests check that hosting them leaves out the
+    /// system integrations.
+    private(set) static var browserModel: BrowserModel?
 
     /// Runs iCloud sync. Kept for the app's lifetime.
     static var iCloudSync: ICloudSyncController?
@@ -126,13 +145,13 @@ enum AppEnvironment {
 
     /// Where installed extensions live.
     static var extensionsFolder: URL {
-        isUITesting
+        isTestRun
             ? FileManager.default.temporaryDirectory.appending(path: "AxoUITests-Extensions-\(UUID().uuidString)", directoryHint: .isDirectory)
             : URL.applicationSupportDirectory.appending(path: "Axo/Extensions", directoryHint: .isDirectory)
     }
 
-    /// Where downloads go during UI tests.
-    static let uiTestingDownloadsDirectory = FileManager.default.temporaryDirectory
+    /// Where downloads go during test runs.
+    static let testDownloadsDirectory = FileManager.default.temporaryDirectory
         .appending(path: "AxoUITests-Downloads-\(UUID().uuidString)", directoryHint: .isDirectory)
 
     /// Where the last Space the window showed is remembered between launches.
@@ -146,7 +165,7 @@ enum AppEnvironment {
             installer: ExtensionInstaller(root: extensionsFolder),
             store: store.extensions,
             pool: pool,
-            persistent: !isUITesting
+            persistent: !isTestRun
         )
         // Developer tools (Inspect Element and the Web Inspector) for pages and for extensions'
         // popups and background pages.
@@ -170,51 +189,58 @@ enum AppEnvironment {
         return manager
     }
 
-    /// Where other browsers keep their data. UI tests never read the real folder: they use
-    /// `AXO_UI_TESTING_IMPORT_ROOT` (a folder of fixtures) or an empty folder.
+    /// Where other browsers keep their data. Test runs never read the real folder: UI tests use
+    /// `AXO_UI_TESTING_IMPORT_ROOT` (a folder of fixtures), and other test runs an empty folder.
     static var otherBrowsersFolder: URL {
-        guard isUITesting else { return .applicationSupportDirectory }
-        if let path = ProcessInfo.processInfo.environment["AXO_UI_TESTING_IMPORT_ROOT"] {
+        guard isTestRun else { return .applicationSupportDirectory }
+        if isUITesting, let path = ProcessInfo.processInfo.environment["AXO_UI_TESTING_IMPORT_ROOT"] {
             return URL(fileURLWithPath: path, isDirectory: true)
         }
         return FileManager.default.temporaryDirectory.appending(path: "AxoUITests-NoBrowsers-\(UUID().uuidString)", directoryHint: .isDirectory)
     }
 
+    /// Whether iCloud sync can run: in builds signed for it (`isEntitled`), never in test runs.
+    static func syncsWithICloud(isTestRun: Bool, isEntitled: @autoclosure () -> Bool) -> Bool {
+        !isTestRun && isEntitled()
+    }
+
     static func makeBrowserModel() -> BrowserModel {
         let model = makeModel()
-        if !isUITesting {
+        if !isTestRun {
             model.onSpaceChange = { UserDefaults.standard.set($0.uuidString, forKey: lastSpaceKey) }
-            // Not in UI tests, so nothing in a test run can offer to change the default browser.
+            // Not in test runs, so nothing in a test run can offer to change the default browser.
             model.defaultBrowser = SystemDefaultBrowser()
-            // Not in UI tests either, so a test run never shows macOS's location prompt.
+            // Not in test runs either, so a test run never shows macOS's location prompt.
             model.locationAuthorization = SystemLocationAuthorization()
             model.pageSummarizer = SystemPageSummarizer()
         } else {
-            // UI tests never offer their pages to the person's other devices, and their pages
+            // Test runs never offer their pages to the person's other devices, and their pages
             // never count as the person's Screen Time usage.
             model.isHandoffEnabled = false
             model.pool.reportsScreenTimeUsage = false
-            // The on-device model's answers vary, so UI tests get a predictable stand-in.
+            // The on-device model's answers vary, so test runs get a predictable stand-in.
             model.pageSummarizer = UITestingPageSummarizer()
         }
+        browserModel = model
         return model
     }
 
     private static func makeModel() -> BrowserModel {
-        let lastSpaceID = isUITesting ? nil : UserDefaults.standard.string(forKey: lastSpaceKey).flatMap(UUID.init(uuidString:))
+        let lastSpaceID = isTestRun ? nil : UserDefaults.standard.string(forKey: lastSpaceKey).flatMap(UUID.init(uuidString:))
         let chromium = ChromiumSupport.makeEngine()
         let pool = if let chromium {
             WebViewPool(engine: chromium)
-        } else if isUITesting {
+        } else if isTestRun {
             WebViewPool(
                 makeDataStore: { _ in .nonPersistent() },
-                downloads: DownloadManager(directory: uiTestingDownloadsDirectory)
+                downloads: DownloadManager(directory: testDownloadsDirectory)
             )
         } else {
             WebViewPool()
         }
         do {
-            let store = isUITesting ? try TabStore.makeInMemory() : try TabStore.openOnDisk(at: databaseURL)
+            let store = isTestRun ? try TabStore.makeInMemory() : try TabStore.openOnDisk(at: databaseURL)
+            self.store = store
             // WebKit's extensions (WKWebExtension) run only in test runs, which use WebKit. On
             // Chromium, ChromiumExtensionBridge connects the engine's own extensions.
             let manager = chromium == nil ? startExtensions(store: store, pool: pool) : nil
@@ -248,17 +274,20 @@ enum AppEnvironment {
             }
             // Focus filters and other App Intents reach the store and window through this.
             IntentBridge.current = IntentBridge(store: store, window: BrowserIntentWindow(model: model))
-            // UI tests use an in-memory database, which must never reach the system's Spotlight index.
-            if !isUITesting {
+            // Test runs use an in-memory database, which must never reach the system's Spotlight index.
+            if !isTestRun {
                 let indexer = SpotlightIndexer(store: store)
                 indexer.start()
                 spotlightIndexer = indexer
             }
-            // iCloud sync, in builds signed for it and never in UI tests (the pane then explains
+            // iCloud sync, in builds signed for it and never in test runs (the pane then explains
             // that this copy can't sync).
             let sync = ICloudSyncController(
                 store: SyncStore(database: store.database),
-                isAvailable: !isUITesting && CloudKitSync.isAvailable(containerIdentifier: ICloudSyncController.containerIdentifier)
+                isAvailable: syncsWithICloud(
+                    isTestRun: isTestRun,
+                    isEntitled: CloudKitSync.isAvailable(containerIdentifier: ICloudSyncController.containerIdentifier)
+                )
             )
             iCloudSync = sync
             model.iCloudSync = sync

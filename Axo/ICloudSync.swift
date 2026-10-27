@@ -8,7 +8,7 @@ import Observation
 /// Runs iCloud sync for the app and backs the iCloud pane in Settings.
 ///
 /// Sync runs only in builds signed with the iCloud entitlement (Release builds, through
-/// `Axo-Release.entitlements`), never in UI testing, and only while the person has it on and is
+/// `Axo-Release.entitlements`), never in test runs, and only while the person has it on and is
 /// signed in to iCloud.
 @MainActor
 @Observable
