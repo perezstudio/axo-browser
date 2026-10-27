@@ -3,6 +3,7 @@
 //  AxoTests
 //
 
+import AppKit
 import CoreGraphics
 import Foundation
 import Testing
@@ -66,5 +67,30 @@ struct TestWindowsTests {
         let frame = TestWindows.frame(for: CGSize(width: 1513, height: 949), in: screen)
         #expect(frame == CGRect(x: -2560, y: 949, width: 1000, height: 600))
         #expect(screen.contains(frame))
+    }
+
+    @Test func onlyTheDimensionThatDoesntFitShrinks() {
+        let screen = CGRect(x: 0, y: 0, width: 1512, height: 600)
+        #expect(TestWindows.frame(for: CGSize(width: 1200, height: 800), in: screen)
+            == CGRect(x: 156, y: 0, width: 1200, height: 600))
+    }
+
+    @Test func thePlacerMovesItsWindowOntoThePrimaryDisplay() async throws {
+        let primary = try #require(NSScreen.screens.first).visibleFrame
+        // Borderless, so the frame is exactly what's set and AppKit doesn't keep it on screen.
+        let window = NSWindow(contentRect: .zero, styleMask: [.borderless], backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        window.setFrame(CGRect(x: primary.maxX + 5000, y: primary.maxY + 5000, width: 400, height: 300), display: false)
+        #expect(!primary.contains(window.frame))
+
+        window.contentView?.addSubview(TestWindowPlacer.PlacerView())
+        // The placer moves the window on the next turn of the main queue.
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+
+        #expect(primary.contains(window.frame))
+        #expect(window.frame.size == CGSize(width: 400, height: 300))
     }
 }

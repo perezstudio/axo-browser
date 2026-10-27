@@ -67,6 +67,9 @@ struct AxoApp: App {
                 }
         }
         .defaultSize(width: 1200, height: 800)
+        // Test runs share saved window state with the person's Axo, which has no scene for test
+        // windows' ID, so they neither restore nor leave windows to restore.
+        .restorationBehavior(AppEnvironment.isTestRun ? .disabled : .automatic)
 
         Settings {
             SettingsView(model: model)
