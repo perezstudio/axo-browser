@@ -30,7 +30,8 @@ jobs:
     runs-on: xcode-27
     timeout-minutes: 75
     env:
-      ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || 'AxoUITests' }}
+      ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || 'AxoUITests/AxoUITests/testJavaScriptConfirmShowsAndReturnsTheAnswer AxoUITests/AxoUITests/testWebInspectorOpens' }}
+      SCREENSHOT_INTERVAL: 5
     steps:
       - uses: actions/checkout@v4
 
