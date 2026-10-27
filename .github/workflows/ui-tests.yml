@@ -58,6 +58,9 @@ jobs:
       # The test plan keeps XCTest's own captures off because on a person's Mac they include
       # other apps; this runner has nothing but the tests on screen.
       - name: Test
+        env:
+          # Skips the few tests that can't pass on this virtual Mac (AxoUITests.isOnHostedRunner).
+          TEST_RUNNER_AXO_HOSTED_RUNNER: "1"
         run: |
           mkdir -p "$RUNNER_TEMP/screenshots"
           ( while true; do

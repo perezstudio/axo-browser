@@ -23,6 +23,13 @@ final class AxoUITests: XCTestCase {
         MainActor.assumeIsolated { _ = NSApplication.shared }
     }
 
+    /// Whether the tests run on a GitHub-hosted Mac (`.github/workflows/ui-tests.yml` sets
+    /// `TEST_RUNNER_AXO_HOSTED_RUNNER`). A few tests can't pass on that virtual Mac and skip
+    /// there; they still run in full everywhere else.
+    static var isOnHostedRunner: Bool {
+        ProcessInfo.processInfo.environment["AXO_HOSTED_RUNNER"] == "1"
+    }
+
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
@@ -220,6 +227,10 @@ final class AxoUITests: XCTestCase {
     /// A page's `confirm()` shows as a dialog naming the page, and the page gets the answer.
     @MainActor
     func testJavaScriptConfirmShowsAndReturnsTheAnswer() throws {
+        // While the page waits on confirm(), WebKit blocks its web process. On GitHub's virtual
+        // Mac every query into the page's web view then takes over a minute, so the dialog can't
+        // be checked in time there (it does appear).
+        try XCTSkipIf(Self.isOnHostedRunner, "A blocked web process stalls accessibility queries on GitHub's hosted Mac.")
         let app = launchApp()
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
@@ -1070,6 +1081,9 @@ final class AxoUITests: XCTestCase {
     /// ⌥⌘I opens Axo's Web Inspector for the selected page, docked in the window.
     @MainActor
     func testWebInspectorOpens() throws {
+        // WebKit pages never draw on GitHub's virtual Mac (the web process's sandbox can't create
+        // IOSurfaces there), so the check that the inspector is drawn can't pass.
+        try XCTSkipIf(Self.isOnHostedRunner, "WebKit pages don't draw on GitHub's hosted Mac.")
         let app = launchApp()
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
