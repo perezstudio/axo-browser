@@ -123,6 +123,10 @@ enum AppEnvironment {
     /// on-disk database.
     private(set) static var store: TabStore?
 
+    /// The window model the app made at launch. Tests check that hosting them leaves out the
+    /// system integrations.
+    private(set) static var browserModel: BrowserModel?
+
     /// Runs iCloud sync. Kept for the app's lifetime.
     static var iCloudSync: ICloudSyncController?
 
@@ -195,6 +199,11 @@ enum AppEnvironment {
         return FileManager.default.temporaryDirectory.appending(path: "AxoUITests-NoBrowsers-\(UUID().uuidString)", directoryHint: .isDirectory)
     }
 
+    /// Whether iCloud sync can run: in builds signed for it (`isEntitled`), never in test runs.
+    static func syncsWithICloud(isTestRun: Bool, isEntitled: @autoclosure () -> Bool) -> Bool {
+        !isTestRun && isEntitled()
+    }
+
     static func makeBrowserModel() -> BrowserModel {
         let model = makeModel()
         if !isTestRun {
@@ -212,6 +221,7 @@ enum AppEnvironment {
             // The on-device model's answers vary, so test runs get a predictable stand-in.
             model.pageSummarizer = UITestingPageSummarizer()
         }
+        browserModel = model
         return model
     }
 
@@ -274,7 +284,10 @@ enum AppEnvironment {
             // that this copy can't sync).
             let sync = ICloudSyncController(
                 store: SyncStore(database: store.database),
-                isAvailable: !isTestRun && CloudKitSync.isAvailable(containerIdentifier: ICloudSyncController.containerIdentifier)
+                isAvailable: syncsWithICloud(
+                    isTestRun: isTestRun,
+                    isEntitled: CloudKitSync.isAvailable(containerIdentifier: ICloudSyncController.containerIdentifier)
+                )
             )
             iCloudSync = sync
             model.iCloudSync = sync

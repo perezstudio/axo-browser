@@ -6,9 +6,11 @@
 import AxoCore
 import AxoPersistence
 import AxoUI
+import AxoWeb
 import Foundation
 import GRDB
 import Testing
+import WebKit
 @testable import Axo
 
 /// These tests host in Axo, which launches the browser before they run. That launch must never
@@ -26,16 +28,28 @@ struct TestHostTests {
         let store = try #require(await launchedStore(), "The test host launched the browser")
         let path = store.database.writer.path
         #expect(path == ":memory:", "Opened \(path)")
-        #expect(path != AppEnvironment.databaseURL.path)
     }
 
     @Test func hostingTestsSkipsSystemIntegrations() async throws {
-        try #require(await launchedStore() != nil)
+        let store = try #require(await launchedStore())
+        let model = try #require(AppEnvironment.browserModel)
+        #expect(model.defaultBrowser == nil, "Nothing in a test run offers to change the default browser")
+        #expect(model.locationAuthorization == nil, "Test runs never show macOS's location prompt")
+        #expect(model.onSpaceChange == nil, "Test runs never remember the Space shown")
+        #expect(!model.isHandoffEnabled, "Test pages never reach the person's other devices")
+        #expect(!model.pool.reportsScreenTimeUsage, "Test pages never count as Screen Time usage")
+        let profileID = try await store.bootstrap().profileID
+        #expect(!model.pool.dataStore(for: profileID).isPersistent, "Test runs never use the person's website data")
         #expect(AppEnvironment.spotlightIndexer == nil, "Test data never reaches Spotlight")
-        #expect(AppEnvironment.iCloudSync?.status == .unavailable, "Test runs never sync")
         #expect(AppEnvironment.settings !== UserDefaults.standard, "Test runs keep their settings apart")
         let realExtensions = URL.applicationSupportDirectory.appending(path: "Axo/Extensions").standardizedFileURL.path
         #expect(!AppEnvironment.extensionsFolder.standardizedFileURL.path.hasPrefix(realExtensions))
+    }
+
+    @Test func testRunsNeverSyncWithICloud() {
+        #expect(AppEnvironment.syncsWithICloud(isTestRun: false, isEntitled: true))
+        #expect(!AppEnvironment.syncsWithICloud(isTestRun: true, isEntitled: true), "Even in a build signed for iCloud")
+        #expect(!AppEnvironment.syncsWithICloud(isTestRun: false, isEntitled: false))
     }
 
     /// The store the app opened at launch. SwiftUI makes the model while the app launches, so
