@@ -341,4 +341,29 @@ struct EngineNeutralModelTests {
 
         #expect(page.isClosed)
     }
+
+    /// Chromium restores a page from its back/forward cache without loading it: the URL and
+    /// title arrive together, then the engine reports the page finished, with no load before it.
+    @Test func aPageRestoredFromTheCacheGetsItsFaviconAndOneVisit() async throws {
+        let first = URL(string: "https://example.com/first")!
+        let second = URL(string: "https://example.com/second")!
+        let page = try await openPage(first)
+        let profileID = try #require(model.space?.profileID)
+        page.navigate(to: first, title: "First")
+        page.navigate(to: second, title: "Second")
+        let scriptsBefore = page.scripts.count
+
+        page.navigate(to: first, title: "First")
+        page.delegate?.pageDidFinishLoad(page)
+
+        // The favicon is looked up again for the restored page.
+        try await waitUntil { page.scripts.count > scriptsBefore }
+        try await waitUntilAsync {
+            try await model.store.history.recent(profileID: profileID).first { $0.url == first }?.visitCount == 2
+        }
+        let history = try await model.store.history.recent(profileID: profileID)
+        #expect(history.first { $0.url == first }?.title == "First")
+        #expect(history.first { $0.url == second }?.visitCount == 1)
+        #expect(model.selectedPage?.title == "First")
+    }
 }
