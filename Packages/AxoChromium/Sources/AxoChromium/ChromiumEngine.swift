@@ -33,6 +33,7 @@ public final class ChromiumEngine: WebEngine {
     private let classes: ChromiumEngineClasses
     private let userDataDirectory: URL
     private let nativeMessagingHostFolders: [URL]
+    private let downloadsFolder: URL?
     private let isEphemeral: Bool
     private let additionalArguments: [String]
     private let schedule: (@escaping @MainActor () -> Void) -> Void
@@ -93,6 +94,9 @@ public final class ChromiumEngine: WebEngine {
     ///   - userDataDirectory: Where profiles keep their data, one folder per profile.
     ///   - nativeMessagingHostFolders: More folders to find native messaging hosts in, after
     ///     Chromium's own, such as Google Chrome's, where apps like 1Password register theirs.
+    ///   - downloadsFolder: Axo's downloads folder (the pool's `DownloadManager`'s), where the
+    ///     engine keeps partial files until Axo chooses a download's destination. `nil` leaves
+    ///     Chrome's default, the person's Downloads folder.
     ///   - isEphemeral: For tests: the engine uses a stand-in keychain (never the person's) and
     ///     makes no background requests of its own.
     ///   - additionalArguments: More Chromium switches, for debugging.
@@ -101,6 +105,7 @@ public final class ChromiumEngine: WebEngine {
         classes: ChromiumEngineClasses,
         userDataDirectory: URL,
         nativeMessagingHostFolders: [URL] = [],
+        downloadsFolder: URL? = nil,
         isEphemeral: Bool = false,
         additionalArguments: [String] = [],
         schedule: @escaping (@escaping @MainActor () -> Void) -> Void = ChromiumEngine.onNextRunLoopTurn
@@ -108,6 +113,7 @@ public final class ChromiumEngine: WebEngine {
         self.classes = classes
         self.userDataDirectory = userDataDirectory
         self.nativeMessagingHostFolders = nativeMessagingHostFolders
+        self.downloadsFolder = downloadsFolder
         self.isEphemeral = isEphemeral
         self.additionalArguments = additionalArguments
         self.schedule = schedule
@@ -138,6 +144,7 @@ public final class ChromiumEngine: WebEngine {
             }
             configuration.userDataDirectory = userDataDirectory
             configuration.nativeMessagingHostFolders = nativeMessagingHostFolders
+            configuration.downloadsFolder = downloadsFolder
             configuration.ephemeral = isEphemeral
             configuration.additionalArguments = additionalArguments
             classes.engine.run(with: configuration) { [self] engine, error in
@@ -208,6 +215,15 @@ public final class ChromiumEngine: WebEngine {
             profile.onBookmarkChange = { [weak self] change in
                 guard let change = BookmarkChange(change) else { return }
                 self?.onBookmarkChange?(change, profileID)
+            }
+            // Downloads with no tab to report to, such as an extension's background download.
+            profile.onDownload = { [weak self] download in
+                guard let self, let delegate else {
+                    download.cancel()
+                    return
+                }
+                let item = delegate.engine(self, didStartDownloadFrom: download.sourceURL, profileID: profileID) { download.cancel() }
+                ChromiumPage.follow(download, reportingTo: item)
             }
             profile.onHistoryChange = { [weak self] change in
                 guard let change = ChromiumHistoryChange(change) else { return }

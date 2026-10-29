@@ -53,6 +53,7 @@ public final class FakeConfiguration: NSObject, AXOEngineConfiguration {
     public var ephemeral = false
     public var nativeMessagingHostFolders: [URL] = []
     public var additionalArguments: [String] = []
+    public var downloadsFolder: URL?
 }
 
 public final class FakeProfile: NSObject, AXOProfile {
@@ -97,6 +98,7 @@ public final class FakeProfile: NSObject, AXOProfile {
     public var onExtensionSidePanelOpen: ((any AXOExtensionSidePanel) -> Void)?
     public var onBookmarkChange: ((any AXOBookmarkChange) -> Void)?
     public var onHistoryChange: ((any AXOHistoryChange) -> Void)?
+    public var onDownload: ((any AXODownload) -> Void)?
     public private(set) var bookmarkBar: [any AXOBookmarkNode] = []
     public private(set) var otherBookmarks: [any AXOBookmarkNode] = []
     public private(set) var bookmarkSetCount = 0

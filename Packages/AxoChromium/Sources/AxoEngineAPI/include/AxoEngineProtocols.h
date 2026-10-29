@@ -75,6 +75,10 @@ NS_SWIFT_UI_ACTOR
 /// own. Apps like 1Password register their hosts for Google Chrome, not for Axo. Empty by
 /// default.
 @property(nonatomic, copy) NSArray<NSURL*>* nativeMessagingHostFolders;
+/// The app's downloads folder. Chrome keeps a download's partial file there before the app
+/// chooses its destination, and a download without a page goes there when there's no
+/// `onDownload` handler. `nil` leaves Chrome's default, the person's Downloads folder.
+@property(nonatomic, copy, nullable) NSURL* downloadsFolder;
 @end
 
 /// The Chromium browser process inside the app. The `AXOEngine` class adopts it.
@@ -202,6 +206,13 @@ NS_SWIFT_UI_ACTOR
 /// two stay in step. The engine's expiry of old visits isn't reported.
 @property(nonatomic, copy, nullable) void (^onHistoryChange)(id<AXOHistoryChange> change);
 
+/// Called when a download without a page to report it to starts: an extension's background
+/// download (`chrome.downloads.download`), or one whose tab navigated or closed before the
+/// server answered. Set `download.observer` before returning, as for
+/// `-[AXOPageDelegate page:didStartDownload:]`. Without a handler, such downloads go to the
+/// configuration's `downloadsFolder` unreported.
+@property(nonatomic, copy, nullable) void (^onDownload)(id<AXODownload> download);
+
 /// Called when an extension's side panel opens (`chrome.sidePanel.open`, or its toolbar button
 /// with `openPanelOnActionClick`). Show `panel.view` beside the page; another extension's panel
 /// that was open has already closed. Without a handler, side panels don't open.
@@ -281,8 +292,8 @@ NS_SWIFT_UI_ACTOR
 /// A download started, from the page or from `-startDownloadFromURL:` or the context menu. Set
 /// `download.observer` before returning: the engine asks it where to save the file right away
 /// (a download it can't ask is cancelled), then reports progress to it. A download whose server
-/// can't be reached or answers with an error is asked about, then fails. Downloads without a page,
-/// such as an extension's background downloads, go to the profile's download folder unreported.
+/// can't be reached or answers with an error is asked about, then fails. A download the page has
+/// left (it navigated or closed before the server answered) goes to `AXOProfile.onDownload`.
 - (void)page:(id<AXOPage>)page didStartDownload:(id<AXODownload>)download;
 @optional
 /// A right-click (or Control-click) in the page. Show the app's own menu for `menu` at
@@ -703,8 +714,10 @@ NS_SWIFT_UI_ACTOR
 - (void)download:(id<AXODownload>)download didReceiveBytes:(int64_t)completed ofTotal:(int64_t)total;
 /// The file is complete at its destination.
 - (void)downloadDidFinish:(id<AXODownload>)download;
-/// The download stopped, with why in words for the person. The partial file is deleted. Files
-/// Chrome marks as possibly unsafe stop this way too, since Axo has no way to keep them yet.
+/// The download stopped, with why in words for the person. The partial file is deleted. A page's
+/// download of a file Chrome marks as possibly unsafe stops this way too (a type that needs a
+/// click on a site visited before today, such as a .dmg, or a risky type over plain http);
+/// downloads the app starts count as the person's choice and aren't stopped for that.
 - (void)download:(id<AXODownload>)download didFailWithMessage:(NSString*)message;
 @end
 

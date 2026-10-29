@@ -218,16 +218,20 @@ final class ChromiumEngineUITests: XCTestCase {
         assertDownloadListed("linked.txt", in: app)
     }
 
-    /// Opens the downloads list and checks it has a finished row for `filename`.
+    /// Opens the downloads list and checks it has a finished row for `filename`: not failed,
+    /// cancelled, or still running (whose status reads "5 bytes of 5 bytes").
     @MainActor
     private func assertDownloadListed(_ filename: String, in app: XCUIApplication) {
         let downloadsButton = app.buttons["downloadsButton"]
         XCTAssertTrue(downloadsButton.waitForExistence(timeout: 15), "The download reached Axo's list")
         downloadsButton.click()
-        let row = app.descendants(matching: .any)
+        let rows = app.descendants(matching: .any)
             .matching(NSPredicate(format: "identifier == 'downloadRow' AND label CONTAINS %@", filename))
-            .firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 10), "The list names the file")
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 10), "The list names the file")
+        let finished = rows.matching(NSPredicate(
+            format: "NOT (label CONTAINS 'Failed' OR label CONTAINS 'Cancelled' OR label CONTAINS ' of ')"
+        )).firstMatch
+        XCTAssertTrue(finished.waitForExistence(timeout: 10), "The download finished: \(rows.firstMatch.label)")
     }
 
     /// An extension's side panel (chrome.sidePanel) shows beside the page in Axo's window when

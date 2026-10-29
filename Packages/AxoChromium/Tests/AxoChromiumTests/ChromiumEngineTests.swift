@@ -353,27 +353,42 @@ struct ChromiumEngineTests {
         #expect(engineMenu.downloads == [file])
     }
 
-    @Test func downloadsThatFailBeforeChoosingADestinationShowAsFailed() throws {
+    @Test func downloadsWithoutATabShowInThePoolsList() throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)
         engine.start()
         scheduled.run()
         let pool = WebViewPool(engine: engine, downloads: DownloadManager(directory: directory))
-        let tab = Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial)
-        pool.page(for: tab, profileID: profileID)
-        let fake = try #require(FakePage.made.first)
-        // The engine reports a download whose server answered with an error this way: started,
-        // then failed, with no destination asked for.
-        let download = FakeDownload(sourceURL: URL(string: "https://example.com/missing.pdf"))
+        pool.page(for: Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial), profileID: profileID)
+        let profile = try #require(FakeProfile.made[profileID])
+        // An extension's background download: the engine reports it to the profile, not a page.
+        let download = FakeDownload(sourceURL: URL(string: "https://example.com/export.csv"))
 
-        fake.delegate?.page(fake, didStart: download)
-        download.observer?.download(download, didFailWithMessage: "The server couldn't send the file.")
-
+        let handler = try #require(profile.onDownload)
+        handler(download)
         let item = try #require(pool.downloads.items.first)
-        #expect(item.state == .failed("The server couldn't send the file."))
-        #expect(item.destination == nil)
+        #expect(item.sourceTabID == nil)
+        let destination = try #require(download.observer?.download(download, destinationForSuggestedFilename: "export.csv", expectedLength: 3))
+        #expect(destination.deletingLastPathComponent().standardizedFileURL == directory.standardizedFileURL)
+        download.observer?.download(download, didFailWithMessage: "The connection failed.")
+        #expect(item.state == .failed("The connection failed."))
         #expect(download.observer == nil, "The observer goes once the download ends")
-        #expect(!download.isCancelled)
+
+        let second = FakeDownload(sourceURL: nil)
+        handler(second)
+        pool.downloads.cancel(try #require(pool.downloads.items.first))
+        #expect(second.isCancelled, "Cancelling in Axo cancels Chromium's download")
+    }
+
+    @Test func downloadsFolderReachesTheEngine() {
+        let scheduled = Scheduled()
+        let folder = URL(fileURLWithPath: "/tmp/AxoChromiumTests-downloads", isDirectory: true)
+        let engine = ChromiumEngine(classes: FakeEngine.classes, userDataDirectory: directory, downloadsFolder: folder) {
+            scheduled.blocks.append($0)
+        }
+        engine.start()
+        scheduled.run()
+        #expect(FakeAXOEngine.configurations.first?.downloadsFolder == folder)
     }
 
     @Test func hibernatedPagesWithoutSavedHistoryReloadTheirURL() async throws {
