@@ -333,6 +333,49 @@ struct ChromiumEngineTests {
         #expect(download.observer == nil, "The observer goes once the download ends")
     }
 
+    @Test func downloadsAxoStartsGoToTheEnginesPage() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine, downloads: DownloadManager(directory: directory))
+        let tab = Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial)
+        pool.page(for: tab, profileID: profileID)
+        let fake = try #require(FakePage.made.first)
+        let file = URL(string: "https://example.com/report.pdf")!
+
+        pool.startDownload(file, in: tab.id)
+        #expect(fake.startedDownloads == [file])
+
+        // The page menu's Download Linked File and Download Image download through the menu.
+        let engineMenu = FakeAXOContextMenu()
+        ChromiumContextMenu(engineMenu).download(file)
+        #expect(engineMenu.downloads == [file])
+    }
+
+    @Test func downloadsThatFailBeforeChoosingADestinationShowAsFailed() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine, downloads: DownloadManager(directory: directory))
+        let tab = Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial)
+        pool.page(for: tab, profileID: profileID)
+        let fake = try #require(FakePage.made.first)
+        // The engine reports a download whose server answered with an error this way: started,
+        // then failed, with no destination asked for.
+        let download = FakeDownload(sourceURL: URL(string: "https://example.com/missing.pdf"))
+
+        fake.delegate?.page(fake, didStart: download)
+        download.observer?.download(download, didFailWithMessage: "The server couldn't send the file.")
+
+        let item = try #require(pool.downloads.items.first)
+        #expect(item.state == .failed("The server couldn't send the file."))
+        #expect(item.destination == nil)
+        #expect(download.observer == nil, "The observer goes once the download ends")
+        #expect(!download.isCancelled)
+    }
+
     @Test func hibernatedPagesWithoutSavedHistoryReloadTheirURL() async throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)

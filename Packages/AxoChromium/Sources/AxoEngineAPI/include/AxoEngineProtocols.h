@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 21
+#define AXO_ENGINE_API_VERSION 22
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -278,7 +278,11 @@ NS_SWIFT_UI_ACTOR
     selectsFilesAllowingMultiple:(BOOL)allowsMultiple
                      directories:(BOOL)allowsDirectories
                       completion:(void (^)(NSArray<NSURL*>* _Nullable files))completion;
-/// A download started. Report its progress through `download.observer`, which the delegate sets.
+/// A download started, from the page or from `-startDownloadFromURL:` or the context menu. Set
+/// `download.observer` before returning: the engine asks it where to save the file right away
+/// (a download it can't ask is cancelled), then reports progress to it. A download whose server
+/// can't be reached or answers with an error is asked about, then fails. Downloads without a page,
+/// such as an extension's background downloads, go to the profile's download folder unreported.
 - (void)page:(id<AXOPage>)page didStartDownload:(id<AXODownload>)download;
 @optional
 /// A right-click (or Control-click) in the page. Show the app's own menu for `menu` at
@@ -359,7 +363,8 @@ NS_SWIFT_UI_ACTOR
 /// A picture of the visible page, `width` points wide.
 - (void)snapshotWithWidth:(CGFloat)width completion:(void (^)(NSImage* _Nullable image))completion;
 
-/// Downloads `url` with the page's profile. Reported through the delegate.
+/// Downloads `url` with the page's profile and cookies. Reported through the delegate
+/// (`page:didStartDownload:`).
 - (void)startDownloadFromURL:(NSURL*)url;
 
 /// Opens or closes Chromium's DevTools for the page.
@@ -538,7 +543,8 @@ NS_SWIFT_UI_ACTOR
 - (void)replaceMisspellingWith:(NSString*)word;
 /// Copies the clicked image.
 - (void)copyImage;
-/// Downloads a link's target or an image, as the page would.
+/// Downloads a link's target (named by its download attribute) or an image, from the clicked
+/// frame. Reported through the page's delegate (`page:didStartDownload:`).
 - (void)download:(NSURL*)url;
 /// Shows the selection's definition (Look Up).
 - (void)lookUpSelection;
@@ -684,22 +690,31 @@ NS_SWIFT_UI_ACTOR
 
 // MARK: - Downloads
 
-/// Receives a download's progress.
+/// Receives a download's progress. After `downloadDidFinish:` or `download:didFailWithMessage:`,
+/// or after the download is cancelled, nothing more arrives.
 NS_SWIFT_UI_ACTOR
 @protocol AXODownloadObserver <NSObject>
-/// Where to save `suggestedFilename`, or `nil` to cancel.
+/// Where to save `suggestedFilename` (a file URL; the folder must exist), or `nil` to cancel.
+/// `expectedLength` is 0 when the server didn't say.
 - (nullable NSURL*)download:(id<AXODownload>)download
     destinationForSuggestedFilename:(NSString*)suggestedFilename
                      expectedLength:(int64_t)expectedLength;
+/// Bytes saved so far, and the total (0 when unknown).
 - (void)download:(id<AXODownload>)download didReceiveBytes:(int64_t)completed ofTotal:(int64_t)total;
+/// The file is complete at its destination.
 - (void)downloadDidFinish:(id<AXODownload>)download;
+/// The download stopped, with why in words for the person. The partial file is deleted. Files
+/// Chrome marks as possibly unsafe stop this way too, since Axo has no way to keep them yet.
 - (void)download:(id<AXODownload>)download didFailWithMessage:(NSString*)message;
 @end
 
+/// A download. The engine keeps it until it ends.
 NS_SWIFT_UI_ACTOR
 @protocol AXODownload <NSObject>
 @property(nonatomic, readonly, nullable) NSURL* sourceURL;
+/// Held weakly: the app keeps it.
 @property(nonatomic, weak, nullable) id<AXODownloadObserver> observer;
+/// Stops the download and deletes the partial file. The observer hears nothing more.
 - (void)cancel;
 @end
 
