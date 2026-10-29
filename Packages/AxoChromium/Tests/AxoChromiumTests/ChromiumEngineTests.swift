@@ -593,6 +593,53 @@ struct ChromiumEngineTests {
         #expect(fake.stoppedFinding == 1, "Chromium clears its own highlight")
     }
 
+    @Test func pageScriptsRunInTheEnginesPage() async throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine)
+        let tab = Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial)
+        pool.page(for: tab, profileID: profileID)
+        let fake = try #require(FakePage.made.first)
+
+        // Translation and summaries read the page's text through the engine's isolated world.
+        fake.scriptResult = ["Axolotls", "live in lakes."]
+        #expect(try await pool.pageTextSegments(in: tab.id, limit: 10) == ["Axolotls", "live in lakes."])
+        fake.scriptResult = "Axolotls live in lakes."
+        #expect(try await pool.readablePageText(in: tab.id, limit: 100) == "Axolotls live in lakes.")
+        #expect(fake.scripts.map(\.world) == ["AxoPageText", "AxoPageText"])
+        #expect(fake.scripts.map { $0.arguments["limit"] as? Int } == [10, 100])
+
+        fake.scriptError = FakeEngineError()
+        await #expect(throws: (any Error).self) { try await pool.readablePageText(in: tab.id) }
+    }
+
+    @Test func faviconsAreReadThroughTheEnginesPage() async throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine)
+        let tab = Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial)
+        pool.page(for: tab, profileID: profileID)
+        let fake = try #require(FakePage.made.first)
+        var icons: [Data] = []
+        pool.onFaviconChange = { _, _, icon in icons.append(icon) }
+
+        // The page declares a data: icon, so nothing is fetched from the network.
+        let image = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 16, pixelsHigh: 16, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
+        let png = try #require(image?.representation(using: .png, properties: [:]))
+        fake.scriptResult = [["data:image/png;base64,\(png.base64EncodedString())", "icon", "16x16", "image/png"]]
+        fake.navigate(to: url, title: "Iconic")
+        try #require(fake.delegate).pageDidFinishLoad(fake)
+        for _ in 0..<200 where icons.isEmpty {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(icons.count == 1)
+        #expect(fake.scripts.last?.world == "AxoFavicons")
+    }
+
     @Test func profileDataGoesToTheEngine() async throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)

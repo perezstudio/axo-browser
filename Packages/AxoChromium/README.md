@@ -29,7 +29,8 @@ Axo never links the engine. The framework is around 500 MB, and only machines th
 - **`ChromiumPage`** (internal) is the `EnginePage`:
   - It maps `AXOPageDelegate` events to `EnginePageDelegate`: state, loads, focus, link clicks (`AXOLinkModifiers` uses the same bits as `LinkModifiers`), new tabs, permissions, dialogs and file pickers.
   - It reports downloads to the pool's `DownloadItem`s through a `DownloadObserver`.
-  - Until the engine supports them (Phase 3): find returns `false`, scripts throw, snapshots and saved history are `nil` (a hibernated tab reloads its URL), and printing prints the view.
+  - Find uses Chromium's own find, and `endFind()` stops it. `callJavaScript(_:arguments:in:)` runs in the engine's isolated worlds of Axo's own, at most five names, and awaits promises (API version 21).
+  - Until the engine supports them (Phase 3): snapshots and saved history are `nil` (a hibernated tab reloads its URL), and printing prints the view.
 
 ## Testing
 

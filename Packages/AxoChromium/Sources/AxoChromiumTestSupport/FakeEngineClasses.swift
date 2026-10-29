@@ -195,8 +195,19 @@ public final class FakePage: NSObject, AXOPage {
     public private(set) var stoppedFinding = 0
     public func stopFinding() { stoppedFinding += 1 }
 
+    /// The scripts run, in order.
+    public private(set) var scripts: [(body: String, arguments: [String: Any], world: String)] = []
+    /// What scripts return, unless ``scriptError`` is set.
+    public var scriptResult: Any?
+    /// The error scripts fail with.
+    public var scriptError: (any Error)?
     public func callFunctionBody(_ functionBody: String, arguments: [String: Any], inWorld world: String, completion: @escaping (Any?, (any Error)?) -> Void) {
-        completion(nil, FakeEngineError())
+        scripts.append((functionBody, arguments, world))
+        if let scriptError {
+            completion(nil, scriptError)
+        } else {
+            completion(scriptResult, nil)
+        }
     }
 
     public func snapshot(withWidth width: CGFloat, completion: @escaping (NSImage?) -> Void) { completion(nil) }
