@@ -714,10 +714,10 @@ NS_SWIFT_UI_ACTOR
 - (void)download:(id<AXODownload>)download didReceiveBytes:(int64_t)completed ofTotal:(int64_t)total;
 /// The file is complete at its destination.
 - (void)downloadDidFinish:(id<AXODownload>)download;
-/// The download stopped, with why in words for the person. The partial file is deleted. A page's
-/// download of a file Chrome marks as possibly unsafe stops this way too (a type that needs a
-/// click on a site visited before today, such as a .dmg, or a risky type over plain http);
-/// downloads the app starts count as the person's choice and aren't stopped for that.
+/// The download stopped, with why in words for the person. The partial file is deleted. A file
+/// Safe Browsing judges harmful stops this way too. Files Chrome flags only for their type (a
+/// .dmg from a site first visited today) or for coming over plain http are kept, as Safari
+/// would; macOS's quarantine check guards opening them.
 - (void)download:(id<AXODownload>)download didFailWithMessage:(NSString*)message;
 @end
 
