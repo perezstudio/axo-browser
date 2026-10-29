@@ -465,6 +465,19 @@ final class ChromiumEngineUITests: XCTestCase {
         XCTAssertTrue(field.waitForNonExistence(timeout: 5))
     }
 
+    /// Summarize Page reads a Chromium page's text through the engine's isolated world. UI tests
+    /// use a predictable stand-in for the on-device model, which repeats the title and text.
+    @MainActor
+    func testSummarizePageReadsChromiumPages() throws {
+        let app = launchChromiumApp()
+        _ = openPage("<title>Story</title><p>Axolotls regrow limbs.</p>", titled: "Story", in: app)
+
+        app.buttons["summarizeButton"].click()
+        let summary = app.staticTexts["summaryText"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 10))
+        XCTAssertEqual(summary.value as? String, "• Story: Axolotls regrow limbs.")
+    }
+
     /// A tab loads its page in Chromium. The page names the engine from its user agent, which
     /// says "Chrome/" only in Chromium, so the test can't pass on WebKit.
     @MainActor

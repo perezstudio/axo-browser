@@ -108,7 +108,8 @@ public protocol EnginePage: AnyObject {
 
     /// Runs `functionBody` as the body of an async JavaScript function with `arguments` as its
     /// parameters, in the isolated world named `world`, so the page's own scripts can't see or
-    /// interfere with it. Returns the function's result as Foundation values.
+    /// interfere with it. A world keeps what earlier calls left in it while the page stays.
+    /// Returns the function's result as Foundation values.
     func callJavaScript(_ functionBody: String, arguments: [String: Any], in world: String) async throws -> Any?
 
     /// A picture of the visible page, `width` points wide, or `nil` if the engine can't take one.
