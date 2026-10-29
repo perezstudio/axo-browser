@@ -56,6 +56,10 @@ public protocol WebEngineDelegate: AnyObject {
     /// `chrome.windows.create` with `type: "popup"`), `size` points big (zero when unspecified).
     /// The engine closing the page (``engine(_:didClose:)``) closes the window.
     func engine(_ engine: any WebEngine, didOpenPopupWindowWith page: any EnginePage, size: CGSize, profileID: Profile.ID)
+    /// The engine started a download with no tab to report it to, such as an extension's
+    /// background download. Return the item to report its progress to; `cancel` stops the
+    /// engine's download when the person cancels it.
+    func engine(_ engine: any WebEngine, didStartDownloadFrom sourceURL: URL?, profileID: Profile.ID, cancel: @escaping @MainActor () -> Void) -> DownloadItem
 }
 
 /// One tab's page in a ``WebEngine``. Owned by ``WebViewPool``.

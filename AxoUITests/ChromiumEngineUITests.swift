@@ -189,6 +189,51 @@ final class ChromiumEngineUITests: XCTestCase {
         waitForExpectations(timeout: 15)
     }
 
+    /// A link with a `download` attribute saves the file through Axo's downloads list on
+    /// Chromium, as on WebKit (testDownloadingAFileShowsItInTheDownloadsList).
+    @MainActor
+    func testPageDownloadsShowInAxosList() throws {
+        let app = launchChromiumApp()
+        _ = openPage(
+            "<title>Files</title><body style='margin:0'><a href='data:text/plain,hello' download='hello.txt' style='display:block;width:100vw;height:100vh'>Get hello</a></body>",
+            titled: "Files", in: app
+        )
+        clickPage(in: app)
+        assertDownloadListed("hello.txt", in: app)
+    }
+
+    /// The page menu's Download Linked File saves the link through Axo's downloads list, named
+    /// by the link's `download` attribute.
+    @MainActor
+    func testDownloadLinkedFileShowsInAxosList() throws {
+        let app = launchChromiumApp()
+        _ = openPage(
+            "<title>Files</title><body style='margin:0'><a href='data:text/plain,hello' download='linked.txt' style='display:block;width:100vw;height:100vh'>Get linked</a></body>",
+            titled: "Files", in: app
+        )
+        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.6)).rightClick()
+        let item = app.windows.firstMatch.menuItems["Download Linked File"]
+        XCTAssertTrue(item.waitForExistence(timeout: 10))
+        item.click()
+        assertDownloadListed("linked.txt", in: app)
+    }
+
+    /// Opens the downloads list and checks it has a finished row for `filename`: not failed,
+    /// cancelled, or still running (whose status reads "5 bytes of 5 bytes").
+    @MainActor
+    private func assertDownloadListed(_ filename: String, in app: XCUIApplication) {
+        let downloadsButton = app.buttons["downloadsButton"]
+        XCTAssertTrue(downloadsButton.waitForExistence(timeout: 15), "The download reached Axo's list")
+        downloadsButton.click()
+        let rows = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == 'downloadRow' AND label CONTAINS %@", filename))
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 10), "The list names the file")
+        let finished = rows.matching(NSPredicate(
+            format: "NOT (label CONTAINS 'Failed' OR label CONTAINS 'Cancelled' OR label CONTAINS ' of ')"
+        )).firstMatch
+        XCTAssertTrue(finished.waitForExistence(timeout: 10), "The download finished: \(rows.firstMatch.label)")
+    }
+
     /// An extension's side panel (chrome.sidePanel) shows beside the page in Axo's window when
     /// its toolbar button is clicked, and its close button hides it.
     @MainActor

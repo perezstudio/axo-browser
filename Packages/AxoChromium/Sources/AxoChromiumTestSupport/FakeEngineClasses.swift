@@ -53,6 +53,7 @@ public final class FakeConfiguration: NSObject, AXOEngineConfiguration {
     public var ephemeral = false
     public var nativeMessagingHostFolders: [URL] = []
     public var additionalArguments: [String] = []
+    public var downloadsFolder: URL?
 }
 
 public final class FakeProfile: NSObject, AXOProfile {
@@ -97,6 +98,7 @@ public final class FakeProfile: NSObject, AXOProfile {
     public var onExtensionSidePanelOpen: ((any AXOExtensionSidePanel) -> Void)?
     public var onBookmarkChange: ((any AXOBookmarkChange) -> Void)?
     public var onHistoryChange: ((any AXOHistoryChange) -> Void)?
+    public var onDownload: ((any AXODownload) -> Void)?
     public private(set) var bookmarkBar: [any AXOBookmarkNode] = []
     public private(set) var otherBookmarks: [any AXOBookmarkNode] = []
     public private(set) var bookmarkSetCount = 0
@@ -211,7 +213,9 @@ public final class FakePage: NSObject, AXOPage {
     }
 
     public func snapshot(withWidth width: CGFloat, completion: @escaping (NSImage?) -> Void) { completion(nil) }
-    public func startDownload(from url: URL) {}
+    /// The downloads Axo started (`startDownload(from:)`), in order.
+    public private(set) var startedDownloads: [URL] = []
+    public func startDownload(from url: URL) { startedDownloads.append(url) }
     public func toggleDevTools() {}
 
     public func printOperation(with printInfo: NSPrintInfo) -> NSPrintOperation {
@@ -348,7 +352,9 @@ public final class FakeAXOContextMenu: NSObject, AXOContextMenu {
     public func perform(_ edit: AXOContextMenuEdit) { performedEdits.append(edit) }
     public func replaceMisspelling(with word: String) {}
     public func copyImage() {}
-    public func download(_ url: URL) {}
+    /// The links and images the menu downloaded, in order.
+    public private(set) var downloads: [URL] = []
+    public func download(_ url: URL) { downloads.append(url) }
     public func lookUpSelection() {}
     public func performExtensionItem(_ item: any AXOContextMenuItem) { performedItems.append(item) }
     public func closed(followingLink url: URL?) { isClosed = true }

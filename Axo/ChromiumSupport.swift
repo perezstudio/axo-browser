@@ -92,8 +92,9 @@ enum ChromiumSupport {
         #endif
     }
 
-    /// The pool's engine: Chromium, started, if it loaded at launch.
-    static func makeEngine() -> ChromiumEngine? {
+    /// The pool's engine: Chromium, started, if it loaded at launch. `downloadsFolder` is the
+    /// pool's downloads folder.
+    static func makeEngine(downloadsFolder: URL) -> ChromiumEngine? {
         guard let classes else { return nil }
         let isUITesting = AppEnvironment.isUITesting
         let directory = userDataDirectory(isUITesting: isUITesting)
@@ -101,6 +102,7 @@ enum ChromiumSupport {
         let engine = ChromiumEngine(
             classes: classes, userDataDirectory: directory,
             nativeMessagingHostFolders: nativeMessagingHostFolders(isUITesting: isUITesting),
+            downloadsFolder: downloadsFolder,
             // Tests never reach the person's keychain or Google's servers.
             isEphemeral: isUITesting,
             additionalArguments: debugEngineArguments

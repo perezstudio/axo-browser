@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 21
+#define AXO_ENGINE_API_VERSION 22
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -75,6 +75,10 @@ NS_SWIFT_UI_ACTOR
 /// own. Apps like 1Password register their hosts for Google Chrome, not for Axo. Empty by
 /// default.
 @property(nonatomic, copy) NSArray<NSURL*>* nativeMessagingHostFolders;
+/// The app's downloads folder. Chrome keeps a download's partial file there before the app
+/// chooses its destination, and a download without a page goes there when there's no
+/// `onDownload` handler. `nil` leaves Chrome's default, the person's Downloads folder.
+@property(nonatomic, copy, nullable) NSURL* downloadsFolder;
 @end
 
 /// The Chromium browser process inside the app. The `AXOEngine` class adopts it.
@@ -202,6 +206,13 @@ NS_SWIFT_UI_ACTOR
 /// two stay in step. The engine's expiry of old visits isn't reported.
 @property(nonatomic, copy, nullable) void (^onHistoryChange)(id<AXOHistoryChange> change);
 
+/// Called when a download without a page to report it to starts: an extension's background
+/// download (`chrome.downloads.download`), or one whose tab navigated or closed before the
+/// server answered. Set `download.observer` before returning, as for
+/// `-[AXOPageDelegate page:didStartDownload:]`. Without a handler, such downloads go to the
+/// configuration's `downloadsFolder` unreported.
+@property(nonatomic, copy, nullable) void (^onDownload)(id<AXODownload> download);
+
 /// Called when an extension's side panel opens (`chrome.sidePanel.open`, or its toolbar button
 /// with `openPanelOnActionClick`). Show `panel.view` beside the page; another extension's panel
 /// that was open has already closed. Without a handler, side panels don't open.
@@ -278,7 +289,11 @@ NS_SWIFT_UI_ACTOR
     selectsFilesAllowingMultiple:(BOOL)allowsMultiple
                      directories:(BOOL)allowsDirectories
                       completion:(void (^)(NSArray<NSURL*>* _Nullable files))completion;
-/// A download started. Report its progress through `download.observer`, which the delegate sets.
+/// A download started, from the page or from `-startDownloadFromURL:` or the context menu. Set
+/// `download.observer` before returning: the engine asks it where to save the file right away
+/// (a download it can't ask is cancelled), then reports progress to it. A download whose server
+/// can't be reached or answers with an error is asked about, then fails. A download the page has
+/// left (it navigated or closed before the server answered) goes to `AXOProfile.onDownload`.
 - (void)page:(id<AXOPage>)page didStartDownload:(id<AXODownload>)download;
 @optional
 /// A right-click (or Control-click) in the page. Show the app's own menu for `menu` at
@@ -359,7 +374,8 @@ NS_SWIFT_UI_ACTOR
 /// A picture of the visible page, `width` points wide.
 - (void)snapshotWithWidth:(CGFloat)width completion:(void (^)(NSImage* _Nullable image))completion;
 
-/// Downloads `url` with the page's profile. Reported through the delegate.
+/// Downloads `url` with the page's profile and cookies. Reported through the delegate
+/// (`page:didStartDownload:`).
 - (void)startDownloadFromURL:(NSURL*)url;
 
 /// Opens or closes Chromium's DevTools for the page.
@@ -538,7 +554,8 @@ NS_SWIFT_UI_ACTOR
 - (void)replaceMisspellingWith:(NSString*)word;
 /// Copies the clicked image.
 - (void)copyImage;
-/// Downloads a link's target or an image, as the page would.
+/// Downloads a link's target (named by its download attribute) or an image, from the clicked
+/// frame. Reported through the page's delegate (`page:didStartDownload:`).
 - (void)download:(NSURL*)url;
 /// Shows the selection's definition (Look Up).
 - (void)lookUpSelection;
@@ -684,22 +701,33 @@ NS_SWIFT_UI_ACTOR
 
 // MARK: - Downloads
 
-/// Receives a download's progress.
+/// Receives a download's progress. After `downloadDidFinish:` or `download:didFailWithMessage:`,
+/// or after the download is cancelled, nothing more arrives.
 NS_SWIFT_UI_ACTOR
 @protocol AXODownloadObserver <NSObject>
-/// Where to save `suggestedFilename`, or `nil` to cancel.
+/// Where to save `suggestedFilename` (a file URL; the folder must exist), or `nil` to cancel.
+/// `expectedLength` is 0 when the server didn't say.
 - (nullable NSURL*)download:(id<AXODownload>)download
     destinationForSuggestedFilename:(NSString*)suggestedFilename
                      expectedLength:(int64_t)expectedLength;
+/// Bytes saved so far, and the total (0 when unknown).
 - (void)download:(id<AXODownload>)download didReceiveBytes:(int64_t)completed ofTotal:(int64_t)total;
+/// The file is complete at its destination.
 - (void)downloadDidFinish:(id<AXODownload>)download;
+/// The download stopped, with why in words for the person. The partial file is deleted. A file
+/// Safe Browsing judges harmful stops this way too. Files Chrome flags only for their type (a
+/// .dmg from a site first visited today) or for coming over plain http are kept, as Safari
+/// would; macOS's quarantine check guards opening them.
 - (void)download:(id<AXODownload>)download didFailWithMessage:(NSString*)message;
 @end
 
+/// A download. The engine keeps it until it ends.
 NS_SWIFT_UI_ACTOR
 @protocol AXODownload <NSObject>
 @property(nonatomic, readonly, nullable) NSURL* sourceURL;
+/// Held weakly: the app keeps it.
 @property(nonatomic, weak, nullable) id<AXODownloadObserver> observer;
+/// Stops the download and deletes the partial file. The observer hears nothing more.
 - (void)cancel;
 @end
 

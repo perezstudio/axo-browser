@@ -533,6 +533,10 @@ extension WebViewPool: WebEngineDelegate {
         onEngineActivatedTab?(tabID)
     }
 
+    public func engine(_ engine: any WebEngine, didStartDownloadFrom sourceURL: URL?, profileID: Profile.ID, cancel: @escaping @MainActor () -> Void) -> DownloadItem {
+        downloads.begin(sourceURL: sourceURL, sourceTabID: nil, cancel: cancel)
+    }
+
     public func engine(_ engine: any WebEngine, didOpenPopupWindowWith page: any EnginePage, size: CGSize, profileID: Profile.ID) {
         guard let handler = onEnginePopupWindow else {
             page.close()

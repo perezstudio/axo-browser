@@ -237,9 +237,15 @@ extension ChromiumPage: AXOPageDelegate {
             return
         }
         let item = delegate.page(self, didStartDownloadFrom: download.sourceURL) { download.cancel() }
+        Self.follow(download, reportingTo: item)
+    }
+
+    /// Reports `download` to `item` until it ends. The engine holds its observer weakly and a
+    /// download outlives its tab, so the observer is kept here, not with the page.
+    static func follow(_ download: any AXODownload, reportingTo item: DownloadItem) {
         let key = ObjectIdentifier(download)
-        let observer = DownloadObserver(item: item) { Self.downloads[key] = nil }
-        Self.downloads[key] = observer
+        let observer = DownloadObserver(item: item) { downloads[key] = nil }
+        downloads[key] = observer
         download.observer = observer
     }
 

@@ -238,9 +238,11 @@ enum AppEnvironment {
 
     private static func makeModel() -> BrowserModel {
         let lastSpaceID = isTestRun ? nil : UserDefaults.standard.string(forKey: lastSpaceKey).flatMap(UUID.init(uuidString:))
-        let chromium = ChromiumSupport.makeEngine()
+        // Test runs save into a temporary folder, on either engine, never the person's Downloads.
+        let downloadsFolder = isTestRun ? testDownloadsDirectory : URL.downloadsDirectory
+        let chromium = ChromiumSupport.makeEngine(downloadsFolder: downloadsFolder)
         let pool = if let chromium {
-            WebViewPool(engine: chromium)
+            WebViewPool(engine: chromium, downloads: DownloadManager(directory: downloadsFolder))
         } else if isTestRun {
             WebViewPool(
                 makeDataStore: { _ in .nonPersistent() },
