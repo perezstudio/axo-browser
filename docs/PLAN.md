@@ -371,7 +371,12 @@ Features beyond the milestones above, each a GitHub issue with its approach and 
   - [ ] [#97](https://github.com/perezstudio/axo-browser/issues/97) Swipe back and forward with two fingers on Chromium pages.
   - [ ] [#98](https://github.com/perezstudio/axo-browser/issues/98) Ask before links open other apps (`mailto:`, `zoommtg:`, and the rest).
   - [ ] [#99](https://github.com/perezstudio/axo-browser/issues/99) Now Playing and media keys for tabs playing media.
-  - [ ] [#100](https://github.com/perezstudio/axo-browser/issues/100) Freeze background tabs before hibernating them.
+  - [ ] [#117](https://github.com/perezstudio/axo-browser/issues/117) Throttle page resizes during sidebar, split, and window resizing.
+- Memory and energy:
+  - [ ] [#100](https://github.com/perezstudio/axo-browser/issues/100) A tab lifecycle policy: freeze, hibernate, and protect tabs by rule, including memory pressure.
+  - [ ] [#115](https://github.com/perezstudio/axo-browser/issues/115) Time asleep doesn't count toward hibernation, and no burst of hibernations after waking.
+  - [ ] [#42](https://github.com/perezstudio/axo-browser/issues/42) Snapshot pages when they're hidden rather than when they hibernate (with Chromium's snapshots).
+  - [ ] [#116](https://github.com/perezstudio/axo-browser/issues/116) A Tab Lifecycle window in the developer tools (after #100).
 - Tabs and navigation:
   - [ ] [#101](https://github.com/perezstudio/axo-browser/issues/101) ⌃⇥ switches to recently used tabs.
   - [ ] [#112](https://github.com/perezstudio/axo-browser/issues/112) History menus on Back and Forward.
