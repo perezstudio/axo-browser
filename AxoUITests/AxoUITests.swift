@@ -893,6 +893,9 @@ final class AxoUITests: XCTestCase {
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["summarizeButton"].isEnabled, "Nothing to summarize without a tab")
+        let window = app.windows.firstMatch
+        XCTAssertGreaterThan(app.buttons["summarizeButton"].frame.minX, window.frame.midX,
+                             "The page's tools sit at the toolbar's trailing edge")
 
         app.typeKey("t", modifierFlags: .command)
         app.typeText("data:text/html,<title>Story</title><p>Axolotls regrow limbs.</p>\n")

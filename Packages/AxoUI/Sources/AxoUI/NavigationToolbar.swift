@@ -3,8 +3,8 @@ import SwiftUI
 
 // Mac only for now; iPhone and iPad have their own chrome.
 #if os(macOS)
-/// The page column's toolbar: back, forward, the address field, and reload when the navigation
-/// bar is above the page, and the extension, downloads, and summary buttons.
+/// The page column's toolbar: back, forward, reload, and the address field when the navigation
+/// bar is above the page, and the extension, downloads, and summary buttons at the trailing edge.
 struct NavigationToolbar: ToolbarContent {
     let model: BrowserModel
     let placement: NavigationBarPlacement
@@ -20,23 +20,24 @@ struct NavigationToolbar: ToolbarContent {
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("pageAddressBar")
             }
+            ToolbarItem(placement: .primaryAction) {
+                ReloadButton(model: model)
+            }
         }
-        ToolbarItemGroup(placement: .primaryAction) {
+        // On the Mac, primary actions sit at the leading edge, after back and forward. The
+        // spacer pushes the page's tools (extensions, downloads, summary) to the trailing edge.
+        ToolbarSpacer(.flexible)
+        ToolbarItemGroup {
             ExtensionToolbarButtons(model: model)
         }
         if !model.pool.downloads.items.isEmpty || model.isShowingDownloads {
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItem {
                 DownloadsButton(model: model)
             }
         }
         if model.pageSummarizer != nil {
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItem {
                 SummaryButton(model: model)
-            }
-        }
-        if placement == .page {
-            ToolbarItem(placement: .primaryAction) {
-                ReloadButton(model: model)
             }
         }
     }
