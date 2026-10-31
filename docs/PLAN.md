@@ -389,11 +389,21 @@ Features beyond the milestones above, each a GitHub issue with its approach and 
   - [ ] [#110](https://github.com/perezstudio/axo-browser/issues/110) Site Settings becomes one panel for the current site (after #54 and #96).
   - [ ] [#109](https://github.com/perezstudio/axo-browser/issues/109) Sidebar media player for tabs playing in the background (after #71 and #99).
   - [ ] [#113](https://github.com/perezstudio/axo-browser/issues/113) Capture a page: a region, the visible area, or the whole page.
+  - [ ] [#120](https://github.com/perezstudio/axo-browser/issues/120) Esc in Peek goes to the page first when it's using it; a second press closes Peek.
+- Command bar:
+  - [ ] [#121](https://github.com/perezstudio/axo-browser/issues/121) Rank by typed pages, match quality, recent tabs, and past choices.
+  - [ ] [#122](https://github.com/perezstudio/axo-browser/issues/122) Narrow results while typing instead of starting over.
+  - [ ] [#123](https://github.com/perezstudio/axo-browser/issues/123) Search and run any menu command.
 - Ecosystem integration:
   - [ ] [#105](https://github.com/perezstudio/axo-browser/issues/105) AppleScript support for windows, Spaces, and tabs.
   - [ ] [#106](https://github.com/perezstudio/axo-browser/issues/106) A global shortcut that opens a new mini window from any app.
 - Organization:
   - [ ] [#111](https://github.com/perezstudio/axo-browser/issues/111) Folders that follow a feed (RSS, Atom, JSON Feed).
+  - [ ] [#118](https://github.com/perezstudio/axo-browser/issues/118) Undo and Redo for sidebar and organization changes.
+  - [ ] [#119](https://github.com/perezstudio/axo-browser/issues/119) Database backups, and restoring from them when the database is damaged.
+- Developer practices:
+  - [ ] [#124](https://github.com/perezstudio/axo-browser/issues/124) A debug check that every live page belongs to a tab, favorite, Peek, or mini window.
+  - [ ] [#125](https://github.com/perezstudio/axo-browser/issues/125) Shared accessibility identifiers for the app and its UI tests.
 
 ## Performance budgets
 
