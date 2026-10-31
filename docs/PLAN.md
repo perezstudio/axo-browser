@@ -361,6 +361,35 @@ The remaining work is tracked as GitHub issues under [#65](https://github.com/pe
   - [x] Shared packages build and pass their tests on iOS (AxoPersistence, AxoCore, AxoSync, AxoWeb, and AxoUI's model).
   - [x] First iOS slice (the `AxoiOS` target, AxoUI's `MobileBrowserView`): Spaces, folders, and pinned tabs (synced once iCloud works), open tabs, an address and search bar, back and forward, and hibernation. iPad gets a sidebar like the Mac; iPhone a Space and tab list with a bottom address bar. No extensions, downloads, or developer tools yet.
 
+**Polish and integration backlog (added October 2026)**
+
+Features beyond the milestones above, each a GitHub issue with its approach and when it's done. They come after the Chromium work they depend on and aren't ordered among themselves yet. Each issue still has open decisions, defaults, and engine details to settle before work starts (written in the issue).
+
+- Pages (engine work, also tracked under [#65](https://github.com/perezstudio/axo-browser/issues/65)):
+  - [ ] [#95](https://github.com/perezstudio/axo-browser/issues/95) Show a link's URL when hovering it.
+  - [ ] [#96](https://github.com/perezstudio/axo-browser/issues/96) Connection security indicator and certificate details.
+  - [ ] [#97](https://github.com/perezstudio/axo-browser/issues/97) Swipe back and forward with two fingers on Chromium pages.
+  - [ ] [#98](https://github.com/perezstudio/axo-browser/issues/98) Ask before links open other apps (`mailto:`, `zoommtg:`, and the rest).
+  - [ ] [#99](https://github.com/perezstudio/axo-browser/issues/99) Now Playing and media keys for tabs playing media.
+  - [ ] [#100](https://github.com/perezstudio/axo-browser/issues/100) Freeze background tabs before hibernating them.
+- Tabs and navigation:
+  - [ ] [#101](https://github.com/perezstudio/axo-browser/issues/101) ⌃⇥ switches to recently used tabs.
+  - [ ] [#112](https://github.com/perezstudio/axo-browser/issues/112) History menus on Back and Forward.
+  - [ ] [#102](https://github.com/perezstudio/axo-browser/issues/102) Unread badges on favorites and pinned tabs, from page titles.
+  - [ ] [#108](https://github.com/perezstudio/axo-browser/issues/108) Short tab titles, made on device.
+  - [ ] [#104](https://github.com/perezstudio/axo-browser/issues/104) Close meeting launch pages after they open the app (after #98).
+- Window and feedback:
+  - [ ] [#103](https://github.com/perezstudio/axo-browser/issues/103) Brief on-screen notices for actions, with Undo.
+  - [ ] [#107](https://github.com/perezstudio/axo-browser/issues/107) Tint the toolbar from the page's color.
+  - [ ] [#110](https://github.com/perezstudio/axo-browser/issues/110) Site Settings becomes one panel for the current site (after #54 and #96).
+  - [ ] [#109](https://github.com/perezstudio/axo-browser/issues/109) Sidebar media player for tabs playing in the background (after #71 and #99).
+  - [ ] [#113](https://github.com/perezstudio/axo-browser/issues/113) Capture a page: a region, the visible area, or the whole page.
+- Ecosystem integration:
+  - [ ] [#105](https://github.com/perezstudio/axo-browser/issues/105) AppleScript support for windows, Spaces, and tabs.
+  - [ ] [#106](https://github.com/perezstudio/axo-browser/issues/106) A global shortcut that opens a new mini window from any app.
+- Organization:
+  - [ ] [#111](https://github.com/perezstudio/axo-browser/issues/111) Folders that follow a feed (RSS, Atom, JSON Feed).
+
 ## Performance budgets
 
 Track five metrics every release and compare against Safari, Chrome, and Arc; publish them once they're competitive.
