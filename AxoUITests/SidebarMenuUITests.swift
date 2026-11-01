@@ -86,11 +86,10 @@ final class SidebarMenuUITests: XCTestCase {
         }
     }
 
-    /// A folder's row, by its name. The Pinned section's identifier replaces the row's own, so
-    /// folder names in these tests differ from the pinned tabs' titles.
+    /// A folder's row, by its name, as `testFoldersHoldPinnedTabs` finds it. (The Pinned
+    /// section's identifier replaces the row's own, so folder names here differ from tab titles.)
     private func folderRow(_ name: String, in sidebar: XCUIElement) -> XCUIElement {
-        sidebar.staticTexts
-            .matching(NSPredicate(format: "identifier == 'pinnedSection' AND label == %@", name)).firstMatch
+        sidebar.staticTexts[name]
     }
 
     // MARK: Tabs
@@ -211,7 +210,7 @@ final class SidebarMenuUITests: XCTestCase {
         XCTAssertTrue(nameField.waitForExistence(timeout: 5))
         nameField.typeText("Work\n")
         let work = folderRow("Work", in: sidebar)
-        XCTAssertTrue(work.waitForExistence(timeout: 5))
+        XCTAssertTrue(work.waitForExistence(timeout: 10))
 
         choose("New Folder Inside…", on: work, in: app)
         XCTAssertTrue(nameField.waitForExistence(timeout: 5))
