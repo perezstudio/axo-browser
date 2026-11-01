@@ -107,6 +107,20 @@ struct PinningAndArchiveModelTests {
         #expect(model.pinnedTabs.first?.hasLeftHome == false)
     }
 
+    @Test func goingToThePinnedPageLoadsTheHomePageAgain() async throws {
+        let tab = try await open(["home"])[0]
+        await model.setPinned(true, tabID: tab.id)
+        pool.load(try page("elsewhere"), in: tab.id)
+        try await waitUntil { model.selectedPage?.title == "elsewhere" && model.pinnedTabs.first?.hasLeftHome == true }
+
+        await model.goToPinnedHome(tab.id)
+
+        #expect(model.pinnedTabs.first?.url == tab.url)
+        #expect(model.pinnedTabs.first?.hasLeftHome == false)
+        try await waitUntil { model.selectedPage?.title == "home" && model.selectedPage?.isLoading == false }
+        #expect(model.selectedTabID == tab.id)
+    }
+
     @Test func idleUnpinnedTabsArchiveButTheSelectedAndPinnedOnesStay() async throws {
         let tabs = try await open(["idle", "pinned", "selected"])
         await model.setPinned(true, tabID: tabs[1].id)

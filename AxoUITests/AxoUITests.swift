@@ -52,7 +52,7 @@ final class AxoUITests: XCTestCase {
     }
 
     @MainActor
-    private static func makeApp() -> XCUIApplication {
+    static func makeApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["AXO_UI_TESTING"] = "1"
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]

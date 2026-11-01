@@ -80,6 +80,32 @@ struct FavoritesModelTests {
         #expect(model.pool.liveWebView(for: id) === webView)
     }
 
+    @Test func theShownPageBecomesTheFavoritesHome() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "AxoFavoriteTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        func page(_ name: String) throws -> URL {
+            let url = directory.appending(path: "\(name).html")
+            try "<title>\(name)</title>".write(to: url, atomically: true, encoding: .utf8)
+            return url
+        }
+        await model.openTab(url: try page("inbox"))
+        let id = try #require(model.selectedTabID)
+        await model.addToFavorites(id)
+        let profileID = try #require(model.space).profileID
+        let elsewhere = try page("archive")
+        model.pool.load(elsewhere, in: id)
+        try await waitUntil { model.pool.state(for: id)?.title == "archive" && model.pool.state(for: id)?.isLoading == false }
+
+        await model.setFavoriteHome(id)
+
+        let saved = try #require(try await store.favorites.favorites(for: profileID).first)
+        #expect(saved.id == id)
+        #expect(saved.url == elsewhere)
+        #expect(saved.title == "archive")
+    }
+
     @Test func favoritesReorderAndOpenByNumber() async throws {
         let profileID = try #require(model.space).profileID
         let a = try await store.favorites.add(url: URL(string: "http://127.0.0.1:9/a")!, profileID: profileID)
