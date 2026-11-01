@@ -3,8 +3,8 @@ import SwiftUI
 
 // Mac only for now; iPhone and iPad have their own chrome.
 #if os(macOS)
-/// The page column's toolbar: back, forward, the address field, and reload when the navigation
-/// bar is above the page, and the extension, downloads, and summary buttons.
+/// The page column's toolbar: back, forward, reload, and the address field when the navigation
+/// bar is above the page, and the extension, downloads, and summary buttons at the trailing edge.
 struct NavigationToolbar: ToolbarContent {
     let model: BrowserModel
     let placement: NavigationBarPlacement
@@ -13,6 +13,7 @@ struct NavigationToolbar: ToolbarContent {
         if placement == .page {
             ToolbarItemGroup(placement: .navigation) {
                 BackForwardButtons(model: model)
+                ReloadButton(model: model)
             }
             ToolbarItem(placement: .principal) {
                 AddressBar(model: model)
@@ -21,22 +22,20 @@ struct NavigationToolbar: ToolbarContent {
                     .accessibilityIdentifier("pageAddressBar")
             }
         }
-        ToolbarItemGroup(placement: .primaryAction) {
+        // The spacer pushes the page's tools (extensions, downloads, summary) to the trailing
+        // edge; without it, they sit at the leading edge when there's no address field in the middle.
+        ToolbarSpacer(.flexible)
+        ToolbarItemGroup {
             ExtensionToolbarButtons(model: model)
         }
         if !model.pool.downloads.items.isEmpty || model.isShowingDownloads {
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItem {
                 DownloadsButton(model: model)
             }
         }
         if model.pageSummarizer != nil {
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItem {
                 SummaryButton(model: model)
-            }
-        }
-        if placement == .page {
-            ToolbarItem(placement: .primaryAction) {
-                ReloadButton(model: model)
             }
         }
     }
