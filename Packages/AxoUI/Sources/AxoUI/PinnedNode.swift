@@ -59,11 +59,15 @@ public enum PinnedNode: Identifiable, Hashable {
         return nil
     }
 
-    /// Every folder in the tree with its depth, in display order, for "Move to Folder" menus.
-    static func flattenedFolders(_ tree: [PinnedNode], depth: Int = 0) -> [(folder: Folder, depth: Int)] {
-        tree.flatMap { node -> [(folder: Folder, depth: Int)] in
+    /// Every folder in the tree with its depth and its path from the top level ("Work › Drafts"),
+    /// in display order, for "Move to Folder" menus. The path is the menu item's title, because
+    /// menus don't carry accessibility labels: VoiceOver reads what's on screen.
+    static func flattenedFolders(_ tree: [PinnedNode], parents: [String] = []) -> [(folder: Folder, depth: Int, path: String)] {
+        tree.flatMap { node -> [(folder: Folder, depth: Int, path: String)] in
             guard case .folder(let folder, let children) = node else { return [] }
-            return [(folder, depth)] + flattenedFolders(children, depth: depth + 1)
+            let names = parents + [folder.name]
+            return [(folder, parents.count, names.joined(separator: " › "))]
+                + flattenedFolders(children, parents: names)
         }
     }
 

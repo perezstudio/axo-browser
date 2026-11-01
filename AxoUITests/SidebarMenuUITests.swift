@@ -94,7 +94,7 @@ final class SidebarMenuUITests: XCTestCase {
     }
 
     /// Opens `element`'s Move to Folder submenu and returns its item titled `title` (a nested
-    /// folder's title is indented with four spaces per level).
+    /// folder's title is its path, such as "Work › Drafts").
     @MainActor
     private func moveToFolderItem(_ title: String, on element: XCUIElement, in app: XCUIApplication) -> XCUIElement {
         element.rightClick()
@@ -344,11 +344,11 @@ final class SidebarMenuUITests: XCTestCase {
         // A folder can't move into itself or its subfolders.
         let intoItself = moveToFolderItem("Work", on: work, in: app)
         XCTAssertFalse(intoItself.isEnabled)
-        XCTAssertFalse(app.windows.firstMatch.menuItems.matching(NSPredicate(format: "title == '    Drafts'")).firstMatch.isEnabled)
+        XCTAssertFalse(app.windows.firstMatch.menuItems.matching(NSPredicate(format: "title == 'Work › Drafts'")).firstMatch.isEnabled)
         closeMenus(in: app)
 
-        // A nested folder is indented under its parent.
-        moveToFolderItem("    Drafts", on: sidebar.staticTexts["Docs"], in: app).click()
+        // A nested folder's title names its parent, for VoiceOver too (menus have no labels).
+        moveToFolderItem("Work › Drafts", on: sidebar.staticTexts["Docs"], in: app).click()
         XCTAssertTrue(sidebar.staticTexts["Pinned"].waitForExistence(timeout: 5), "Moving into a folder pins the tab")
         expectation(for: NSPredicate(format: "value == '1 item'"), evaluatedWith: drafts)
         waitForExpectations(timeout: 5)
