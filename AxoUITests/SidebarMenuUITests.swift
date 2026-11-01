@@ -93,17 +93,17 @@ final class SidebarMenuUITests: XCTestCase {
         XCTFail("\(title) stayed \(lastSeen ? "enabled" : "disabled"). \(message)", line: line)
     }
 
-    /// Opens `element`'s Move to Folder submenu and returns its item whose accessibility label
-    /// is `label` (a folder's name, plus its parent's for a nested folder).
+    /// Opens `element`'s Move to Folder submenu and returns its item titled `title` (a nested
+    /// folder's title is indented with four spaces per level).
     @MainActor
-    private func moveToFolderItem(_ label: String, on element: XCUIElement, in app: XCUIApplication) -> XCUIElement {
+    private func moveToFolderItem(_ title: String, on element: XCUIElement, in app: XCUIApplication) -> XCUIElement {
         element.rightClick()
         let menu = app.windows.firstMatch
         let move = menu.menuItems["Move to Folder"]
         XCTAssertTrue(move.waitForExistence(timeout: 5))
         move.hover()
-        let item = menu.menuItems.matching(NSPredicate(format: "label == %@", label)).firstMatch
-        XCTAssertTrue(item.waitForExistence(timeout: 5), "No \(label) in Move to Folder")
+        let item = menu.menuItems.matching(NSPredicate(format: "title == %@", title)).firstMatch
+        XCTAssertTrue(item.waitForExistence(timeout: 5), "No \(title) in Move to Folder")
         return item
     }
 
@@ -273,7 +273,7 @@ final class SidebarMenuUITests: XCTestCase {
 
         choose("Pin Tab", on: row, in: app)
         XCTAssertTrue(sidebar.staticTexts["Pinned"].waitForExistence(timeout: 5))
-        XCTAssertTrue(row.exists, "The split stays together")
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "The split stays together")
         XCTAssertEqual(tabRows(in: sidebar).sorted(), ["Mail", "News"], "Both panes are pinned")
 
         let newFolder = moveToFolderItem("New Folder…", on: row, in: app)
@@ -285,7 +285,7 @@ final class SidebarMenuUITests: XCTestCase {
         XCTAssertTrue(box.waitForExistence(timeout: 5))
         expectation(for: NSPredicate(format: "value == '1 item'"), evaluatedWith: box)
         waitForExpectations(timeout: 5)
-        XCTAssertTrue(row.exists)
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
 
         moveToFolderItem("Pinned (No Folder)", on: row, in: app).click()
         expectation(for: NSPredicate(format: "value == '0 items'"), evaluatedWith: box)
@@ -295,7 +295,7 @@ final class SidebarMenuUITests: XCTestCase {
 
         choose("Unpin Tab", on: row, in: app)
         XCTAssertTrue(sidebar.staticTexts["Pinned"].waitForNonExistence(timeout: 5))
-        XCTAssertTrue(row.exists, "The split stays together")
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "The split stays together")
         XCTAssertEqual(tabRows(in: sidebar).sorted(), ["Mail", "News"])
 
         choose("Add to Favorites", on: row, in: app)
@@ -343,11 +343,11 @@ final class SidebarMenuUITests: XCTestCase {
         // A folder can't move into itself or its subfolders.
         let intoItself = moveToFolderItem("Work", on: work, in: app)
         XCTAssertFalse(intoItself.isEnabled)
-        XCTAssertFalse(app.windows.firstMatch.menuItems.matching(NSPredicate(format: "label == 'Drafts, inside Work'")).firstMatch.isEnabled)
+        XCTAssertFalse(app.windows.firstMatch.menuItems.matching(NSPredicate(format: "title == '    Drafts'")).firstMatch.isEnabled)
         closeMenus(in: app)
 
-        // VoiceOver names a nested folder's parent in Move to Folder.
-        moveToFolderItem("Drafts, inside Work", on: sidebar.staticTexts["Docs"], in: app).click()
+        // A nested folder is indented under its parent.
+        moveToFolderItem("    Drafts", on: sidebar.staticTexts["Docs"], in: app).click()
         XCTAssertTrue(sidebar.staticTexts["Pinned"].waitForExistence(timeout: 5), "Moving into a folder pins the tab")
         expectation(for: NSPredicate(format: "value == '1 item'"), evaluatedWith: drafts)
         waitForExpectations(timeout: 5)
