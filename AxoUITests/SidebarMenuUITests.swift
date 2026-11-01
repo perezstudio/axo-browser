@@ -78,6 +78,46 @@ final class SidebarMenuUITests: XCTestCase {
         return enabled
     }
 
+    /// Waits until `title` in `element`'s context menu is `enabled`, opening the menu again
+    /// each time: an action runs after its menu closes, so a menu opened at once can still show
+    /// the state from before it.
+    @MainActor
+    private func expectMenuItem(_ title: String, on element: XCUIElement, enabled: Bool, in app: XCUIApplication,
+                                _ message: String = "", line: UInt = #line) {
+        let deadline = Date.now.addingTimeInterval(10)
+        var lastSeen = !enabled
+        repeat {
+            lastSeen = isEnabled(title, on: element, in: app)
+            if lastSeen == enabled { return }
+        } while Date.now < deadline
+        XCTFail("\(title) stayed \(lastSeen ? "enabled" : "disabled"). \(message)", line: line)
+    }
+
+    /// Opens `element`'s Move to Folder submenu and returns its item whose accessibility label
+    /// is `label` (a folder's name, plus its parent's for a nested folder).
+    @MainActor
+    private func moveToFolderItem(_ label: String, on element: XCUIElement, in app: XCUIApplication) -> XCUIElement {
+        element.rightClick()
+        let menu = app.windows.firstMatch
+        let move = menu.menuItems["Move to Folder"]
+        XCTAssertTrue(move.waitForExistence(timeout: 5))
+        move.hover()
+        let item = menu.menuItems.matching(NSPredicate(format: "label == %@", label)).firstMatch
+        XCTAssertTrue(item.waitForExistence(timeout: 5), "No \(label) in Move to Folder")
+        return item
+    }
+
+    /// Closes an open context menu and its submenus, waiting until they're gone.
+    @MainActor
+    private func closeMenus(in app: XCUIApplication) {
+        let menu = app.windows.firstMatch.menus.firstMatch
+        for _ in 0..<3 where menu.exists {
+            app.typeKey(.escape, modifierFlags: [])
+            _ = menu.waitForNonExistence(timeout: 2)
+        }
+        XCTAssertFalse(menu.exists, "The menu didn't close")
+    }
+
     /// The unpinned tabs' titles, in sidebar order.
     private func tabRows(in sidebar: XCUIElement) -> [String] {
         sidebar.staticTexts.matching(identifier: "tabRow").allElementsBoundByIndex.map { row in
@@ -154,11 +194,8 @@ final class SidebarMenuUITests: XCTestCase {
         browse(to: "Later", in: app)
         XCTAssertTrue(sidebar.staticTexts["Later"].waitForExistence(timeout: 5))
         choose("Pin This Page Instead", on: sidebar.staticTexts["Later"], in: app)
-        let goHome = menuItem("Go to Pinned Page", on: sidebar.staticTexts["Later"], in: app)
-        expectation(for: NSPredicate(format: "isEnabled == false"), evaluatedWith: goHome)
-        waitForExpectations(timeout: 5)
-        app.typeKey(.escape, modifierFlags: [])
-        XCTAssertTrue(goHome.waitForNonExistence(timeout: 5))
+        expectMenuItem("Go to Pinned Page", on: sidebar.staticTexts["Later"], enabled: false, in: app,
+                       "This page is the pinned page now")
 
         choose("Unload Tab", on: sidebar.staticTexts["Later"], in: app)
         XCTAssertTrue(app.descendants(matching: .any)["emptyState"].waitForExistence(timeout: 5),
@@ -171,6 +208,37 @@ final class SidebarMenuUITests: XCTestCase {
         XCTAssertEqual(tabRows(in: sidebar), ["Later"])
     }
 
+    /// Makes a split of `first` and `second` (selected) with `first`'s Add to Split View, and
+    /// returns its sidebar row.
+    @MainActor
+    private func makeSplit(_ first: String, _ second: String, in app: XCUIApplication, sidebar: XCUIElement) -> XCUIElement {
+        sidebar.staticTexts[second].click()
+        expectSelected(second, in: app)
+        choose("Add to Split View", on: sidebar.staticTexts[first], in: app)
+        XCTAssertTrue(app.descendants(matching: .any)["splitView"].waitForExistence(timeout: 10))
+        // By its spoken label: a pinned row takes the Pinned section's identifier.
+        let row = sidebar.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == 'splitRow' OR label BEGINSWITH 'Split view:'")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        return row
+    }
+
+    /// Waits until the split's two panes sit side by side (`true`) or stacked.
+    @MainActor
+    private func expectPanes(sideBySide: Bool, in app: XCUIApplication) {
+        let panes = app.descendants(matching: .any).matching(identifier: "splitPane")
+        let deadline = Date.now.addingTimeInterval(10)
+        while Date.now < deadline {
+            let frames = panes.allElementsBoundByIndex.map(\.frame)
+            if frames.count == 2 {
+                let apartHorizontally = abs(frames[0].midX - frames[1].midX) > abs(frames[0].midY - frames[1].midY)
+                if apartHorizontally == sideBySide { return }
+            }
+            _ = panes.firstMatch.waitForNonExistence(timeout: 0.5)
+        }
+        XCTFail("The panes aren't \(sideBySide ? "side by side" : "stacked")")
+    }
+
     /// Add to Split View from a tab's menu, then the split row's Stack Panes, Show Panes Side by
     /// Side, and Separate Split View.
     @MainActor
@@ -179,28 +247,73 @@ final class SidebarMenuUITests: XCTestCase {
         for title in ["Notes", "Docs"] {
             openTab(title, in: app, sidebar: sidebar)
         }
-
-        choose("Add to Split View", on: sidebar.staticTexts["Notes"], in: app)
-        let splitView = app.descendants(matching: .any)["splitView"]
-        XCTAssertTrue(splitView.waitForExistence(timeout: 10))
-        let row = sidebar.descendants(matching: .any).matching(identifier: "splitRow").firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        let row = makeSplit("Notes", "Docs", in: app, sidebar: sidebar)
+        expectPanes(sideBySide: true, in: app)
 
         choose("Stack Panes", on: row, in: app)
+        expectPanes(sideBySide: false, in: app)
         choose("Show Panes Side by Side", on: row, in: app)
-        XCTAssertTrue(menuItem("Stack Panes", on: row, in: app).exists, "Back side by side")
-        app.typeKey(.escape, modifierFlags: [])
-        XCTAssertTrue(app.windows.firstMatch.menuItems["Stack Panes"].waitForNonExistence(timeout: 5))
+        expectPanes(sideBySide: true, in: app)
 
         choose("Separate Split View", on: row, in: app)
-        XCTAssertTrue(splitView.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["splitView"].waitForNonExistence(timeout: 5))
         XCTAssertEqual(tabRows(in: sidebar).sorted(), ["Docs", "Notes"])
+    }
+
+    /// The tab items on a split's row act on the split: Pin Tab and Unpin Tab pin it whole, Move
+    /// to Folder › New Folder… moves it into a new folder and Pinned (No Folder) back out, and
+    /// Add to Favorites and Close Tab take the row's tab out, which ends a two-pane split.
+    @MainActor
+    func testSplitRowTabItems() throws {
+        let (app, sidebar) = launchApp()
+        for title in ["Notes", "Docs", "Mail", "News"] {
+            openTab(title, in: app, sidebar: sidebar)
+        }
+        var row = makeSplit("Notes", "Docs", in: app, sidebar: sidebar)
+
+        choose("Pin Tab", on: row, in: app)
+        XCTAssertTrue(sidebar.staticTexts["Pinned"].waitForExistence(timeout: 5))
+        XCTAssertTrue(row.exists, "The split stays together")
+        XCTAssertEqual(tabRows(in: sidebar).sorted(), ["Mail", "News"], "Both panes are pinned")
+
+        let newFolder = moveToFolderItem("New Folder…", on: row, in: app)
+        newFolder.click()
+        let nameField = app.textFields["nameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.typeText("Box\n")
+        let box = folderRow("Box", in: sidebar)
+        XCTAssertTrue(box.waitForExistence(timeout: 5))
+        expectation(for: NSPredicate(format: "value == '1 item'"), evaluatedWith: box)
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(row.exists)
+
+        moveToFolderItem("Pinned (No Folder)", on: row, in: app).click()
+        expectation(for: NSPredicate(format: "value == '0 items'"), evaluatedWith: box)
+        waitForExpectations(timeout: 5)
+        choose("Delete Folder", on: box, in: app)
+        XCTAssertTrue(box.waitForNonExistence(timeout: 5))
+
+        choose("Unpin Tab", on: row, in: app)
+        XCTAssertTrue(sidebar.staticTexts["Pinned"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(row.exists, "The split stays together")
+        XCTAssertEqual(tabRows(in: sidebar).sorted(), ["Mail", "News"])
+
+        choose("Add to Favorites", on: row, in: app)
+        XCTAssertTrue(app.buttons["favoriteTile"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["splitView"].waitForNonExistence(timeout: 5))
+        XCTAssertEqual(tabRows(in: sidebar).count, 3, "The other pane is a tab again")
+
+        row = makeSplit("Mail", "News", in: app, sidebar: sidebar)
+        choose("Close Tab", on: row, in: app)
+        XCTAssertTrue(app.descendants(matching: .any)["splitView"].waitForNonExistence(timeout: 5))
+        XCTAssertEqual(tabRows(in: sidebar).count, 2, "One pane closed, the other is a tab again")
     }
 
     // MARK: Folders
 
-    /// A folder's menu: New Folder Inside…, Rename…, and Delete Folder; and a tab's Move to
-    /// Folder into a nested folder and back out with Pinned (No Folder).
+    /// A folder's menu: New Folder Inside…, Rename…, Move to Folder (never into itself or its
+    /// subfolders), and Delete Folder; and a tab's Move to Folder into a nested folder and back
+    /// out with Pinned (No Folder).
     @MainActor
     func testFolderMenu() throws {
         let (app, sidebar) = launchApp()
@@ -227,25 +340,28 @@ final class SidebarMenuUITests: XCTestCase {
         XCTAssertTrue(drafts.waitForExistence(timeout: 5))
         XCTAssertFalse(folderRow("Inner", in: sidebar).exists)
 
-        // Nested folders are indented in the menu, and VoiceOver names their parent.
-        sidebar.staticTexts["Docs"].rightClick()
-        let menu = app.windows.firstMatch
-        menu.menuItems["Move to Folder"].hover()
-        let nested = menu.menuItems.matching(NSPredicate(format: "label == 'Drafts, inside Work' OR title CONTAINS 'Drafts'")).firstMatch
-        XCTAssertTrue(nested.waitForExistence(timeout: 5))
-        nested.click()
+        // A folder can't move into itself or its subfolders.
+        let intoItself = moveToFolderItem("Work", on: work, in: app)
+        XCTAssertFalse(intoItself.isEnabled)
+        XCTAssertFalse(app.windows.firstMatch.menuItems.matching(NSPredicate(format: "label == 'Drafts, inside Work'")).firstMatch.isEnabled)
+        closeMenus(in: app)
+
+        // VoiceOver names a nested folder's parent in Move to Folder.
+        moveToFolderItem("Drafts, inside Work", on: sidebar.staticTexts["Docs"], in: app).click()
         XCTAssertTrue(sidebar.staticTexts["Pinned"].waitForExistence(timeout: 5), "Moving into a folder pins the tab")
         expectation(for: NSPredicate(format: "value == '1 item'"), evaluatedWith: drafts)
         waitForExpectations(timeout: 5)
 
-        sidebar.staticTexts["Docs"].rightClick()
-        menu.menuItems["Move to Folder"].hover()
-        let topLevel = menu.menuItems["Pinned (No Folder)"]
-        XCTAssertTrue(topLevel.waitForExistence(timeout: 5))
-        topLevel.click()
+        moveToFolderItem("Pinned (No Folder)", on: sidebar.staticTexts["Docs"], in: app).click()
         expectation(for: NSPredicate(format: "value == '0 items'"), evaluatedWith: drafts)
         waitForExpectations(timeout: 5)
         XCTAssertTrue(sidebar.staticTexts["Docs"].exists, "It stays pinned, at the top level")
+
+        // A folder's own Move to Folder takes it out of its parent.
+        moveToFolderItem("Pinned (No Folder)", on: drafts, in: app).click()
+        expectation(for: NSPredicate(format: "value == '0 items'"), evaluatedWith: work)
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(drafts.exists)
 
         choose("Delete Folder", on: drafts, in: app)
         XCTAssertTrue(drafts.waitForNonExistence(timeout: 5))
@@ -340,6 +456,17 @@ final class SidebarMenuUITests: XCTestCase {
         app.buttons["createSpaceButton"].click()
         XCTAssertTrue(sidebar.staticTexts["Work"].waitForExistence(timeout: 5))
         XCTAssertEqual(dots.count, 2)
+
+        // Settings › Profiles lists the new Space's own profile, named after it.
+        app.typeKey(",", modifierFlags: .command)
+        let profiles = app.toolbars.buttons["Profiles"]
+        XCTAssertTrue(profiles.waitForExistence(timeout: 5))
+        profiles.click()
+        let list = app.outlines["profileList"].exists ? app.outlines["profileList"] : app.tables["profileList"]
+        XCTAssertTrue(list.staticTexts["Work"].waitForExistence(timeout: 5), "The Space got its own profile")
+        XCTAssertTrue(list.staticTexts["Default"].exists)
+        app.typeKey("w", modifierFlags: .command)
+        XCTAssertTrue(profiles.waitForNonExistence(timeout: 5))
 
         choose("Delete Space…", on: dots.element(boundBy: 1), in: app)
         let confirm = app.sheets.buttons["Delete Space"].firstMatch
