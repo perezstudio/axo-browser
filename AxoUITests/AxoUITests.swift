@@ -299,6 +299,10 @@ final class AxoUITests: XCTestCase {
         XCTAssertEqual(app.textFields.matching(identifier: "addressField").count, 1, "The sidebar no longer has one")
         XCTAssertGreaterThan(address.frame.minX, sidebar.frame.maxX - 1, "It sits in the page's toolbar")
         XCTAssertTrue(app.buttons["backButton"].exists && app.buttons["reloadButton"].exists)
+        XCTAssertLessThan(app.buttons["reloadButton"].frame.maxX, pageBar.frame.minX,
+                          "Reload stays with back and forward, before the address field")
+        XCTAssertGreaterThan(app.buttons["summarizeButton"].frame.minX, pageBar.frame.maxX,
+                             "The page's tools sit after the address field, at the trailing edge")
 
         app.typeKey("l", modifierFlags: .command)
         app.typeText("data:text/html,<title>Above</title>\n")
@@ -893,20 +897,24 @@ final class AxoUITests: XCTestCase {
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["summarizeButton"].isEnabled, "Nothing to summarize without a tab")
+        let window = app.windows.firstMatch
+        XCTAssertGreaterThan(app.buttons["summarizeButton"].frame.minX, window.frame.midX,
+                             "The page's tools sit at the toolbar's trailing edge")
 
         app.typeKey("t", modifierFlags: .command)
         app.typeText("data:text/html,<title>Story</title><p>Axolotls regrow limbs.</p>\n")
         XCTAssertTrue(sidebar.staticTexts["Story"].waitForExistence(timeout: 10))
 
-        app.menuBars.menuBarItems["View"].click()
-        XCTAssertTrue(app.menuBars.menuItems["Translate Page"].isEnabled)
-        XCTAssertTrue(app.menuBars.menuItems["Summarize Page"].isEnabled)
-        app.typeKey(.escape, modifierFlags: [])
-
         app.buttons["summarizeButton"].click()
         let summary = app.staticTexts["summaryText"]
         XCTAssertTrue(summary.waitForExistence(timeout: 10))
         XCTAssertEqual(summary.value as? String, "• Story: Axolotls regrow limbs.")
+
+        // Checked after the button: a click right after Esc closes the menu was sometimes lost.
+        app.menuBars.menuBarItems["View"].click()
+        XCTAssertTrue(app.menuBars.menuItems["Translate Page"].isEnabled)
+        XCTAssertTrue(app.menuBars.menuItems["Summarize Page"].isEnabled)
+        app.typeKey(.escape, modifierFlags: [])
     }
 
     /// Import from Another Browser reads Arc's Spaces and Chrome's bookmarks from fixture files
