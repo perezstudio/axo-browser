@@ -13,6 +13,7 @@ struct NavigationToolbar: ToolbarContent {
         if placement == .page {
             ToolbarItemGroup(placement: .navigation) {
                 BackForwardButtons(model: model)
+                ReloadButton(model: model)
             }
             ToolbarItem(placement: .principal) {
                 AddressBar(model: model)
@@ -20,12 +21,9 @@ struct NavigationToolbar: ToolbarContent {
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("pageAddressBar")
             }
-            ToolbarItem(placement: .primaryAction) {
-                ReloadButton(model: model)
-            }
         }
-        // On the Mac, primary actions sit at the leading edge, after back and forward. The
-        // spacer pushes the page's tools (extensions, downloads, summary) to the trailing edge.
+        // The spacer pushes the page's tools (extensions, downloads, summary) to the trailing
+        // edge; without it, they sit at the leading edge when there's no address field in the middle.
         ToolbarSpacer(.flexible)
         ToolbarItemGroup {
             ExtensionToolbarButtons(model: model)
