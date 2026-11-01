@@ -216,9 +216,10 @@ final class SidebarMenuUITests: XCTestCase {
         expectSelected(second, in: app)
         choose("Add to Split View", on: sidebar.staticTexts[first], in: app)
         XCTAssertTrue(app.descendants(matching: .any)["splitView"].waitForExistence(timeout: 10))
-        // By its spoken label: a pinned row takes the Pinned section's identifier.
-        let row = sidebar.descendants(matching: .any)
-            .matching(NSPredicate(format: "identifier == 'splitRow' OR label BEGINSWITH 'Split view:'")).firstMatch
+        // Pinned, the row takes the Pinned section's identifier and shows its spoken text only
+        // as its value; it's the only pinned row here without a label of its own.
+        let row = sidebar.descendants(matching: .any).matching(NSPredicate(
+            format: "identifier == 'splitRow' OR (identifier == 'pinnedSection' AND label == '')")).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         return row
     }
