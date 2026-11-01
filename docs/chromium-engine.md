@@ -55,7 +55,7 @@ The `AxoChromium` Swift package wraps that API as a `ChromiumEngine` that confor
 
 - **Principal class:** set `NSPrincipalClass` to `AXOApplication`, which the framework provides. Chrome's browser code requires `NSApp` to be Chrome's own application class.
 - **Starting the engine:** call `AXOEngine.runWithConfiguration(_:ready:)` once after launch, from a run-loop callout (`RunLoop.main.perform`), never a main-queue block. Chromium's main loop runs nested inside AppKit's, so SwiftUI keeps owning app launch, but the call only returns when the engine shuts down. `ready` reports when pages can be made.
-- **Quitting:** quitting the app shuts the engine down first; `AXOApplication` handles it. The engine quits the way Chrome's own Quit does, which also ends Chrome's background modes, and it turns off the Chrome features that would run in the background (Omnibox Everywhere and Glic, which Chromium's field trial testing config turns on). Pages and windows asked for after shutdown stay empty. The engine's `scripts/test_quit.sh` checks it.
+- **Quitting:** quitting the app shuts the engine down first; `AXOApplication` handles it. The engine quits the way Chrome's own Quit does, which also ends Chrome's background modes, and it turns off the Chrome features that would run in the background (Omnibox Everywhere, which Chromium's field trial testing config turns on, and Glic, on by default). Pages and windows asked for after shutdown stay empty. The engine's `scripts/test_quit.sh` checks it.
 
 For now the engine is compiled into Chromium's own `Chromium Framework.framework`, which brings Chrome's helper apps and packaging with it. Renaming it to `AxoEngine` and publishing it as a downloadable framework come later, with release packaging.
 
