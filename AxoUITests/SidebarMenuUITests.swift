@@ -86,9 +86,11 @@ final class SidebarMenuUITests: XCTestCase {
         }
     }
 
+    /// A folder's row, by its name and item count. (The Pinned section's identifier replaces
+    /// the row's own.)
     private func folderRow(_ name: String, in sidebar: XCUIElement) -> XCUIElement {
-        sidebar.descendants(matching: .any)
-            .matching(NSPredicate(format: "identifier == 'folderRow' AND label == %@", name)).firstMatch
+        sidebar.staticTexts
+            .matching(NSPredicate(format: "label == %@ AND (value ENDSWITH ' items' OR value == '1 item')", name)).firstMatch
     }
 
     // MARK: Tabs
@@ -136,37 +138,38 @@ final class SidebarMenuUITests: XCTestCase {
     @MainActor
     func testPinnedTabMenu() throws {
         let (app, sidebar) = launchApp()
-        openTab("Home page", in: app, sidebar: sidebar)
-        choose("Pin Tab", on: sidebar.staticTexts["Home page"], in: app)
+        openTab("Start", in: app, sidebar: sidebar)
+        choose("Pin Tab", on: sidebar.staticTexts["Start"], in: app)
         XCTAssertTrue(sidebar.staticTexts["Pinned"].waitForExistence(timeout: 5))
-        XCTAssertFalse(isEnabled("Go to Pinned Page", on: sidebar.staticTexts["Home page"], in: app),
+        XCTAssertFalse(isEnabled("Go to Pinned Page", on: sidebar.staticTexts["Start"], in: app),
                        "It's on its pinned page")
-        XCTAssertFalse(isEnabled("Pin This Page Instead", on: sidebar.staticTexts["Home page"], in: app))
+        XCTAssertFalse(isEnabled("Pin This Page Instead", on: sidebar.staticTexts["Start"], in: app))
 
+        // Titles without spaces: the address field shows them percent-encoded.
         browse(to: "Away", in: app)
         XCTAssertTrue(sidebar.staticTexts["Away"].waitForExistence(timeout: 5))
         choose("Go to Pinned Page", on: sidebar.staticTexts["Away"], in: app)
-        XCTAssertTrue(sidebar.staticTexts["Home page"].waitForExistence(timeout: 10))
-        expectSelected("Home page", in: app)
+        XCTAssertTrue(sidebar.staticTexts["Start"].waitForExistence(timeout: 10))
+        expectSelected("Start", in: app)
 
-        browse(to: "New home", in: app)
-        XCTAssertTrue(sidebar.staticTexts["New home"].waitForExistence(timeout: 5))
-        choose("Pin This Page Instead", on: sidebar.staticTexts["New home"], in: app)
-        let goHome = menuItem("Go to Pinned Page", on: sidebar.staticTexts["New home"], in: app)
+        browse(to: "Later", in: app)
+        XCTAssertTrue(sidebar.staticTexts["Later"].waitForExistence(timeout: 5))
+        choose("Pin This Page Instead", on: sidebar.staticTexts["Later"], in: app)
+        let goHome = menuItem("Go to Pinned Page", on: sidebar.staticTexts["Later"], in: app)
         expectation(for: NSPredicate(format: "isEnabled == false"), evaluatedWith: goHome)
         waitForExpectations(timeout: 5)
         app.typeKey(.escape, modifierFlags: [])
         XCTAssertTrue(goHome.waitForNonExistence(timeout: 5))
 
-        choose("Unload Tab", on: sidebar.staticTexts["New home"], in: app)
+        choose("Unload Tab", on: sidebar.staticTexts["Later"], in: app)
         XCTAssertTrue(app.descendants(matching: .any)["emptyState"].waitForExistence(timeout: 5),
                       "Its page goes away")
-        XCTAssertTrue(sidebar.staticTexts["New home"].exists, "It stays pinned")
+        XCTAssertTrue(sidebar.staticTexts["Later"].exists, "It stays pinned")
         XCTAssertTrue(sidebar.staticTexts["Pinned"].exists)
 
-        choose("Unpin Tab", on: sidebar.staticTexts["New home"], in: app)
+        choose("Unpin Tab", on: sidebar.staticTexts["Later"], in: app)
         XCTAssertTrue(sidebar.staticTexts["Pinned"].waitForNonExistence(timeout: 5))
-        XCTAssertEqual(tabRows(in: sidebar), ["New home"])
+        XCTAssertEqual(tabRows(in: sidebar), ["Later"])
     }
 
     /// Add to Split View from a tab's menu, then the split row's Stack Panes, Show Panes Side by
@@ -332,7 +335,9 @@ final class SidebarMenuUITests: XCTestCase {
         let separate = app.descendants(matching: .any)["separateProfileToggle"]
         XCTAssertTrue(separate.exists)
         separate.click()
-        XCTAssertTrue(app.textFields["Profile name"].waitForExistence(timeout: 5), "It asks for the profile's name")
+        // The profile's name field has only a placeholder (the Space's name).
+        let profileName = app.textFields.matching(NSPredicate(format: "placeholderValue == 'Work' AND identifier != 'spaceNameField'"))
+        XCTAssertTrue(profileName.firstMatch.waitForExistence(timeout: 5), "It asks for the profile's name")
         app.buttons["createSpaceButton"].click()
         XCTAssertTrue(sidebar.staticTexts["Work"].waitForExistence(timeout: 5))
         XCTAssertEqual(dots.count, 2)
