@@ -905,15 +905,16 @@ final class AxoUITests: XCTestCase {
         app.typeText("data:text/html,<title>Story</title><p>Axolotls regrow limbs.</p>\n")
         XCTAssertTrue(sidebar.staticTexts["Story"].waitForExistence(timeout: 10))
 
-        app.menuBars.menuBarItems["View"].click()
-        XCTAssertTrue(app.menuBars.menuItems["Translate Page"].isEnabled)
-        XCTAssertTrue(app.menuBars.menuItems["Summarize Page"].isEnabled)
-        app.typeKey(.escape, modifierFlags: [])
-
         app.buttons["summarizeButton"].click()
         let summary = app.staticTexts["summaryText"]
         XCTAssertTrue(summary.waitForExistence(timeout: 10))
         XCTAssertEqual(summary.value as? String, "• Story: Axolotls regrow limbs.")
+
+        // Checked after the button: a click right after Esc closes the menu was sometimes lost.
+        app.menuBars.menuBarItems["View"].click()
+        XCTAssertTrue(app.menuBars.menuItems["Translate Page"].isEnabled)
+        XCTAssertTrue(app.menuBars.menuItems["Summarize Page"].isEnabled)
+        app.typeKey(.escape, modifierFlags: [])
     }
 
     /// Import from Another Browser reads Arc's Spaces and Chrome's bookmarks from fixture files
