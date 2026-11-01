@@ -86,11 +86,11 @@ final class SidebarMenuUITests: XCTestCase {
         }
     }
 
-    /// A folder's row, by its name and item count. (The Pinned section's identifier replaces
-    /// the row's own.)
+    /// A folder's row, by its name. The Pinned section's identifier replaces the row's own, so
+    /// folder names in these tests differ from the pinned tabs' titles.
     private func folderRow(_ name: String, in sidebar: XCUIElement) -> XCUIElement {
         sidebar.staticTexts
-            .matching(NSPredicate(format: "label == %@ AND (value ENDSWITH ' items' OR value == '1 item')", name)).firstMatch
+            .matching(NSPredicate(format: "identifier == 'pinnedSection' AND label == %@", name)).firstMatch
     }
 
     // MARK: Tabs
