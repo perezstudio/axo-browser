@@ -272,6 +272,24 @@ struct ChromiumExtensionBridgeTests {
         inspected.onLoad?()
         #expect(inspected.inspectCount == 1)
 
+        // An extension that opens its popup itself (1Password): the click opens nothing directly,
+        // and the popup it asks for a moment later is the one inspected.
+        let request = try #require(profile.onExtensionPopupRequest)
+        profile.nextPopup = nil
+        bridge.inspectPopup(extensionID: "onepassword", profileID: profileID, tabID: model.selectedTabID)
+        try await waitUntil { profile.performed.contains { $0.extensionID == "onepassword" } }
+        let ownPopup = FakeExtensionPopup(extensionIdentifier: "onepassword")
+        request(ownPopup)
+        #expect(bridge.popups["onepassword"]?.popover.behavior == .applicationDefined)
+        ownPopup.onLoad?()
+        #expect(ownPopup.inspectCount == 1)
+        // Its next popup, without asking, is an ordinary one.
+        let later = FakeExtensionPopup(extensionIdentifier: "onepassword")
+        request(later)
+        #expect(bridge.popups["onepassword"]?.popover.behavior == .transient)
+        later.onLoad?()
+        #expect(later.inspectCount == 0)
+
         // Side panels offer Inspect Side Panel.
         let open = try #require(profile.onExtensionSidePanelOpen)
         let panel = FakeExtensionSidePanel(extensionIdentifier: "notes", title: "Notes")

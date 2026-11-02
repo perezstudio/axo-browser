@@ -43,6 +43,10 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
     /// copy of the file the prompt described, so changing the file meanwhile changes nothing.
     @ObservationIgnored private var preparedInstalls: [String: (url: URL, isUnpacked: Bool)] = [:]
     @ObservationIgnored private(set) var popups: [String: (popup: ChromiumExtensionPopup, closer: PopoverCloser, popover: NSPopover)] = [:]
+    /// Extensions whose popup is to be inspected when it opens, with when that was asked: those
+    /// that open their popup themselves (`chrome.action.openPopup`, as 1Password does) open it a
+    /// moment after the click, through the engine's popup request.
+    @ObservationIgnored private var pendingInspections: [String: Date] = [:]
 
     init(model: BrowserModel, engine: ChromiumEngine, store: TabStore) {
         self.model = model
@@ -78,7 +82,10 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
             self?.showDevToolsWindow(devTools)
         }
         // Extensions that handle their own clicks (1Password) open their popup themselves.
-        engine.onExtensionPopupRequest = { [weak self] popup, _ in self?.present(popup) }
+        engine.onExtensionPopupRequest = { [weak self] popup, _ in
+            guard let self else { return }
+            present(popup, inspecting: takePendingInspection(popup.extensionID))
+        }
         // Buttons appear once the engine is ready.
         let previous = engine.onStateChange
         engine.onStateChange = { [weak self] state in
@@ -200,10 +207,19 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
     /// inspected popup open: closing the popup would end its DevTools.
     func inspectPopup(extensionID: String, profileID: Profile.ID, tabID: AxoCore.Tab.ID?) {
         let page = page(for: tabID)
+        // An extension that opens its popup itself does so a moment after the click.
+        pendingInspections[extensionID] = Date()
         Task {
             guard let popup = await engine.performExtensionAction(extensionID, profileID: profileID, page: page) else { return }
-            present(popup, inspecting: true)
+            present(popup, inspecting: takePendingInspection(extensionID))
         }
+    }
+
+    /// Whether the extension's popup opening now was asked to be inspected, in the last few
+    /// seconds; forgets the ask.
+    private func takePendingInspection(_ extensionID: String) -> Bool {
+        guard let asked = pendingInspections.removeValue(forKey: extensionID) else { return false }
+        return Date().timeIntervalSince(asked) < 5
     }
 
     func shortcuts(profileID: Profile.ID) -> [ExtensionShortcut] {

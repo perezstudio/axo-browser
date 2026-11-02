@@ -577,7 +577,7 @@ final class ChromiumEngineUITests: XCTestCase {
     }
 
     /// The Extensions window's "Inspect Background Page" opens DevTools for an extension's service
-    /// worker in a window of Axo's own, and its toolbar button's menu inspects its popup (#45).
+    /// worker in a window of Axo's own, and Develop › Inspect Extension Popup inspects its popup (#45).
     @MainActor
     func testExtensionsServiceWorkerAndPopupCanBeInspected() throws {
         let folder = FileManager.default.temporaryDirectory.appending(path: "AxoUITestInspect-\(UUID().uuidString)")
@@ -615,8 +615,13 @@ final class ChromiumEngineUITests: XCTestCase {
         let nothingToInspect = NSPredicate(format: "label CONTAINS 'no background page' OR value CONTAINS 'no background page'")
         XCTAssertFalse(app.descendants(matching: .any).matching(nothingToInspect).firstMatch.exists, "No 'nothing to inspect' message")
 
-        button.rightClick()
-        let inspectPopup = app.windows.firstMatch.menuItems["Inspect Popup"]
+        // Develop › Inspect Extension Popup › the extension (the toolbar button's menu has it too).
+        let develop = app.menuBars.menuBarItems["Develop"]
+        develop.click()
+        let submenu = app.menuBars.menuItems["Inspect Extension Popup"]
+        XCTAssertTrue(submenu.waitForExistence(timeout: 5))
+        submenu.hover()
+        let inspectPopup = submenu.menuItems["Axo Inspected"]
         XCTAssertTrue(inspectPopup.waitForExistence(timeout: 5))
         inspectPopup.click()
         let popupDevTools = app.windows.matching(NSPredicate(format: "title CONTAINS 'popup.html'")).firstMatch

@@ -298,6 +298,7 @@ public struct BrowserCommands: Commands {
             Button("Show JavaScript Console") { model?.showJavaScriptConsole() }
                 .keyboardShortcut("c", modifiers: [.command, .option])
                 .disabled(model?.selectedTabID == nil || model?.developerTools == nil)
+            InspectExtensionPopupMenu(model: model)
         }
         CommandMenu("History") {
             Button("Back") { model?.goBack() }
@@ -307,6 +308,31 @@ public struct BrowserCommands: Commands {
                 .keyboardShortcut("]")
                 .disabled(model?.selectedPage?.canGoForward != true)
         }
+    }
+}
+#endif
+
+#if os(macOS)
+/// Develop › Inspect Extension Popup: each extension in the toolbar, whose popup opens with its
+/// DevTools. The same as "Inspect Popup" in a button's context menu, from the keyboard.
+struct InspectExtensionPopupMenu: View {
+    let model: BrowserModel?
+
+    var body: some View {
+        let toolbar = model?.extensionToolbar
+        let profileID = model?.space?.profileID
+        let items = (toolbar?.canInspectPopups == true ? profileID.map {
+            toolbar?.toolbarItems(profileID: $0, tabID: model?.selectedTabID) ?? []
+        } : nil) ?? []
+        Menu("Inspect Extension Popup") {
+            ForEach(items.filter(\.isEnabled)) { item in
+                Button(item.label) {
+                    guard let toolbar, let profileID else { return }
+                    toolbar.inspectPopup(extensionID: item.id, profileID: profileID, tabID: model?.selectedTabID)
+                }
+            }
+        }
+        .disabled(items.filter(\.isEnabled).isEmpty)
     }
 }
 #endif

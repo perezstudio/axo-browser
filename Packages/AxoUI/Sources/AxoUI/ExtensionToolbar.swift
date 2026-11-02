@@ -26,7 +26,8 @@ public struct ExtensionToolbarItem: Identifiable, Equatable {
     public var badge: String
     /// Whether the button can be clicked.
     public var isEnabled: Bool
-    /// Whether clicking it opens a popup (so the popup can be inspected).
+    /// Whether clicking it opens a popup the button declares. Extensions can also open one
+    /// themselves from the click (`chrome.action.openPopup`), so this isn't the only way to have one.
     public var hasPopup: Bool
 
     /// Creates an item.
@@ -116,7 +117,8 @@ public protocol ExtensionToolbarProviding: AnyObject {
     func performShortcut(_ shortcut: ExtensionShortcut, profileID: Profile.ID, tabID: AxoCore.Tab.ID?)
     /// Whether ``inspectPopup(extensionID:profileID:tabID:)`` works, for the buttons' menus.
     var canInspectPopups: Bool { get }
-    /// Opens a button's popup and its DevTools, keeping the popup open while it's inspected.
+    /// Clicks a button and inspects the popup that opens, its own or one the extension opens
+    /// itself, keeping the popup open while it's inspected.
     func inspectPopup(extensionID: String, profileID: Profile.ID, tabID: AxoCore.Tab.ID?)
 }
 
@@ -152,14 +154,14 @@ struct ExtensionToolbarButtons: View {
                 .accessibilityIdentifier("extensionButton")
                 .background(PopoverAnchor { model.extensionAnchors[item.id] = $0 })
                 .contextMenu {
-                    if item.hasPopup && provider.canInspectPopups {
+                    if item.isEnabled && provider.canInspectPopups {
                         Button("Inspect Popup") {
                             provider.inspectPopup(extensionID: item.id, profileID: profileID, tabID: model.selectedTabID)
                         }
                     }
                 }
                 .accessibilityActions {
-                    if item.hasPopup && provider.canInspectPopups {
+                    if item.isEnabled && provider.canInspectPopups {
                         Button("Inspect Popup") {
                             provider.inspectPopup(extensionID: item.id, profileID: profileID, tabID: model.selectedTabID)
                         }

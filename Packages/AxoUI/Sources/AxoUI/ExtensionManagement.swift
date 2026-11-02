@@ -316,7 +316,7 @@ private struct ExtensionRow: View {
                 // Also in its toolbar button's menu; here it's reachable from the keyboard. The
                 // Extensions window closes so the popup can show under its button.
                 if let toolbar = model.extensionToolbar, toolbar.canInspectPopups, let profileID = model.space?.profileID,
-                   toolbar.toolbarItems(profileID: profileID, tabID: model.selectedTabID).contains(where: { $0.id == item.id && $0.hasPopup }) {
+                   toolbar.toolbarItems(profileID: profileID, tabID: model.selectedTabID).contains(where: { $0.id == item.id }) {
                     Button("Inspect Popup") {
                         dismiss()
                         toolbar.inspectPopup(extensionID: item.id, profileID: profileID, tabID: model.selectedTabID)
