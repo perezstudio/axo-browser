@@ -522,6 +522,8 @@ struct ChromiumEngineTests {
         #expect(closed)
         popup.focus()
         #expect(fakePopup.focusCount == 1, "Focusing reaches the engine")
+        popup.inspect()
+        #expect(fakePopup.inspectCount == 1, "Inspecting reaches the engine")
         popup.close()
         #expect(fakePopup.isClosed)
 
@@ -604,6 +606,20 @@ struct ChromiumEngineTests {
             .visited(url, title: "Added", at: date), .deleted([url], in: nil), .deletedAll,
             .deleted([url], in: date...date.addingTimeInterval(60)),
         ])
+    }
+
+    @Test func inspectingAnExtensionsBackgroundAsksTheProfile() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        #expect(!engine.inspectExtensionBackground("abc", profileID: profileID), "Not before the engine is ready")
+        engine.start()
+        scheduled.run()
+        _ = engine.makePage(profileID: profileID)
+        let profile = try #require(FakeProfile.made[profileID])
+        profile.extensionsWithBackgrounds = ["abc"]
+        #expect(engine.inspectExtensionBackground("abc", profileID: profileID))
+        #expect(!engine.inspectExtensionBackground("theme", profileID: profileID), "One without a background says so")
+        #expect(profile.inspectedBackgrounds == ["abc", "theme"])
     }
 
     @Test func devToolsWindowsReachTheAppOnlyWhenItShowsThem() throws {

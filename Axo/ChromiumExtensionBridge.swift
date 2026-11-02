@@ -43,6 +43,10 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
     /// copy of the file the prompt described, so changing the file meanwhile changes nothing.
     @ObservationIgnored private var preparedInstalls: [String: (url: URL, isUnpacked: Bool)] = [:]
     @ObservationIgnored private(set) var popups: [String: (popup: ChromiumExtensionPopup, closer: PopoverCloser, popover: NSPopover)] = [:]
+    /// Extensions whose popup is to be inspected when it opens, with when that was asked: those
+    /// that open their popup themselves (`chrome.action.openPopup`, as 1Password does) open it a
+    /// moment after the click, through the engine's popup request.
+    @ObservationIgnored private var pendingInspections: [String: Date] = [:]
 
     init(model: BrowserModel, engine: ChromiumEngine, store: TabStore) {
         self.model = model
@@ -68,14 +72,20 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
                 return
             }
             panel.onClose = { [weak model] in model?.extensionSidePanelDidClose(panel.extensionID) }
-            model.showExtensionSidePanel(ExtensionSidePanel(id: panel.extensionID, title: panel.title, view: panel.view, profileID: profileID) { panel.close() })
+            model.showExtensionSidePanel(ExtensionSidePanel(
+                id: panel.extensionID, title: panel.title, view: panel.view, profileID: profileID,
+                inspect: { panel.inspect() }, close: { panel.close() }
+            ))
         }
         // DevTools undocked from a page, or for a worker, opens in a window of its own.
         engine.onDevToolsWindowOpen = { [weak self] devTools, _ in
             self?.showDevToolsWindow(devTools)
         }
         // Extensions that handle their own clicks (1Password) open their popup themselves.
-        engine.onExtensionPopupRequest = { [weak self] popup, _ in self?.present(popup) }
+        engine.onExtensionPopupRequest = { [weak self] popup, _ in
+            guard let self else { return }
+            present(popup, inspecting: takePendingInspection(popup.extensionID))
+        }
         // Buttons appear once the engine is ready.
         let previous = engine.onStateChange
         engine.onStateChange = { [weak self] state in
@@ -176,7 +186,9 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
     func toolbarItems(profileID: Profile.ID, tabID: AxoCore.Tab.ID?) -> [ExtensionToolbarItem] {
         _ = revision
         return engine.toolbarButtons(profileID: profileID, page: page(for: tabID)).map {
-            ExtensionToolbarItem(id: $0.extensionID, label: $0.title, icon: $0.icon, badge: $0.badge, isEnabled: $0.isEnabled)
+            ExtensionToolbarItem(
+                id: $0.extensionID, label: $0.title, icon: $0.icon, badge: $0.badge, isEnabled: $0.isEnabled, hasPopup: $0.hasPopup
+            )
         }
     }
 
@@ -186,6 +198,28 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
             guard let popup = await engine.performExtensionAction(extensionID, profileID: profileID, page: page) else { return }
             present(popup)
         }
+    }
+
+    var canInspectPopups: Bool { true }
+
+    /// Opens the popup, as clicking its button does, and inspects it once it loads. The popover
+    /// stays open until its DevTools closes (or the button is clicked again), as Chrome keeps an
+    /// inspected popup open: closing the popup would end its DevTools.
+    func inspectPopup(extensionID: String, profileID: Profile.ID, tabID: AxoCore.Tab.ID?) {
+        let page = page(for: tabID)
+        // An extension that opens its popup itself does so a moment after the click.
+        pendingInspections[extensionID] = Date()
+        Task {
+            guard let popup = await engine.performExtensionAction(extensionID, profileID: profileID, page: page) else { return }
+            present(popup, inspecting: takePendingInspection(extensionID))
+        }
+    }
+
+    /// Whether the extension's popup opening now was asked to be inspected, in the last few
+    /// seconds; forgets the ask.
+    private func takePendingInspection(_ extensionID: String) -> Bool {
+        guard let asked = pendingInspections.removeValue(forKey: extensionID) else { return false }
+        return Date().timeIntervalSince(asked) < 5
     }
 
     func shortcuts(profileID: Profile.ID) -> [ExtensionShortcut] {
@@ -231,8 +265,9 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
         tabID.flatMap { model?.pool.livePage(for: $0) }
     }
 
-    /// Shows a popup under its toolbar button in a popover that follows the popup's size.
-    private func present(_ popup: ChromiumExtensionPopup) {
+    /// Shows a popup under its toolbar button in a popover that follows the popup's size. An
+    /// inspected popup gets its DevTools once it loads, and stays open until DevTools closes.
+    private func present(_ popup: ChromiumExtensionPopup, inspecting: Bool = false) {
         let extensionID = popup.extensionID
         // The extension's open popup, if any, goes away first: its page and its popover.
         if let previous = popups.removeValue(forKey: extensionID) {
@@ -243,12 +278,18 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
         controller.view = popup.view
         let popover = NSPopover()
         popover.contentViewController = controller
-        popover.behavior = .transient
+        popover.behavior = inspecting ? .applicationDefined : .transient
+        if inspecting {
+            popup.onInspectorClose = { [weak popover] in popover?.close() }
+        }
         popover.contentSize = popup.preferredSize
         popup.onResize = { [weak popover] size in popover?.contentSize = size }
         popup.onClose = { [weak popover] in popover?.close() }
         let focus = PopupFocus { [weak popup] in popup?.focus() }
-        popup.onLoad = { focus.loaded() }
+        popup.onLoad = { [weak popup] in
+            focus.loaded()
+            if inspecting { popup?.inspect() }
+        }
         // Only this popup's entry: a newer popup of the same extension may have replaced it.
         let closer = PopoverCloser(onShow: { focus.shown() }) { [weak self, weak popup] in
             guard let self, let popup, popups[extensionID]?.popup === popup else { return }
@@ -409,8 +450,10 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
         throw ChromiumExtensionError.siteAccessNotSupported
     }
 
+    /// The extension's service worker or background page, in a DevTools window
+    /// (``showDevToolsWindow(_:)``).
     func inspectBackgroundPage(_ extensionID: String, profileID: Profile.ID) async -> Bool {
-        false
+        engine.inspectExtensionBackground(extensionID, profileID: profileID)
     }
 }
 
