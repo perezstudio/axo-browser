@@ -72,10 +72,10 @@ private struct LinkStatusLabel: View {
             .background(.regularMaterial, in: .rect(cornerRadius: 5))
             .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(.separator))
             .allowsHitTesting(false)
-            // VoiceOver reads links' addresses itself. It stays readable (not a link: nothing to
-            // press) for anyone whose pointer follows the VoiceOver cursor, and for UI tests.
-            // SwiftUI's `Text` gives its string as the value; a value set here came through empty.
-            .accessibilityLabel("Link address")
+            // VoiceOver reads links' addresses itself. It stays readable, as plain text giving the
+            // address (SwiftUI's `Text` gives its string as the value, which an accessibility label
+            // or value set here would replace), for anyone whose pointer follows the VoiceOver
+            // cursor, and for UI tests.
             .accessibilityIdentifier("linkStatus")
     }
 }
