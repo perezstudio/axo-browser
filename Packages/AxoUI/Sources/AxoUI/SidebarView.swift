@@ -266,7 +266,7 @@ struct FolderContextMenu: View {
     }
 }
 
-/// "Move to Folder" with every folder (indented by depth), the top level, and a new folder.
+/// "Move to Folder" with every folder (by its path), the top level, and a new folder.
 struct MoveToFolderMenu: View {
     let model: BrowserModel
     let item: PinnedItem
@@ -281,21 +281,16 @@ struct MoveToFolderMenu: View {
                 Button("Pinned (No Folder)") { Task { await model.move(item, toFolder: nil) } }
                 Divider()
             }
+            // Each folder by its path ("Work › Drafts"), which VoiceOver reads too.
             ForEach(PinnedNode.flattenedFolders(model.pinnedTree), id: \.folder.id) { entry in
-                Button(String(repeating: "    ", count: entry.depth) + entry.folder.name) {
+                Button(entry.path) {
                     Task { await model.move(item, toFolder: entry.folder.id) }
                 }
                 .disabled(entry.folder.id == current || excluding.contains(entry.folder.id))
-                // The indent shows nesting on screen; VoiceOver says it in words.
-                .accessibilityLabel(parentName(of: entry.folder).map { "\(entry.folder.name), inside \($0)" } ?? entry.folder.name)
             }
             Divider()
             Button("New Folder…") { model.namingRequest = .newFolder(parent: nil, moving: item) }
         }
-    }
-
-    private func parentName(of folder: Folder) -> String? {
-        folder.parentID.flatMap { id in model.folders.first { $0.id == id }?.name }
     }
 }
 

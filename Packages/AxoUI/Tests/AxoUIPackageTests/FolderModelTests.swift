@@ -112,6 +112,7 @@ struct FolderModelTests {
         let flattened = PinnedNode.flattenedFolders(model.pinnedTree)
         #expect(flattened.map(\.folder.name) == ["Outer", "Inner", "Other"])
         #expect(flattened.map(\.depth) == [0, 1, 0])
+        #expect(flattened.map(\.path) == ["Outer", "Outer › Inner", "Other"], "Menu titles name each folder's parents")
         #expect(PinnedNode.folderAndDescendants(outer.id, in: model.pinnedTree)
             == Set([outer.id, try folder(named: "Inner").id]))
     }
