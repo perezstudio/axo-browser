@@ -70,6 +70,10 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
             panel.onClose = { [weak model] in model?.extensionSidePanelDidClose(panel.extensionID) }
             model.showExtensionSidePanel(ExtensionSidePanel(id: panel.extensionID, title: panel.title, view: panel.view, profileID: profileID) { panel.close() })
         }
+        // DevTools undocked from a page, or for a worker, opens in a window of its own.
+        engine.onDevToolsWindowOpen = { [weak self] devTools, _ in
+            self?.showDevToolsWindow(devTools)
+        }
         // Extensions that handle their own clicks (1Password) open their popup themselves.
         engine.onExtensionPopupRequest = { [weak self] popup, _ in self?.present(popup) }
         // Buttons appear once the engine is ready.
@@ -257,6 +261,21 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
     }
 
     // MARK: DeveloperToolsProviding
+
+    /// The DevTools windows open now.
+    private(set) var devToolsWindows: [DevToolsWindowController] = []
+
+    /// Shows DevTools in a window of its own, kept until it closes.
+    func showDevToolsWindow(_ devTools: ChromiumDevToolsWindow) {
+        let controller = DevToolsWindowController(
+            devTools: devTools, isTestRun: AppEnvironment.isTestRun, cascadingFrom: devToolsWindows.last?.window
+        )
+        controller.onClosed = { [weak self] closed in
+            self?.devToolsWindows.removeAll { $0 === closed }
+        }
+        devToolsWindows.append(controller)
+        controller.show()
+    }
 
     /// Chromium's DevTools, docked beside the page in its view (`EnginePage.toggleDevTools()`).
     func toggleInspector(for tabID: AxoCore.Tab.ID) -> Bool {

@@ -372,14 +372,15 @@ public final class WebViewPool {
         return true
     }
 
-    /// Hibernates every hidden tab that has been idle longer than the timeout.
+    /// Hibernates every hidden tab that has been idle longer than the timeout, except tabs whose
+    /// page has developer tools open (``EnginePage/hasDevTools``).
     ///
     /// - Returns: The IDs of the tabs that hibernated.
     @discardableResult
     public func hibernateIdleTabs() async -> Set<Tab.ID> {
         let cutoff = now().addingTimeInterval(-configuration.hibernationTimeout)
         let idle = live.values
-            .filter { !isVisible($0.tabID) && $0.lastUsed <= cutoff }
+            .filter { !isVisible($0.tabID) && $0.lastUsed <= cutoff && !$0.page.hasDevTools }
             .map(\.tabID)
         var hibernatedIDs: Set<Tab.ID> = []
         for tabID in idle where await hibernate(tabID) {

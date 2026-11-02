@@ -141,11 +141,16 @@ public protocol EnginePage: AnyObject {
     /// Opens the engine's developer tools on the JavaScript console. Returns `false` when the
     /// engine has none.
     func showDevToolsConsole() -> Bool
+    /// Whether the engine's developer tools are open for the page, docked or in a window of their
+    /// own. The pool doesn't hibernate an idle tab while they are: an undocked DevTools window
+    /// stays in use while its tab is hidden.
+    var hasDevTools: Bool { get }
 }
 
 extension EnginePage {
     public func toggleDevTools() -> Bool { false }
     public func showDevToolsConsole() -> Bool { false }
+    public var hasDevTools: Bool { false }
 }
 
 /// Receives a ``EnginePage``'s events. ``WebViewPool`` implements it for each live tab.

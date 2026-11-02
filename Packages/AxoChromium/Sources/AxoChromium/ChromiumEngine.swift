@@ -57,6 +57,32 @@ public final class ChromiumEngine: WebEngine {
     /// Called when an extension's side panel opens (`chrome.sidePanel`), with its profile. Show it
     /// beside the page.
     public var onExtensionSidePanelOpen: ((ChromiumExtensionSidePanel, Profile.ID) -> Void)?
+    /// Called when Chromium's DevTools opens in a window of its own (undocked, or for a worker),
+    /// with its profile. Show it in a window. Without it, undocking keeps DevTools docked.
+    public var onDevToolsWindowOpen: ((ChromiumDevToolsWindow, Profile.ID) -> Void)? {
+        didSet {
+            guard state == .ready else { return }
+            for profileID in followedProfiles {
+                followDevToolsWindows(of: classes.profile.profile(withIdentifier: profileID), profileID: profileID)
+            }
+        }
+    }
+
+    /// Gives the profile a DevTools window handler while Axo shows DevTools windows, and none
+    /// otherwise: the engine undocks DevTools only for a profile with one.
+    private func followDevToolsWindows(of profile: any AXOProfile, profileID: Profile.ID) {
+        guard onDevToolsWindowOpen != nil else {
+            profile.onDevToolsWindowOpen = nil
+            return
+        }
+        profile.onDevToolsWindowOpen = { [weak self] window in
+            guard let handler = self?.onDevToolsWindowOpen else {
+                window.close()
+                return
+            }
+            handler(ChromiumDevToolsWindow(window), profileID)
+        }
+    }
     /// Called with each change an extension makes to a profile's bookmarks (`chrome.bookmarks`).
     /// Apply it, then set the tree again with ``setBookmarks(_:profileID:)``.
     public var onBookmarkChange: ((BookmarkChange, Profile.ID) -> Void)?
@@ -212,6 +238,7 @@ public final class ChromiumEngine: WebEngine {
             profile.onExtensionSidePanelOpen = { [weak self] panel in
                 self?.onExtensionSidePanelOpen?(ChromiumExtensionSidePanel(panel), profileID)
             }
+            followDevToolsWindows(of: profile, profileID: profileID)
             profile.onBookmarkChange = { [weak self] change in
                 guard let change = BookmarkChange(change) else { return }
                 self?.onBookmarkChange?(change, profileID)

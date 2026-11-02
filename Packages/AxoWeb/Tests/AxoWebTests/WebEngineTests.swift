@@ -118,6 +118,21 @@ struct WebEngineTests {
         #expect(woken.loads.isEmpty, "It restores history instead of loading the tab's URL")
     }
 
+    @Test func idleTabsWithDevToolsOpenStayAwake() async throws {
+        let inspected = Tab.testTab(url: url)
+        let other = Tab.testTab(url: URL(string: "https://example.com/other")!)
+        pool.page(for: inspected, profileID: profileID)
+        pool.page(for: other, profileID: profileID)
+        try livePage(for: inspected).hasDevTools = true
+
+        clock.advance(by: pool.configuration.hibernationTimeout + 1)
+        #expect(await pool.hibernateIdleTabs() == [other.id], "Its undocked DevTools window is still in use")
+        #expect(pool.isLive(inspected.id))
+
+        try livePage(for: inspected).hasDevTools = false
+        #expect(await pool.hibernateIdleTabs() == [inspected.id], "Once DevTools closes, it hibernates as usual")
+    }
+
     @Test func discardingClosesThePage() throws {
         let tab = Tab.testTab(url: url)
         pool.page(for: tab, profileID: profileID)

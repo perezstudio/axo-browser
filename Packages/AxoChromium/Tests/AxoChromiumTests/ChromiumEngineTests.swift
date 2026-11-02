@@ -606,6 +606,50 @@ struct ChromiumEngineTests {
         ])
     }
 
+    @Test func devToolsWindowsReachTheAppOnlyWhenItShowsThem() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        _ = engine.makePage(profileID: profileID)
+        let without = try #require(FakeProfile.made[profileID])
+        #expect(without.onDevToolsWindowOpen == nil, "Without a handler, the engine keeps DevTools docked")
+
+        let otherProfile = UUID()
+        var openedWindow: ChromiumDevToolsWindow?
+        var openedProfile: Profile.ID?
+        engine.onDevToolsWindowOpen = { window, profileID in
+            openedWindow = window
+            openedProfile = profileID
+        }
+        _ = engine.makePage(profileID: otherProfile)
+        let profile = try #require(FakeProfile.made[otherProfile])
+        let fake = FakeDevToolsWindow()
+        let open = try #require(profile.onDevToolsWindowOpen)
+        open(fake)
+        let window = try #require(openedWindow)
+        #expect(openedProfile == otherProfile)
+        #expect(window.view === fake.view)
+        #expect(window.title == fake.title)
+        var closed = false
+        window.onClose = { closed = true }
+        fake.onClose?()
+        #expect(closed)
+        window.close()
+        #expect(fake.isClosed)
+
+        // Setting the handler after a profile is in use gives it one; clearing it takes it away.
+        engine.onDevToolsWindowOpen = { _, _ in }
+        #expect(without.onDevToolsWindowOpen != nil, "Profiles already in use get the handler too")
+        let handler = try #require(profile.onDevToolsWindowOpen)
+        engine.onDevToolsWindowOpen = nil
+        #expect(profile.onDevToolsWindowOpen == nil && without.onDevToolsWindowOpen == nil)
+        // A window that opens through a handler the app dropped meanwhile closes.
+        let late = FakeDevToolsWindow()
+        handler(late)
+        #expect(late.isClosed)
+    }
+
     @Test func devToolsDocksInThePagesViewBesideThePage() throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)
@@ -651,6 +695,25 @@ struct ChromiumEngineTests {
         #expect(devTools.superview == nil)
         #expect(fake.view.frame == page.view.bounds)
         #expect(fake.view.autoresizingMask == [.width, .height])
+
+        // Undocked: Chrome moves DevTools' view into its own window. The page doesn't take it back
+        // while it's there.
+        fake.devToolsView = devTools
+        fake.delegate?.pageDevToolsDidChange?(fake)
+        let undockedWindow = NSView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
+        undockedWindow.addSubview(devTools)
+        devTools.frame = undockedWindow.bounds
+        fake.devToolsView = nil
+        fake.delegate?.pageDevToolsDidChange?(fake)
+        #expect(devTools.superview === undockedWindow, "Left in DevTools' own window")
+        #expect(fake.view.frame == page.view.bounds)
+        // Docked again: Chrome reuses the same view, still sized for the window it left.
+        fake.devToolsView = devTools
+        fake.devToolsPageWidth = 500
+        fake.delegate?.pageDevToolsDidChange?(fake)
+        #expect(devTools.superview === page.view, "Taken back from the window it left")
+        #expect(devTools.frame == page.view.bounds, "Sized for the page's view again")
+        #expect(fake.view.frame.width == 500)
 
         // Closing the tab takes open DevTools with it.
         fake.devToolsView = devTools

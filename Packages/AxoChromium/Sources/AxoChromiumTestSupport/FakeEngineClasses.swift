@@ -96,6 +96,7 @@ public final class FakeProfile: NSObject, AXOProfile {
     public var onExtensionWindowOpen: ((any AXOWindow, NSSize) -> Void)?
     public var onExtensionPrompt: ((any AXOExtensionPrompt, @escaping (AXOExtensionPromptAnswer) -> Void) -> Void)?
     public var onExtensionSidePanelOpen: ((any AXOExtensionSidePanel) -> Void)?
+    public var onDevToolsWindowOpen: ((any AXODevToolsWindow) -> Void)?
     public var onBookmarkChange: ((any AXOBookmarkChange) -> Void)?
     public var onHistoryChange: ((any AXOHistoryChange) -> Void)?
     public var onDownload: ((any AXODownload) -> Void)?
@@ -224,6 +225,7 @@ public final class FakePage: NSObject, AXOPage {
     /// The docked DevTools to report, and the page's width while it's open: the page keeps the
     /// left of the bounds it's given, as with DevTools docked to the right.
     public var devToolsView: NSView?
+    public var hasDevTools = false
     public var devToolsPageWidth: CGFloat = 600
     public private(set) var devToolsLayoutBounds: [NSRect] = []
     public func devToolsPageFrame(inBounds bounds: NSRect) -> NSRect {
@@ -406,6 +408,25 @@ public final class FakeExtensionPopup: NSObject, AXOExtensionPopup {
     }
 
     public func focus() { focusCount += 1 }
+    public func close() { isClosed = true }
+}
+
+public final class FakeDevToolsWindow: NSObject, AXODevToolsWindow {
+    public let view = NSView()
+    public var title = "DevTools - example.com/"
+    public var inspectedPage: (any AXOPage)?
+    public var onTitleChange: (() -> Void)?
+    public var onClose: (() -> Void)?
+    public var onUnusedKeyEvent: ((NSEvent) -> Bool)?
+    public var onActivate: (() -> Void)?
+    public private(set) var isClosed = false
+    /// How many times Axo gave DevTools keyboard focus.
+    public private(set) var focusCount = 0
+
+    public override init() {}
+
+    public func focus() { focusCount += 1 }
+
     public func close() { isClosed = true }
 }
 

@@ -74,6 +74,8 @@ public final class FakePage: EnginePage {
     public let profileID: Profile.ID
     public weak var delegate: (any EnginePageDelegate)?
     public let view = PlatformView()
+    /// Whether the page reports developer tools open.
+    public var hasDevTools = false
 
     public private(set) var url: URL?
     public private(set) var title = ""
