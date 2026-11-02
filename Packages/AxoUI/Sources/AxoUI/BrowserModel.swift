@@ -60,6 +60,9 @@ public final class BrowserModel {
     public var spaceToDelete: Space?
     /// The live state of the selected tab's web view.
     public private(set) var selectedPage: WebTabState?
+    /// Whether Peek or the command bar covers the window's pages. Their link status labels hide
+    /// then: the cover takes the pointer, so the engine never says it left the link.
+    public var arePagesCovered: Bool { peek != nil || isCommandBarVisible }
     /// Incremented to ask the address field to take focus.
     public private(set) var addressFocusRequest = 0
     /// A problem worth telling the user about, such as the database failing to open.

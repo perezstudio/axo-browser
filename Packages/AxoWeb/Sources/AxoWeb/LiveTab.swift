@@ -82,6 +82,15 @@ final class LiveTab: EnginePageDelegate {
         pool?.onPageFullscreen?(tabID, fullscreen)
     }
 
+    func page(_ page: any EnginePage, hoversLinkTo url: URL?) {
+        // Chromium allows addresses of up to 2 MB; the label only needs the start.
+        var link = url
+        if let url, url.absoluteString.utf8.count > HoveredLinks.maxLength {
+            link = URL(string: String(url.absoluteString.prefix(HoveredLinks.maxLength)))
+        }
+        if state.hoveredLink != link { state.hoveredLink = link }
+    }
+
     func page(_ page: any EnginePage, didOpen opened: OpenedPage) {
         guard let handler = pool?.onPageOpened else {
             opened.page.close()

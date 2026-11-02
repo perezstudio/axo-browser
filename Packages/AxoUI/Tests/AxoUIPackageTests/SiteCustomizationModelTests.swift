@@ -59,6 +59,8 @@ struct SiteCustomizationModelTests {
         await model.saveCustomization(SiteCustomization(domain: "example.com", js: "document.title = 'Customized'"))
         let tab = AxoCore.Tab(spaceID: UUID(), url: URL(string: "about:blank")!, sortKey: "a0")
         let webView = model.pool.webView(for: tab, profileID: try #require(model.space).profileID)
-        #expect(webView.configuration.userContentController.userScripts.count == 1)
+        // The customization's script, besides Axo's own hovered-link script.
+        let sources = webView.configuration.userContentController.userScripts.map(\.source)
+        #expect(sources.filter { $0.contains("document.title = 'Customized'") }.count == 1)
     }
 }

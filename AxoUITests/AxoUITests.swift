@@ -755,6 +755,28 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["127.0.0.1"].waitForExistence(timeout: 5), "The page is now a tab")
     }
 
+    /// Hovering a link shows where it goes at the bottom of the page, and moving away hides it.
+    @MainActor
+    func testHoveringALinkShowsItsAddress() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        // The link points at a closed loopback port, and isn't clicked.
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,<title>Pond</title><a href='http://127.0.0.1:9/axolotl'>An axolotl</a>\n")
+        XCTAssertTrue(sidebar.staticTexts["Pond"].waitForExistence(timeout: 10))
+
+        let link = app.webViews.firstMatch.links["An axolotl"]
+        XCTAssertTrue(link.waitForExistence(timeout: 10))
+        link.hover()
+        let status = app.descendants(matching: .any)["linkStatus"]
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        XCTAssertEqual(status.value as? String, "http://127.0.0.1:9/axolotl")
+
+        sidebar.staticTexts["Pond"].hover()
+        XCTAssertTrue(status.waitForNonExistence(timeout: 5), "Leaving the link hides it")
+    }
+
     /// Add Split View (⌃⇧=) shows a chosen tab next to the current one as one sidebar row, and
     /// the split can be stacked and separated from the Tabs menu.
     @MainActor

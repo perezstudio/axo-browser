@@ -182,6 +182,11 @@ public final class FakePage: EnginePage {
         delegate?.page(self, setsFullscreen: fullscreen)
     }
 
+    /// Reports the link under the pointer, or `nil` once the pointer leaves it.
+    public func hoverLink(_ url: URL?) {
+        delegate?.page(self, hoversLinkTo: url)
+    }
+
     /// Opens another page, as a page's `window.open` would.
     public func open(_ opened: FakePage, url: URL, as kind: OpenedPage.Kind) {
         opened.url = url

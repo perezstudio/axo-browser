@@ -763,7 +763,7 @@ struct ChromiumEngineTests {
         #expect(devTools.superview == nil)
     }
 
-    @Test func pagesAPageOpensArriveConnectedAndFullScreenRequestsPassThrough() throws {
+    @Test func pagesAPageOpensArriveConnectedAndFullScreenAndHoveredLinksPassThrough() throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)
         engine.start()
@@ -792,6 +792,13 @@ struct ChromiumEngineTests {
         #expect(fullscreen == [true])
         pool.exitFullscreen(tab.id)
         #expect(fake.exitedFullscreen == 1)
+
+        // The link under the pointer reaches the tab's state, for the status label.
+        let link = URL(string: "https://example.com/axolotl")!
+        try #require(fake.delegate).page?(fake, hoversLinkTo: link)
+        #expect(pool.state(for: tab.id)?.hoveredLink == link)
+        try #require(fake.delegate).page?(fake, hoversLinkTo: nil)
+        #expect(pool.state(for: tab.id)?.hoveredLink == nil)
     }
 
     @Test func findGoesToTheEnginesPage() async throws {
