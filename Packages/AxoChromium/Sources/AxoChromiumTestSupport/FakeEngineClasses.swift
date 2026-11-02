@@ -124,6 +124,13 @@ public final class FakeProfile: NSObject, AXOProfile {
     public private(set) var userScriptChanges: [(String, Bool)] = []
     public func setUserScriptsAllowed(_ allowed: Bool, forExtension extensionID: String) { userScriptChanges.append((extensionID, allowed)) }
     public func uninstallExtension(_ extensionID: String) { uninstalled.append(extensionID) }
+    /// The extensions whose background Axo inspected, and those that have one to inspect.
+    public private(set) var inspectedBackgrounds: [String] = []
+    public var extensionsWithBackgrounds: Set<String> = []
+    public func inspectExtensionBackground(_ extensionID: String) -> Bool {
+        inspectedBackgrounds.append(extensionID)
+        return extensionsWithBackgrounds.contains(extensionID)
+    }
     public func extensionActions(for page: any AXOPage) -> [any AXOExtensionAction] { actions }
 
     public func performExtensionAction(_ extensionID: String, on page: any AXOPage, window: any AXOWindow, completion: @escaping ((any AXOExtensionPopup)?) -> Void) {
@@ -383,11 +390,14 @@ public final class FakeExtensionSidePanel: NSObject, AXOExtensionSidePanel {
     public var onClose: (() -> Void)?
     public private(set) var isClosed = false
 
+    public private(set) var inspectCount = 0
+
     public init(extensionIdentifier: String, title: String) {
         self.extensionIdentifier = extensionIdentifier
         self.title = title
     }
 
+    public func inspect() { inspectCount += 1 }
     public func close() { isClosed = true }
 }
 
@@ -408,6 +418,9 @@ public final class FakeExtensionPopup: NSObject, AXOExtensionPopup {
     }
 
     public func focus() { focusCount += 1 }
+    public private(set) var inspectCount = 0
+    public var onInspectorClose: (() -> Void)?
+    public func inspect() { inspectCount += 1 }
     public func close() { isClosed = true }
 }
 

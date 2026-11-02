@@ -72,7 +72,7 @@ struct ChromiumExtensionBridgeTests {
         profile.actions = [FakeExtensionAction(extensionIdentifier: "abc", title: "Blocker", badgeText: "4")]
 
         let items = bridge.toolbarItems(profileID: profileID, tabID: model.selectedTabID)
-        #expect(items == [ExtensionToolbarItem(id: "abc", label: "Blocker", icon: nil, badge: "4", isEnabled: true)])
+        #expect(items == [ExtensionToolbarItem(id: "abc", label: "Blocker", icon: nil, badge: "4", isEnabled: true, hasPopup: true)])
     }
 
     @Test func clickingAButtonRunsItOnTheSelectedPage() async throws {
@@ -231,6 +231,73 @@ struct ChromiumExtensionBridgeTests {
         open(second)
         second.onClose?()
         #expect(model.extensionSidePanel == nil, "Closing it from the extension hides it")
+    }
+
+    @Test func extensionsBackgroundsPopupsAndSidePanelsCanBeInspected() async throws {
+        await model.openTab(url: URL(string: "https://example.com/")!)
+        let profile = try #require(FakeProfile.made[profileID] ?? {
+            _ = bridge.toolbarItems(profileID: profileID, tabID: model.selectedTabID)
+            return FakeProfile.made[profileID]
+        }())
+
+        // The Extensions window's Inspect: the engine's answer comes back.
+        profile.extensionsWithBackgrounds = ["blocker"]
+        #expect(await bridge.inspectBackgroundPage("blocker", profileID: profileID))
+        #expect(!(await bridge.inspectBackgroundPage("theme", profileID: profileID)))
+        #expect(profile.inspectedBackgrounds == ["blocker", "theme"])
+
+        // Toolbar buttons with popups offer Inspect Popup.
+        profile.actions = [FakeExtensionAction(extensionIdentifier: "blocker", title: "Blocker", badgeText: "")]
+        #expect(bridge.toolbarItems(profileID: profileID, tabID: model.selectedTabID).first?.hasPopup == true)
+        #expect(bridge.canInspectPopups)
+
+        // A plain click: a transient popover, not inspected.
+        let clicked = FakeExtensionPopup(extensionIdentifier: "blocker")
+        profile.nextPopup = clicked
+        bridge.performAction(extensionID: "blocker", profileID: profileID, tabID: model.selectedTabID)
+        try await waitUntil { self.bridge.popups["blocker"]?.popup.view === clicked.view }
+        #expect(bridge.popups["blocker"]?.popover.behavior == .transient)
+        clicked.onLoad?()
+        #expect(clicked.inspectCount == 0)
+
+        // Inspect Popup: it opens, stays open until its DevTools closes, and is inspected once loaded.
+        let inspected = FakeExtensionPopup(extensionIdentifier: "blocker")
+        profile.nextPopup = inspected
+        bridge.inspectPopup(extensionID: "blocker", profileID: profileID, tabID: model.selectedTabID)
+        try await waitUntil { self.bridge.popups["blocker"]?.popup.view === inspected.view }
+        #expect(bridge.popups["blocker"]?.popover.behavior == .applicationDefined, "Clicks elsewhere don't close it, or its DevTools")
+        #expect(inspected.onInspectorClose != nil, "Its DevTools closing closes it")
+        #expect(clicked.onInspectorClose == nil, "A popup that isn't inspected doesn't wait for DevTools")
+        #expect(inspected.inspectCount == 0, "Not before it loads")
+        inspected.onLoad?()
+        #expect(inspected.inspectCount == 1)
+
+        // An extension that opens its popup itself (1Password): the click opens nothing directly,
+        // and the popup it asks for a moment later is the one inspected.
+        let request = try #require(profile.onExtensionPopupRequest)
+        profile.nextPopup = nil
+        bridge.inspectPopup(extensionID: "onepassword", profileID: profileID, tabID: model.selectedTabID)
+        try await waitUntil { profile.performed.contains { $0.extensionID == "onepassword" } }
+        let ownPopup = FakeExtensionPopup(extensionIdentifier: "onepassword")
+        request(ownPopup)
+        #expect(bridge.popups["onepassword"]?.popover.behavior == .applicationDefined)
+        ownPopup.onLoad?()
+        #expect(ownPopup.inspectCount == 1)
+        // Its next popup, without asking, is an ordinary one.
+        let later = FakeExtensionPopup(extensionIdentifier: "onepassword")
+        request(later)
+        #expect(bridge.popups["onepassword"]?.popover.behavior == .transient)
+        later.onLoad?()
+        #expect(later.inspectCount == 0)
+
+        // Side panels offer Inspect Side Panel.
+        let open = try #require(profile.onExtensionSidePanelOpen)
+        let panel = FakeExtensionSidePanel(extensionIdentifier: "notes", title: "Notes")
+        open(panel)
+        let shown = try #require(model.extensionSidePanel)
+        let inspect = try #require(shown.inspect)
+        inspect()
+        #expect(panel.inspectCount == 1)
     }
 
     @Test func undockedDevToolsOpensInAWindowOfItsOwn() async throws {
