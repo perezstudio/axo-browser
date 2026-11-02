@@ -479,7 +479,7 @@ final class PopupFocus {
         focusIfReady()
     }
 
-    /// The popup's page loaded (again, if it navigated).
+    /// The popup's page loaded (the engine reports only its first load).
     func loaded() {
         isLoaded = true
         focusIfReady()

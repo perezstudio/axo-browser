@@ -276,6 +276,7 @@ struct ChromiumExtensionBridgeTests {
         let loadedFirst = FakeExtensionPopup(extensionIdentifier: "bitwarden")
         request(loadedFirst)
         let first = try #require(bridge.popups["bitwarden"])
+        #expect(first.popover.delegate === first.closer, "The popover reports showing to the closer")
         loadedFirst.onLoad?()
         #expect(loadedFirst.focusCount == 0, "Not before the popover shows")
         first.closer.popoverDidShow(Notification(name: NSPopover.didShowNotification))
@@ -291,15 +292,13 @@ struct ChromiumExtensionBridgeTests {
         #expect(shownFirst.focusCount == 1)
     }
 
-    @Test func popupFocusWaitsForBothAndFollowsLaterLoads() {
+    @Test func popupFocusWaitsForBoth() {
         var focused = 0
         let focus = PopupFocus { focused += 1 }
         focus.loaded()
         #expect(focused == 0)
         focus.shown()
         #expect(focused == 1)
-        focus.loaded()
-        #expect(focused == 2, "A popup that loads another page gets focus again")
     }
 
     @Test func unpackedFoldersShowWhatTheyCanDoThenLoad() async throws {
