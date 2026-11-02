@@ -60,6 +60,12 @@ struct WebEngineTests {
         #expect(changes == ["next Next"], "Only real URL or title changes are reported")
     }
 
+    @Test func enginesWithoutTheirOwnDevToolsSaySo() {
+        let page = FakePage(profileID: profileID)
+        #expect(!page.toggleDevTools(), "Axo opens WebKit's Web Inspector itself, through AxoInspector")
+        #expect(!page.showDevToolsConsole())
+    }
+
     @Test func navigationGoesToTheTabsPage() throws {
         let tab = Tab.testTab(url: url)
         pool.page(for: tab, profileID: profileID)

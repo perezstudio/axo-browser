@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 23
+#define AXO_ENGINE_API_VERSION 24
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -296,6 +296,10 @@ NS_SWIFT_UI_ACTOR
 /// left (it navigated or closed before the server answered) goes to `AXOProfile.onDownload`.
 - (void)page:(id<AXOPage>)page didStartDownload:(id<AXODownload>)download;
 @optional
+/// The page's docked DevTools opened, closed, or changed the page's place in it. Lay out
+/// `devToolsView` and the page again (`-devToolsPageFrameInBounds:`). Don't open or close DevTools
+/// from inside the call.
+- (void)pageDevToolsDidChange:(id<AXOPage>)page;
 /// A right-click (or Control-click) in the page. Show the app's own menu for `menu` at
 /// `menu.location`, and call `-[AXOContextMenu closedFollowingLink:]` when it closes. Return
 /// `NO` to show nothing.
@@ -378,8 +382,21 @@ NS_SWIFT_UI_ACTOR
 /// (`page:didStartDownload:`).
 - (void)startDownloadFromURL:(NSURL*)url;
 
-/// Opens or closes Chromium's DevTools for the page.
+/// Opens or closes Chromium's DevTools for the page, docked: see `devToolsView`. Only a page in a
+/// window (`AXOWindow.pages`) can show DevTools; for others this does nothing.
 - (void)toggleDevTools;
+/// Opens the page's DevTools on its Console, or switches open DevTools to it. Only for a page in a
+/// window, like `-toggleDevTools`.
+- (void)showDevToolsConsole;
+/// The page's docked DevTools, or `nil` while it's closed. Show it filling the area the page had,
+/// with the page's view on top at `-devToolsPageFrameInBounds:`: DevTools draws its own divider and
+/// dock-side menu around the page, and changes the page's place as the person drags or docks it to
+/// another side, reporting each change through `-pageDevToolsDidChange:`.
+@property(nonatomic, readonly, nullable) NSView* devToolsView;
+/// Where the page's view goes when `devToolsView` fills `bounds` (in a container that isn't
+/// flipped): the side and size DevTools chose, kept within `bounds` and leaving DevTools room.
+/// All of `bounds` while DevTools is closed; empty while DevTools hides the page.
+- (NSRect)devToolsPageFrameInBounds:(NSRect)bounds;
 
 /// A print operation for the page.
 - (NSPrintOperation*)printOperationWithPrintInfo:(NSPrintInfo*)printInfo;

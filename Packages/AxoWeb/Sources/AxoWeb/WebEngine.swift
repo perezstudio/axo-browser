@@ -133,6 +133,19 @@ public protocol EnginePage: AnyObject {
 
     /// Stops the page and releases what it holds. The pool never uses it again.
     func close()
+
+    /// Opens or closes the engine's own developer tools for the page, docked beside it in the
+    /// page's view. Returns `false` when the engine has none (WebKit, whose Web Inspector Axo
+    /// opens itself through AxoInspector).
+    func toggleDevTools() -> Bool
+    /// Opens the engine's developer tools on the JavaScript console. Returns `false` when the
+    /// engine has none.
+    func showDevToolsConsole() -> Bool
+}
+
+extension EnginePage {
+    public func toggleDevTools() -> Bool { false }
+    public func showDevToolsConsole() -> Bool { false }
 }
 
 /// Receives a ``EnginePage``'s events. ``WebViewPool`` implements it for each live tab.

@@ -216,7 +216,21 @@ public final class FakePage: NSObject, AXOPage {
     /// The downloads Axo started (`startDownload(from:)`), in order.
     public private(set) var startedDownloads: [URL] = []
     public func startDownload(from url: URL) { startedDownloads.append(url) }
-    public func toggleDevTools() {}
+    /// How many times Axo toggled DevTools, and opened it on the Console.
+    public private(set) var devToolsToggles = 0
+    public private(set) var consoleShows = 0
+    public func toggleDevTools() { devToolsToggles += 1 }
+    public func showDevToolsConsole() { consoleShows += 1 }
+    /// The docked DevTools to report, and the page's width while it's open: the page keeps the
+    /// left of the bounds it's given, as with DevTools docked to the right.
+    public var devToolsView: NSView?
+    public var devToolsPageWidth: CGFloat = 600
+    public private(set) var devToolsLayoutBounds: [NSRect] = []
+    public func devToolsPageFrame(inBounds bounds: NSRect) -> NSRect {
+        devToolsLayoutBounds.append(bounds)
+        guard devToolsView != nil else { return bounds }
+        return NSRect(x: bounds.minX, y: bounds.minY, width: min(devToolsPageWidth, bounds.width), height: bounds.height)
+    }
 
     public func printOperation(with printInfo: NSPrintInfo) -> NSPrintOperation {
         NSPrintOperation(view: view, printInfo: printInfo)

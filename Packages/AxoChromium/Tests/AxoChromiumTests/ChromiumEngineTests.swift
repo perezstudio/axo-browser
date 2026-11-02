@@ -606,6 +606,59 @@ struct ChromiumEngineTests {
         ])
     }
 
+    @Test func devToolsDocksInThePagesViewBesideThePage() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine)
+        let tab = Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial)
+        let page = pool.page(for: tab, profileID: profileID)
+        let fake = try #require(FakePage.made.first)
+        page.view.frame = NSRect(x: 0, y: 0, width: 1000, height: 700)
+        #expect(fake.view.frame == page.view.bounds, "Without DevTools, the page fills its view")
+
+        #expect(page.toggleDevTools(), "Chromium has its own DevTools")
+        #expect(page.showDevToolsConsole())
+        #expect(fake.devToolsToggles == 1 && fake.consoleShows == 1, "Both reach the engine's page")
+
+        // DevTools opens: it fills the view, below the page, which goes where DevTools puts it.
+        let devTools = NSView()
+        fake.devToolsView = devTools
+        fake.devToolsPageWidth = 600
+        try #require(fake.delegate).pageDevToolsDidChange?(fake)
+        #expect(fake.devToolsLayoutBounds.last == page.view.bounds, "Asks for the page's place in the whole view")
+        #expect(devTools.superview === page.view)
+        #expect(devTools.frame == page.view.bounds)
+        #expect(page.view.subviews.firstIndex(of: devTools)! < page.view.subviews.firstIndex(of: fake.view)!,
+                "DevTools is below the page")
+        #expect(fake.view.frame == NSRect(x: 0, y: 0, width: 600, height: 700))
+        #expect(fake.view.autoresizingMask == [], "DevTools places the page, not autoresizing")
+
+        // The person drags DevTools' divider, then the window resizes.
+        fake.devToolsPageWidth = 500
+        fake.delegate?.pageDevToolsDidChange?(fake)
+        #expect(fake.view.frame.width == 500)
+        fake.devToolsPageWidth = 700
+        page.view.setFrameSize(NSSize(width: 1200, height: 800))
+        #expect(fake.devToolsLayoutBounds.last == NSRect(x: 0, y: 0, width: 1200, height: 800))
+        #expect(fake.view.frame == NSRect(x: 0, y: 0, width: 700, height: 800), "Laid out again as the view resizes")
+        #expect(devTools.frame.size == NSSize(width: 1200, height: 800))
+
+        // DevTools closes: the page fills the view again.
+        fake.devToolsView = nil
+        fake.delegate?.pageDevToolsDidChange?(fake)
+        #expect(devTools.superview == nil)
+        #expect(fake.view.frame == page.view.bounds)
+        #expect(fake.view.autoresizingMask == [.width, .height])
+
+        // Closing the tab takes open DevTools with it.
+        fake.devToolsView = devTools
+        fake.delegate?.pageDevToolsDidChange?(fake)
+        page.close()
+        #expect(devTools.superview == nil)
+    }
+
     @Test func pagesAPageOpensArriveConnectedAndFullScreenRequestsPassThrough() throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)
