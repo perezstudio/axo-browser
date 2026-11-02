@@ -266,6 +266,42 @@ struct ChromiumExtensionBridgeTests {
         #expect(bridge.popups["onepassword"]?.popup.view === second.view, "The new one is the extension's popup")
     }
 
+    @Test func popupsGetFocusOnceTheirPopoverShowsAndTheirPageLoads() async throws {
+        await model.openTab(url: URL(string: "https://example.com/")!)
+        _ = bridge.toolbarItems(profileID: profileID, tabID: model.selectedTabID)
+        let profile = try #require(FakeProfile.made[profileID])
+        let request = try #require(profile.onExtensionPopupRequest)
+
+        // Loaded first, then shown.
+        let loadedFirst = FakeExtensionPopup(extensionIdentifier: "bitwarden")
+        request(loadedFirst)
+        let first = try #require(bridge.popups["bitwarden"])
+        loadedFirst.onLoad?()
+        #expect(loadedFirst.focusCount == 0, "Not before the popover shows")
+        first.closer.popoverDidShow(Notification(name: NSPopover.didShowNotification))
+        #expect(loadedFirst.focusCount == 1)
+
+        // Shown first, then loaded.
+        let shownFirst = FakeExtensionPopup(extensionIdentifier: "onepassword")
+        request(shownFirst)
+        let second = try #require(bridge.popups["onepassword"])
+        second.closer.popoverDidShow(Notification(name: NSPopover.didShowNotification))
+        #expect(shownFirst.focusCount == 0, "Not before the page loads")
+        shownFirst.onLoad?()
+        #expect(shownFirst.focusCount == 1)
+    }
+
+    @Test func popupFocusWaitsForBothAndFollowsLaterLoads() {
+        var focused = 0
+        let focus = PopupFocus { focused += 1 }
+        focus.loaded()
+        #expect(focused == 0)
+        focus.shown()
+        #expect(focused == 1)
+        focus.loaded()
+        #expect(focused == 2, "A popup that loads another page gets focus again")
+    }
+
     @Test func unpackedFoldersShowWhatTheyCanDoThenLoad() async throws {
         let folder = FileManager.default.temporaryDirectory.appending(path: "AxoTests-Extension-\(UUID().uuidString)", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

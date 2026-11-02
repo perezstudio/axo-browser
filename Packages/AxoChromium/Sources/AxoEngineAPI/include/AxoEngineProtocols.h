@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 22
+#define AXO_ENGINE_API_VERSION 23
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -695,6 +695,10 @@ NS_SWIFT_UI_ACTOR
 @property(nonatomic, copy, nullable) void (^onLoad)(void);
 /// Called when the popup closes itself (`window.close()`); it's unusable after.
 @property(nonatomic, copy, nullable) void (^onClose)(void);
+/// Gives the popup's page keyboard focus, as Chrome does when it shows its popup, so a field the
+/// page focuses shows as active (caret, focus ring, `document.hasFocus()`) and gets what's typed.
+/// Call it once `view` shows in a key window (or a popover of one) and the page has loaded.
+- (void)focus;
 /// Closes the popup.
 - (void)close;
 @end

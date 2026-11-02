@@ -510,12 +510,18 @@ struct ChromiumEngineTests {
 
         var sizes: [NSSize] = []
         var closed = false
+        var loaded = false
         popup.onResize = { sizes.append($0) }
         popup.onClose = { closed = true }
+        popup.onLoad = { loaded = true }
         fakePopup.onResize?(NSSize(width: 220, height: 120))
+        fakePopup.onLoad?()
         fakePopup.onClose?()
         #expect(sizes == [NSSize(width: 220, height: 120)])
+        #expect(loaded)
         #expect(closed)
+        popup.focus()
+        #expect(fakePopup.focusCount == 1, "Focusing reaches the engine")
         popup.close()
         #expect(fakePopup.isClosed)
 

@@ -384,11 +384,14 @@ public final class FakeExtensionPopup: NSObject, AXOExtensionPopup {
     public var onLoad: (() -> Void)?
     public var onClose: (() -> Void)?
     public private(set) var isClosed = false
+    /// How many times Axo focused the popup's page.
+    public private(set) var focusCount = 0
 
     public init(extensionIdentifier: String) {
         self.extensionIdentifier = extensionIdentifier
     }
 
+    public func focus() { focusCount += 1 }
     public func close() { isClosed = true }
 }
 

@@ -242,8 +242,10 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
         popover.contentSize = popup.preferredSize
         popup.onResize = { [weak popover] size in popover?.contentSize = size }
         popup.onClose = { [weak popover] in popover?.close() }
+        let focus = PopupFocus { [weak popup] in popup?.focus() }
+        popup.onLoad = { focus.loaded() }
         // Only this popup's entry: a newer popup of the same extension may have replaced it.
-        let closer = PopoverCloser { [weak self, weak popup] in
+        let closer = PopoverCloser(onShow: { focus.shown() }) { [weak self, weak popup] in
             guard let self, let popup, popups[extensionID]?.popup === popup else { return }
             popups.removeValue(forKey: extensionID)
             popup.close()
@@ -439,15 +441,51 @@ struct InstallPreview {
     }
 }
 
-/// Runs a closure when a popover closes, so the popup inside it closes too.
+/// Runs closures when a popover shows and closes, so the popup inside it gets focus and closes
+/// with it.
 final class PopoverCloser: NSObject, NSPopoverDelegate {
+    private let onShow: () -> Void
     private let onClose: () -> Void
 
-    init(onClose: @escaping () -> Void) {
+    init(onShow: @escaping () -> Void = {}, onClose: @escaping () -> Void) {
+        self.onShow = onShow
         self.onClose = onClose
+    }
+
+    func popoverDidShow(_ notification: Notification) {
+        onShow()
     }
 
     func popoverDidClose(_ notification: Notification) {
         onClose()
+    }
+}
+
+/// Focuses a popup's page once its popover has shown and its page has loaded, whichever comes
+/// last, as Chrome does when its popup appears. Without it, a field the popup focuses shows no
+/// caret or focus ring.
+final class PopupFocus {
+    private var isShown = false
+    private var isLoaded = false
+    private let focus: () -> Void
+
+    init(focus: @escaping () -> Void) {
+        self.focus = focus
+    }
+
+    /// The popover is showing.
+    func shown() {
+        isShown = true
+        focusIfReady()
+    }
+
+    /// The popup's page loaded (again, if it navigated).
+    func loaded() {
+        isLoaded = true
+        focusIfReady()
+    }
+
+    private func focusIfReady() {
+        if isShown && isLoaded { focus() }
     }
 }
