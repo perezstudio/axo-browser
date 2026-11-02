@@ -233,6 +233,58 @@ struct ChromiumExtensionBridgeTests {
         #expect(model.extensionSidePanel == nil, "Closing it from the extension hides it")
     }
 
+    @Test func undockedDevToolsOpensInAWindowOfItsOwn() async throws {
+        await model.openTab(url: URL(string: "https://example.com/")!)
+        _ = bridge.toolbarItems(profileID: profileID, tabID: model.selectedTabID)
+        let profile = try #require(FakeProfile.made[profileID])
+        let open = try #require(profile.onDevToolsWindowOpen, "Axo shows DevTools windows, so undocking is allowed")
+
+        // DevTools opens undocked: a window titled like DevTools, showing its view.
+        let devTools = FakeDevToolsWindow()
+        open(devTools)
+        let controller = try #require(bridge.devToolsWindows.first)
+        defer { controller.window.close() }
+        #expect(controller.window.title == "DevTools - example.com/")
+        #expect(devTools.view.superview === controller.window.contentView)
+        #expect(devTools.view.frame == controller.window.contentView?.bounds)
+        devTools.title = "DevTools - example.com/next"
+        devTools.onTitleChange?()
+        #expect(controller.window.title == "DevTools - example.com/next")
+
+        // DevTools docks again (or its page closes): the window closes, without closing it again.
+        devTools.onClose?()
+        #expect(!controller.window.isVisible)
+        #expect(bridge.devToolsWindows.isEmpty)
+        #expect(!devTools.isClosed, "DevTools already left")
+
+        // Closing the window closes DevTools.
+        let second = FakeDevToolsWindow()
+        open(second)
+        let secondWindow = try #require(bridge.devToolsWindows.first).window
+        secondWindow.close()
+        #expect(second.isClosed)
+        #expect(bridge.devToolsWindows.isEmpty)
+
+        // ⌘W in DevTools closes its window, not the browser's tab.
+        let third = FakeDevToolsWindow()
+        open(third)
+        let thirdWindow = try #require(bridge.devToolsWindows.first).window
+        let commandW = try #require(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0, windowNumber: thirdWindow.windowNumber,
+            context: nil, characters: "w", charactersIgnoringModifiers: "w", isARepeat: false, keyCode: 13
+        ))
+        let tabsBefore = model.tabs.count
+        #expect(third.onUnusedKeyEvent?(commandW) == true)
+        #expect(third.isClosed)
+        #expect(bridge.devToolsWindows.isEmpty)
+        #expect(model.tabs.count == tabsBefore, "The browser's tab stays")
+    }
+
+    @Test func devToolsWindowsDontSaveTheirFrameInTestRuns() {
+        #expect(DevToolsWindowController.frameAutosaveName(isTestRun: true) == nil)
+        #expect(DevToolsWindowController.frameAutosaveName(isTestRun: false) == "AxoDevToolsWindow")
+    }
+
     @Test func chromesPromptsAreAxosAlerts() async throws {
         await model.openTab(url: URL(string: "https://example.com/")!)
         _ = bridge.toolbarItems(profileID: profileID, tabID: model.selectedTabID)

@@ -163,6 +163,46 @@ public final class ChromiumExtensionSidePanel {
     }
 }
 
+/// Chromium's DevTools in a window of its own: undocked from a page, or for something with no
+/// page (a worker). Show ``view`` in a window titled ``title``.
+@MainActor
+public final class ChromiumDevToolsWindow {
+    private let window: any AXODevToolsWindow
+
+    init(_ window: any AXODevToolsWindow) {
+        self.window = window
+    }
+
+    /// The view that draws DevTools.
+    public var view: NSView { window.view }
+    /// What DevTools calls itself, such as "DevTools - example.com/".
+    public var title: String { window.title }
+
+    /// Called when ``title`` changes.
+    public var onTitleChange: (() -> Void)? {
+        get { window.onTitleChange }
+        set { window.onTitleChange = newValue }
+    }
+
+    /// Called when DevTools leaves the window without Axo asking (docked again, or its page
+    /// closed). Close the window.
+    public var onClose: (() -> Void)? {
+        get { window.onClose }
+        set { window.onClose = newValue }
+    }
+
+    /// Called with key presses DevTools didn't use. Return `true` if Axo used one.
+    public var onUnusedKeyEvent: ((NSEvent) -> Bool)? {
+        get { window.onUnusedKeyEvent }
+        set { window.onUnusedKeyEvent = newValue }
+    }
+
+    /// Closes DevTools.
+    public func close() {
+        window.close()
+    }
+}
+
 /// An extension's popup, open. Show ``view`` in a popover sized to ``preferredSize``.
 @MainActor
 public final class ChromiumExtensionPopup {

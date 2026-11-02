@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 24
+#define AXO_ENGINE_API_VERSION 25
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -31,6 +31,7 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol AXOContextMenu;
 @protocol AXOContextMenuItem;
 @protocol AXOExtensionSidePanel;
+@protocol AXODevToolsWindow;
 @protocol AXOBookmarkNode;
 @protocol AXOBookmarkChange;
 @protocol AXOHistoryChange;
@@ -225,6 +226,13 @@ NS_SWIFT_UI_ACTOR
 /// closes the window for Chrome too. Normal windows (`type: "normal"`) don't come here: their tabs
 /// open in the profile's existing window. Without a handler, popup windows fail to open.
 @property(nonatomic, copy, nullable) void (^onExtensionWindowOpen)(id<AXOWindow> window, NSSize size);
+
+/// Called when Chromium's DevTools opens in a window of its own: undocked from a page (its
+/// dock-side menu's "Undock into separate window", or saved that way), or for something with no
+/// page to dock beside, such as a worker. Show `window.view` in a window of the app's, titled
+/// `window.title`. Without a handler, undocking keeps DevTools docked, and DevTools for things
+/// with no page doesn't open.
+@property(nonatomic, copy, nullable) void (^onDevToolsWindowOpen)(id<AXODevToolsWindow> window);
 
 /// Installs an extension package (a CRX3 `.crx` file), as Chrome does when a person drops one on
 /// its Extensions page: Axo asks the person first. `completion` gets the extension's ID, or an
@@ -677,6 +685,28 @@ NS_SWIFT_UI_ACTOR
 /// (`chrome.sidePanel.close`, `window.close()`, or turned it off), or another opened.
 @property(nonatomic, copy, nullable) void (^onClose)(void);
 /// Closes the panel, as its close button does.
+- (void)close;
+@end
+
+/// Chromium's DevTools in a window of its own (`AXOProfile.onDevToolsWindowOpen`).
+NS_SWIFT_UI_ACTOR
+@protocol AXODevToolsWindow <NSObject>
+/// The view that draws DevTools.
+@property(nonatomic, readonly) NSView* view;
+/// What DevTools calls itself, such as "DevTools - example.com/".
+@property(nonatomic, readonly) NSString* title;
+/// The page it inspects, or `nil` when it inspects something with no page (a worker).
+@property(nonatomic, readonly, nullable) id<AXOPage> inspectedPage;
+/// Called when `title` changes.
+@property(nonatomic, copy, nullable) void (^onTitleChange)(void);
+/// Called when DevTools leaves the window without the app asking: docked again to its page, or
+/// its page closed. Close the window; this object is unusable after.
+@property(nonatomic, copy, nullable) void (^onClose)(void);
+/// A key press DevTools didn't use. Return `YES` if the app used it, such as ⌘W closing the
+/// window; other shortcuts can go to the app's menu. Without a handler, they go to the inspected
+/// page's delegate, as a docked DevTools' do.
+@property(nonatomic, copy, nullable) BOOL (^onUnusedKeyEvent)(NSEvent* event);
+/// Closes DevTools, as closing Chrome's DevTools window does.
 - (void)close;
 @end
 

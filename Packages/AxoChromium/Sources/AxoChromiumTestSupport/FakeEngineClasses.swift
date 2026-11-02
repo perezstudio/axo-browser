@@ -96,6 +96,7 @@ public final class FakeProfile: NSObject, AXOProfile {
     public var onExtensionWindowOpen: ((any AXOWindow, NSSize) -> Void)?
     public var onExtensionPrompt: ((any AXOExtensionPrompt, @escaping (AXOExtensionPromptAnswer) -> Void) -> Void)?
     public var onExtensionSidePanelOpen: ((any AXOExtensionSidePanel) -> Void)?
+    public var onDevToolsWindowOpen: ((any AXODevToolsWindow) -> Void)?
     public var onBookmarkChange: ((any AXOBookmarkChange) -> Void)?
     public var onHistoryChange: ((any AXOHistoryChange) -> Void)?
     public var onDownload: ((any AXODownload) -> Void)?
@@ -406,6 +407,20 @@ public final class FakeExtensionPopup: NSObject, AXOExtensionPopup {
     }
 
     public func focus() { focusCount += 1 }
+    public func close() { isClosed = true }
+}
+
+public final class FakeDevToolsWindow: NSObject, AXODevToolsWindow {
+    public let view = NSView()
+    public var title = "DevTools - example.com/"
+    public var inspectedPage: (any AXOPage)?
+    public var onTitleChange: (() -> Void)?
+    public var onClose: (() -> Void)?
+    public var onUnusedKeyEvent: ((NSEvent) -> Bool)?
+    public private(set) var isClosed = false
+
+    public override init() {}
+
     public func close() { isClosed = true }
 }
 

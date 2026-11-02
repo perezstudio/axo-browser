@@ -139,14 +139,18 @@ final class ChromiumPage: NSObject, EnginePage {
     func layOutDevTools() {
         guard let page else { return }
         let devTools = page.devToolsView
-        if shownDevTools !== devTools {
-            if shownDevTools?.superview === view { shownDevTools?.removeFromSuperview() }
-            shownDevTools = devTools
-            if let devTools {
-                devTools.frame = view.bounds
+        // Chrome reuses DevTools' view when it docks again after being undocked, so it may be in
+        // DevTools' own window now: take it back whenever it isn't here, and remove only from here.
+        if shownDevTools !== devTools, shownDevTools?.superview === view {
+            shownDevTools?.removeFromSuperview()
+        }
+        shownDevTools = devTools
+        if let devTools {
+            if devTools.superview !== view {
                 devTools.autoresizingMask = [.width, .height]
                 view.addSubview(devTools, positioned: .below, relativeTo: page.view)
             }
+            devTools.frame = view.bounds
         }
         page.view.frame = devTools == nil ? view.bounds : page.devToolsPageFrame(inBounds: view.bounds)
         page.view.autoresizingMask = devTools == nil ? [.width, .height] : []

@@ -606,6 +606,50 @@ struct ChromiumEngineTests {
         ])
     }
 
+    @Test func devToolsWindowsReachTheAppOnlyWhenItShowsThem() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        _ = engine.makePage(profileID: profileID)
+        let without = try #require(FakeProfile.made[profileID])
+        #expect(without.onDevToolsWindowOpen == nil, "Without a handler, the engine keeps DevTools docked")
+
+        let otherProfile = UUID()
+        var openedWindow: ChromiumDevToolsWindow?
+        var openedProfile: Profile.ID?
+        engine.onDevToolsWindowOpen = { window, profileID in
+            openedWindow = window
+            openedProfile = profileID
+        }
+        _ = engine.makePage(profileID: otherProfile)
+        let profile = try #require(FakeProfile.made[otherProfile])
+        let fake = FakeDevToolsWindow()
+        let open = try #require(profile.onDevToolsWindowOpen)
+        open(fake)
+        let window = try #require(openedWindow)
+        #expect(openedProfile == otherProfile)
+        #expect(window.view === fake.view)
+        #expect(window.title == fake.title)
+        var closed = false
+        window.onClose = { closed = true }
+        fake.onClose?()
+        #expect(closed)
+        window.close()
+        #expect(fake.isClosed)
+
+        // Setting the handler after a profile is in use gives it one; clearing it takes it away.
+        engine.onDevToolsWindowOpen = { _, _ in }
+        #expect(without.onDevToolsWindowOpen != nil, "Profiles already in use get the handler too")
+        let handler = try #require(profile.onDevToolsWindowOpen)
+        engine.onDevToolsWindowOpen = nil
+        #expect(profile.onDevToolsWindowOpen == nil && without.onDevToolsWindowOpen == nil)
+        // A window that opens through a handler the app dropped meanwhile closes.
+        let late = FakeDevToolsWindow()
+        handler(late)
+        #expect(late.isClosed)
+    }
+
     @Test func devToolsDocksInThePagesViewBesideThePage() throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)
