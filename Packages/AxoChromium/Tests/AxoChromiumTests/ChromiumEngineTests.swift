@@ -625,8 +625,9 @@ struct ChromiumEngineTests {
         // DevTools opens: it fills the view, below the page, which goes where DevTools puts it.
         let devTools = NSView()
         fake.devToolsView = devTools
-        fake.devToolsPageFrame = NSRect(x: 0, y: 0, width: 600, height: 700)
+        fake.devToolsPageWidth = 600
         try #require(fake.delegate).pageDevToolsDidChange?(fake)
+        #expect(fake.devToolsLayoutBounds.last == page.view.bounds, "Asks for the page's place in the whole view")
         #expect(devTools.superview === page.view)
         #expect(devTools.frame == page.view.bounds)
         #expect(page.view.subviews.firstIndex(of: devTools)! < page.view.subviews.firstIndex(of: fake.view)!,
@@ -635,11 +636,12 @@ struct ChromiumEngineTests {
         #expect(fake.view.autoresizingMask == [], "DevTools places the page, not autoresizing")
 
         // The person drags DevTools' divider, then the window resizes.
-        fake.devToolsPageFrame = NSRect(x: 0, y: 0, width: 500, height: 700)
+        fake.devToolsPageWidth = 500
         fake.delegate?.pageDevToolsDidChange?(fake)
         #expect(fake.view.frame.width == 500)
-        fake.devToolsPageFrame = NSRect(x: 0, y: 0, width: 700, height: 800)
+        fake.devToolsPageWidth = 700
         page.view.setFrameSize(NSSize(width: 1200, height: 800))
+        #expect(fake.devToolsLayoutBounds.last == NSRect(x: 0, y: 0, width: 1200, height: 800))
         #expect(fake.view.frame == NSRect(x: 0, y: 0, width: 700, height: 800), "Laid out again as the view resizes")
         #expect(devTools.frame.size == NSSize(width: 1200, height: 800))
 

@@ -221,12 +221,15 @@ public final class FakePage: NSObject, AXOPage {
     public private(set) var consoleShows = 0
     public func toggleDevTools() { devToolsToggles += 1 }
     public func showDevToolsConsole() { consoleShows += 1 }
-    /// The docked DevTools to report, and where it puts the page (in a 1000x700 container, as
-    /// the engine would).
+    /// The docked DevTools to report, and the page's width while it's open: the page keeps the
+    /// left of the bounds it's given, as with DevTools docked to the right.
     public var devToolsView: NSView?
-    public var devToolsPageFrame = NSRect(x: 0, y: 0, width: 600, height: 700)
+    public var devToolsPageWidth: CGFloat = 600
+    public private(set) var devToolsLayoutBounds: [NSRect] = []
     public func devToolsPageFrame(inBounds bounds: NSRect) -> NSRect {
-        devToolsView == nil ? bounds : devToolsPageFrame
+        devToolsLayoutBounds.append(bounds)
+        guard devToolsView != nil else { return bounds }
+        return NSRect(x: bounds.minX, y: bounds.minY, width: min(devToolsPageWidth, bounds.width), height: bounds.height)
     }
 
     public func printOperation(with printInfo: NSPrintInfo) -> NSPrintOperation {
