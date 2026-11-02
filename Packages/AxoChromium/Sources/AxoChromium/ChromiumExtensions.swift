@@ -201,7 +201,8 @@ public final class ChromiumExtensionPopup {
 
     /// Gives the popup's page keyboard focus, as Chrome does when its popup shows, so a field the
     /// page focuses shows as active and gets what's typed. Call it once ``view`` shows in its
-    /// popover and the page has loaded.
+    /// popover and the page has loaded; from then on the popup follows Axo becoming active or
+    /// inactive.
     public func focus() {
         popup.focus()
     }

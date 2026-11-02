@@ -697,7 +697,9 @@ NS_SWIFT_UI_ACTOR
 @property(nonatomic, copy, nullable) void (^onClose)(void);
 /// Gives the popup's page keyboard focus, as Chrome does when it shows its popup, so a field the
 /// page focuses shows as active (caret, focus ring, `document.hasFocus()`) and gets what's typed.
-/// Call it once `view` shows in a key window (or a popover of one) and the page has loaded.
+/// Call it once `view` shows (in a popover or window) and the page has loaded. From then on the
+/// popup follows the app becoming active or inactive, so a popup shown while the app wasn't
+/// active gets focus once it is.
 - (void)focus;
 /// Closes the popup.
 - (void)close;
