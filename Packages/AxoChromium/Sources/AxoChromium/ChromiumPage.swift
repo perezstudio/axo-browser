@@ -132,6 +132,8 @@ final class ChromiumPage: NSObject, EnginePage {
         return true
     }
 
+    var hasDevTools: Bool { page?.hasDevTools ?? false }
+
     /// Lays out the page and its docked DevTools in ``view``: DevTools fills it, and the page
     /// sits on top where DevTools puts it (DevTools draws its own divider and dock-side menu
     /// around the page). Without DevTools, the page fills ``view``. Frames and autoresizing

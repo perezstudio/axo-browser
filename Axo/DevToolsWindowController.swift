@@ -20,12 +20,19 @@ final class DevToolsWindowController: NSObject, NSWindowDelegate {
 
     let devTools: ChromiumDevToolsWindow
     let window: NSWindow
+    /// Where shortcuts DevTools and the window don't use go: Axo's menu.
+    var performMenuKey: (NSEvent) -> Bool = { NSApp.mainMenu?.performKeyEquivalent(with: $0) ?? false }
     /// Called once the window has closed, for whoever keeps the controller.
     var onClosed: ((DevToolsWindowController) -> Void)?
     /// Whether DevTools went away first, so closing the window doesn't close it again.
     private var devToolsEnded = false
 
-    init(devTools: ChromiumDevToolsWindow, isTestRun: Bool) {
+    /// - Parameters:
+    ///   - devTools: The DevTools to show.
+    ///   - isTestRun: Test runs don't save the window's frame.
+    ///   - cascadingFrom: Another DevTools window open now, to place this one below and right of.
+    ///     The frame's autosave name belongs to one window at a time, so a second one cascades.
+    init(devTools: ChromiumDevToolsWindow, isTestRun: Bool, cascadingFrom other: NSWindow? = nil) {
         self.devTools = devTools
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 900, height: 650),
@@ -43,8 +50,9 @@ final class DevToolsWindowController: NSObject, NSWindowDelegate {
         view.autoresizingMask = [.width, .height]
         window.contentView?.addSubview(view)
         window.center()
-        if let name = Self.frameAutosaveName(isTestRun: isTestRun) {
-            window.setFrameAutosaveName(name)
+        let restored = Self.frameAutosaveName(isTestRun: isTestRun).map { window.setFrameAutosaveName($0) } ?? false
+        if !restored, let other {
+            window.setFrameTopLeftPoint(window.cascadeTopLeft(from: NSPoint(x: other.frame.minX, y: other.frame.maxY)))
         }
         devTools.onTitleChange = { [weak self] in
             guard let self else { return }
@@ -57,22 +65,27 @@ final class DevToolsWindowController: NSObject, NSWindowDelegate {
         devTools.onUnusedKeyEvent = { [weak self] event in
             self?.handleUnusedKey(event) ?? false
         }
+        devTools.onActivate = { [weak self] in
+            self?.window.makeKeyAndOrderFront(nil)
+        }
     }
 
-    /// Brings the window to the front.
+    /// Brings the window to the front, with DevTools taking the keyboard.
     func show() {
         window.makeKeyAndOrderFront(nil)
+        devTools.focus()
     }
 
     /// ⌘W closes the window (Axo's Close Tab would close the browser's tab instead); other
     /// shortcuts go to Axo's menu.
     func handleUnusedKey(_ event: NSEvent) -> Bool {
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        // Only the modifier keys: Caps Lock and the like don't change what ⌘W means.
+        let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
         if flags == .command, event.charactersIgnoringModifiers?.lowercased() == "w" {
             window.performClose(nil)
             return true
         }
-        return NSApp.mainMenu?.performKeyEquivalent(with: event) ?? false
+        return performMenuKey(event)
     }
 
     func windowWillClose(_ notification: Notification) {

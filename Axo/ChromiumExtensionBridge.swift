@@ -267,7 +267,9 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
 
     /// Shows DevTools in a window of its own, kept until it closes.
     func showDevToolsWindow(_ devTools: ChromiumDevToolsWindow) {
-        let controller = DevToolsWindowController(devTools: devTools, isTestRun: AppEnvironment.isTestRun)
+        let controller = DevToolsWindowController(
+            devTools: devTools, isTestRun: AppEnvironment.isTestRun, cascadingFrom: devToolsWindows.last?.window
+        )
         controller.onClosed = { [weak self] closed in
             self?.devToolsWindows.removeAll { $0 === closed }
         }

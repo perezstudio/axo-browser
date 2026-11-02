@@ -696,6 +696,25 @@ struct ChromiumEngineTests {
         #expect(fake.view.frame == page.view.bounds)
         #expect(fake.view.autoresizingMask == [.width, .height])
 
+        // Undocked: Chrome moves DevTools' view into its own window. The page doesn't take it back
+        // while it's there.
+        fake.devToolsView = devTools
+        fake.delegate?.pageDevToolsDidChange?(fake)
+        let undockedWindow = NSView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
+        undockedWindow.addSubview(devTools)
+        devTools.frame = undockedWindow.bounds
+        fake.devToolsView = nil
+        fake.delegate?.pageDevToolsDidChange?(fake)
+        #expect(devTools.superview === undockedWindow, "Left in DevTools' own window")
+        #expect(fake.view.frame == page.view.bounds)
+        // Docked again: Chrome reuses the same view, still sized for the window it left.
+        fake.devToolsView = devTools
+        fake.devToolsPageWidth = 500
+        fake.delegate?.pageDevToolsDidChange?(fake)
+        #expect(devTools.superview === page.view, "Taken back from the window it left")
+        #expect(devTools.frame == page.view.bounds, "Sized for the page's view again")
+        #expect(fake.view.frame.width == 500)
+
         // Closing the tab takes open DevTools with it.
         fake.devToolsView = devTools
         fake.delegate?.pageDevToolsDidChange?(fake)

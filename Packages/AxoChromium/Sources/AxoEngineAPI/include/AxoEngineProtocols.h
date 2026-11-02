@@ -396,6 +396,9 @@ NS_SWIFT_UI_ACTOR
 /// Opens the page's DevTools on its Console, or switches open DevTools to it. Only for a page in a
 /// window, like `-toggleDevTools`.
 - (void)showDevToolsConsole;
+/// Whether the page has DevTools open, docked or in a window of its own. Keep such a page alive
+/// (don't hibernate it) while it does.
+@property(nonatomic, readonly) BOOL hasDevTools;
 /// The page's docked DevTools, or `nil` while it's closed. Show it filling the area the page had,
 /// with the page's view on top at `-devToolsPageFrameInBounds:`: DevTools draws its own divider and
 /// dock-side menu around the page, and changes the page's place as the person drags or docks it to
@@ -706,6 +709,12 @@ NS_SWIFT_UI_ACTOR
 /// window; other shortcuts can go to the app's menu. Without a handler, they go to the inspected
 /// page's delegate, as a docked DevTools' do.
 @property(nonatomic, copy, nullable) BOOL (^onUnusedKeyEvent)(NSEvent* event);
+/// DevTools asked to come to the front (opened again from the page, a breakpoint hit, an element
+/// to inspect). Bring the window forward.
+@property(nonatomic, copy, nullable) void (^onActivate)(void);
+/// Gives DevTools keyboard focus, as Chrome does when its window shows. Call it once `view` is in
+/// the window.
+- (void)focus;
 /// Closes DevTools, as closing Chrome's DevTools window does.
 - (void)close;
 @end

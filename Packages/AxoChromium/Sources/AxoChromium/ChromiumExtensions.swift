@@ -197,6 +197,18 @@ public final class ChromiumDevToolsWindow {
         set { window.onUnusedKeyEvent = newValue }
     }
 
+    /// Called when DevTools asks to come to the front (opened again from the page, a breakpoint
+    /// hit). Bring the window forward.
+    public var onActivate: (() -> Void)? {
+        get { window.onActivate }
+        set { window.onActivate = newValue }
+    }
+
+    /// Gives DevTools keyboard focus, once ``view`` is in the window.
+    public func focus() {
+        window.focus()
+    }
+
     /// Closes DevTools.
     public func close() {
         window.close()
