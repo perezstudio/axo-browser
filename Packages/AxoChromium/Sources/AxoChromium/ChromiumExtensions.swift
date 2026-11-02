@@ -187,10 +187,24 @@ public final class ChromiumExtensionPopup {
         set { popup.onResize = newValue }
     }
 
+    /// Called once the popup page has loaded.
+    public var onLoad: (() -> Void)? {
+        get { popup.onLoad }
+        set { popup.onLoad = newValue }
+    }
+
     /// Called when the popup closes itself (`window.close()`).
     public var onClose: (() -> Void)? {
         get { popup.onClose }
         set { popup.onClose = newValue }
+    }
+
+    /// Gives the popup's page keyboard focus, as Chrome does when its popup shows, so a field the
+    /// page focuses shows as active and gets what's typed. Call it once ``view`` shows in its
+    /// popover and the page has loaded; from then on the popup follows Axo becoming active or
+    /// inactive.
+    public func focus() {
+        popup.focus()
     }
 
     /// Closes the popup.
