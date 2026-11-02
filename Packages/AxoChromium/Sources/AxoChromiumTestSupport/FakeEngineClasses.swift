@@ -193,8 +193,11 @@ public final class FakePage: NSObject, AXOPage {
 
     public func restoreNavigationState(_ state: Data) { restored.append(state) }
     public func load(_ url: URL) { loads.append(url) }
-    public func goBack() {}
-    public func goForward() {}
+    /// How many times Axo went back and forward.
+    public private(set) var backs = 0
+    public private(set) var forwards = 0
+    public func goBack() { backs += 1 }
+    public func goForward() { forwards += 1 }
     public func reload() {}
     public func stopLoading() {}
     public private(set) var finds: [(text: String, backwards: Bool)] = []

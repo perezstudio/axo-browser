@@ -36,6 +36,7 @@ final class ChromiumPage: NSObject, EnginePage {
         self.profileID = profileID
         super.init()
         (view as? ChromiumPageView)?.onResize = { [weak self] in self?.layOutDevTools() }
+        (view as? ChromiumPageView)?.onSwipe = { [weak self] deltaX in self?.swiped(deltaX: deltaX) }
     }
 
     /// Puts the Chromium page inside ``view`` and loads whatever was asked for before.
@@ -118,6 +119,32 @@ final class ChromiumPage: NSObject, EnginePage {
 
     func exitFullscreen() {
         page?.exitFullscreen()
+    }
+
+    // MARK: Swipes
+
+    /// Where a three-finger swipe goes: AppKit's `deltaX` is positive for a swipe toward the
+    /// right (Back) and negative toward the left (Forward), as Chrome maps it.
+    enum SwipeNavigation: Equatable {
+        case back, forward
+    }
+
+    static func swipeNavigation(deltaX: CGFloat) -> SwipeNavigation? {
+        if deltaX > 0 { return .back }
+        if deltaX < 0 { return .forward }
+        return nil
+    }
+
+    /// A three-finger swipe ("Swipe with three fingers" in System Settings) reached the page's
+    /// view: Chromium's page view leaves `swipeWithEvent:` to its superviews (Chrome handles it in
+    /// its Views window, which Axo doesn't have). Two-finger swipes are Chrome's own history
+    /// swiper's, inside the page view.
+    func swiped(deltaX: CGFloat) {
+        switch Self.swipeNavigation(deltaX: deltaX) {
+        case .back where canGoBack: goBack()
+        case .forward where canGoForward: goForward()
+        default: break
+        }
     }
 
     // MARK: DevTools
@@ -368,6 +395,12 @@ final class DownloadObserver: NSObject, AXODownloadObserver {
 final class ChromiumPageView: NSView {
     /// Called after the view resizes.
     var onResize: (() -> Void)?
+    /// Called with a three-finger swipe's `deltaX`.
+    var onSwipe: ((CGFloat) -> Void)?
+
+    override func swipe(with event: NSEvent) {
+        onSwipe?(event.deltaX)
+    }
 
     override func resizeSubviews(withOldSize oldSize: NSSize) {
         super.resizeSubviews(withOldSize: oldSize)

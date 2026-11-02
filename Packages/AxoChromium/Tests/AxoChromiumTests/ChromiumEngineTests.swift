@@ -666,6 +666,31 @@ struct ChromiumEngineTests {
         #expect(late.isClosed)
     }
 
+    @Test func threeFingerSwipesGoBackAndForward() throws {
+        #expect(ChromiumPage.swipeNavigation(deltaX: 1) == .back, "Toward the right, as Chrome maps it")
+        #expect(ChromiumPage.swipeNavigation(deltaX: -1) == .forward)
+        #expect(ChromiumPage.swipeNavigation(deltaX: 0) == nil, "Up or down")
+
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine)
+        let tab = Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial)
+        let page = try #require(pool.page(for: tab, profileID: profileID) as? ChromiumPage)
+        let fake = try #require(FakePage.made.first)
+
+        page.swiped(deltaX: 1)
+        page.swiped(deltaX: -1)
+        #expect(fake.backs == 0 && fake.forwards == 0, "Nowhere to go yet")
+        fake.canGoBack = true
+        fake.canGoForward = true
+        page.swiped(deltaX: 1)
+        page.swiped(deltaX: -1)
+        page.swiped(deltaX: 0)
+        #expect(fake.backs == 1 && fake.forwards == 1)
+    }
+
     @Test func devToolsDocksInThePagesViewBesideThePage() throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)
