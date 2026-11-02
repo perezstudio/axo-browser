@@ -26,14 +26,17 @@ public struct ExtensionToolbarItem: Identifiable, Equatable {
     public var badge: String
     /// Whether the button can be clicked.
     public var isEnabled: Bool
+    /// Whether clicking it opens a popup (so the popup can be inspected).
+    public var hasPopup: Bool
 
     /// Creates an item.
-    public init(id: String, label: String, icon: PlatformImage?, badge: String, isEnabled: Bool) {
+    public init(id: String, label: String, icon: PlatformImage?, badge: String, isEnabled: Bool, hasPopup: Bool = false) {
         self.id = id
         self.label = label
         self.icon = icon
         self.badge = badge
         self.isEnabled = isEnabled
+        self.hasPopup = hasPopup
     }
 }
 
@@ -111,9 +114,17 @@ public protocol ExtensionToolbarProviding: AnyObject {
     func shortcuts(profileID: Profile.ID) -> [ExtensionShortcut]
     /// Runs a shortcut, as pressing its keys does, with the given tab as the active one.
     func performShortcut(_ shortcut: ExtensionShortcut, profileID: Profile.ID, tabID: AxoCore.Tab.ID?)
+    /// Whether ``inspectPopup(extensionID:profileID:tabID:)`` works, for the buttons' menus.
+    var canInspectPopups: Bool { get }
+    /// Opens a button's popup and its DevTools, keeping the popup open while it's inspected.
+    func inspectPopup(extensionID: String, profileID: Profile.ID, tabID: AxoCore.Tab.ID?)
 }
 
 extension ExtensionToolbarProviding {
+    /// No popup inspector, for providers whose engine can't inspect popups.
+    public var canInspectPopups: Bool { false }
+    /// Does nothing, for providers whose engine can't inspect popups.
+    public func inspectPopup(extensionID: String, profileID: Profile.ID, tabID: AxoCore.Tab.ID?) {}
     /// No shortcuts, for providers whose engine doesn't have them.
     public func shortcuts(profileID: Profile.ID) -> [ExtensionShortcut] { [] }
     /// Does nothing, for providers whose engine doesn't have shortcuts.
@@ -140,6 +151,13 @@ struct ExtensionToolbarButtons: View {
                 .accessibilityLabel(item.badge.isEmpty ? item.label : "\(item.label), \(item.badge)")
                 .accessibilityIdentifier("extensionButton")
                 .background(PopoverAnchor { model.extensionAnchors[item.id] = $0 })
+                .contextMenu {
+                    if item.hasPopup && provider.canInspectPopups {
+                        Button("Inspect Popup") {
+                            provider.inspectPopup(extensionID: item.id, profileID: profileID, tabID: model.selectedTabID)
+                        }
+                    }
+                }
             }
         }
     }

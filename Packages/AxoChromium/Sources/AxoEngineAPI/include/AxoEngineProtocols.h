@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 25
+#define AXO_ENGINE_API_VERSION 26
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -140,6 +140,10 @@ NS_SWIFT_UI_ACTOR
 
 /// Uninstalls an extension and deletes its data.
 - (void)uninstallExtension:(NSString*)extensionID;
+/// Opens DevTools for the extension's service worker (started first if it's asleep) or background
+/// page, as Chrome's Extensions page does. It arrives through `onDevToolsWindowOpen`. Returns `NO`
+/// when the extension has neither, or isn't on.
+- (BOOL)inspectExtensionBackground:(NSString*)extensionID;
 
 /// The toolbar buttons of the profile's enabled extensions, for `page`: what Chrome's toolbar
 /// would show when that page is the active tab.
@@ -689,6 +693,8 @@ NS_SWIFT_UI_ACTOR
 @property(nonatomic, copy, nullable) void (^onClose)(void);
 /// Closes the panel, as its close button does.
 - (void)close;
+/// Opens DevTools for the panel's page, in a window of its own (`onDevToolsWindowOpen`).
+- (void)inspect;
 @end
 
 /// Chromium's DevTools in a window of its own (`AXOProfile.onDevToolsWindowOpen`).
@@ -749,6 +755,10 @@ NS_SWIFT_UI_ACTOR
 @property(nonatomic, copy, nullable) void (^onResize)(NSSize size);
 /// Called once the popup page has loaded.
 @property(nonatomic, copy, nullable) void (^onLoad)(void);
+/// Opens DevTools for the popup's page, in a window of its own (`onDevToolsWindowOpen`). Keep the
+/// popup open while it's inspected, as Chrome does: a popover that closes when DevTools takes
+/// focus closes the popup and its DevTools.
+- (void)inspect;
 /// Called when the popup closes itself (`window.close()`); it's unusable after.
 @property(nonatomic, copy, nullable) void (^onClose)(void);
 /// Gives the popup's page keyboard focus, as Chrome does when it shows its popup, so a field the

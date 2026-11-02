@@ -157,6 +157,11 @@ public final class ChromiumExtensionSidePanel {
         set { panel.onClose = newValue }
     }
 
+    /// Opens DevTools for the panel's page, arriving through ``ChromiumEngine/onDevToolsWindowOpen``.
+    public func inspect() {
+        panel.inspect()
+    }
+
     /// Closes the panel.
     public func close() {
         panel.close()
@@ -251,6 +256,12 @@ public final class ChromiumExtensionPopup {
         set { popup.onClose = newValue }
     }
 
+    /// Opens DevTools for the popup's page, arriving through ``ChromiumEngine/onDevToolsWindowOpen``.
+    /// Keep the popup open while it's inspected.
+    public func inspect() {
+        popup.inspect()
+    }
+
     /// Gives the popup's page keyboard focus, as Chrome does when its popup shows, so a field the
     /// page focuses shows as active and gets what's typed. Call it once ``view`` shows in its
     /// popover and the page has loaded; from then on the popup follows Axo becoming active or
@@ -292,6 +303,13 @@ extension ChromiumEngine {
     /// Uninstalls an extension and deletes its data.
     public func uninstallExtension(_ extensionID: String, profileID: Profile.ID) {
         readyProfile(profileID)?.uninstallExtension(extensionID)
+    }
+
+    /// Opens DevTools for an extension's service worker (started first if it's asleep) or
+    /// background page, arriving through ``onDevToolsWindowOpen``. Returns `false` when it has
+    /// neither, or isn't on.
+    public func inspectExtensionBackground(_ extensionID: String, profileID: Profile.ID) -> Bool {
+        readyProfile(profileID)?.inspectExtensionBackground(extensionID) ?? false
     }
 
     /// Loads an unpacked extension folder into a profile, in developer mode, and returns its ID.

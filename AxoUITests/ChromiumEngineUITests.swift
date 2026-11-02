@@ -576,6 +576,51 @@ final class ChromiumEngineUITests: XCTestCase {
         XCTAssertFalse(elements.exists, "DevTools closed")
     }
 
+    /// The Extensions window's "Inspect Background Page" opens DevTools for an extension's service
+    /// worker in a window of Axo's own, and its toolbar button's menu inspects its popup (#45).
+    @MainActor
+    func testExtensionsServiceWorkerAndPopupCanBeInspected() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "AxoUITestInspect-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try """
+        {"name": "Axo Inspected", "version": "1.0", "manifest_version": 3, "description": "UI test extension.",
+         "action": {"default_title": "Axo Inspected", "default_popup": "popup.html"},
+         "background": {"service_worker": "bg.js"}}
+        """.write(to: folder.appending(path: "manifest.json"), atomically: true, encoding: .utf8)
+        try "chrome.action.setBadgeText({ text: '1' });".write(to: folder.appending(path: "bg.js"), atomically: true, encoding: .utf8)
+        try "<!doctype html><title>Inspected popup</title><p>Popup</p>".write(to: folder.appending(path: "popup.html"), atomically: true, encoding: .utf8)
+
+        let app = launchChromiumApp(extensionFolder: folder)
+        XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 10))
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,<title>Page</title><p>Page</p>\n")
+        let button = app.buttons.matching(NSPredicate(format: "identifier == 'extensionButton' AND label CONTAINS 'Axo Inspected'")).firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 30))
+
+        app.typeKey("e", modifierFlags: [.command, .shift])
+        let window = app.descendants(matching: .any)["extensionsWindow"]
+        XCTAssertTrue(window.waitForExistence(timeout: 10))
+        let inspect = window.buttons["Inspect Axo Inspected Background Page"]
+        XCTAssertTrue(inspect.waitForExistence(timeout: 10))
+        inspect.click()
+        let devTools = app.windows.matching(NSPredicate(format: "title BEGINSWITH 'DevTools'")).firstMatch
+        XCTAssertTrue(devTools.waitForExistence(timeout: 20), "The service worker's DevTools opens in a window of Axo's")
+        XCTAssertFalse(app.alerts.firstMatch.exists, "No 'nothing to inspect' message")
+        devTools.typeKey("w", modifierFlags: .command)
+        let closed = NSPredicate(format: "exists == false")
+        expectation(for: closed, evaluatedWith: devTools)
+        waitForExpectations(timeout: 10)
+        let done = app.sheets.firstMatch.buttons["Done"]
+        if done.exists { done.click() }
+
+        button.rightClick()
+        let inspectPopup = app.windows.firstMatch.menuItems["Inspect Popup"]
+        XCTAssertTrue(inspectPopup.waitForExistence(timeout: 5))
+        inspectPopup.click()
+        let popupDevTools = app.windows.matching(NSPredicate(format: "title CONTAINS 'popup.html'")).firstMatch
+        XCTAssertTrue(popupDevTools.waitForExistence(timeout: 20), "The popup's DevTools opens in a window of Axo's")
+    }
+
     /// A tab loads its page in Chromium. The page names the engine from its user agent, which
     /// says "Chrome/" only in Chromium, so the test can't pass on WebKit.
     @MainActor

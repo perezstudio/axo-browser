@@ -14,13 +14,19 @@ public struct ExtensionSidePanel: Identifiable {
     public var profileID: Profile.ID?
     /// Closes the panel in the engine.
     public var close: @MainActor () -> Void
+    /// Opens DevTools for the panel's page, when the engine can.
+    public var inspect: (@MainActor () -> Void)?
 
     /// Creates a panel.
-    public init(id: String, title: String, view: PlatformView, profileID: Profile.ID? = nil, close: @escaping @MainActor () -> Void) {
+    public init(
+        id: String, title: String, view: PlatformView, profileID: Profile.ID? = nil,
+        inspect: (@MainActor () -> Void)? = nil, close: @escaping @MainActor () -> Void
+    ) {
         self.id = id
         self.title = title
         self.view = view
         self.profileID = profileID
+        self.inspect = inspect
         self.close = close
     }
 }
@@ -78,12 +84,31 @@ struct ExtensionSidePanelView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+            .contextMenu {
+                if let inspect = panel.inspect {
+                    Button("Inspect Side Panel") { inspect() }
+                }
+            }
             Divider()
             HostedView(view: panel.view)
         }
         .frame(minWidth: 280, idealWidth: 360, maxWidth: 520)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("extensionSidePanel")
+        .modifier(InspectAction(inspect: panel.inspect))
+    }
+}
+
+/// "Inspect Side Panel" as a VoiceOver action too, when the engine can inspect it.
+private struct InspectAction: ViewModifier {
+    let inspect: (@MainActor () -> Void)?
+
+    func body(content: Content) -> some View {
+        if let inspect {
+            content.accessibilityAction(named: "Inspect Side Panel") { inspect() }
+        } else {
+            content
+        }
     }
 }
 
