@@ -605,13 +605,15 @@ final class ChromiumEngineUITests: XCTestCase {
         inspect.click()
         let devTools = app.windows.matching(NSPredicate(format: "title BEGINSWITH 'DevTools'")).firstMatch
         XCTAssertTrue(devTools.waitForExistence(timeout: 20), "The service worker's DevTools opens in a window of Axo's")
-        XCTAssertFalse(app.alerts.firstMatch.exists, "No 'nothing to inspect' message")
         devTools.typeKey("w", modifierFlags: .command)
         let closed = NSPredicate(format: "exists == false")
         expectation(for: closed, evaluatedWith: devTools)
         waitForExpectations(timeout: 10)
         let done = app.sheets.firstMatch.buttons["Done"]
-        if done.exists { done.click() }
+        XCTAssertTrue(done.waitForExistence(timeout: 5), "The Extensions window stays open")
+        done.click()
+        let nothingToInspect = NSPredicate(format: "label CONTAINS 'no background page' OR value CONTAINS 'no background page'")
+        XCTAssertFalse(app.descendants(matching: .any).matching(nothingToInspect).firstMatch.exists, "No 'nothing to inspect' message")
 
         button.rightClick()
         let inspectPopup = app.windows.firstMatch.menuItems["Inspect Popup"]
@@ -619,6 +621,18 @@ final class ChromiumEngineUITests: XCTestCase {
         inspectPopup.click()
         let popupDevTools = app.windows.matching(NSPredicate(format: "title CONTAINS 'popup.html'")).firstMatch
         XCTAssertTrue(popupDevTools.waitForExistence(timeout: 20), "The popup's DevTools opens in a window of Axo's")
+        // DevTools taking focus, and clicks elsewhere, leave the popup open: closing it would end
+        // its DevTools.
+        let popover = app.popovers.firstMatch
+        XCTAssertTrue(popover.waitForExistence(timeout: 5))
+        app.windows.matching(NSPredicate(format: "title BEGINSWITH 'DevTools'")).firstMatch.click()
+        sleep(1)
+        XCTAssertTrue(popover.exists, "The inspected popup stays open")
+        XCTAssertTrue(popupDevTools.exists, "And so does its DevTools")
+        // Closing its DevTools closes the popup.
+        popupDevTools.typeKey("w", modifierFlags: .command)
+        expectation(for: closed, evaluatedWith: popover)
+        waitForExpectations(timeout: 10)
     }
 
     /// A tab loads its page in Chromium. The page names the engine from its user agent, which

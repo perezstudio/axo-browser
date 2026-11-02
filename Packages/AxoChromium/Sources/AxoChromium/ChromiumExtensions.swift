@@ -256,10 +256,16 @@ public final class ChromiumExtensionPopup {
         set { popup.onClose = newValue }
     }
 
-    /// Opens DevTools for the popup's page, arriving through ``ChromiumEngine/onDevToolsWindowOpen``.
-    /// Keep the popup open while it's inspected.
+    /// Opens DevTools for the popup's page, on its Console, arriving through
+    /// ``ChromiumEngine/onDevToolsWindowOpen``. Keep the popup open until ``onInspectorClose``.
     public func inspect() {
         popup.inspect()
+    }
+
+    /// Called when the DevTools ``inspect()`` opened goes away.
+    public var onInspectorClose: (() -> Void)? {
+        get { popup.onInspectorClose }
+        set { popup.onInspectorClose = newValue }
     }
 
     /// Gives the popup's page keyboard focus, as Chrome does when its popup shows, so a field the

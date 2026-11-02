@@ -158,6 +158,13 @@ struct ExtensionToolbarButtons: View {
                         }
                     }
                 }
+                .accessibilityActions {
+                    if item.hasPopup && provider.canInspectPopups {
+                        Button("Inspect Popup") {
+                            provider.inspectPopup(extensionID: item.id, profileID: profileID, tabID: model.selectedTabID)
+                        }
+                    }
+                }
             }
         }
     }

@@ -84,6 +84,7 @@ struct ExtensionSidePanelView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+            .contentShape(Rectangle())
             .contextMenu {
                 if let inspect = panel.inspect {
                     Button("Inspect Side Panel") { inspect() }

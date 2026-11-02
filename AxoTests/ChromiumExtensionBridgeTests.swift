@@ -260,12 +260,14 @@ struct ChromiumExtensionBridgeTests {
         clicked.onLoad?()
         #expect(clicked.inspectCount == 0)
 
-        // Inspect Popup: it opens, stays open while DevTools has focus, and is inspected once loaded.
+        // Inspect Popup: it opens, stays open until its DevTools closes, and is inspected once loaded.
         let inspected = FakeExtensionPopup(extensionIdentifier: "blocker")
         profile.nextPopup = inspected
         bridge.inspectPopup(extensionID: "blocker", profileID: profileID, tabID: model.selectedTabID)
         try await waitUntil { self.bridge.popups["blocker"]?.popup.view === inspected.view }
-        #expect(bridge.popups["blocker"]?.popover.behavior == .semitransient, "DevTools' window taking focus doesn't close it")
+        #expect(bridge.popups["blocker"]?.popover.behavior == .applicationDefined, "Clicks elsewhere don't close it, or its DevTools")
+        #expect(inspected.onInspectorClose != nil, "Its DevTools closing closes it")
+        #expect(clicked.onInspectorClose == nil, "A popup that isn't inspected doesn't wait for DevTools")
         #expect(inspected.inspectCount == 0, "Not before it loads")
         inspected.onLoad?()
         #expect(inspected.inspectCount == 1)

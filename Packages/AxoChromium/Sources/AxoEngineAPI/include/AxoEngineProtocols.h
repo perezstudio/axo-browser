@@ -755,10 +755,12 @@ NS_SWIFT_UI_ACTOR
 @property(nonatomic, copy, nullable) void (^onResize)(NSSize size);
 /// Called once the popup page has loaded.
 @property(nonatomic, copy, nullable) void (^onLoad)(void);
-/// Opens DevTools for the popup's page, in a window of its own (`onDevToolsWindowOpen`). Keep the
-/// popup open while it's inspected, as Chrome does: a popover that closes when DevTools takes
-/// focus closes the popup and its DevTools.
+/// Opens DevTools for the popup's page, on its Console as Chrome does, in a window of its own
+/// (`onDevToolsWindowOpen`). Keep the popup open until `onInspectorClose`, as Chrome does: a popup
+/// that closes ends its DevTools too.
 - (void)inspect;
+/// Called when the DevTools `-inspect` opened goes away.
+@property(nonatomic, copy, nullable) void (^onInspectorClose)(void);
 /// Called when the popup closes itself (`window.close()`); it's unusable after.
 @property(nonatomic, copy, nullable) void (^onClose)(void);
 /// Gives the popup's page keyboard focus, as Chrome does when it shows its popup, so a field the

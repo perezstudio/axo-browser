@@ -419,6 +419,7 @@ public final class FakeExtensionPopup: NSObject, AXOExtensionPopup {
 
     public func focus() { focusCount += 1 }
     public private(set) var inspectCount = 0
+    public var onInspectorClose: (() -> Void)?
     public func inspect() { inspectCount += 1 }
     public func close() { isClosed = true }
 }

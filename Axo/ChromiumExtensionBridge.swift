@@ -196,9 +196,8 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
     var canInspectPopups: Bool { true }
 
     /// Opens the popup, as clicking its button does, and inspects it once it loads. The popover
-    /// stays open while DevTools is in use (Chrome keeps an inspected popup open too): a
-    /// transient one would close as DevTools' window takes focus, closing the popup and its
-    /// DevTools. Clicking in the browser window closes it.
+    /// stays open until its DevTools closes (or the button is clicked again), as Chrome keeps an
+    /// inspected popup open: closing the popup would end its DevTools.
     func inspectPopup(extensionID: String, profileID: Profile.ID, tabID: AxoCore.Tab.ID?) {
         let page = page(for: tabID)
         Task {
@@ -251,8 +250,8 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
     }
 
     /// Shows a popup under its toolbar button in a popover that follows the popup's size. An
-    /// inspected popup gets its DevTools once it loads, and stays open while DevTools has focus.
-    func present(_ popup: ChromiumExtensionPopup, inspecting: Bool = false) {
+    /// inspected popup gets its DevTools once it loads, and stays open until DevTools closes.
+    private func present(_ popup: ChromiumExtensionPopup, inspecting: Bool = false) {
         let extensionID = popup.extensionID
         // The extension's open popup, if any, goes away first: its page and its popover.
         if let previous = popups.removeValue(forKey: extensionID) {
@@ -263,7 +262,10 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
         controller.view = popup.view
         let popover = NSPopover()
         popover.contentViewController = controller
-        popover.behavior = inspecting ? .semitransient : .transient
+        popover.behavior = inspecting ? .applicationDefined : .transient
+        if inspecting {
+            popup.onInspectorClose = { [weak popover] in popover?.close() }
+        }
         popover.contentSize = popup.preferredSize
         popup.onResize = { [weak popover] size in popover?.contentSize = size }
         popup.onClose = { [weak popover] in popover?.close() }

@@ -252,6 +252,7 @@ private struct ExtensionRow: View {
     let model: BrowserModel
     let refresh: () async -> Void
     @State private var isConfirmingRemoval = false
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -312,6 +313,17 @@ private struct ExtensionRow: View {
                 }
                 .disabled(!item.isEnabled)
                 .accessibilityLabel("Inspect \(item.name) Background Page")
+                // Also in its toolbar button's menu; here it's reachable from the keyboard. The
+                // Extensions window closes so the popup can show under its button.
+                if let toolbar = model.extensionToolbar, toolbar.canInspectPopups, let profileID = model.space?.profileID,
+                   toolbar.toolbarItems(profileID: profileID, tabID: model.selectedTabID).contains(where: { $0.id == item.id && $0.hasPopup }) {
+                    Button("Inspect Popup") {
+                        dismiss()
+                        toolbar.inspectPopup(extensionID: item.id, profileID: profileID, tabID: model.selectedTabID)
+                    }
+                    .disabled(!item.isEnabled)
+                    .accessibilityLabel("Inspect \(item.name) Popup")
+                }
                 Spacer()
                 Button("Remove…", role: .destructive) { isConfirmingRemoval = true }
                     .accessibilityLabel("Remove \(item.name)")

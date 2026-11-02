@@ -115,9 +115,10 @@ struct PinningAndArchiveModelTests {
 
         await model.goToPinnedHome(tab.id)
 
-        #expect(model.pinnedTabs.first?.url == tab.url)
-        #expect(model.pinnedTabs.first?.hasLeftHome == false)
+        // The page that was elsewhere can still report its URL just after the reset, so the tab
+        // settles once the home page loads (CLAUDE.md: observed values can trail the model's write).
         try await waitUntil { model.selectedPage?.title == "home" && model.selectedPage?.isLoading == false }
+        try await waitUntil { model.pinnedTabs.first?.url == tab.url && model.pinnedTabs.first?.hasLeftHome == false }
         #expect(model.selectedTabID == tab.id)
     }
 
