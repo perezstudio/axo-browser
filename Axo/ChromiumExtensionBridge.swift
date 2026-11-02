@@ -21,7 +21,7 @@ import SwiftUI
 /// history changes the engine makes without a page visit (extensions adding visits or deleting
 /// history) to Axo's history.
 @Observable
-final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManaging {
+final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManaging, DeveloperToolsProviding {
     @ObservationIgnored private weak var model: BrowserModel?
     @ObservationIgnored private let engine: ChromiumEngine
     @ObservationIgnored private let store: TabStore
@@ -50,6 +50,7 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
         self.store = store
         model.extensionToolbar = self
         model.extensionManagement = self
+        model.developerTools = self
         engine.onExtensionsChange = { [weak self] _ in self?.revision += 1 }
         // Chrome's prompts (permissions, uninstalls, what to share) are Axo's alerts.
         engine.onExtensionPrompt = { [weak self] prompt, _, answer in
@@ -253,6 +254,17 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
         popover.delegate = closer
         popups[extensionID] = (popup, closer, popover)
         model?.presentExtensionPopup(popover, extensionID: extensionID)
+    }
+
+    // MARK: DeveloperToolsProviding
+
+    /// Chromium's DevTools, docked beside the page in its view (`EnginePage.toggleDevTools()`).
+    func toggleInspector(for tabID: AxoCore.Tab.ID) -> Bool {
+        model?.pool.livePage(for: tabID)?.toggleDevTools() ?? true
+    }
+
+    func showConsole(for tabID: AxoCore.Tab.ID) -> Bool {
+        model?.pool.livePage(for: tabID)?.showDevToolsConsole() ?? true
     }
 
     // MARK: ExtensionManaging

@@ -44,6 +44,23 @@ struct ChromiumExtensionBridgeTests {
         profileID = try #require(model.space?.profileID)
     }
 
+    @Test func theDevelopMenuOpensChromiumsDevToolsForTheSelectedTab() async throws {
+        #expect(model.developerTools === bridge, "Develop › Show Web Inspector is available on Chromium")
+        await model.openTab(url: URL(string: "https://example.com/first")!)
+        let firstID = try #require(model.selectedTabID)
+        await model.openTab(url: URL(string: "https://example.com/second")!)
+        model.select(firstID)
+        let firstPage = try #require(FakePage.made.first { $0.loads.last?.lastPathComponent == "first" })
+        let secondPage = try #require(FakePage.made.first { $0.loads.last?.lastPathComponent == "second" })
+
+        model.toggleWebInspector()
+        model.showJavaScriptConsole()
+        #expect(firstPage.devToolsToggles == 1, "The selected tab's page")
+        #expect(firstPage.consoleShows == 1)
+        #expect(secondPage.devToolsToggles == 0 && secondPage.consoleShows == 0)
+        #expect(model.alertMessage == nil, "No fallback to Safari's Develop menu")
+    }
+
     @Test func connectsToTheToolbarAndExtensionsWindow() {
         #expect(model.extensionToolbar === bridge)
         #expect(model.extensionManagement === bridge)

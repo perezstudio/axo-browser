@@ -15,8 +15,10 @@ final class ChromiumPage: NSObject, EnginePage {
     weak var delegate: (any EnginePageDelegate)?
     /// The engine, which wraps the pages this one opens.
     weak var engine: ChromiumEngine?
-    let view: PlatformView = NSView()
+    let view: PlatformView = ChromiumPageView()
     private(set) var page: (any AXOPage)?
+    /// The page's docked DevTools, while it shows in ``view``.
+    private var shownDevTools: NSView?
     private(set) var isClosed = false
     /// What to load once attached: the last URL or history asked for before the engine was ready.
     private var pendingLoad: PendingLoad?
@@ -33,6 +35,7 @@ final class ChromiumPage: NSObject, EnginePage {
     init(profileID: Profile.ID) {
         self.profileID = profileID
         super.init()
+        (view as? ChromiumPageView)?.onResize = { [weak self] in self?.layOutDevTools() }
     }
 
     /// Puts the Chromium page inside ``view`` and loads whatever was asked for before.
@@ -117,6 +120,38 @@ final class ChromiumPage: NSObject, EnginePage {
         page?.exitFullscreen()
     }
 
+    // MARK: DevTools
+
+    func toggleDevTools() -> Bool {
+        page?.toggleDevTools()
+        return true
+    }
+
+    func showDevToolsConsole() -> Bool {
+        page?.showDevToolsConsole()
+        return true
+    }
+
+    /// Lays out the page and its docked DevTools in ``view``: DevTools fills it, and the page
+    /// sits on top where DevTools puts it (DevTools draws its own divider and dock-side menu
+    /// around the page). Without DevTools, the page fills ``view``. Frames and autoresizing
+    /// only, never Auto Layout: DevTools moves the page as the person drags its divider.
+    func layOutDevTools() {
+        guard let page else { return }
+        let devTools = page.devToolsView
+        if shownDevTools !== devTools {
+            if shownDevTools?.superview === view { shownDevTools?.removeFromSuperview() }
+            shownDevTools = devTools
+            if let devTools {
+                devTools.frame = view.bounds
+                devTools.autoresizingMask = [.width, .height]
+                view.addSubview(devTools, positioned: .below, relativeTo: page.view)
+            }
+        }
+        page.view.frame = devTools == nil ? view.bounds : page.devToolsPageFrame(inBounds: view.bounds)
+        page.view.autoresizingMask = devTools == nil ? [.width, .height] : []
+    }
+
     func printOperation(with printInfo: NSPrintInfo) -> NSPrintOperation {
         page?.printOperation(with: printInfo) ?? NSPrintOperation(view: view, printInfo: printInfo)
     }
@@ -126,6 +161,8 @@ final class ChromiumPage: NSObject, EnginePage {
     func closedByEngine() {
         isClosed = true
         page?.delegate = nil
+        shownDevTools?.removeFromSuperview()
+        shownDevTools = nil
         page?.view.removeFromSuperview()
         page = nil
         pendingLoad = nil
@@ -134,6 +171,8 @@ final class ChromiumPage: NSObject, EnginePage {
     func close() {
         isClosed = true
         page?.delegate = nil
+        shownDevTools?.removeFromSuperview()
+        shownDevTools = nil
         page?.close()
         page?.view.removeFromSuperview()
         page = nil
@@ -164,6 +203,10 @@ extension ChromiumPage: AXOPageDelegate {
 
     func pageDidTakeFocus(_ page: any AXOPage) {
         delegate?.pageDidTakeFocus(self)
+    }
+
+    func pageDevToolsDidChange(_ page: any AXOPage) {
+        layOutDevTools()
     }
 
     func page(_ page: any AXOPage, shouldHandleLinkTo url: URL, modifiers: AXOLinkModifiers) -> Bool {
@@ -311,5 +354,17 @@ final class DownloadObserver: NSObject, AXODownloadObserver {
     func download(_ download: any AXODownload, didFailWithMessage message: String) {
         item.reportFailed(message)
         onEnd()
+    }
+}
+
+/// ``ChromiumPage``'s view: holds the Chromium page's view and, while it's open, its docked
+/// DevTools, laying them out again when it resizes.
+final class ChromiumPageView: NSView {
+    /// Called after the view resizes.
+    var onResize: (() -> Void)?
+
+    override func resizeSubviews(withOldSize oldSize: NSSize) {
+        super.resizeSubviews(withOldSize: oldSize)
+        onResize?()
     }
 }

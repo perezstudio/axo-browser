@@ -216,7 +216,18 @@ public final class FakePage: NSObject, AXOPage {
     /// The downloads Axo started (`startDownload(from:)`), in order.
     public private(set) var startedDownloads: [URL] = []
     public func startDownload(from url: URL) { startedDownloads.append(url) }
-    public func toggleDevTools() {}
+    /// How many times Axo toggled DevTools, and opened it on the Console.
+    public private(set) var devToolsToggles = 0
+    public private(set) var consoleShows = 0
+    public func toggleDevTools() { devToolsToggles += 1 }
+    public func showDevToolsConsole() { consoleShows += 1 }
+    /// The docked DevTools to report, and where it puts the page (in a 1000x700 container, as
+    /// the engine would).
+    public var devToolsView: NSView?
+    public var devToolsPageFrame = NSRect(x: 0, y: 0, width: 600, height: 700)
+    public func devToolsPageFrame(inBounds bounds: NSRect) -> NSRect {
+        devToolsView == nil ? bounds : devToolsPageFrame
+    }
 
     public func printOperation(with printInfo: NSPrintInfo) -> NSPrintOperation {
         NSPrintOperation(view: view, printInfo: printInfo)
