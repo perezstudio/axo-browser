@@ -29,6 +29,17 @@ final class SitePermissionAdapter: PermissionDecisionStore {
         case .microphone: [.microphone]
         case .cameraAndMicrophone: [.camera, .microphone]
         case .location: [.location]
+        case .notifications: [.notifications]
+        case .clipboard: [.clipboard]
+        }
+    }
+
+    /// The request kind that keeps a saved kind's answer in the engine, if the engine keeps one.
+    static func lastingKind(for kind: SitePermission.Kind) -> PermissionKind? {
+        switch kind {
+        case .notifications: .notifications
+        case .clipboard: .clipboard
+        case .camera, .microphone, .location: nil
         }
     }
 
@@ -71,6 +82,9 @@ extension BrowserModel {
     public func setSitePermission(_ decision: SitePermission.Decision?, for kind: SitePermission.Kind) async {
         guard let origin = siteSettingsOrigin, let profileID = space?.profileID else { return }
         try? await store.sitePermissions.setDecision(decision, for: [kind], origin: origin.serialized, profileID: profileID)
+        if let lasting = SitePermissionAdapter.lastingKind(for: kind) {
+            pool.setLastingPermission(lasting, origin: origin, decision: decision.map { $0 == .allow ? .allow : .deny }, profileID: profileID)
+        }
         await refreshSiteSettings()
     }
 
@@ -78,7 +92,39 @@ extension BrowserModel {
     public func resetSiteSettings() async {
         guard let origin = siteSettingsOrigin, let profileID = space?.profileID else { return }
         try? await store.sitePermissions.reset(origin: origin.serialized, profileID: profileID)
+        for kind in PermissionKind.allCases where kind.lastsInEngine {
+            pool.setLastingPermission(kind, origin: origin, decision: nil, profileID: profileID)
+        }
         await refreshSiteSettings()
+    }
+
+    /// Replaces the answers the engine keeps itself (notifications and the clipboard) with Axo's
+    /// saved ones, in every profile or just `profileID`, forgetting any the engine has that Axo
+    /// doesn't: at launch, and after clearing a profile's website data, which clears the engine's.
+    func syncLastingPermissions(profileID only: Profile.ID? = nil) async {
+        guard let saved = try? await store.sitePermissions.all([.notifications, .clipboard]) else { return }
+        let profileIDs = if let only { [only] } else { await profiles().map(\.id) }
+        for profileID in profileIDs {
+            let answers = saved.filter { $0.profileID == profileID }.compactMap { permission -> LastingPermission? in
+                guard let kind = SitePermissionAdapter.lastingKind(for: permission.kind),
+                      let url = URL(string: permission.origin), let origin = PageOrigin(url: url) else { return nil }
+                return LastingPermission(kind: kind, origin: origin, decision: permission.decision == .allow ? .allow : .deny)
+            }
+            pool.replaceLastingPermissions(answers, profileID: profileID)
+        }
+    }
+
+    /// What Site Settings offers for the selected page's site: the kinds the engine asks Axo
+    /// about, and notifications and the clipboard only on a secure site (https, or this Mac),
+    /// where pages can ask for them.
+    public var siteSettingsKinds: [SitePermission.Kind] {
+        guard let origin = siteSettingsOrigin else { return [] }
+        let asked = pool.askedPermissionKinds
+        let secure = origin.scheme == "https" || ["localhost", "127.0.0.1", "::1"].contains(origin.host)
+        return SitePermission.Kind.allCases.filter { kind in
+            guard let lasting = SitePermissionAdapter.lastingKind(for: kind) else { return true }
+            return secure && asked.contains(lasting)
+        }
     }
 }
 
@@ -103,8 +149,8 @@ struct SiteSettingsButton: View {
     }
 }
 
-/// What the selected page's site may use: camera, microphone, and location, each Ask, Allow,
-/// or Don't Allow.
+/// What the selected page's site may use: camera, microphone, location, notifications, and the
+/// clipboard, each Ask, Allow, or Don't Allow.
 struct SiteSettingsView: View {
     let model: BrowserModel
 
@@ -114,7 +160,7 @@ struct SiteSettingsView: View {
                 .font(.headline)
                 .accessibilityAddTraits(.isHeader)
             Form {
-                ForEach(SitePermission.Kind.allCases, id: \.self) { kind in
+                ForEach(model.siteSettingsKinds, id: \.self) { kind in
                     Picker(Self.title(for: kind), selection: Binding(
                         get: { model.sitePermissions[kind] },
                         set: { decision in Task { await model.setSitePermission(decision, for: kind) } }
@@ -154,6 +200,8 @@ struct SiteSettingsView: View {
         case .camera: "Camera"
         case .microphone: "Microphone"
         case .location: "Location"
+        case .notifications: "Notifications"
+        case .clipboard: "Clipboard"
         }
     }
 }

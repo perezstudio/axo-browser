@@ -141,10 +141,24 @@ struct PagePromptTests {
         #expect(PageOrigin(url: URL(string: "about:blank")!) == nil)
     }
 
-    @Test func withoutAHandlerPermissionsAreDeniedAndNotRemembered() async {
+    @Test func withoutAHandlerThereIsNoAnswerAndNothingIsRemembered() async {
         let origin = PageOrigin(scheme: "https", host: "example.com")
-        #expect(await pool.decidePermission(.location, origin: origin, tabID: UUID(), profileID: profileID) == .deny)
+        #expect(await pool.decidePermission(.location, origin: origin, tabID: UUID(), profileID: profileID) == nil)
         #expect(pool.rememberedPermission(.location, origin: origin, profileID: profileID) == nil)
+    }
+
+    @Test func aPromptThatGoesAwayUnansweredIsRememberedNowhere() async {
+        let origin = PageOrigin(scheme: "https", host: "example.com")
+        pool.onPermissionRequest = { _ in nil }
+        #expect(await pool.decidePermission(.notifications, origin: origin, tabID: UUID(), profileID: profileID) == nil)
+        #expect(pool.rememberedPermission(.notifications, origin: origin, profileID: profileID) == nil)
+    }
+
+    @Test func ipv6OriginsKeepTheirBrackets() throws {
+        let origin = try #require(PageOrigin(url: URL(string: "http://[::1]:8000/page")!))
+        #expect(origin.serialized == "http://[::1]:8000")
+        #expect(URL(string: origin.serialized).flatMap(PageOrigin.init(url:)) == origin, "It reads back as itself")
+        #expect(PageOrigin(scheme: "https", host: "example.com").serialized == "https://example.com")
     }
 
     @Test func originsNameThemselvesForPeople() {

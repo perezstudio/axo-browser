@@ -90,6 +90,27 @@ struct SiteSettingsTests {
         #expect(model.sitePermissions.isEmpty)
     }
 
+    @Test func notificationsAndTheClipboardAreAskedAboutAndSaved() async throws {
+        let answering = answerPrompts(with: .allow)
+        defer { answering.cancel() }
+        #expect(await pool.decidePermission(.notifications, origin: meet, tabID: UUID(), profileID: profileID) == .allow)
+        answering.cancel()
+        let denying = answerPrompts(with: .deny)
+        defer { denying.cancel() }
+        #expect(await pool.decidePermission(.clipboard, origin: meet, tabID: UUID(), profileID: profileID) == .deny)
+
+        let saved = try await store.sitePermissions.decisions(origin: meet.serialized, profileID: profileID)
+        #expect(saved == [.notifications: .allow, .clipboard: .deny])
+    }
+
+    @Test func eachPermissionAsksItsOwnQuestion() {
+        let request = { (kind: PermissionKind) in PermissionRequest(tabID: UUID(), origin: self.meet, kind: kind) }
+        #expect(PagePromptModifier.question(for: request(.camera)) == "Allow “meet.example.com” to use your camera?")
+        #expect(PagePromptModifier.question(for: request(.notifications)) == "Allow “meet.example.com” to send you notifications?")
+        #expect(PagePromptModifier.question(for: request(.clipboard)) == "Allow “meet.example.com” to see text and images you copy?")
+        #expect(Set(PermissionKind.allCases.map { PagePromptModifier.question(for: request($0)) }).count == PermissionKind.allCases.count)
+    }
+
     @Test func allowingLocationAsksMacOSOnce() async throws {
         let location = FakeLocationAuthorization()
         model.locationAuthorization = location

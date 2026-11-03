@@ -245,7 +245,7 @@ public final class BrowserModel {
             }
         }
         pool.onPermissionRequest = { [weak self] request in
-            guard let self else { return .deny }
+            guard let self else { return nil }
             let decision = await self.prompts.ask(request)
             // macOS asks about location once, after the person allows a site in Axo.
             if request.kind == .location, decision == .allow { self.locationAuthorization?.requestIfNeeded() }
@@ -367,6 +367,7 @@ public final class BrowserModel {
             observeProfiles()
             observeLinkRoutes()
             observeSiteCustomizations()
+            await syncLastingPermissions()
             pool.startHibernationTimer()
             startArchiving()
         } catch {

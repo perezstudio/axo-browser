@@ -35,10 +35,23 @@ public protocol WebEngine: AnyObject {
     /// for engines with a window model of their own. Chromium's extension APIs see these as one
     /// window's tabs. WebKit has no such model and ignores it.
     func setWindowPages(_ pages: [any EnginePage], active: (any EnginePage)?, profileID: Profile.ID)
+
+    /// Sets a site's lasting answer in the engine's own settings, for kinds the engine keeps an
+    /// answer for itself (``PermissionKind/lastsInEngine``); `nil` clears it, so the site asks
+    /// again. Engines that ask every time (WebKit) ignore it.
+    func setLastingPermission(_ kind: PermissionKind, origin: PageOrigin, decision: PermissionDecision?, profileID: Profile.ID)
+    /// Replaces every lasting answer the engine keeps for a profile with `answers`, forgetting any
+    /// it has that Axo doesn't (Axo's are the ones that count).
+    func replaceLastingPermissions(_ answers: [LastingPermission], profileID: Profile.ID)
+    /// The kinds of permission the engine asks Axo about. Site Settings offers only these.
+    var askedPermissionKinds: Set<PermissionKind> { get }
 }
 
 extension WebEngine {
     public func setWindowPages(_ pages: [any EnginePage], active: (any EnginePage)?, profileID: Profile.ID) {}
+    public func setLastingPermission(_ kind: PermissionKind, origin: PageOrigin, decision: PermissionDecision?, profileID: Profile.ID) {}
+    public func replaceLastingPermissions(_ answers: [LastingPermission], profileID: Profile.ID) {}
+    public var askedPermissionKinds: Set<PermissionKind> { [.camera, .microphone, .cameraAndMicrophone, .location] }
 }
 
 /// Tabs an engine changed on its own, such as through Chromium's extension APIs
@@ -190,8 +203,9 @@ public protocol EnginePageDelegate: AnyObject {
     /// the engine's download when the person cancels it.
     func page(_ page: any EnginePage, didStartDownloadFrom sourceURL: URL?, cancel: @escaping @MainActor () -> Void) -> DownloadItem
 
-    /// The page wants the camera, microphone, or location.
-    func page(_ page: any EnginePage, requestsPermission kind: PermissionKind, origin: PageOrigin) async -> PermissionDecision
+    /// The page wants a device or capability (``PermissionKind``). `nil` is no answer (Axo
+    /// couldn't ask, or the prompt went away unanswered): engines that keep answers record nothing.
+    func page(_ page: any EnginePage, requestsPermission kind: PermissionKind, origin: PageOrigin) async -> PermissionDecision?
     /// The page called `alert()`, `confirm()`, or `prompt()`.
     func page(_ page: any EnginePage, showsDialog kind: JavaScriptDialog.Kind, message: String, origin: PageOrigin) async -> JavaScriptDialogResult
     /// The page's file input wants files. Return them, or `nil` to cancel.

@@ -239,6 +239,18 @@ struct WebEngineTests {
 
     // MARK: Windows
 
+    @Test func onlyAnswersTheEngineKeepsReachIt() {
+        let site = PageOrigin(scheme: "https", host: "news.example.com")
+        for kind in PermissionKind.allCases {
+            pool.setLastingPermission(kind, origin: site, decision: .allow, profileID: profileID)
+        }
+        pool.setLastingPermission(.notifications, origin: site, decision: nil, profileID: profileID)
+
+        #expect(engine.lastingPermissions.map(\.kind) == [.notifications, .clipboard, .notifications])
+        #expect(engine.lastingPermissions.map(\.decision) == [.allow, .allow, nil])
+        #expect(engine.lastingPermissions.allSatisfy { $0.origin == site && $0.profileID == profileID })
+    }
+
     @Test func onlyLiveTabsReachTheEnginesWindowInOrder() throws {
         let first = Tab.testTab(url: url), unloaded = Tab.testTab(url: url), second = Tab.testTab(url: url)
         pool.page(for: first, profileID: profileID)

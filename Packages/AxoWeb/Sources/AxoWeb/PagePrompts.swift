@@ -7,6 +7,32 @@ public enum PermissionKind: String, Hashable, Sendable, CaseIterable {
     case microphone
     case cameraAndMicrophone
     case location
+    /// Showing notifications.
+    case notifications
+    /// Reading what the person copied.
+    case clipboard
+
+    /// Whether the engine keeps an answer itself (Chromium, for notifications and the clipboard,
+    /// which pages read without asking), so Axo's site settings must keep the engine's copy in
+    /// step (``WebViewPool/setLastingPermission(_:origin:decision:profileID:)``). Other kinds are
+    /// asked about each time, and Axo answers from its settings.
+    public var lastsInEngine: Bool {
+        self == .notifications || self == .clipboard
+    }
+}
+
+/// A site's saved answer for a kind the engine keeps itself (``PermissionKind/lastsInEngine``).
+public struct LastingPermission: Hashable, Sendable {
+    public var kind: PermissionKind
+    public var origin: PageOrigin
+    public var decision: PermissionDecision
+
+    /// Creates a site's answer for a kind.
+    public init(kind: PermissionKind, origin: PageOrigin, decision: PermissionDecision) {
+        self.kind = kind
+        self.origin = origin
+        self.decision = decision
+    }
 }
 
 /// The answer to a ``PermissionRequest``.
@@ -61,7 +87,9 @@ public struct PageOrigin: Hashable, Sendable {
     /// The origin as text, such as `https://meet.example.com` or `http://localhost:3000`, for
     /// saving decisions.
     public var serialized: String {
-        port == 0 ? "\(scheme)://\(host)" : "\(scheme)://\(host):\(port)"
+        // An IPv6 address keeps its brackets, as in a URL.
+        let host = host.contains(":") ? "[\(host)]" : host
+        return port == 0 ? "\(scheme)://\(host)" : "\(scheme)://\(host):\(port)"
     }
 
     /// How to name the origin to people: its host (with a non-default port), or "This page".

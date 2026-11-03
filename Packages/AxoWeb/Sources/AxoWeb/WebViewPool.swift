@@ -54,7 +54,7 @@ public final class WebViewPool {
     /// Asked when a page wants the camera, microphone, or location. Return the person's answer.
     /// Requests are denied when this is `nil`. Each answer is remembered for the profile, origin,
     /// and kind until the pool is deallocated (that is, until Axo quits).
-    public var onPermissionRequest: ((PermissionRequest) async -> PermissionDecision)?
+    public var onPermissionRequest: ((PermissionRequest) async -> PermissionDecision?)?
 
     /// Asked when a page calls `alert()`, `confirm()`, or `prompt()`. Return the person's answer.
     /// Dialogs are cancelled when this is `nil`.
@@ -557,13 +557,15 @@ public final class WebViewPool {
     // MARK: Permissions
 
     /// Returns the remembered answer for this profile, origin, and kind, or asks the app and
-    /// remembers its answer for the rest of the session.
+    /// remembers its answer, or `nil` when there's no answer (no handler, or the prompt went away
+    /// unanswered, as when its tab closed), which is remembered nowhere. An answer for a kind the
+    /// engine keeps itself also goes to the engine, in case the engine stopped waiting for it.
     func decidePermission(
         _ kind: PermissionKind,
         origin: PageOrigin,
         tabID: Tab.ID,
         profileID: Profile.ID
-    ) async -> PermissionDecision {
+    ) async -> PermissionDecision? {
         let key = PermissionKey(profileID: profileID, origin: origin, kind: kind)
         if let permissionStore {
             if let saved = await permissionStore.savedDecision(for: kind, origin: origin, profileID: profileID) {
@@ -572,19 +574,39 @@ public final class WebViewPool {
         } else if let remembered = permissionDecisions[key] {
             return remembered
         }
-        guard let handler = onPermissionRequest else { return .deny }
-        let decision = await handler(PermissionRequest(tabID: tabID, origin: origin, kind: kind))
+        guard let handler = onPermissionRequest,
+              let decision = await handler(PermissionRequest(tabID: tabID, origin: origin, kind: kind)) else { return nil }
         if let permissionStore {
             await permissionStore.saveDecision(decision, for: kind, origin: origin, profileID: profileID)
         } else {
             permissionDecisions[key] = decision
         }
+        setLastingPermission(kind, origin: origin, decision: decision, profileID: profileID)
         return decision
     }
 
     /// The remembered answer for a profile, origin, and kind, if any.
     public func rememberedPermission(_ kind: PermissionKind, origin: PageOrigin, profileID: Profile.ID) -> PermissionDecision? {
         permissionDecisions[PermissionKey(profileID: profileID, origin: origin, kind: kind)]
+    }
+
+    /// Keeps the engine's own copy of a site's answer in step with Axo's, for kinds the engine
+    /// keeps itself (``PermissionKind/lastsInEngine``: notifications and the clipboard, on
+    /// Chromium). `nil` clears it, so the site asks again. Does nothing for other kinds.
+    public func setLastingPermission(_ kind: PermissionKind, origin: PageOrigin, decision: PermissionDecision?, profileID: Profile.ID) {
+        guard kind.lastsInEngine else { return }
+        engine.setLastingPermission(kind, origin: origin, decision: decision, profileID: profileID)
+    }
+
+    /// Replaces every lasting answer the engine keeps for a profile with Axo's (at launch, and after
+    /// clearing website data, which clears the engine's copy too).
+    public func replaceLastingPermissions(_ answers: [LastingPermission], profileID: Profile.ID) {
+        engine.replaceLastingPermissions(answers.filter(\.kind.lastsInEngine), profileID: profileID)
+    }
+
+    /// The kinds of permission the engine asks Axo about.
+    public var askedPermissionKinds: Set<PermissionKind> {
+        engine.askedPermissionKinds
     }
 
     /// Forgets every remembered permission answer, so pages ask again.

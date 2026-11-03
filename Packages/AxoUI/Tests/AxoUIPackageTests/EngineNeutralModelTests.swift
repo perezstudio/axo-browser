@@ -88,6 +88,84 @@ struct EngineNeutralModelTests {
         #expect(announcements == ["1 tab hibernated"])
     }
 
+    @Test func siteSettingsKeepTheEnginesLastingAnswersInStep() async throws {
+        _ = try await openPage(URL(string: "https://news.example.com/today")!)
+        let site = PageOrigin(scheme: "https", host: "news.example.com")
+
+        await model.setSitePermission(.deny, for: .notifications)
+        await model.setSitePermission(.allow, for: .camera)
+        await model.setSitePermission(.allow, for: .clipboard)
+        #expect(engine.lastingPermissions.map(\.kind) == [.notifications, .clipboard], "The camera is asked about each time")
+        #expect(engine.lastingPermissions.map(\.decision) == [.deny, .allow])
+        #expect(engine.lastingPermissions.allSatisfy { $0.origin == site })
+
+        await model.resetSiteSettings()
+        #expect(engine.lastingPermissions.suffix(2).map(\.kind) == [.notifications, .clipboard])
+        #expect(engine.lastingPermissions.suffix(2).allSatisfy { $0.decision == nil }, "Reset clears them in the engine too")
+    }
+
+    @Test func savedLastingAnswersReachTheEngineAtLaunch() async throws {
+        let profileID = try #require(model.space?.profileID)
+        try await model.store.sitePermissions.setDecision(.allow, for: [.notifications], origin: "https://news.example.com", profileID: profileID)
+        try await model.store.sitePermissions.setDecision(.deny, for: [.clipboard, .location], origin: "http://127.0.0.1:8080", profileID: profileID)
+
+        let relaunchedEngine = FakeEngine()
+        let pool = WebViewPool(engine: relaunchedEngine)
+        pool.reportsScreenTimeUsage = false
+        let relaunched = BrowserModel(store: model.store, pool: pool)
+        relaunched.announce = { _ in }
+        await relaunched.start()
+
+        // Each profile's answers replace the engine's own, the profile without any included.
+        let replaced = try #require(relaunchedEngine.replacedLastingPermissions[profileID])
+        #expect(Set(replaced) == [
+            LastingPermission(kind: .notifications, origin: PageOrigin(scheme: "https", host: "news.example.com"), decision: .allow),
+            LastingPermission(kind: .clipboard, origin: PageOrigin(scheme: "http", host: "127.0.0.1", port: 8080), decision: .deny),
+        ])
+        let other = try await model.store.createProfile(name: "Work")
+        await relaunched.syncLastingPermissions()
+        #expect(relaunchedEngine.replacedLastingPermissions[other.id] == [], "Clearing whatever the engine had")
+    }
+
+    @Test func clearingWebsiteDataGivesTheEngineAxosAnswersAgain() async throws {
+        let profileID = try #require(model.space?.profileID)
+        try await model.store.sitePermissions.setDecision(.allow, for: [.notifications], origin: "https://news.example.com", profileID: profileID)
+
+        await model.clearWebsiteData(for: profileID)
+        #expect(engine.clearedProfiles == [profileID])
+        #expect(engine.replacedLastingPermissions[profileID]?.map(\.kind) == [.notifications])
+    }
+
+    @Test func answeringAPromptForALastingKindTellsTheEngine() async throws {
+        let site = PageOrigin(scheme: "https", host: "news.example.com")
+        let answering = Task { @MainActor in
+            while !Task.isCancelled {
+                if case .permission = model.currentPrompt?.content { model.answerPermission(.allow) }
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+        defer { answering.cancel() }
+        let profileID = try #require(model.space?.profileID)
+
+        #expect(await model.pool.decidePermission(.notifications, origin: site, tabID: UUID(), profileID: profileID) == .allow)
+        #expect(engine.lastingPermissions.last?.kind == .notifications)
+        #expect(engine.lastingPermissions.last?.decision == .allow, "In case the engine stopped waiting for it")
+    }
+
+    @Test func siteSettingsOfferOnlyWhatTheSiteCanAskFor() async throws {
+        _ = try await openPage(URL(string: "https://news.example.com/")!)
+        #expect(model.siteSettingsKinds == SitePermission.Kind.allCases)
+
+        _ = try await openPage(URL(string: "http://plain.example.com/")!)
+        #expect(model.siteSettingsKinds == [.camera, .microphone, .location], "Notifications need a secure site")
+        _ = try await openPage(URL(string: "http://localhost:8000/")!)
+        #expect(model.siteSettingsKinds.contains(.notifications), "This Mac counts as secure")
+
+        engine.askedPermissionKinds = [.camera, .microphone, .cameraAndMicrophone, .location]
+        _ = try await openPage(URL(string: "https://news.example.com/")!)
+        #expect(model.siteSettingsKinds == [.camera, .microphone, .location], "Not for an engine that never asks")
+    }
+
     @Test func findGoesToThePage() async throws {
         let page = try await openPage(URL(string: "https://example.com/")!)
         page.findResult = false

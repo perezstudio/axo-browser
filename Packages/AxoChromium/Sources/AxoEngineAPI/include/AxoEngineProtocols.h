@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 29
+#define AXO_ENGINE_API_VERSION 30
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -106,6 +106,27 @@ NS_SWIFT_UI_ACTOR
 @end
 
 // MARK: - Profiles
+
+/// What a page can ask to use.
+typedef NS_ENUM(NSInteger, AXOPermissionKind) {
+  AXOPermissionKindCamera,
+  AXOPermissionKindMicrophone,
+  AXOPermissionKindCameraAndMicrophone,
+  AXOPermissionKindLocation,
+  /// Showing notifications (`Notification.requestPermission`). An answer lasts: Chrome keeps it,
+  /// so keep it in step with the app's own settings (`-[AXOProfile setPermission:...]`).
+  AXOPermissionKindNotifications,
+  /// Reading the clipboard (`navigator.clipboard.read`). An answer lasts, as for notifications.
+  AXOPermissionKindClipboard,
+};
+
+/// A site's lasting answer for a permission, as Chrome keeps it.
+typedef NS_ENUM(NSInteger, AXOPermissionSetting) {
+  /// No answer: the page's next request asks.
+  AXOPermissionSettingAsk,
+  AXOPermissionSettingAllow,
+  AXOPermissionSettingBlock,
+};
 
 /// One Axo profile's website data: a Chromium profile in its own folder.
 NS_SWIFT_UI_ACTOR
@@ -199,6 +220,18 @@ NS_SWIFT_UI_ACTOR
 - (void)setBookmarkBar:(NSArray<id<AXOBookmarkNode>>*)bar
                  other:(NSArray<id<AXOBookmarkNode>>*)other
     NS_SWIFT_NAME(setBookmarks(bar:other:));
+/// Sets a site's lasting answer for notifications or the clipboard in Chrome's own settings,
+/// which pages read (`Notification.permission`, `navigator.permissions.query`) without asking,
+/// and lifts any hold Chrome put on the site for dismissing prompts.
+/// The app calls it whenever its own answer for the site changes. Other kinds are answered each
+/// time they're asked, so this does nothing for them, nor for an origin that isn't http or https.
+- (void)setPermission:(AXOPermissionKind)kind
+               origin:(NSURL*)origin
+              setting:(AXOPermissionSetting)setting NS_SWIFT_NAME(setPermission(_:origin:setting:));
+/// Forgets every site's lasting answer for notifications and the clipboard in Chrome's settings,
+/// and Chrome's holds on sites that dismissed prompts (embargoes), so the app can set its own
+/// answers afresh (at launch), leaving none that only Chrome knows.
+- (void)clearLastingPermissions;
 
 /// Called with each change an extension makes to the bookmarks. Apply it to the app's data and
 /// set the tree again; a change the app can't make is undone by that.
@@ -260,13 +293,6 @@ typedef NS_OPTIONS(NSUInteger, AXOLinkModifiers) {
   AXOLinkModifierControl = 1 << 3,
 };
 
-typedef NS_ENUM(NSInteger, AXOPermissionKind) {
-  AXOPermissionKindCamera,
-  AXOPermissionKindMicrophone,
-  AXOPermissionKindCameraAndMicrophone,
-  AXOPermissionKindLocation,
-};
-
 typedef NS_ENUM(NSInteger, AXODialogKind) {
   AXODialogKindAlert,
   AXODialogKindConfirm,
@@ -287,10 +313,14 @@ NS_SWIFT_UI_ACTOR
 - (BOOL)page:(id<AXOPage>)page shouldHandleLinkToURL:(NSURL*)url modifiers:(AXOLinkModifiers)modifiers;
 /// `target="_blank"`, `window.open`, and the like.
 - (void)page:(id<AXOPage>)page wantsToOpenURLInNewTab:(NSURL*)url;
+/// The page asks to use a device or capability. Answer Allow, Block, or Ask when there's no
+/// answer (the app couldn't ask, or the page went away before the person chose), so nothing
+/// lasting is recorded. Notifications and the clipboard keep an Allow or Block in Chrome's
+/// settings; the other kinds are answered this time only.
 - (void)page:(id<AXOPage>)page
     requestsPermission:(AXOPermissionKind)kind
                 origin:(NSURL*)origin
-            completion:(void (^)(BOOL allowed))completion;
+            completion:(void (^)(AXOPermissionSetting answer))completion;
 - (void)page:(id<AXOPage>)page
     showsDialog:(AXODialogKind)kind
         message:(NSString*)message
