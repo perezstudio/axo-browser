@@ -189,6 +189,9 @@ public protocol EnginePageDelegate: AnyObject {
     /// The page asked to fill the screen (`element.requestFullscreen()`), or to stop, for engines
     /// that leave that to Axo.
     func page(_ page: any EnginePage, setsFullscreen fullscreen: Bool)
+    /// The link under the pointer, or with keyboard focus, changed: `url` is where it goes, or
+    /// `nil` once there's none. Axo shows it in a status label over the page.
+    func page(_ page: any EnginePage, hoversLinkTo url: URL?)
     /// The page opened another page that's already loading (`window.open`, a `target="_blank"`
     /// link), for engines that keep the new page connected to its opener.
     func page(_ page: any EnginePage, didOpen opened: OpenedPage)

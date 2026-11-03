@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 26
+#define AXO_ENGINE_API_VERSION 27
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -326,6 +326,10 @@ NS_SWIFT_UI_ACTOR
 /// leaves full screen another way, call `-[AXOPage exitFullscreen]`. Without this, pages can't
 /// go full screen.
 - (void)page:(id<AXOPage>)page setsFullscreen:(BOOL)fullscreen NS_SWIFT_NAME(page(_:setsFullscreen:));
+/// The link the pointer is over changed, or the link with keyboard focus, as Chrome shows in its
+/// status bubble: `url` is where it goes, or `nil` once neither is over or on a link. Links in
+/// frames count too. Show it without taking the page's clicks.
+- (void)page:(id<AXOPage>)page hoversLinkToURL:(nullable NSURL*)url NS_SWIFT_NAME(page(_:hoversLinkTo:));
 /// The page opened another page (`window.open`, a `target="_blank"` link, a link opened in a new
 /// tab): `newPage` is already loading `url`, with what the request carried (its opener, form
 /// data, referrer). Show it as a tab after this one, in the background when `inBackground`, or as

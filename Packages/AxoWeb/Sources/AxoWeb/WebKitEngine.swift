@@ -64,21 +64,25 @@ public final class WebKitEngine: WebEngine {
         configuration.preferences.isElementFullscreenEnabled = true
         UserAgent.apply(to: configuration)
         siteCustomizationScripts.forEach(configuration.userContentController.addUserScript)
+        let hoveredLinks = HoveredLinks.install(in: configuration)
         configurators.forEach { $0(configuration, profileID) }
         let webView = PooledWebView(frame: .zero, configuration: configuration)
         webView.allowsBackForwardNavigationGestures = true
         let page = WebKitPage(webView: webView, downloads: downloads)
+        hoveredLinks.page = page
         pages.add(page)
         return page
     }
 
-    /// Axo adds no other user scripts, so updating live web views replaces all of theirs.
+    /// Axo's only other user script is the one ``HoveredLinks`` adds, so updating live web views
+    /// replaces all of theirs and adds that one back.
     public func setSiteCustomizations(_ customizations: [SiteCustomization]) {
         siteCustomizationScripts = SiteCustomizationScripts.userScripts(for: customizations)
         for page in pages.allObjects {
             let controller = page.webView.configuration.userContentController
             controller.removeAllUserScripts()
             siteCustomizationScripts.forEach(controller.addUserScript)
+            controller.addUserScript(HoveredLinks.userScript)
         }
     }
 

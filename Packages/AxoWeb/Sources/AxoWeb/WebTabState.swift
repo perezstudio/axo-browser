@@ -23,6 +23,9 @@ public final class WebTabState {
     /// A picture of the page from when the tab hibernated, shown while it restores. `nil` once
     /// the restored page finishes loading, or if the tab didn't wake from hibernation.
     public internal(set) var restoringSnapshot: PlatformImage?
+    /// Where the link under the pointer, or with keyboard focus, goes, for the status label over
+    /// the page; `nil` when there's none, or while the page isn't showing.
+    public internal(set) var hoveredLink: URL?
 
     init() {}
 }

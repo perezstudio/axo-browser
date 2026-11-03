@@ -20,6 +20,7 @@ struct PeekOverlay: View {
                 header
                 Divider()
                 WebViewHost(tab: peek.tab, profileID: profileID, pool: model.pool)
+                    .linkStatus(for: model.peekPage)
                     .overlay(alignment: .top) {
                         if let page = model.peekPage, page.isLoading {
                             ProgressView(value: page.estimatedProgress)

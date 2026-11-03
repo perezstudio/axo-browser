@@ -334,6 +334,11 @@ extension ChromiumPage: AXOPageDelegate {
         delegate?.page(self, setsFullscreen: fullscreen)
     }
 
+    /// The link under the pointer, or with keyboard focus, changed.
+    func page(_ page: any AXOPage, hoversLinkTo url: URL?) {
+        delegate?.page(self, hoversLinkTo: url)
+    }
+
     /// A page this one opened (`window.open`, `target="_blank"`), already loading and connected
     /// to it.
     func page(_ page: any AXOPage, didOpen newPage: any AXOPage, url: URL, popup: Bool, size: NSSize, inBackground: Bool) {

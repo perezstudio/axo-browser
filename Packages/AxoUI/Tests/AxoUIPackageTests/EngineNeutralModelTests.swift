@@ -48,6 +48,29 @@ struct EngineNeutralModelTests {
         #expect(page.navigation == ["back", "reload"])
     }
 
+    @Test func theLinkStatusFollowsTheShownPage() async throws {
+        let first = try await openPage(URL(string: "https://example.com/")!)
+        let firstID = try #require(model.selectedTabID)
+        let link = URL(string: "https://example.com/axolotl")!
+        first.hoverLink(link)
+        #expect(model.selectedPage?.hoveredLink == link)
+
+        let second = try await openPage(URL(string: "https://example.org/")!)
+        second.hoverLink(URL(string: "https://example.org/other")!)
+        #expect(model.selectedPage?.hoveredLink == URL(string: "https://example.org/other"))
+        model.select(firstID)
+        #expect(model.selectedPage?.hoveredLink == link, "Each tab's own link")
+    }
+
+    @Test func coveringThePagesHidesTheirLinkStatus() async throws {
+        _ = try await openPage(URL(string: "https://example.com/")!)
+        #expect(!model.arePagesCovered)
+        model.showCommandBar()
+        #expect(model.arePagesCovered)
+        model.hideCommandBar()
+        #expect(!model.arePagesCovered)
+    }
+
     @Test func findGoesToThePage() async throws {
         let page = try await openPage(URL(string: "https://example.com/")!)
         page.findResult = false

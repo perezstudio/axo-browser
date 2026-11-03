@@ -80,6 +80,7 @@ struct MiniWindowView: View {
         VStack(spacing: 0) {
             if !mini.isExtensionWindow { openInAxoBar }
             WebViewHost(tab: mini.tab, profileID: mini.profileID, pool: model.pool)
+                .linkStatus(for: model.miniWindowPage(mini.id))
                 .overlay(alignment: .top) {
                     if let page = model.miniWindowPage(mini.id), page.isLoading {
                         ProgressView(value: page.estimatedProgress)

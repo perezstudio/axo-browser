@@ -132,6 +132,8 @@ public final class WebViewContainer: PlatformView {
         }
         mountedView = view
         mountedState = state
+        // A link reported while the page was hidden (or in another host) isn't under the pointer.
+        state?.hoveredLink = nil
         screenTime?.url = state?.url
         if let state {
             urlUpdates = Task { [weak self] in
@@ -183,10 +185,12 @@ public final class WebViewContainer: PlatformView {
     func unmount() {
         urlUpdates?.cancel()
         urlUpdates = nil
-        mountedState = nil
         if mountedView?.superview === self {
             mountedView?.removeFromSuperview()
+            // The pointer left with the page, and the engine doesn't always say so.
+            mountedState?.hoveredLink = nil
         }
+        mountedState = nil
         mountedView = nil
         screenTime?.url = nil
     }
