@@ -899,22 +899,18 @@ final class AxoUITests: XCTestCase {
         XCTAssertEqual(camera.value as? String, "Ask")
         XCTAssertTrue(app.popUpButtons["sitePermission-microphone"].exists)
         XCTAssertTrue(app.popUpButtons["sitePermission-location"].exists)
-        let notifications = app.popUpButtons["sitePermission-notifications"]
-        XCTAssertTrue(notifications.exists)
-        XCTAssertTrue(app.popUpButtons["sitePermission-clipboard"].exists)
+        // UI tests run on WebKit, which never asks about notifications or the clipboard, so Site
+        // Settings doesn't offer them (Chromium's rows are covered by the model's tests).
+        XCTAssertFalse(app.popUpButtons["sitePermission-notifications"].exists)
+        XCTAssertFalse(app.popUpButtons["sitePermission-clipboard"].exists)
 
         camera.click()
         app.menuItems["Don't Allow"].click()
         expectation(for: NSPredicate(format: "value == %@", "Don't Allow"), evaluatedWith: camera)
         waitForExpectations(timeout: 5)
-        notifications.click()
-        app.menuItems["Allow"].click()
-        expectation(for: NSPredicate(format: "value == %@", "Allow"), evaluatedWith: notifications)
-        waitForExpectations(timeout: 5)
 
         app.buttons["resetSiteSettings"].click()
         expectation(for: NSPredicate(format: "value == %@", "Ask"), evaluatedWith: camera)
-        expectation(for: NSPredicate(format: "value == %@", "Ask"), evaluatedWith: notifications)
         waitForExpectations(timeout: 5)
     }
 
