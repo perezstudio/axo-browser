@@ -413,6 +413,7 @@ private struct BrowserWindowOpener: ViewModifier {
 
     func body(content: Content) -> some View {
         content.onAppear {
+            model.isAppActive = { NSApp.isActive }
             model.showBrowserWindow = {
                 let browserWindows = NSApp.windows.filter {
                     $0.identifier?.rawValue.hasPrefix(AppEnvironment.browserWindowID) == true

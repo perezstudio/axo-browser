@@ -91,6 +91,10 @@ public final class WebViewPool {
     /// `window.open`), with the tab that opened it. Without a handler, the new page closes and
     /// its URL goes to ``onOpenInNewTab``.
     public var onPageOpened: ((OpenedPage, Tab.ID) -> Void)?
+    /// Called when a tab's page asks to be shown (after a click on one of its notifications, but
+    /// also when entering full screen, and other times the person didn't start): select the tab
+    /// only when that's what the person meant (AxoUI does it while Axo is active).
+    public var onPageWantsToBeShown: ((Tab.ID) -> Void)?
     /// Called when a tab's page asks to fill the screen, or to stop (Chromium's
     /// `element.requestFullscreen()`).
     public var onPageFullscreen: ((Tab.ID, Bool) -> Void)?
