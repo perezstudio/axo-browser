@@ -309,7 +309,9 @@ struct EngineNeutralModelTests {
         #expect(engine.windowPages[profileID]?.active === opened, "The engine's window keeps it active meanwhile")
         #expect(engine.windowPages[profileID]?.pages.contains { $0 === opened } == true, "And keeps it in its tabs")
 
-        try await waitUntil { model.tabs.count == 2 }
+        // The sidebar's own observation can list the new tab a moment before adopting it selects
+        // it, so wait for the selection itself.
+        try await waitUntil { model.tabs.count == 2 && model.selectedTabID == model.tabs.last?.id }
         let openedID = try #require(model.tabs.last?.id)
         #expect(model.selectedTabID == openedID)
         #expect(model.pool.livePage(for: openedID) === opened)

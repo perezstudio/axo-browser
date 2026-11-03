@@ -234,20 +234,27 @@ struct BrowserModelTests {
 
 }
 
-/// Polls until `condition` is true, or fails after 10 seconds.
+/// How long the waits below give up after: a guard against a hang, not a time budget. These tests
+/// are main-actor isolated and run in parallel, so they all share the main thread with each
+/// other and with WebKit's work there, and a wait lasts as long as the rest of the suite keeps
+/// that thread busy. On the iOS Simulator a page load waited 10 to 13 seconds in a 22-second run
+/// (and 3 to 4 in a calmer one), failing the old 10-second limit while nothing was wrong.
+let waitLimit: Duration = .seconds(60)
+
+/// Polls until `condition` is true, or fails after ``waitLimit``.
 @MainActor
 func waitUntil(_ condition: () -> Bool) async throws {
-    let deadline = ContinuousClock.now + .seconds(10)
+    let deadline = ContinuousClock.now + waitLimit
     while !condition() {
         try #require(ContinuousClock.now < deadline, "Timed out")
         try await Task.sleep(for: .milliseconds(20))
     }
 }
 
-/// Polls an async condition until it's true, or fails after 10 seconds.
+/// Polls an async condition until it's true, or fails after ``waitLimit``.
 @MainActor
 func waitUntilAsync(_ condition: () async throws -> Bool) async throws {
-    let deadline = ContinuousClock.now + .seconds(10)
+    let deadline = ContinuousClock.now + waitLimit
     while try await !condition() {
         try #require(ContinuousClock.now < deadline, "Timed out")
         try await Task.sleep(for: .milliseconds(20))
