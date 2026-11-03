@@ -177,7 +177,13 @@ public final class WebViewPool {
             existing.lastUsed = now()
             return existing.page
         }
-        let saved = hibernated.removeValue(forKey: tab.id)
+        var saved = hibernated.removeValue(forKey: tab.id)
+        // A page kept for another profile (the tab's Space moved meanwhile) never wakes with that
+        // profile's website data: a new page loads instead.
+        if let kept = saved?.kept, kept.profileID != profileID {
+            kept.tearDown()
+            saved = nil
+        }
         if let kept = saved?.kept {
             kept.lastUsed = now()
             live[tab.id] = kept

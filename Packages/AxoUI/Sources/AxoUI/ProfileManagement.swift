@@ -65,12 +65,13 @@ extension BrowserModel {
     /// observation), so its shown tab's new page uses the new profile's data, never the old one's.
     private func discardWebViews(for tabIDs: [AxoCore.Tab.ID]) async {
         for tabID in tabIDs {
+            if fullscreenTabID == tabID { exitPageFullscreen() }
             prompts.dismissAll(from: tabID)
             pool.discard(tabID)
         }
-        if let space, let fresh = (try? await store.spaces())?.first(where: { $0.id == space.id }) {
-            await followShownSpaceChange(to: fresh)
-        }
+        // Without the Space's new record (a failed read, or one a newer read overtook, which makes
+        // the page itself), the page waits: made now, it would use the old profile.
+        guard (try? await refreshSpaces()) == true else { return }
         if let selectedTabID, tabIDs.contains(selectedTabID), !pool.isLive(selectedTabID) {
             activateSelectedTab()
         }

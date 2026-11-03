@@ -121,7 +121,10 @@ extension BrowserModel {
     func observeFavorites(for profileID: Profile.ID) async {
         guard favoritesProfileID != profileID else { return }
         favoritesProfileID = profileID
-        favorites = (try? await store.favorites.favorites(for: profileID)) ?? []
+        let loaded = (try? await store.favorites.favorites(for: profileID)) ?? []
+        // Another profile's favorites may have been asked for meanwhile; theirs win.
+        guard favoritesProfileID == profileID else { return }
+        favorites = loaded
         favoritesObservationTask?.cancel()
         let observation = store.favorites.observe(for: profileID)
         favoritesObservationTask = Task { [weak self] in

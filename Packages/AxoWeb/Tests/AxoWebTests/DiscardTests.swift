@@ -172,6 +172,19 @@ struct DiscardTests {
         #expect(pool.isLive(inspected.id), "Developer tools keep it live, as for the timer")
     }
 
+    @Test func aPageKeptForAnotherProfileIsntWoken() async throws {
+        let page = try loadedPage()
+        #expect(await pool.hibernate(tab.id))
+
+        // The tab's Space moved to another profile while it slept.
+        let other = UUID()
+        let woken = try #require(pool.page(for: tab, profileID: other) as? FakePage)
+        #expect(woken !== page)
+        #expect(woken.profileID == other)
+        #expect(page.isClosed, "Never another profile's website data")
+        #expect(woken.loads == [tab.url])
+    }
+
     @Test func aKeptPageThatLoadsAgainOnItsOwnIsLiveAgain() async throws {
         let page = try loadedPage()
         #expect(await pool.hibernate(tab.id))
