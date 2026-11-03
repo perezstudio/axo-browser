@@ -12,6 +12,15 @@ final class LiveTab: EnginePageDelegate {
     let page: any EnginePage
     let state = WebTabState()
     var lastUsed: Date
+    /// Goes up whenever the page navigates or finishes loading, so the pool knows a snapshot it
+    /// took before is out of date.
+    private(set) var contentVersion = 0
+    /// The latest snapshot of the page (JPEG), taken when it was last hidden, and the
+    /// ``contentVersion`` it shows (`nil` when it came from before the tab last hibernated).
+    var snapshot: Data?
+    var snapshotVersion: Int?
+    /// The snapshot being taken, if any.
+    var snapshotTask: Task<Void, Never>?
     private weak var pool: WebViewPool?
 
     init(tabID: Tab.ID, profileID: Profile.ID, page: any EnginePage, pool: WebViewPool, lastUsed: Date) {
@@ -33,6 +42,7 @@ final class LiveTab: EnginePageDelegate {
         let url = page.url
         let title = page.title
         guard url != state.url || title != state.title else { return }
+        if url != state.url { contentVersion += 1 }
         state.url = url
         state.title = title
         if let url {
@@ -42,6 +52,7 @@ final class LiveTab: EnginePageDelegate {
 
     /// Stops the page and detaches it so it can be deallocated.
     func tearDown() {
+        snapshotTask?.cancel()
         page.delegate = nil
         page.close()
     }
@@ -53,11 +64,13 @@ final class LiveTab: EnginePageDelegate {
     }
 
     func pageDidFinishLoad(_ page: any EnginePage) {
+        contentVersion += 1
         state.restoringSnapshot = nil
         pool?.loadFavicon(for: tabID)
     }
 
     func pageDidFailLoad(_ page: any EnginePage) {
+        contentVersion += 1
         state.restoringSnapshot = nil
     }
 
