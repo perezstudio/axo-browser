@@ -33,7 +33,7 @@ public struct PagePrompt: Identifiable {
 @MainActor
 final class PagePromptQueue {
     private enum Answer {
-        case permission(CheckedContinuation<PermissionDecision, Never>)
+        case permission(CheckedContinuation<PermissionDecision?, Never>)
         case dialog(CheckedContinuation<JavaScriptDialogResult, Never>)
         case extensionPermission(CheckedContinuation<Bool, Never>)
     }
@@ -45,7 +45,9 @@ final class PagePromptQueue {
     /// The prompt to show now.
     var current: PagePrompt? { pending.first?.prompt }
 
-    func ask(_ request: PermissionRequest) async -> PermissionDecision {
+    /// Asks about a page's permission request: the person's answer, or `nil` if the prompt went
+    /// away unanswered (``dismissAll(from:)``).
+    func ask(_ request: PermissionRequest) async -> PermissionDecision? {
         await withCheckedContinuation { continuation in
             enqueue(PagePrompt(content: .permission(request)), .permission(continuation))
         }
@@ -87,7 +89,8 @@ final class PagePromptQueue {
         onChange?(current)
     }
 
-    /// Denies or cancels every prompt from a tab, for example when it closes.
+    /// Takes away every prompt from a tab, for example when it closes: a page's permission request
+    /// gets no answer (so nothing is saved), an extension's is refused, and a dialog is cancelled.
     func dismissAll(from tabID: AxoCore.Tab.ID) {
         let before = current?.id
         let (dismissed, kept) = pending.reduce(into: ([(PagePrompt, Answer)](), [(PagePrompt, Answer)]())) { result, entry in
@@ -96,7 +99,7 @@ final class PagePromptQueue {
         pending = kept.map { (prompt: $0.0, answer: $0.1) }
         for (_, answer) in dismissed {
             switch answer {
-            case .permission(let continuation): continuation.resume(returning: .deny)
+            case .permission(let continuation): continuation.resume(returning: nil)
             case .dialog(let continuation): continuation.resume(returning: .cancelled)
             case .extensionPermission(let continuation): continuation.resume(returning: false)
             }

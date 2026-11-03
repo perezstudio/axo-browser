@@ -131,8 +131,8 @@ final class LiveTab: EnginePageDelegate {
         return pool.downloads.begin(sourceURL: sourceURL, sourceTabID: tabID, cancel: cancel)
     }
 
-    func page(_ page: any EnginePage, requestsPermission kind: PermissionKind, origin: PageOrigin) async -> PermissionDecision {
-        await pool?.decidePermission(kind, origin: origin, tabID: tabID, profileID: profileID) ?? .deny
+    func page(_ page: any EnginePage, requestsPermission kind: PermissionKind, origin: PageOrigin) async -> PermissionDecision? {
+        await pool?.decidePermission(kind, origin: origin, tabID: tabID, profileID: profileID)
     }
 
     func page(_ page: any EnginePage, showsDialog kind: JavaScriptDialog.Kind, message: String, origin: PageOrigin) async -> JavaScriptDialogResult {

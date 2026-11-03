@@ -12,7 +12,7 @@ extension View {
 ///
 /// Every alert names the asking site, so a page can't pass its dialogs off as Axo's or another
 /// site's.
-private struct PagePromptModifier: ViewModifier {
+struct PagePromptModifier: ViewModifier {
     let model: BrowserModel
     @State private var promptText = ""
 
@@ -37,7 +37,7 @@ private struct PagePromptModifier: ViewModifier {
     private func title(for prompt: PagePrompt?) -> String {
         switch prompt?.content {
         case .permission(let request):
-            "Allow “\(request.origin.displayName)” to use your \(Self.noun(for: request.kind))?"
+            Self.question(for: request)
         case .dialog(let dialog):
             dialog.origin.host.isEmpty ? "This page says" : "\(dialog.origin.displayName) says"
         case .extensionPermission(let prompt):
@@ -73,7 +73,7 @@ private struct PagePromptModifier: ViewModifier {
     private func message(for prompt: PagePrompt) -> some View {
         switch prompt.content {
         case .permission:
-            Text("Axo remembers your choice for this site until you quit.")
+            Text("Axo remembers your choice for this site. You can change it in Site Settings.")
         case .dialog(let dialog):
             Text(dialog.message)
         case .extensionPermission(let request):
@@ -81,13 +81,16 @@ private struct PagePromptModifier: ViewModifier {
         }
     }
 
-    /// The device named in a permission request.
-    static func noun(for kind: PermissionKind) -> String {
-        switch kind {
-        case .camera: "camera"
-        case .microphone: "microphone"
-        case .cameraAndMicrophone: "camera and microphone"
-        case .location: "location"
+    /// The question a permission prompt asks.
+    static func question(for request: PermissionRequest) -> String {
+        let site = "“\(request.origin.displayName)”"
+        return switch request.kind {
+        case .camera: "Allow \(site) to use your camera?"
+        case .microphone: "Allow \(site) to use your microphone?"
+        case .cameraAndMicrophone: "Allow \(site) to use your camera and microphone?"
+        case .location: "Allow \(site) to use your location?"
+        case .notifications: "Allow \(site) to send you notifications?"
+        case .clipboard: "Allow \(site) to see text and images you copy?"
         }
     }
 }

@@ -108,6 +108,18 @@ public final class FakeProfile: NSObject, AXOProfile {
         otherBookmarks = other
         bookmarkSetCount += 1
     }
+
+    /// The lasting permission answers Axo set, in order: kind, origin, setting.
+    public private(set) var permissionSettings: [(kind: AXOPermissionKind, origin: URL, setting: AXOPermissionSetting)] = []
+    public func setPermission(_ kind: AXOPermissionKind, origin: URL, setting: AXOPermissionSetting) {
+        permissionSettings.append((kind, origin, setting))
+    }
+    /// How many times Axo cleared every lasting answer.
+    public private(set) var lastingPermissionClears = 0
+    public func clearLastingPermissions() {
+        lastingPermissionClears += 1
+        permissionSettings.removeAll()
+    }
     public var extensionCommands: [any AXOExtensionCommand] = []
     public private(set) var performedCommands: [(name: String, extensionID: String, page: any AXOPage)] = []
 

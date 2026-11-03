@@ -299,7 +299,89 @@ struct ChromiumEngineTests {
         let allowed = await withCheckedContinuation { continuation in
             delegate.page(fake, requestsPermission: .camera, origin: URL(string: "https://meet.example.com")!) { continuation.resume(returning: $0) }
         }
-        #expect(allowed)
+        #expect(allowed == .allow)
+        let denied = await withCheckedContinuation { continuation in
+            delegate.page(fake, requestsPermission: .location, origin: URL(string: "https://meet.example.com")!) { continuation.resume(returning: $0) }
+        }
+        #expect(denied == .block)
+        // Axo doesn't ask for origins it can't name (an extension's page): no answer, nothing kept.
+        let unasked = await withCheckedContinuation { continuation in
+            delegate.page(fake, requestsPermission: .notifications, origin: URL(string: "chrome-extension://abc/options.html")!) { continuation.resume(returning: $0) }
+        }
+        #expect(unasked == .ask)
+    }
+
+    @Test func notificationAndClipboardRequestsReachThePoolAsThemselves() async throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine)
+        var asked: [PermissionKind] = []
+        pool.onPermissionRequest = { request in
+            asked.append(request.kind)
+            return .allow
+        }
+        pool.page(for: Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial), profileID: profileID)
+        let fake = try #require(FakePage.made.first)
+        let delegate = try #require(fake.delegate)
+        let site = URL(string: "https://news.example.com")!
+
+        for kind in [AXOPermissionKind.notifications, .clipboard] {
+            let allowed = await withCheckedContinuation { continuation in
+                delegate.page(fake, requestsPermission: kind, origin: site) { continuation.resume(returning: $0) }
+            }
+            #expect(allowed == .allow)
+        }
+        // A kind from a newer engine is refused, never taken for another.
+        let unknown = await withCheckedContinuation { continuation in
+            delegate.page(fake, requestsPermission: AXOPermissionKind(rawValue: 99)!, origin: site) { continuation.resume(returning: $0) }
+        }
+        #expect(unknown == .ask, "No answer, so nothing lasting")
+        #expect(asked == [.notifications, .clipboard])
+    }
+
+    @Test func lastingAnswersReachAProfileOnceItsInUse() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        let news = PageOrigin(scheme: "https", host: "news.example.com")
+        engine.setLastingPermission(.notifications, origin: news, decision: .allow, profileID: profileID)
+        engine.start()
+        scheduled.run()
+        engine.setLastingPermission(.clipboard, origin: news, decision: .deny, profileID: profileID)
+        engine.setLastingPermission(.camera, origin: news, decision: .allow, profileID: profileID)
+        #expect(FakeProfile.made[profileID] == nil, "A profile nothing uses isn't loaded for its answers")
+
+        _ = engine.extensions(profileID: profileID)
+        let profile = try #require(FakeProfile.made[profileID])
+        let given = profile.permissionSettings.map { "\($0.kind.rawValue) \($0.origin.absoluteString) \($0.setting.rawValue)" }
+        #expect(Set(given) == [
+            "\(AXOPermissionKind.notifications.rawValue) https://news.example.com \(AXOPermissionSetting.allow.rawValue)",
+            "\(AXOPermissionKind.clipboard.rawValue) https://news.example.com \(AXOPermissionSetting.block.rawValue)",
+        ], "Not the camera, which is asked about each time")
+
+        engine.setLastingPermission(.notifications, origin: news, decision: nil, profileID: profileID)
+        #expect(profile.permissionSettings.last?.setting == .ask, "Cleared at once for a profile in use")
+    }
+
+    @Test func replacingLastingAnswersClearsChromesOwnFirst() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        let news = PageOrigin(scheme: "https", host: "news.example.com")
+        let local = PageOrigin(scheme: "http", host: "::1", port: 8000)
+        engine.start()
+        scheduled.run()
+        engine.replaceLastingPermissions([LastingPermission(kind: .notifications, origin: news, decision: .deny)], profileID: profileID)
+        #expect(FakeProfile.made[profileID] == nil, "Not loaded for it")
+
+        _ = engine.extensions(profileID: profileID)
+        let profile = try #require(FakeProfile.made[profileID])
+        #expect(profile.lastingPermissionClears == 1, "Chrome's own answers go first")
+        #expect(profile.permissionSettings.map(\.setting) == [.block])
+
+        engine.replaceLastingPermissions([LastingPermission(kind: .clipboard, origin: local, decision: .allow)], profileID: profileID)
+        #expect(profile.lastingPermissionClears == 2)
+        #expect(profile.permissionSettings.map { $0.origin.absoluteString } == ["http://[::1]:8000"], "An IPv6 site keeps its brackets")
     }
 
     @Test func downloadsReportToThePoolsList() throws {

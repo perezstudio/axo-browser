@@ -107,6 +107,11 @@ public final class ChromiumEngine: WebEngine {
     private var followedProfiles: Set<Profile.ID> = []
     /// Each profile's bookmarks, given to its engine profile once that's in use.
     var bookmarkTrees: [Profile.ID: BookmarkTree] = [:]
+    /// Each profile's lasting permission answers (notifications, the clipboard) from Axo's site
+    /// settings, given to the engine once the profile is in use; `nil` clears one.
+    var lastingPermissions: [Profile.ID: [LastingPermissionKey: PermissionDecision?]] = [:]
+    /// Profiles whose lasting answers in Chrome are cleared before Axo's are given, once in use.
+    var clearsLastingPermissions: Set<Profile.ID> = []
     /// Profiles whose data was removed. They're never loaded again, so a late call can't bring
     /// one back.
     private var removedProfiles: Set<Profile.ID> = []
@@ -258,6 +263,12 @@ public final class ChromiumEngine: WebEngine {
             }
             if let tree = bookmarkTrees[profileID] {
                 profile.setBookmarks(tree)
+            }
+            if clearsLastingPermissions.remove(profileID) != nil {
+                profile.clearLastingPermissions()
+            }
+            for (key, decision) in lastingPermissions[profileID] ?? [:] {
+                profile.setLastingPermission(key, decision: decision)
             }
             profile.onExtensionPrompt = { [weak self] prompt, answer in
                 guard let handler = self?.onExtensionPrompt else {

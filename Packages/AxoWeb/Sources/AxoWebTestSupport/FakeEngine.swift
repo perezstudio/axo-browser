@@ -23,6 +23,22 @@ public final class FakeEngine: WebEngine {
         windowPages[profileID] = (pages, active)
     }
 
+    /// The lasting permission answers the pool set, in order.
+    public private(set) var lastingPermissions: [(kind: PermissionKind, origin: PageOrigin, decision: PermissionDecision?, profileID: Profile.ID)] = []
+
+    public func setLastingPermission(_ kind: PermissionKind, origin: PageOrigin, decision: PermissionDecision?, profileID: Profile.ID) {
+        lastingPermissions.append((kind, origin, decision, profileID))
+    }
+
+    /// The answers each profile's lasting permissions were last replaced with.
+    public private(set) var replacedLastingPermissions: [Profile.ID: [LastingPermission]] = [:]
+    public func replaceLastingPermissions(_ answers: [LastingPermission], profileID: Profile.ID) {
+        replacedLastingPermissions[profileID] = answers
+    }
+
+    /// The kinds this engine asks about: every kind, as Chromium does, unless a test sets others.
+    public var askedPermissionKinds = Set(PermissionKind.allCases)
+
     /// Plays the engine opening `page` on its own, as an extension's `chrome.tabs.create` would.
     public func openPageOnItsOwn(_ page: any EnginePage, profileID: Profile.ID, at index: Int) {
         delegate?.engine(self, didOpen: page, profileID: profileID, at: index)

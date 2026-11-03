@@ -67,7 +67,7 @@ struct PagePromptQueueTests {
 
         await model.closeTab(tabID)
 
-        #expect(await fromTab.value == .deny)
+        #expect(await fromTab.value == nil, "No answer, so nothing is saved")
         guard case .dialog(let remaining) = model.currentPrompt?.content else { Issue.record("Expected the other tab's dialog"); return }
         #expect(remaining.message == "stay")
         model.answerDialog(.cancelled)

@@ -55,6 +55,8 @@ extension BrowserModel {
     /// Signs a profile out of every site by removing its cookies and website data.
     public func clearWebsiteData(for profileID: Profile.ID) async {
         await pool.clearWebsiteData(for: profileID)
+        // That clears the engine's own copy of site answers too; Axo's still count.
+        await syncLastingPermissions(profileID: profileID)
         announce("Website data cleared")
     }
 

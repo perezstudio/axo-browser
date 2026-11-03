@@ -264,22 +264,35 @@ extension ChromiumPage: AXOPageDelegate {
         delegate?.page(self, wantsToOpenInNewTab: url)
     }
 
-    func page(_ page: any AXOPage, requestsPermission kind: AXOPermissionKind, origin: URL, completion: @escaping (Bool) -> Void) {
+    /// A permission request. With no answer (no delegate, an origin Axo doesn't ask about, a kind
+    /// from a newer engine, or the prompt went away unanswered) the engine records nothing.
+    func page(_ page: any AXOPage, requestsPermission kind: AXOPermissionKind, origin: URL, completion: @escaping (AXOPermissionSetting) -> Void) {
         guard let delegate, let pageOrigin = PageOrigin(url: origin) else {
-            completion(false)
+            completion(.ask)
             return
         }
-        let permission: PermissionKind = switch kind {
-        case .camera: .camera
-        case .microphone: .microphone
-        case .location: .location
-        default: .cameraAndMicrophone
+        let permission: PermissionKind
+        switch kind {
+        case .camera: permission = .camera
+        case .microphone: permission = .microphone
+        case .cameraAndMicrophone: permission = .cameraAndMicrophone
+        case .location: permission = .location
+        case .notifications: permission = .notifications
+        case .clipboard: permission = .clipboard
+        @unknown default:
+            // A kind from a newer engine: never mistaken for another.
+            completion(.ask)
+            return
         }
         Task {
-            let decision = await delegate.page(self, requestsPermission: permission, origin: pageOrigin)
-            completion(decision == .allow)
+            switch await delegate.page(self, requestsPermission: permission, origin: pageOrigin) {
+            case .allow: completion(.allow)
+            case .deny: completion(.block)
+            case nil: completion(.ask)
+            }
         }
     }
+
 
     func page(
         _ page: any AXOPage,

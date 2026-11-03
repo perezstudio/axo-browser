@@ -26,6 +26,29 @@ struct SitePermissionStoreTests {
         #expect(try await permissions.decisions(origin: meet, profileID: profileID) == [.camera: .deny], "nil means ask again")
     }
 
+    @Test func notificationAndClipboardAnswersAreListedForTheEngine() async throws {
+        let news = "https://news.example.com"
+        let other = try await store.createProfile(name: "Work")
+        try await permissions.setDecision(.allow, for: [.notifications], origin: news, profileID: profileID)
+        try await permissions.setDecision(.deny, for: [.clipboard, .camera], origin: meet, profileID: other.id)
+
+        let listed = try await permissions.all([.notifications, .clipboard])
+        #expect(Set(listed.map { "\($0.kind.rawValue) \($0.origin) \($0.decision.rawValue)" }) == [
+            "notifications \(news) allow",
+            "clipboard \(meet) deny",
+        ], "Every profile's, and only the kinds asked for")
+        #expect(listed.first { $0.kind == .clipboard }?.profileID == other.id)
+    }
+
+    @Test func aNewerVersionsKindsDontHideTheOthers() async throws {
+        try await permissions.setDecision(.allow, for: [.camera], origin: meet, profileID: profileID)
+        try await store.database.writer.write { db in
+            try db.execute(sql: "INSERT INTO sitePermission (profileID, origin, kind, decision, updatedAt) VALUES (?, ?, 'midi', 'allow', ?)",
+                           arguments: [profileID, meet, Date()])
+        }
+        #expect(try await permissions.decisions(origin: meet, profileID: profileID) == [.camera: .allow])
+    }
+
     @Test func answersBelongToOneSiteAndProfile() async throws {
         let other = try await store.createProfile(name: "Work")
         try await permissions.setDecision(.allow, for: [.location], origin: meet, profileID: profileID)

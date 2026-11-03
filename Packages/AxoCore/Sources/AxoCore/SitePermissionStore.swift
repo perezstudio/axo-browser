@@ -12,6 +12,8 @@ public struct SitePermission: Codable, Hashable, Sendable, FetchableRecord, Pers
         case camera
         case microphone
         case location
+        case notifications
+        case clipboard
     }
 
     /// The saved answer. Without one, Axo asks.
@@ -47,8 +49,9 @@ public struct SitePermission: Codable, Hashable, Sendable, FetchableRecord, Pers
     }
 }
 
-/// Saves the person's answers to sites asking for the camera, microphone, or location, per
-/// profile and origin, so pages don't ask again after Axo restarts.
+/// Saves the person's answers to sites asking for the camera, microphone, location,
+/// notifications, or the clipboard, per profile and origin, so pages don't ask again after Axo
+/// restarts.
 public final class SitePermissionStore: Sendable {
     private let database: AppDatabase
 
@@ -72,11 +75,23 @@ public final class SitePermissionStore: Sendable {
     /// Every saved answer for a site, by kind.
     public func decisions(origin: String, profileID: Profile.ID) async throws -> [SitePermission.Kind: SitePermission.Decision] {
         try await database.writer.read { db in
+            // Only kinds this version knows, so a newer version's rows don't break the rest.
             let saved = try SitePermission
                 .filter(SitePermission.Columns.profileID == profileID)
                 .filter(SitePermission.Columns.origin == origin)
+                .filter(SitePermission.Kind.allCases.map(\.rawValue).contains(SitePermission.Columns.kind))
                 .fetchAll(db)
             return Dictionary(saved.map { ($0.kind, $0.decision) }, uniquingKeysWith: { _, last in last })
+        }
+    }
+
+    /// Every saved answer for some kinds, in every profile and site, so the engine's own copy of
+    /// them can be brought in step at launch.
+    public func all(_ kinds: Set<SitePermission.Kind>) async throws -> [SitePermission] {
+        try await database.writer.read { db in
+            try SitePermission
+                .filter(kinds.map(\.rawValue).contains(SitePermission.Columns.kind))
+                .fetchAll(db)
         }
     }
 

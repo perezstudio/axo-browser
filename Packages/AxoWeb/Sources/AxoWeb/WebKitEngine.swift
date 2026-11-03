@@ -262,7 +262,7 @@ extension WebKitPage: WKNavigationDelegate, WKUIDelegate {
         await decide(.location, for: origin)
     }
 
-    /// Asks the delegate, denying when there is none.
+    /// Asks the delegate, denying when there's no answer (WebKit keeps none, so nothing lasts).
     private func decide(_ kind: PermissionKind, for origin: WKSecurityOrigin) async -> WKPermissionDecision {
         let decision = await delegate?.page(self, requestsPermission: kind, origin: PageOrigin(origin)) ?? .deny
         return decision == .allow ? .grant : .deny
