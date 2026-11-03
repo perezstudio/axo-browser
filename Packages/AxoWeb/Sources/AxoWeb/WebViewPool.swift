@@ -13,8 +13,11 @@ import AppKit
 ///
 /// A tab is in one of three states:
 /// - **Live:** it has a page. Visible tabs are always live.
-/// - **Hibernated:** its page was discarded to free memory, but its back and forward history
-///   (``EnginePage/interactionState``) is kept so it restores instantly when shown again.
+/// - **Hibernated:** its page's memory was freed, and its back and forward history kept so it
+///   restores when shown again: an engine that can discard a page (Chromium) keeps the page
+///   without its renderer, still in the engine's window; otherwise the page closes and its
+///   ``EnginePage/interactionState`` is kept. Each kept page still costs some memory (Chrome's
+///   tab, its history entries); a closed one costs only its snapshot.
 /// - **Unloaded:** the pool knows nothing about it yet; it loads from the tab's URL when shown.
 @MainActor
 public final class WebViewPool {
@@ -161,7 +164,9 @@ public final class WebViewPool {
 
     /// Returns the tab's page, creating or waking it if needed.
     ///
-    /// A new page loads `tab.url`; a hibernated one restores its history instead.
+    /// A new page loads `tab.url`. A hibernated one shows its snapshot while it wakes: a page the
+    /// engine kept (``EnginePage/discard()``) loads again, with its history; otherwise a new page
+    /// restores the saved history, or loads `tab.url` when there's none.
     ///
     /// - Parameters:
     ///   - tab: The tab to show.
@@ -172,15 +177,28 @@ public final class WebViewPool {
             existing.lastUsed = now()
             return existing.page
         }
+        let saved = hibernated.removeValue(forKey: tab.id)
+        if let kept = saved?.kept {
+            kept.lastUsed = now()
+            live[tab.id] = kept
+            // Only while it loads again: a page something else reloaded meanwhile is ready.
+            if kept.page.isDiscarded {
+                kept.state.restoringSnapshot = saved?.snapshot.flatMap(PlatformImage.init(data:))
+                kept.page.loadIfDiscarded()
+            }
+            return kept.page
+        }
 
         let page = engine.makePage(profileID: profileID)
         let liveTab = LiveTab(tabID: tab.id, profileID: profileID, page: page, pool: self, lastUsed: now())
         live[tab.id] = liveTab
 
-        if let saved = hibernated.removeValue(forKey: tab.id), let interactionState = saved.interactionState {
+        if let saved {
             liveTab.state.restoringSnapshot = saved.snapshot.flatMap(PlatformImage.init(data:))
             // Kept in case the tab hibernates again before a newer one is taken.
             liveTab.snapshot = saved.snapshot
+        }
+        if let interactionState = saved?.interactionState {
             page.restore(interactionState: interactionState)
         } else {
             page.load(tab.url)
@@ -192,7 +210,9 @@ public final class WebViewPool {
     /// loading anything. Call it from ``onEngineOpenedPage`` once the tab exists.
     public func adopt(_ page: any EnginePage, as tab: Tab, profileID: Profile.ID) {
         awaitingAdoption[tab.id] = nil
-        hibernated[tab.id] = nil
+        if let kept = hibernated.removeValue(forKey: tab.id)?.kept, kept.page !== page {
+            kept.tearDown()
+        }
         if let existing = live[tab.id] {
             // A page the engine opened is already live under its tab's ID.
             if existing.page === page { return }
@@ -204,6 +224,9 @@ public final class WebViewPool {
             live[otherID] = nil
             awaitingAdoption[otherID] = nil
         }
+        for (otherID, saved) in hibernated where saved.kept?.page === page {
+            hibernated[otherID] = nil
+        }
         live[tab.id] = LiveTab(tabID: tab.id, profileID: profileID, page: page, pool: self, lastUsed: now())
     }
 
@@ -213,23 +236,30 @@ public final class WebViewPool {
     }
 
     /// Tells the engine which tabs a window shows, in sidebar order, and which is selected: the
-    /// Space's tabs. Only live tabs are passed on; the others have no page. Engines with a window
-    /// model (Chromium's extension APIs) show them as that window's tabs.
+    /// Space's tabs. Only tabs with a page are passed on: live ones, and hibernated ones whose
+    /// discarded page the engine kept (so Chromium's extensions still list them, as discarded).
+    /// Engines with a window model (Chromium's extension APIs) show them as that window's tabs.
     public func setWindowTabs(_ tabIDs: [Tab.ID], selected: Tab.ID?, profileID: Profile.ID) {
         // Pages waiting to join the sidebar stay in the window until they do.
         let waiting = awaitingAdoption.filter { $0.value == profileID && !tabIDs.contains($0.key) }.keys.sorted { $0.uuidString < $1.uuidString }
-        let liveIDs = (tabIDs + waiting).filter { live[$0] != nil }
-        windowTabs[profileID] = liveIDs
+        let ids = (tabIDs + waiting).filter { windowPage(for: $0) != nil }
+        windowTabs[profileID] = ids
         engine.setWindowPages(
-            liveIDs.compactMap { live[$0]?.page },
+            ids.compactMap(windowPage(for:)),
             active: selected.flatMap { live[$0]?.page },
             profileID: profileID
         )
     }
 
-    /// The tab whose live page is `page`.
+    /// The tab's page for the engine's window: its live page, or the discarded one it kept.
+    private func windowPage(for tabID: Tab.ID) -> (any EnginePage)? {
+        live[tabID]?.page ?? hibernated[tabID]?.kept?.page
+    }
+
+    /// The tab whose page is `page`, live or kept while it hibernates.
     private func tabID(of page: any EnginePage) -> Tab.ID? {
         live.first { $0.value.page === page }?.key
+            ?? hibernated.first { $0.value.kept?.page === page }?.key
     }
 
     /// The tab's page if it is live, without creating one.
@@ -393,9 +423,12 @@ public final class WebViewPool {
         visibleCounts[tabID] != nil
     }
 
-    /// Discards the tab's page and keeps its history and latest snapshot so it can wake later.
-    /// The snapshot is the one taken when the tab was last hidden, unless the page has changed
-    /// since (it loaded in the background) or has none, when it's taken now.
+    /// Frees the tab's page and keeps its history and latest snapshot so it can wake later. An
+    /// engine that can discard the page (Chromium) keeps it, with its history and its place in the
+    /// engine's window, so extensions still see the tab; otherwise (WebKit) the page closes and
+    /// its ``EnginePage/interactionState`` is kept. The snapshot is the one taken when the tab was
+    /// last hidden, unless the page has changed since (it loaded in the background) or has none,
+    /// when it's taken now.
     ///
     /// Does nothing if the tab isn't live or is visible. If the tab is shown, closed, or
     /// hibernated again while the snapshot is taken, the page is kept.
@@ -406,15 +439,54 @@ public final class WebViewPool {
         guard !isVisible(tabID), let liveTab = live[tabID] else { return false }
         // A snapshot being taken, and any retake it starts for a page that changed meanwhile.
         while let taking = liveTab.snapshotTask { await taking.value }
-        var snapshot = liveTab.snapshot
-        if snapshot == nil || liveTab.snapshotVersion != liveTab.contentVersion {
-            snapshot = await PageSnapshot.capture(liveTab.page) ?? snapshot
+        if liveTab.snapshot == nil || liveTab.snapshotVersion != liveTab.contentVersion {
+            let version = liveTab.contentVersion
+            if let captured = await PageSnapshot.capture(liveTab.page) {
+                liveTab.snapshot = captured
+                liveTab.snapshotVersion = version
+            }
         }
+        let snapshot = liveTab.snapshot
         guard live[tabID] === liveTab, !isVisible(tabID) else { return false }
         live[tabID] = nil
-        hibernated[tabID] = HibernatedTab(interactionState: liveTab.page.interactionState, snapshot: snapshot)
+        // An engine that can discard the page keeps it, with its history and its place in the
+        // engine's window. Hibernated first, so the engine reporting the discard finds it so.
+        hibernated[tabID] = HibernatedTab(kept: liveTab, interactionState: nil, snapshot: snapshot)
+        liveTab.isBeingDiscarded = true
+        let discarded = liveTab.page.discard()
+        liveTab.isBeingDiscarded = false
+        if discarded { return true }
+        hibernated[tabID] = HibernatedTab(kept: nil, interactionState: liveTab.page.interactionState, snapshot: snapshot)
         liveTab.tearDown()
         return true
+    }
+
+    /// A kept page that loaded again while its tab hibernated (an extension reloaded or navigated
+    /// it) is live again, so it hibernates again once it's idle.
+    func keptPageMayHaveWoken(_ liveTab: LiveTab) {
+        guard !liveTab.isBeingDiscarded, hibernated[liveTab.tabID]?.kept === liveTab,
+              !liveTab.page.isDiscarded else { return }
+        hibernated[liveTab.tabID] = nil
+        live[liveTab.tabID] = liveTab
+        liveTab.lastUsed = now()
+    }
+
+    /// The engine discarded a tab's page on its own (Chrome, for an extension's
+    /// `chrome.tabs.discard` or under memory pressure): a hidden tab hibernates, keeping the page;
+    /// a tab that's showing loads again at once.
+    func pageWasDiscarded(_ liveTab: LiveTab) {
+        // A page waiting for its tab loads again when it's shown.
+        guard live[liveTab.tabID] === liveTab, awaitingAdoption[liveTab.tabID] == nil else { return }
+        if isVisible(liveTab.tabID) {
+            liveTab.page.loadIfDiscarded()
+            return
+        }
+        liveTab.snapshotTask?.cancel()
+        liveTab.snapshotTask = nil
+        live[liveTab.tabID] = nil
+        // A snapshot from before the page last changed would show another page.
+        let snapshot = liveTab.snapshotVersion == liveTab.contentVersion ? liveTab.snapshot : nil
+        hibernated[liveTab.tabID] = HibernatedTab(kept: liveTab, interactionState: nil, snapshot: snapshot)
     }
 
     /// Hibernates every hidden tab that has been idle longer than the timeout, except tabs whose
@@ -423,7 +495,20 @@ public final class WebViewPool {
     /// - Returns: The IDs of the tabs that hibernated.
     @discardableResult
     public func hibernateIdleTabs() async -> Set<Tab.ID> {
-        let cutoff = now().addingTimeInterval(-configuration.hibernationTimeout)
+        await hibernateHiddenTabs(idleSince: now().addingTimeInterval(-configuration.hibernationTimeout))
+    }
+
+    /// Hibernates every hidden tab now, however recently it was used, as the idle timer would once
+    /// they'd been idle long enough; tabs whose page has developer tools open are left alone. For
+    /// Develop › Hibernate Background Tabs, to check hibernation by hand.
+    ///
+    /// - Returns: The IDs of the tabs that hibernated.
+    @discardableResult
+    public func hibernateHiddenTabs() async -> Set<Tab.ID> {
+        await hibernateHiddenTabs(idleSince: .distantFuture)
+    }
+
+    private func hibernateHiddenTabs(idleSince cutoff: Date) async -> Set<Tab.ID> {
         let idle = live.values
             .filter { !isVisible($0.tabID) && $0.lastUsed <= cutoff && !$0.page.hasDevTools }
             .map(\.tabID)
@@ -464,7 +549,7 @@ public final class WebViewPool {
     /// discarded.
     public func discard(_ tabID: Tab.ID) {
         awaitingAdoption[tabID] = nil
-        hibernated[tabID] = nil
+        hibernated.removeValue(forKey: tabID)?.kept?.tearDown()
         visibleCounts[tabID] = nil
         live.removeValue(forKey: tabID)?.tearDown()
     }
@@ -542,6 +627,9 @@ public final class WebViewPool {
         for (tabID, liveTab) in live where liveTab.profileID == profileID {
             discard(tabID)
         }
+        for (tabID, saved) in hibernated where saved.kept?.profileID == profileID {
+            discard(tabID)
+        }
         try? await engine.removeWebsiteData(for: profileID)
     }
 }
@@ -569,7 +657,7 @@ extension WebViewPool: WebEngineDelegate {
         // The engine already closed the page; forget it without closing it again.
         awaitingAdoption[tabID] = nil
         live.removeValue(forKey: tabID)?.snapshotTask?.cancel()
-        hibernated[tabID] = nil
+        hibernated.removeValue(forKey: tabID)?.kept?.page.delegate = nil
         visibleCounts[tabID] = nil
         onEngineClosedTab?(tabID)
     }
@@ -639,6 +727,9 @@ private struct PermissionKey: Hashable {
 
 /// What the pool keeps for a hibernated tab.
 private struct HibernatedTab {
+    /// The tab's page, discarded but kept with its history, for engines that can
+    /// (``EnginePage/discard()``); `nil` when the page closed.
+    var kept: LiveTab?
     /// The page's opaque back and forward state, from ``EnginePage/interactionState``.
     var interactionState: Any?
     /// A JPEG of the page from when it was last hidden, or when it hibernated.

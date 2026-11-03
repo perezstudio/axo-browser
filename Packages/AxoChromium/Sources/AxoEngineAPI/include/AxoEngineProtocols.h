@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 28
+#define AXO_ENGINE_API_VERSION 29
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -330,6 +330,10 @@ NS_SWIFT_UI_ACTOR
 /// status bubble: `url` is where it goes, or `nil` once neither is over or on a link. Links in
 /// frames count too. Show it without taking the page's clicks.
 - (void)page:(id<AXOPage>)page hoversLinkToURL:(nullable NSURL*)url NS_SWIFT_NAME(page(_:hoversLinkTo:));
+/// The page was discarded: by `-discard`, or by Chrome on its own (an extension's
+/// `chrome.tabs.discard`, or memory pressure). It comes on a later turn, and only while the page
+/// is still discarded. The page loads again when shown, or with `-loadIfDiscarded`.
+- (void)pageWasDiscarded:(id<AXOPage>)page;
 /// The page opened another page (`window.open`, a `target="_blank"` link, a link opened in a new
 /// tab): `newPage` is already loading `url`, with what the request carried (its opener, form
 /// data, referrer). Show it as a tab after this one, in the background when `inBackground`, or as
@@ -361,7 +365,21 @@ NS_SWIFT_UI_ACTOR
 @property(nonatomic, readonly) BOOL canGoBack;
 @property(nonatomic, readonly) BOOL canGoForward;
 
-/// Back and forward history, serialized, for hibernation. `nil` while unsupported.
+/// Frees the page's renderer and memory but keeps the page, its back and forward history, and its
+/// place in its window, so extensions still list it (as `discarded`, also when it joins a window
+/// later), as Chrome discards tabs to save memory. It loads its current entry again when shown, or
+/// with `-loadIfDiscarded`. Returns whether the page is now discarded: NO when there's nothing to
+/// discard (already discarded, or closed) or Chromium skipped it (a navigation about to commit).
+/// Don't discard a page that's showing.
+- (BOOL)discard;
+/// Whether the page is discarded, until it loads again.
+@property(nonatomic, readonly, getter=isDiscarded) BOOL discarded;
+/// Loads a discarded page's current history entry again; does nothing for a page that isn't
+/// discarded.
+- (void)loadIfDiscarded;
+
+/// Back and forward history, serialized, for hibernation. `nil` while unsupported (hibernation
+/// uses `-discard`, which keeps history).
 @property(nonatomic, readonly, nullable) NSData* navigationState;
 /// Restores history saved from `navigationState` and loads its current entry.
 - (void)restoreNavigationState:(NSData*)state;

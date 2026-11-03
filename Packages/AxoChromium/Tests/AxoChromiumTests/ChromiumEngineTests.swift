@@ -391,7 +391,7 @@ struct ChromiumEngineTests {
         #expect(FakeAXOEngine.configurations.first?.downloadsFolder == folder)
     }
 
-    @Test func hibernatedPagesWithoutSavedHistoryReloadTheirURL() async throws {
+    @Test func hibernatedPagesAreDiscardedAndWakeInPlace() async throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)
         engine.start()
@@ -402,11 +402,15 @@ struct ChromiumEngineTests {
         let first = try #require(FakePage.made.first)
 
         #expect(await pool.hibernate(tab.id))
-        #expect(first.isClosed)
+        #expect(first.isDiscarded, "Discarded as Chrome discards tabs, keeping its history")
+        #expect(!first.isClosed)
+        pool.setWindowTabs([tab.id], selected: nil, profileID: profileID)
+        #expect(FakeWindow.made.last?.pages.first === first, "Still in the engine's window, for extensions")
+
         pool.page(for: tab, profileID: profileID)
-        let woken = try #require(FakePage.made.last)
-        #expect(woken !== first)
-        #expect(woken.loads == [url], "Chromium doesn't save history yet, so it reloads the URL")
+        #expect(FakePage.made.count == 1, "Woken in place")
+        #expect(first.discardedLoads == 1)
+        #expect(first.loads == [url], "Not loaded from the tab's URL again")
     }
 
     // MARK: Windows

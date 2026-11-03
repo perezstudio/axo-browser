@@ -66,9 +66,22 @@ final class ChromiumPage: NSObject, EnginePage {
     var canGoBack: Bool { page?.canGoBack ?? false }
     var canGoForward: Bool { page?.canGoForward ?? false }
 
-    /// The engine's serialized history, or `nil` while Chromium doesn't support saving it yet;
-    /// a hibernated tab then reloads its URL when it wakes.
+    /// The engine's serialized history, or `nil` while Chromium doesn't support saving it yet.
+    /// Hibernation doesn't need it: Chromium pages are discarded (``discard()``), which keeps
+    /// their history.
     var interactionState: Any? { page?.navigationState }
+
+    /// Discards the page as Chrome discards a tab: its renderer goes, the page stays, with its
+    /// history and its tab in the engine's window.
+    func discard() -> Bool {
+        page?.discard() ?? false
+    }
+
+    func loadIfDiscarded() {
+        page?.loadIfDiscarded()
+    }
+
+    var isDiscarded: Bool { page?.isDiscarded ?? false }
 
     func restore(interactionState: Any) {
         guard let data = interactionState as? Data else { return }
@@ -337,6 +350,10 @@ extension ChromiumPage: AXOPageDelegate {
     /// The link under the pointer, or with keyboard focus, changed.
     func page(_ page: any AXOPage, hoversLinkTo url: URL?) {
         delegate?.page(self, hoversLinkTo: url)
+    }
+
+    func pageWasDiscarded(_ page: any AXOPage) {
+        delegate?.pageWasDiscarded(self)
     }
 
     /// A page this one opened (`window.open`, `target="_blank"`), already loading and connected

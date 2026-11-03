@@ -71,6 +71,23 @@ struct EngineNeutralModelTests {
         #expect(!model.arePagesCovered)
     }
 
+    @Test func hibernatingBackgroundTabsLeavesTheShownOneAlone() async throws {
+        let background = try await openPage(URL(string: "https://example.com/")!)
+        let backgroundID = try #require(model.selectedTabID)
+        _ = try await openPage(URL(string: "https://example.org/")!)
+        let shownID = try #require(model.selectedTabID)
+        // The window's page view shows the selected tab.
+        model.pool.beginShowing(shownID)
+        var announcements: [String] = []
+        model.announce = { announcements.append($0) }
+
+        await model.hibernateBackgroundTabs()
+        #expect(model.pool.isHibernated(backgroundID), "Hibernated at once, though it was just used")
+        #expect(background.isClosed, "This engine can't discard, so the page closes")
+        #expect(model.pool.isLive(shownID))
+        #expect(announcements == ["1 tab hibernated"])
+    }
+
     @Test func findGoesToThePage() async throws {
         let page = try await openPage(URL(string: "https://example.com/")!)
         page.findResult = false
