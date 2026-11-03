@@ -223,7 +223,13 @@ public final class FakePage: NSObject, AXOPage {
         }
     }
 
-    public func snapshot(withWidth width: CGFloat, completion: @escaping (NSImage?) -> Void) { completion(nil) }
+    /// What snapshots return, and the widths asked for, in order.
+    public var snapshotImage: NSImage?
+    public private(set) var snapshotWidths: [CGFloat] = []
+    public func snapshot(withWidth width: CGFloat, completion: @escaping (NSImage?) -> Void) {
+        snapshotWidths.append(width)
+        completion(snapshotImage)
+    }
     /// The downloads Axo started (`startDownload(from:)`), in order.
     public private(set) var startedDownloads: [URL] = []
     public func startDownload(from url: URL) { startedDownloads.append(url) }

@@ -100,6 +100,16 @@ public final class FakePage: EnginePage {
     public private(set) var isClosed = false
     /// What ``snapshot(width:)`` returns.
     public var snapshotImage: PlatformImage?
+    /// How many snapshots the pool asked for.
+    public private(set) var snapshotCount = 0
+    /// Whether snapshots wait for ``answerHeldSnapshot()`` instead of answering at once.
+    public var holdsSnapshots = false
+    private var heldSnapshots: [CheckedContinuation<Void, Never>] = []
+
+    /// Answers the oldest held snapshot with ``snapshotImage``.
+    public func answerHeldSnapshot() {
+        heldSnapshots.removeFirst().resume()
+    }
     /// What ``find(_:backwards:)`` returns.
     public var findResult = true
     /// Whether finds wait for ``answerHeldFind(_:)`` instead of answering ``findResult`` at once.
@@ -118,6 +128,18 @@ public final class FakePage: EnginePage {
         self.url = url
         self.title = title
         delegate?.pageStateDidChange(self)
+    }
+
+    /// Fails loading the page and tells the delegate.
+    public func failLoad() {
+        isLoading = false
+        delegate?.pageDidFailLoad(self)
+    }
+
+    /// Finishes loading the page and tells the delegate.
+    public func finishLoad() {
+        isLoading = false
+        delegate?.pageDidFinishLoad(self)
     }
 
     public var interactionState: Any? { url.map { "history:\($0.absoluteString)" } }
@@ -161,7 +183,10 @@ public final class FakePage: EnginePage {
     }
 
     public func snapshot(width: CGFloat) async -> PlatformImage? {
-        snapshotImage
+        snapshotCount += 1
+        guard holdsSnapshots else { return snapshotImage }
+        await withCheckedContinuation { heldSnapshots.append($0) }
+        return snapshotImage
     }
 
     public func startDownload(_ url: URL) {

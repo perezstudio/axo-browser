@@ -821,6 +821,31 @@ struct ChromiumEngineTests {
         #expect(fake.stoppedFinding == 1, "Chromium clears its own highlight")
     }
 
+    @Test func hiddenTabsAreSnapshottedByTheEngineForHibernation() async throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine)
+        let tab = Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial)
+        pool.page(for: tab, profileID: profileID)
+        let fake = try #require(FakePage.made.first)
+        fake.snapshotImage = NSImage(size: NSSize(width: 64, height: 40), flipped: false) { rect in
+            NSColor.systemRed.setFill()
+            rect.fill()
+            return true
+        }
+
+        pool.beginShowing(tab.id)
+        pool.endShowing(tab.id)
+        // Taken as the tab is hidden, before it hibernates.
+        for _ in 0..<200 where fake.snapshotWidths.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(fake.snapshotWidths == [640], "At the pool's width")
+        #expect(await pool.hibernate(tab.id))
+        #expect(fake.snapshotWidths == [640], "Hibernating used that snapshot")
+        #expect(pool.snapshot(for: tab.id) != nil)
+    }
+
     @Test func pageScriptsRunInTheEnginesPage() async throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)

@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 27
+#define AXO_ENGINE_API_VERSION 28
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -391,7 +391,10 @@ NS_SWIFT_UI_ACTOR
                  inWorld:(NSString*)world
               completion:(void (^)(id _Nullable result, NSError* _Nullable error))completion;
 
-/// A picture of the visible page, `width` points wide.
+/// A picture of the visible page, `width` points wide at 1x (no wider than the page), from its
+/// last frame. Works for a page that was just hidden (taken out of its window), as Chrome
+/// snapshots a tab it hides. `completion` runs once, on the main thread; `nil` when there's no
+/// frame to copy (nothing has drawn yet, a crashed renderer) or the copy fails.
 - (void)snapshotWithWidth:(CGFloat)width completion:(void (^)(NSImage* _Nullable image))completion;
 
 /// Downloads `url` with the page's profile and cookies. Reported through the delegate

@@ -179,6 +179,8 @@ public final class WebViewPool {
 
         if let saved = hibernated.removeValue(forKey: tab.id), let interactionState = saved.interactionState {
             liveTab.state.restoringSnapshot = saved.snapshot.flatMap(PlatformImage.init(data:))
+            // Kept in case the tab hibernates again before a newer one is taken.
+            liveTab.snapshot = saved.snapshot
             page.restore(interactionState: interactionState)
         } else {
             page.load(tab.url)
@@ -198,6 +200,7 @@ public final class WebViewPool {
         }
         // The page live under another ID (adopted under a new one) moves, without closing.
         for (otherID, other) in live where other.page === page {
+            other.snapshotTask?.cancel()
             live[otherID] = nil
             awaitingAdoption[otherID] = nil
         }
@@ -249,8 +252,8 @@ public final class WebViewPool {
         hibernated[tabID] != nil
     }
 
-    /// The JPEG snapshot taken when the tab hibernated, or `nil` if it isn't hibernated or
-    /// the engine couldn't capture one.
+    /// The hibernated tab's JPEG snapshot, or `nil` if it isn't hibernated or the engine couldn't
+    /// capture one.
     public func snapshot(for tabID: Tab.ID) -> Data? {
         hibernated[tabID]?.snapshot
     }
@@ -339,14 +342,50 @@ public final class WebViewPool {
     }
 
     /// Marks a tab as no longer shown in one place. Its idle timer starts now.
+    ///
+    /// Once it's shown nowhere, the pool snapshots the page while its last frame is fresh, for
+    /// when the tab hibernates (as Chrome snapshots a tab it hides), unless nothing has changed
+    /// since the last snapshot.
     public func endShowing(_ tabID: Tab.ID) {
         guard let count = visibleCounts[tabID] else { return }
         if count <= 1 {
             visibleCounts[tabID] = nil
+            if let liveTab = live[tabID] { refreshSnapshot(of: liveTab) }
         } else {
             visibleCounts[tabID] = count - 1
         }
         live[tabID]?.lastUsed = now()
+    }
+
+    /// Snapshots the tab's page unless its snapshot is current or one is being taken. Only the
+    /// latest snapshot is kept. A page that changed while its snapshot was taken, and is still
+    /// hidden, is snapshotted again once that one is done.
+    ///
+    /// A page still loading isn't snapshotted: its picture would be blank or half drawn, and could
+    /// replace a good one. Hibernation snapshots it if it finishes loading while hidden.
+    private func refreshSnapshot(of liveTab: LiveTab) {
+        guard liveTab.snapshotTask == nil, liveTab.snapshotVersion != liveTab.contentVersion,
+              !liveTab.page.isLoading else { return }
+        let version = liveTab.contentVersion
+        liveTab.snapshotTask = Task { [weak self] in
+            let snapshot = await PageSnapshot.capture(liveTab.page)
+            liveTab.snapshotTask = nil
+            guard !Task.isCancelled else { return }
+            if let snapshot {
+                liveTab.snapshot = snapshot
+                liveTab.snapshotVersion = version
+            }
+            // Only for a change during the capture, so a page that can't be snapshotted isn't
+            // asked again and again.
+            guard let self, liveTab.contentVersion != version, self.live[liveTab.tabID] === liveTab,
+                  !self.isVisible(liveTab.tabID) else { return }
+            self.refreshSnapshot(of: liveTab)
+        }
+    }
+
+    /// Whether a snapshot of the tab's page is being taken, for tests.
+    func isSnapshotting(_ tabID: Tab.ID) -> Bool {
+        live[tabID]?.snapshotTask != nil
     }
 
     /// Whether the tab is shown anywhere.
@@ -354,8 +393,9 @@ public final class WebViewPool {
         visibleCounts[tabID] != nil
     }
 
-    /// Snapshots the page, then discards the tab's page and keeps its history so it can
-    /// wake later.
+    /// Discards the tab's page and keeps its history and latest snapshot so it can wake later.
+    /// The snapshot is the one taken when the tab was last hidden, unless the page has changed
+    /// since (it loaded in the background) or has none, when it's taken now.
     ///
     /// Does nothing if the tab isn't live or is visible. If the tab is shown, closed, or
     /// hibernated again while the snapshot is taken, the page is kept.
@@ -364,7 +404,12 @@ public final class WebViewPool {
     @discardableResult
     public func hibernate(_ tabID: Tab.ID) async -> Bool {
         guard !isVisible(tabID), let liveTab = live[tabID] else { return false }
-        let snapshot = await PageSnapshot.capture(liveTab.page)
+        // A snapshot being taken, and any retake it starts for a page that changed meanwhile.
+        while let taking = liveTab.snapshotTask { await taking.value }
+        var snapshot = liveTab.snapshot
+        if snapshot == nil || liveTab.snapshotVersion != liveTab.contentVersion {
+            snapshot = await PageSnapshot.capture(liveTab.page) ?? snapshot
+        }
         guard live[tabID] === liveTab, !isVisible(tabID) else { return false }
         live[tabID] = nil
         hibernated[tabID] = HibernatedTab(interactionState: liveTab.page.interactionState, snapshot: snapshot)
@@ -523,7 +568,7 @@ extension WebViewPool: WebEngineDelegate {
         guard let tabID = tabID(of: page) else { return }
         // The engine already closed the page; forget it without closing it again.
         awaitingAdoption[tabID] = nil
-        live[tabID] = nil
+        live.removeValue(forKey: tabID)?.snapshotTask?.cancel()
         hibernated[tabID] = nil
         visibleCounts[tabID] = nil
         onEngineClosedTab?(tabID)
@@ -596,7 +641,7 @@ private struct PermissionKey: Hashable {
 private struct HibernatedTab {
     /// The page's opaque back and forward state, from ``EnginePage/interactionState``.
     var interactionState: Any?
-    /// A JPEG of the page when it hibernated.
+    /// A JPEG of the page from when it was last hidden, or when it hibernated.
     var snapshot: Data?
 }
 
