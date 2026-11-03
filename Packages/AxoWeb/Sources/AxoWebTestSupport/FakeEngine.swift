@@ -136,6 +136,47 @@ public final class FakePage: EnginePage {
         delegate?.pageDidFailLoad(self)
     }
 
+    /// Whether ``discard()`` works, as on Chromium (WebKit pages can't be discarded).
+    public var canDiscard = false
+    /// Whether the page is discarded, and how many times it loaded again afterwards.
+    public private(set) var isDiscarded = false
+    public private(set) var discardedLoads = 0
+
+    public func discard() -> Bool {
+        guard canDiscard, !isDiscarded, !discardIsSkipped else { return false }
+        isDiscarded = true
+        // Engines report it on a later turn.
+        Task { @MainActor [weak self] in
+            guard let self, self.isDiscarded else { return }
+            self.delegate?.pageWasDiscarded(self)
+        }
+        return true
+    }
+
+    public func loadIfDiscarded() {
+        guard isDiscarded else { return }
+        isDiscarded = false
+        discardedLoads += 1
+    }
+
+    /// Discards the page as the engine does on its own (an extension's `chrome.tabs.discard`),
+    /// reporting it at once.
+    public func discardOnItsOwn() {
+        isDiscarded = true
+        delegate?.pageWasDiscarded(self)
+    }
+
+    /// Loads a discarded page again on the engine's own (an extension's `chrome.tabs.reload`).
+    public func reloadOnItsOwn() {
+        isDiscarded = false
+        delegate?.pageStateDidChange(self)
+        finishLoad()
+    }
+
+    /// Whether ``discard()`` reports the page discarded but leaves it live, as Chromium does when
+    /// a navigation is about to commit.
+    public var discardIsSkipped = false
+
     /// Finishes loading the page and tells the delegate.
     public func finishLoad() {
         isLoading = false

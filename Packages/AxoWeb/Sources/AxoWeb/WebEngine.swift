@@ -145,9 +145,22 @@ public protocol EnginePage: AnyObject {
     /// own. The pool doesn't hibernate an idle tab while they are: an undocked DevTools window
     /// stays in use while its tab is hidden.
     var hasDevTools: Bool { get }
+
+    /// Frees the page's memory but keeps the page, its back and forward history, and its place in
+    /// the engine's window, as Chrome discards tabs. Returns whether it did: engines that can't
+    /// (WebKit) return `false`, and the pool closes the page and keeps ``interactionState``
+    /// instead. The pool only discards a page that isn't showing.
+    func discard() -> Bool
+    /// Loads a discarded page's current history entry again; does nothing otherwise.
+    func loadIfDiscarded()
+    /// Whether the page is discarded (``discard()``), until it loads again.
+    var isDiscarded: Bool { get }
 }
 
 extension EnginePage {
+    public func discard() -> Bool { false }
+    public func loadIfDiscarded() {}
+    public var isDiscarded: Bool { false }
     public func toggleDevTools() -> Bool { false }
     public func showDevToolsConsole() -> Bool { false }
     public var hasDevTools: Bool { false }
@@ -192,6 +205,9 @@ public protocol EnginePageDelegate: AnyObject {
     /// The link under the pointer, or with keyboard focus, changed: `url` is where it goes, or
     /// `nil` once there's none. Axo shows it in a status label over the page.
     func page(_ page: any EnginePage, hoversLinkTo url: URL?)
+    /// The engine discarded the page (``EnginePage/discard()``), or did so on its own (Chrome, for
+    /// an extension's `chrome.tabs.discard` or under memory pressure).
+    func pageWasDiscarded(_ page: any EnginePage)
     /// The page opened another page that's already loading (`window.open`, a `target="_blank"`
     /// link), for engines that keep the new page connected to its opener.
     func page(_ page: any EnginePage, didOpen opened: OpenedPage)

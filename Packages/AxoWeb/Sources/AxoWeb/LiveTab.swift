@@ -21,6 +21,9 @@ final class LiveTab: EnginePageDelegate {
     var snapshotVersion: Int?
     /// The snapshot being taken, if any.
     var snapshotTask: Task<Void, Never>?
+    /// Set while the pool discards the page, so the page's own events meanwhile aren't taken for
+    /// it loading again.
+    var isBeingDiscarded = false
     private weak var pool: WebViewPool?
 
     init(tabID: Tab.ID, profileID: Profile.ID, page: any EnginePage, pool: WebViewPool, lastUsed: Date) {
@@ -61,12 +64,18 @@ final class LiveTab: EnginePageDelegate {
 
     func pageStateDidChange(_ page: any EnginePage) {
         syncState()
+        pool?.keptPageMayHaveWoken(self)
     }
 
     func pageDidFinishLoad(_ page: any EnginePage) {
         contentVersion += 1
         state.restoringSnapshot = nil
+        pool?.keptPageMayHaveWoken(self)
         pool?.loadFavicon(for: tabID)
+    }
+
+    func pageWasDiscarded(_ page: any EnginePage) {
+        pool?.pageWasDiscarded(self)
     }
 
     func pageDidFailLoad(_ page: any EnginePage) {

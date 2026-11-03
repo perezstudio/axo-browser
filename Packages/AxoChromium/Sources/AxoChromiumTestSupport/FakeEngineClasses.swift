@@ -192,6 +192,21 @@ public final class FakePage: NSObject, AXOPage {
     }
 
     public func restoreNavigationState(_ state: Data) { restored.append(state) }
+
+    /// Whether the page is discarded, and how many times it loaded again afterwards.
+    public private(set) var isDiscarded = false
+    public private(set) var discardedLoads = 0
+    public func discard() -> Bool {
+        guard !isDiscarded, !isClosed else { return false }
+        isDiscarded = true
+        delegate?.pageWasDiscarded?(self)
+        return true
+    }
+    public func loadIfDiscarded() {
+        guard isDiscarded else { return }
+        isDiscarded = false
+        discardedLoads += 1
+    }
     public func load(_ url: URL) { loads.append(url) }
     /// How many times Axo went back and forward.
     public private(set) var backs = 0
