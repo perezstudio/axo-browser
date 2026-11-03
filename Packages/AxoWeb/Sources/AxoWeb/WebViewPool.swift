@@ -272,6 +272,11 @@ public final class WebViewPool {
         live[tabID]?.state
     }
 
+    /// The profile whose website data the tab's live page uses, or `nil` if it isn't live.
+    public func liveProfileID(for tabID: Tab.ID) -> Profile.ID? {
+        live[tabID]?.profileID
+    }
+
     /// Whether the tab currently has a page.
     public func isLive(_ tabID: Tab.ID) -> Bool {
         live[tabID] != nil

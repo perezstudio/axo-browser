@@ -34,7 +34,7 @@ extension BrowserModel {
         let name = allProfiles.first { $0.id == id }?.name ?? "Profile"
         do {
             let movedTabs = try await store.deleteProfile(id: id, movingSpacesTo: replacement)
-            discardWebViews(for: movedTabs)
+            await discardWebViews(for: movedTabs)
             await pool.removeWebsiteData(for: id)
             announce("Deleted \(name)")
         } catch {
@@ -46,7 +46,7 @@ extension BrowserModel {
     /// website data.
     public func moveSpace(_ spaceID: Space.ID, toProfile profileID: Profile.ID) async {
         do {
-            discardWebViews(for: try await store.moveSpace(id: spaceID, toProfile: profileID))
+            await discardWebViews(for: try await store.moveSpace(id: spaceID, toProfile: profileID))
         } catch {
             report(error, "Axo couldn't move the Space.")
         }
@@ -60,16 +60,19 @@ extension BrowserModel {
         announce("Website data cleared")
     }
 
-    /// Discards tabs' web views, which belong to their old profile's data store. Shown tabs get
-    /// a new web view on the next update.
-    private func discardWebViews(for tabIDs: [AxoCore.Tab.ID]) {
+    /// Discards tabs' pages, which belong to their old profile's website data. If the shown
+    /// Space moved, it takes its new profile first (from the store, without waiting for the Spaces
+    /// observation), so its shown tab's new page uses the new profile's data, never the old one's.
+    private func discardWebViews(for tabIDs: [AxoCore.Tab.ID]) async {
         for tabID in tabIDs {
             prompts.dismissAll(from: tabID)
             pool.discard(tabID)
         }
-        if let selectedTabID, tabIDs.contains(selectedTabID) {
-            select(nil)
-            select(selectedTabID)
+        if let space, let fresh = (try? await store.spaces())?.first(where: { $0.id == space.id }) {
+            await followShownSpaceChange(to: fresh)
+        }
+        if let selectedTabID, tabIDs.contains(selectedTabID), !pool.isLive(selectedTabID) {
+            activateSelectedTab()
         }
     }
 

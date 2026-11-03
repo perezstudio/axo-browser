@@ -476,10 +476,7 @@ public final class BrowserModel {
     func followShownSpace() async throws {
         guard let current = space else { return }
         if let fresh = spaces.first(where: { $0.id == current.id }) {
-            if fresh != current {
-                space = fresh
-                if fresh.profileID != current.profileID { await observeFavorites(for: fresh.profileID) }
-            }
+            await followShownSpaceChange(to: fresh)
             return
         }
         selectedTabBySpace[current.id] = nil
@@ -493,6 +490,24 @@ public final class BrowserModel {
         }
         try await show(target)
         announce("Switched to \(target.name)")
+    }
+
+    /// Takes the shown Space's latest record (a rename, a new color, another profile). When its
+    /// profile changed (here, or on another device through iCloud), the profile's favorites
+    /// follow, and the Space's live pages, which use the old profile's website data, close; the
+    /// shown tab's is made again with the new one's.
+    func followShownSpaceChange(to fresh: Space) async {
+        guard let current = space, fresh.id == current.id, fresh != current else { return }
+        space = fresh
+        guard fresh.profileID != current.profileID else { return }
+        await observeFavorites(for: fresh.profileID)
+        for tab in tabs {
+            if let profileID = pool.liveProfileID(for: tab.id), profileID != fresh.profileID {
+                prompts.dismissAll(from: tab.id)
+                pool.discard(tab.id)
+            }
+        }
+        activateSelectedTab()
     }
 
     /// Shows `target` in the window: its tabs, its remembered selection, and live updates.
