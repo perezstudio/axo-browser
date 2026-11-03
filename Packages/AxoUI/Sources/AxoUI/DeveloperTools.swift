@@ -24,6 +24,14 @@ extension BrowserModel {
         if !tools.showConsole(for: tabID) { explainInspectorFallback() }
     }
 
+    /// Develop › Hibernate Background Tabs: hibernates every tab that isn't showing now, as the idle
+    /// timer would after half an hour, so hibernation can be checked by hand. Tells VoiceOver how
+    /// many hibernated.
+    public func hibernateBackgroundTabs() async {
+        let count = await pool.hibernateHiddenTabs().count
+        announce(count == 1 ? "1 tab hibernated" : "\(count) tabs hibernated")
+    }
+
     private func explainInspectorFallback() {
         alertMessage = "Axo's Web Inspector isn't available on this version of macOS. You can inspect this page from Safari's Develop menu instead."
     }

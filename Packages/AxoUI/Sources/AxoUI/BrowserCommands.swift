@@ -299,6 +299,9 @@ public struct BrowserCommands: Commands {
                 .keyboardShortcut("c", modifiers: [.command, .option])
                 .disabled(model?.selectedTabID == nil || model?.developerTools == nil)
             InspectExtensionPopupMenu(model: model)
+            Divider()
+            Button("Hibernate Background Tabs") { Task { await model?.hibernateBackgroundTabs() } }
+                .disabled(model == nil)
         }
         CommandMenu("History") {
             Button("Back") { model?.goBack() }

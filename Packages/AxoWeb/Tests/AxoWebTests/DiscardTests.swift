@@ -156,6 +156,22 @@ struct DiscardTests {
         #expect(!pool.isHibernated(tab.id))
     }
 
+    @Test func hibernatingHiddenTabsDoesntWaitForTheTimeout() async throws {
+        let page = try loadedPage()
+        let shown = Tab.testTab(url: URL(string: "https://example.com/shown")!)
+        pool.page(for: shown, profileID: profileID)
+        pool.beginShowing(shown.id)
+        let inspected = Tab.testTab(url: URL(string: "https://example.com/inspected")!)
+        pool.page(for: inspected, profileID: profileID)
+        try #require(engine.pages.last).hasDevTools = true
+
+        #expect(await pool.hibernateIdleTabs() == [], "None has been idle half an hour")
+        #expect(await pool.hibernateHiddenTabs() == [tab.id])
+        #expect(page.isDiscarded)
+        #expect(pool.isLive(shown.id))
+        #expect(pool.isLive(inspected.id), "Developer tools keep it live, as for the timer")
+    }
+
     @Test func aKeptPageThatLoadsAgainOnItsOwnIsLiveAgain() async throws {
         let page = try loadedPage()
         #expect(await pool.hibernate(tab.id))

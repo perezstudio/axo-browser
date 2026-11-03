@@ -495,7 +495,20 @@ public final class WebViewPool {
     /// - Returns: The IDs of the tabs that hibernated.
     @discardableResult
     public func hibernateIdleTabs() async -> Set<Tab.ID> {
-        let cutoff = now().addingTimeInterval(-configuration.hibernationTimeout)
+        await hibernateHiddenTabs(idleSince: now().addingTimeInterval(-configuration.hibernationTimeout))
+    }
+
+    /// Hibernates every hidden tab now, however recently it was used, as the idle timer would once
+    /// they'd been idle long enough; tabs whose page has developer tools open are left alone. For
+    /// Develop › Hibernate Background Tabs, to check hibernation by hand.
+    ///
+    /// - Returns: The IDs of the tabs that hibernated.
+    @discardableResult
+    public func hibernateHiddenTabs() async -> Set<Tab.ID> {
+        await hibernateHiddenTabs(idleSince: .distantFuture)
+    }
+
+    private func hibernateHiddenTabs(idleSince cutoff: Date) async -> Set<Tab.ID> {
         let idle = live.values
             .filter { !isVisible($0.tabID) && $0.lastUsed <= cutoff && !$0.page.hasDevTools }
             .map(\.tabID)
