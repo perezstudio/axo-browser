@@ -41,7 +41,8 @@ struct ProfileManagementTests {
         let oldWebView = try #require(model.pool.liveWebView(for: tabID))
 
         await model.deleteProfile(home.profileID, movingSpacesTo: work.id)
-        try await waitUntil { model.space?.profileID == work.id }
+        // The Space and the profile list come from separate observations, in either order.
+        try await waitUntil { model.space?.profileID == work.id && model.allProfiles.map(\.id) == [work.id] }
         #expect(removed.profiles == [home.profileID])
         #expect(model.allProfiles.map(\.id) == [work.id])
         #expect(model.selectedTabID == tabID, "The tab stays selected")
