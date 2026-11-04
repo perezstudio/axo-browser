@@ -166,6 +166,87 @@ struct EngineNeutralModelTests {
         #expect(model.siteSettingsKinds == [.camera, .microphone, .location], "Not for an engine that never asks")
     }
 
+    @Test func deletingAProfileReloadsTheShownTabWithTheNewProfile() async throws {
+        let home = try #require(model.space)
+        let work = try #require(await model.addProfile(named: "Work"))
+        let old = try await openPage(URL(string: "https://example.com/")!)
+        let tabID = try #require(model.selectedTabID)
+        #expect(old.profileID == home.profileID)
+
+        await model.deleteProfile(home.profileID, movingSpacesTo: work.id)
+        try await waitUntil { model.space?.profileID == work.id }
+        let page = try #require(model.pool.livePage(for: tabID) as? FakePage)
+        #expect(page !== old)
+        #expect(page.profileID == work.id, "Never the deleted profile's website data")
+        #expect(engine.pages.allSatisfy { $0 === old || $0.profileID == work.id }, "No page made for the deleted profile")
+    }
+
+    @Test func movingTheShownSpaceReloadsItsTabWithTheNewProfile() async throws {
+        let home = try #require(model.space)
+        let work = try #require(await model.addProfile(named: "Work"))
+        _ = try await openPage(URL(string: "https://example.com/")!)
+        let tabID = try #require(model.selectedTabID)
+
+        await model.moveSpace(home.id, toProfile: work.id)
+        try await waitUntil { model.space?.profileID == work.id }
+        let page = try #require(model.pool.livePage(for: tabID) as? FakePage)
+        #expect(page.profileID == work.id, "The page uses the Space's new profile")
+    }
+
+    @Test func aSpaceMovedToAnotherProfileElsewhereReloadsItsPages() async throws {
+        let home = try #require(model.space)
+        let work = try #require(await model.addProfile(named: "Work"))
+        let background = try await openPage(URL(string: "https://example.com/1")!)
+        let backgroundID = try #require(model.selectedTabID)
+        _ = try await openPage(URL(string: "https://example.com/2")!)
+        let shownID = try #require(model.selectedTabID)
+
+        // As iCloud would: the store changes, and only the Spaces observation tells the model.
+        _ = try await model.store.moveSpace(id: home.id, toProfile: work.id)
+        try await waitUntil { model.space?.profileID == work.id && model.pool.liveProfileID(for: shownID) == work.id }
+        #expect(model.pool.liveProfileID(for: backgroundID) == nil, "Its old page closed")
+        #expect(background.isClosed)
+    }
+
+    @Test func aHibernatedTabWhoseSpaceMovedWakesWithTheNewProfile() async throws {
+        let home = try #require(model.space)
+        let work = try #require(await model.addProfile(named: "Work"))
+        let background = try await openPage(URL(string: "https://example.com/1")!)
+        background.canDiscard = true
+        let backgroundID = try #require(model.selectedTabID)
+        _ = try await openPage(URL(string: "https://example.com/2")!)
+        model.pool.beginShowing(try #require(model.selectedTabID))
+        #expect(await model.pool.hibernate(backgroundID))
+
+        _ = try await model.store.moveSpace(id: home.id, toProfile: work.id)
+        try await waitUntil { model.space?.profileID == work.id }
+        model.select(backgroundID)
+        let woken = try #require(model.pool.livePage(for: backgroundID) as? FakePage)
+        #expect(woken !== background, "Not the page kept for the old profile")
+        #expect(woken.profileID == work.id)
+        #expect(background.isClosed)
+    }
+
+    @Test func movingTheShownSpaceClosesPeekAndAnOldFavoriteGivesWay() async throws {
+        let home = try #require(model.space)
+        let work = try #require(await model.addProfile(named: "Work"))
+        _ = try await openPage(URL(string: "https://example.com/tab")!)
+        let tabID = try #require(model.selectedTabID)
+        _ = try await openPage(URL(string: "https://example.com/favorite")!)
+        let favoriteID = try #require(model.selectedTabID)
+        await model.addToFavorites(favoriteID)
+        model.select(favoriteID)
+        model.openPeek(URL(string: "https://example.com/peek")!, from: tabID)
+        #expect(model.peek != nil)
+
+        await model.moveSpace(home.id, toProfile: work.id)
+        // The Spaces observation may be the read that applies the change.
+        try await waitUntil { model.space?.profileID == work.id }
+        #expect(model.peek == nil, "Peek's page used the old profile")
+        try await waitUntil { model.selectedTabID == tabID }
+        #expect(model.pool.liveProfileID(for: tabID) == work.id, "The home profile's favorite gave way to the Space's first tab")
+    }
+
     @Test func aPageAskingToBeShownBringsItsTabForwardEvenInAnotherSpace() async throws {
         let mail = try await openPage(URL(string: "https://mail.example.com/")!)
         let mailID = try #require(model.selectedTabID)

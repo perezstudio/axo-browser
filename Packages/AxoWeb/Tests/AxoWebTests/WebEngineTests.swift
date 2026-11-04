@@ -239,6 +239,15 @@ struct WebEngineTests {
 
     // MARK: Windows
 
+    @Test func aLivePageNamesItsProfile() {
+        let tab = Tab.testTab(url: url)
+        #expect(pool.liveProfileID(for: tab.id) == nil)
+        pool.page(for: tab, profileID: profileID)
+        #expect(pool.liveProfileID(for: tab.id) == profileID)
+        pool.discard(tab.id)
+        #expect(pool.liveProfileID(for: tab.id) == nil)
+    }
+
     @Test func aPageAskingToBeShownNamesItsTab() throws {
         let tab = Tab.testTab(url: url)
         pool.page(for: tab, profileID: profileID)

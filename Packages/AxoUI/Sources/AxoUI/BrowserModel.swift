@@ -42,6 +42,8 @@ public final class BrowserModel {
     @ObservationIgnored public var presentMiniWindow: ((MiniWindow) -> Void)?
     /// Brings the browser window forward, reopening it if it was closed, so a tab added from
     /// outside it (a routed link, Open in Axo) is on screen. Set by the app.
+    /// Counts reads of the Spaces, so only the newest is applied (``refreshSpaces()``).
+    @ObservationIgnored var spacesReadGeneration = 0
     @ObservationIgnored public var showBrowserWindow: (() -> Void)?
     /// Whether Axo is the active app. Pages asking to be shown are only followed while it is.
     @ObservationIgnored public var isAppActive: () -> Bool = { true }
@@ -481,10 +483,7 @@ public final class BrowserModel {
     func followShownSpace() async throws {
         guard let current = space else { return }
         if let fresh = spaces.first(where: { $0.id == current.id }) {
-            if fresh != current {
-                space = fresh
-                if fresh.profileID != current.profileID { await observeFavorites(for: fresh.profileID) }
-            }
+            await followShownSpaceChange(to: fresh)
             return
         }
         selectedTabBySpace[current.id] = nil
@@ -498,6 +497,47 @@ public final class BrowserModel {
         }
         try await show(target)
         announce("Switched to \(target.name)")
+    }
+
+    /// Takes the shown Space's latest record (a rename, a new color, another profile). When its
+    /// profile changed (here, or on another device through iCloud), the Space's live pages, which
+    /// use the old profile's website data, close (and with them Peek, page full screen, and a find
+    /// bar on a closed page), the shown tab's is made again with the new profile's, and the new
+    /// profile's favorites follow. All of that happens before the first suspension, so it applies
+    /// to this Space and what's drawn next already uses the new profile. A selected favorite of
+    /// the old profile gives way to the first tab.
+    func followShownSpaceChange(to fresh: Space) async {
+        guard let current = space, fresh.id == current.id, fresh != current else { return }
+        space = fresh
+        guard fresh.profileID != current.profileID else { return }
+        if peek != nil { closePeek() }
+        for tab in tabs {
+            guard let profileID = pool.liveProfileID(for: tab.id), profileID != fresh.profileID else { continue }
+            if fullscreenTabID == tab.id { exitPageFullscreen() }
+            prompts.dismissAll(from: tab.id)
+            pool.discard(tab.id)
+        }
+        if isFindBarVisible, let selectedTabID, !pool.isLive(selectedTabID) { closeFindBar() }
+        activateSelectedTab()
+        await observeFavorites(for: fresh.profileID)
+        guard space?.id == fresh.id, space?.profileID == fresh.profileID, let selectedTabID,
+              !tabs.contains(where: { $0.id == selectedTabID }),
+              !favorites.contains(where: { $0.id == selectedTabID }) else { return }
+        select(visibleTabOrder.first)
+    }
+
+    /// Reads the Spaces and follows the shown one's changes, dropping a read that a newer one
+    /// overtook (reads can finish out of order), so an older record never undoes a newer one.
+    /// Returns whether this read was applied; when it wasn't, the newer one applies its own.
+    @discardableResult
+    func refreshSpaces() async throws -> Bool {
+        spacesReadGeneration += 1
+        let generation = spacesReadGeneration
+        let fresh = try await store.spaces()
+        guard generation == spacesReadGeneration else { return false }
+        spaces = fresh
+        try await followShownSpace()
+        return true
     }
 
     /// Shows `target` in the window: its tabs, its remembered selection, and live updates.
@@ -573,8 +613,7 @@ public final class BrowserModel {
                 for try await _ in observation {
                     // Re-read for the same reason as tabs: never apply a stale list.
                     guard let self else { return }
-                    self.spaces = try await self.store.spaces()
-                    try await self.followShownSpace()
+                    try await self.refreshSpaces()
                 }
             } catch {
                 self?.logger.error("Space observation failed: \(error)")
