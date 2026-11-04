@@ -248,6 +248,16 @@ struct WebEngineTests {
         #expect(pool.liveProfileID(for: tab.id) == nil)
     }
 
+    @Test func aPageAskingToBeShownNamesItsTab() throws {
+        let tab = Tab.testTab(url: url)
+        pool.page(for: tab, profileID: profileID)
+        var asked: [Tab.ID] = []
+        pool.onPageWantsToBeShown = { asked.append($0) }
+
+        try livePage(for: tab).askToBeShown()
+        #expect(asked == [tab.id])
+    }
+
     @Test func onlyAnswersTheEngineKeepsReachIt() {
         let site = PageOrigin(scheme: "https", host: "news.example.com")
         for kind in PermissionKind.allCases {

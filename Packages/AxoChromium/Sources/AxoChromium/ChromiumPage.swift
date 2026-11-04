@@ -365,6 +365,10 @@ extension ChromiumPage: AXOPageDelegate {
         delegate?.page(self, hoversLinkTo: url)
     }
 
+    func pageWantsToBeShown(_ page: any AXOPage) {
+        delegate?.pageWantsToBeShown(self)
+    }
+
     func pageWasDiscarded(_ page: any AXOPage) {
         delegate?.pageWasDiscarded(self)
     }

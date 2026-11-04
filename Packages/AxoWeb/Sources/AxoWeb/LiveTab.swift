@@ -74,6 +74,10 @@ final class LiveTab: EnginePageDelegate {
         pool?.loadFavicon(for: tabID)
     }
 
+    func pageWantsToBeShown(_ page: any EnginePage) {
+        pool?.onPageWantsToBeShown?(tabID)
+    }
+
     func pageWasDiscarded(_ page: any EnginePage) {
         pool?.pageWasDiscarded(self)
     }

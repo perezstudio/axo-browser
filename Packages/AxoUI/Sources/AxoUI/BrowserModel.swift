@@ -45,6 +45,8 @@ public final class BrowserModel {
     /// Counts reads of the Spaces, so only the newest is applied (``refreshSpaces()``).
     @ObservationIgnored var spacesReadGeneration = 0
     @ObservationIgnored public var showBrowserWindow: (() -> Void)?
+    /// Whether Axo is the active app. Pages asking to be shown are only followed while it is.
+    @ObservationIgnored public var isAppActive: () -> Bool = { true }
     /// Closes a mini window's AppKit window after its page moved to a tab.
     @ObservationIgnored public var dismissMiniWindow: ((MiniWindow.ID) -> Void)?
     /// The tab the next command bar choice joins in a split view (Add Split View).
@@ -323,6 +325,9 @@ public final class BrowserModel {
                 engineSelectionAwaitingAdoption = id
                 syncEngineWindow()
             }
+        }
+        pool.onPageWantsToBeShown = { [weak self] id in
+            Task { await self?.showTabForPage(id) }
         }
         pool.onLinkClick = { [weak self] click in
             self?.handleLinkClick(click) ?? false

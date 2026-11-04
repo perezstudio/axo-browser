@@ -384,6 +384,22 @@ struct ChromiumEngineTests {
         #expect(profile.permissionSettings.map { $0.origin.absoluteString } == ["http://[::1]:8000"], "An IPv6 site keeps its brackets")
     }
 
+    @Test func aPageAskingToBeShownReachesThePool() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine)
+        let tab = Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial)
+        pool.page(for: tab, profileID: profileID)
+        let fake = try #require(FakePage.made.first)
+        var asked: [Tab.ID] = []
+        pool.onPageWantsToBeShown = { asked.append($0) }
+
+        try #require(fake.delegate).pageWantsToBeShown?(fake)
+        #expect(asked == [tab.id])
+    }
+
     @Test func downloadsReportToThePoolsList() throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)

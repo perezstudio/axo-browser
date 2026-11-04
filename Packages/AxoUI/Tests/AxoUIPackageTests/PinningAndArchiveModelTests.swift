@@ -126,7 +126,6 @@ struct PinningAndArchiveModelTests {
         let tabs = try await open(["idle", "pinned", "selected"])
         await model.setPinned(true, tabID: tabs[1].id)
         model.select(tabs[2].id)
-        try await Task.sleep(for: .milliseconds(100))  // let activity writes land
 
         clock.advance(hours: 13)
         await model.archiveInactiveTabs()
@@ -140,7 +139,15 @@ struct PinningAndArchiveModelTests {
         let tabs = try await open(["a", "b"])
         clock.advance(hours: 11)
         model.select(tabs[0].id)   // marks "a" (and the previously selected "b") active now
-        try await Task.sleep(for: .milliseconds(100))
+        // Those writes happen in a task of their own: wait for them, not for a fixed time, since
+        // the main thread these tests share can be busy for seconds.
+        let shown = clock.now
+        try await waitUntilAsync {
+            let a = try await store.tab(id: tabs[0].id), b = try await store.tab(id: tabs[1].id)
+            // Stored times lose sub-millisecond precision.
+            let isShown = { (date: Date?) in date.map { abs($0.timeIntervalSince(shown)) < 1 } ?? false }
+            return isShown(a?.lastActiveAt) && isShown(b?.lastActiveAt)
+        }
 
         clock.advance(hours: 11)
         await model.archiveInactiveTabs()

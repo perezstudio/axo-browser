@@ -175,6 +175,11 @@ public final class FakePage: EnginePage {
         discardedLoads += 1
     }
 
+    /// Asks to be shown, as a page does after a click on one of its notifications.
+    public func askToBeShown() {
+        delegate?.pageWantsToBeShown(self)
+    }
+
     /// Discards the page as the engine does on its own (an extension's `chrome.tabs.discard`),
     /// reporting it at once.
     public func discardOnItsOwn() {

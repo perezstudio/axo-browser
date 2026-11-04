@@ -247,6 +247,72 @@ struct EngineNeutralModelTests {
         #expect(model.pool.liveProfileID(for: tabID) == work.id, "The home profile's favorite gave way to the Space's first tab")
     }
 
+    @Test func aPageAskingToBeShownBringsItsTabForwardEvenInAnotherSpace() async throws {
+        let mail = try await openPage(URL(string: "https://mail.example.com/")!)
+        let mailID = try #require(model.selectedTabID)
+        _ = try await openPage(URL(string: "https://news.example.com/")!)
+        let firstSpace = try #require(model.space?.id)
+        var broughtForward = 0
+        model.showBrowserWindow = { broughtForward += 1 }
+
+        await model.createSpace(name: "Work")
+        #expect(model.space?.id != firstSpace)
+        mail.askToBeShown()
+        try await waitUntil { model.selectedTabID == mailID }
+        #expect(model.space?.id == firstSpace, "Its Space is shown again")
+        #expect(broughtForward == 1)
+    }
+
+    @Test func aPageAskingToBeShownIsIgnoredWhileAxoIsntActive() async throws {
+        let mail = try await openPage(URL(string: "https://mail.example.com/")!)
+        let mailID = try #require(model.selectedTabID)
+        _ = try await openPage(URL(string: "https://news.example.com/")!)
+        var broughtForward = 0
+        model.showBrowserWindow = { broughtForward += 1 }
+        model.isAppActive = { false }
+
+        await model.showTabForPage(mailID)
+        #expect(model.selectedTabID != mailID, "Another app is in use: no tab switching under it")
+        #expect(broughtForward == 0)
+        _ = mail
+    }
+
+    @Test func theSelectedTabAskingToBeShownChangesNothing() async throws {
+        _ = try await openPage(URL(string: "https://video.example.com/")!)
+        let videoID = try #require(model.selectedTabID)
+        var broughtForward = 0
+        model.showBrowserWindow = { broughtForward += 1 }
+
+        // As a page entering full screen asks.
+        await model.showTabForPage(videoID)
+        #expect(broughtForward == 0)
+    }
+
+    @Test func aFavoriteAskingToBeShownIsSelected() async throws {
+        let mail = try await openPage(URL(string: "https://mail.example.com/")!)
+        let mailID = try #require(model.selectedTabID)
+        await model.addToFavorites(mailID)
+        #expect(model.isFavorite(mailID))
+        _ = try await openPage(URL(string: "https://news.example.com/")!)
+        var broughtForward = 0
+        model.showBrowserWindow = { broughtForward += 1 }
+
+        mail.askToBeShown()
+        try await waitUntil { model.selectedTabID == mailID }
+        #expect(broughtForward == 1)
+    }
+
+    @Test func anUnknownTabAskingToBeShownChangesNothing() async throws {
+        _ = try await openPage(URL(string: "https://news.example.com/")!)
+        let selected = model.selectedTabID
+        var broughtForward = 0
+        model.showBrowserWindow = { broughtForward += 1 }
+
+        await model.showTabForPage(UUID())
+        #expect(model.selectedTabID == selected)
+        #expect(broughtForward == 0)
+    }
+
     @Test func findGoesToThePage() async throws {
         let page = try await openPage(URL(string: "https://example.com/")!)
         page.findResult = false
@@ -390,7 +456,9 @@ struct EngineNeutralModelTests {
         #expect(engine.windowPages[profileID]?.active === opened, "The engine's window keeps it active meanwhile")
         #expect(engine.windowPages[profileID]?.pages.contains { $0 === opened } == true, "And keeps it in its tabs")
 
-        try await waitUntil { model.tabs.count == 2 }
+        // The sidebar's own observation can list the new tab a moment before adopting it selects
+        // it, so wait for the selection itself.
+        try await waitUntil { model.tabs.count == 2 && model.selectedTabID == model.tabs.last?.id }
         let openedID = try #require(model.tabs.last?.id)
         #expect(model.selectedTabID == openedID)
         #expect(model.pool.livePage(for: openedID) === opened)
