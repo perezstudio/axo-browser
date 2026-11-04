@@ -166,6 +166,72 @@ struct EngineNeutralModelTests {
         #expect(model.siteSettingsKinds == [.camera, .microphone, .location], "Not for an engine that never asks")
     }
 
+    @Test func aPageAskingToBeShownBringsItsTabForwardEvenInAnotherSpace() async throws {
+        let mail = try await openPage(URL(string: "https://mail.example.com/")!)
+        let mailID = try #require(model.selectedTabID)
+        _ = try await openPage(URL(string: "https://news.example.com/")!)
+        let firstSpace = try #require(model.space?.id)
+        var broughtForward = 0
+        model.showBrowserWindow = { broughtForward += 1 }
+
+        await model.createSpace(name: "Work")
+        #expect(model.space?.id != firstSpace)
+        mail.askToBeShown()
+        try await waitUntil { model.selectedTabID == mailID }
+        #expect(model.space?.id == firstSpace, "Its Space is shown again")
+        #expect(broughtForward == 1)
+    }
+
+    @Test func aPageAskingToBeShownIsIgnoredWhileAxoIsntActive() async throws {
+        let mail = try await openPage(URL(string: "https://mail.example.com/")!)
+        let mailID = try #require(model.selectedTabID)
+        _ = try await openPage(URL(string: "https://news.example.com/")!)
+        var broughtForward = 0
+        model.showBrowserWindow = { broughtForward += 1 }
+        model.isAppActive = { false }
+
+        await model.showTabForPage(mailID)
+        #expect(model.selectedTabID != mailID, "Another app is in use: no tab switching under it")
+        #expect(broughtForward == 0)
+        _ = mail
+    }
+
+    @Test func theSelectedTabAskingToBeShownChangesNothing() async throws {
+        _ = try await openPage(URL(string: "https://video.example.com/")!)
+        let videoID = try #require(model.selectedTabID)
+        var broughtForward = 0
+        model.showBrowserWindow = { broughtForward += 1 }
+
+        // As a page entering full screen asks.
+        await model.showTabForPage(videoID)
+        #expect(broughtForward == 0)
+    }
+
+    @Test func aFavoriteAskingToBeShownIsSelected() async throws {
+        let mail = try await openPage(URL(string: "https://mail.example.com/")!)
+        let mailID = try #require(model.selectedTabID)
+        await model.addToFavorites(mailID)
+        #expect(model.isFavorite(mailID))
+        _ = try await openPage(URL(string: "https://news.example.com/")!)
+        var broughtForward = 0
+        model.showBrowserWindow = { broughtForward += 1 }
+
+        mail.askToBeShown()
+        try await waitUntil { model.selectedTabID == mailID }
+        #expect(broughtForward == 1)
+    }
+
+    @Test func anUnknownTabAskingToBeShownChangesNothing() async throws {
+        _ = try await openPage(URL(string: "https://news.example.com/")!)
+        let selected = model.selectedTabID
+        var broughtForward = 0
+        model.showBrowserWindow = { broughtForward += 1 }
+
+        await model.showTabForPage(UUID())
+        #expect(model.selectedTabID == selected)
+        #expect(broughtForward == 0)
+    }
+
     @Test func findGoesToThePage() async throws {
         let page = try await openPage(URL(string: "https://example.com/")!)
         page.findResult = false

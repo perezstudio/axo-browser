@@ -34,6 +34,23 @@ extension BrowserModel {
         return true
     }
 
+    /// Shows the tab whose page asked to be shown, as after a click on one of its notifications:
+    /// selects it, in its Space if it's elsewhere, or the favorite, and brings the window forward.
+    ///
+    /// The engine also asks for reasons the person didn't start (a page entering full screen, an
+    /// extension reloading a page that posted a form), so this only acts while Axo is the active
+    /// app (a notification click makes it so first), never activates Axo itself, and leaves a tab
+    /// that's already selected alone. Pages elsewhere (Peek, mini windows) are left as they are.
+    func showTabForPage(_ tabID: AxoCore.Tab.ID) async {
+        guard isAppActive(), selectedTabID != tabID else { return }
+        if favorites.contains(where: { $0.id == tabID }) {
+            select(tabID)
+            showBrowserWindow?()
+            return
+        }
+        _ = await showTabForIntent(tabID)
+    }
+
     /// Copies the selected tab's page into a Space as a new tab, pinned or not, and returns it.
     /// The original tab stays where it is.
     public func saveCurrentTab(to spaceID: Space.ID, pinned: Bool) async throws -> AxoCore.Tab {

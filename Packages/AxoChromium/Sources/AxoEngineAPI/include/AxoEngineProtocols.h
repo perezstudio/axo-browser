@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 30
+#define AXO_ENGINE_API_VERSION 31
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -364,6 +364,12 @@ NS_SWIFT_UI_ACTOR
 /// `chrome.tabs.discard`, or memory pressure). It comes on a later turn, and only while the page
 /// is still discarded. The page loads again when shown, or with `-loadIfDiscarded`.
 - (void)pageWasDiscarded:(id<AXOPage>)page;
+/// The page asked to be shown: `window.focus()` after the person clicks one of its notifications,
+/// or a service worker's `clients.focus()`, which pages can only do after something the person did;
+/// but Chrome also asks when the page enters full screen, for a media session's "raise", and when
+/// reloading a page that posted a form. Show its tab (and its window) when that's what the person
+/// meant.
+- (void)pageWantsToBeShown:(id<AXOPage>)page NS_SWIFT_NAME(pageWantsToBeShown(_:));
 /// The page opened another page (`window.open`, a `target="_blank"` link, a link opened in a new
 /// tab): `newPage` is already loading `url`, with what the request carried (its opener, form
 /// data, referrer). Show it as a tab after this one, in the background when `inBackground`, or as

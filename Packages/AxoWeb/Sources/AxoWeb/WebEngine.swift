@@ -222,6 +222,10 @@ public protocol EnginePageDelegate: AnyObject {
     /// The engine discarded the page (``EnginePage/discard()``), or did so on its own (Chrome, for
     /// an extension's `chrome.tabs.discard` or under memory pressure).
     func pageWasDiscarded(_ page: any EnginePage)
+    /// The page asked to be shown: `window.focus()` after a click on one of its notifications, a
+    /// service worker's `clients.focus()`, but also entering full screen, a media "raise", or an
+    /// extension reloading a page that posted a form, which the person didn't necessarily start.
+    func pageWantsToBeShown(_ page: any EnginePage)
     /// The page opened another page that's already loading (`window.open`, a `target="_blank"`
     /// link), for engines that keep the new page connected to its opener.
     func page(_ page: any EnginePage, didOpen opened: OpenedPage)
