@@ -100,6 +100,14 @@ public struct BrowserCommands: Commands {
                 .disabled(model == nil)
             Button("Customize This Site…") { model?.customizeCurrentSite() }
                 .disabled(model?.selectedHost == nil)
+            Button(model?.isSidebarAddressBarShown == false ? "Show Address Bar in Sidebar" : "Hide Address Bar in Sidebar") {
+                guard let model else { return }
+                model.setSidebarAddressBarShown(!model.isSidebarAddressBarShown)
+            }
+            .disabled(model == nil)
+            Button("Copy Link") { model?.copyShownPageLink() }
+                .keyboardShortcut("c", modifiers: [.command, .shift])
+                .disabled(model?.shownPageURL == nil)
             Button("Site Settings…") {
                 guard let model else { return }
                 Task { await model.showSiteSettings() }

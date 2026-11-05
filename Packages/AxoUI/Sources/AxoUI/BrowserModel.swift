@@ -84,6 +84,24 @@ public final class BrowserModel {
     public private(set) var isCommandBarVisible = false
     /// What's typed in the command bar.
     public private(set) var commandQuery = ""
+    /// The tab whose address the command bar is editing (``editAddress()``), or `nil` when it's
+    /// opening something new. Return on a page or history result loads it in this tab.
+    public private(set) var commandBarEditedTabID: AxoCore.Tab.ID?
+    /// Incremented when the command bar should select everything typed in it.
+    public private(set) var commandQuerySelectionRequest = 0
+    /// Asks the windows to show (`true`) or hide the sidebar's address bar (View menu), counted so
+    /// each request is seen. The windows keep the setting, in their own settings store; every
+    /// window sets the same value, so two windows can't undo each other.
+    public private(set) var sidebarAddressBarRequest: (count: Int, shown: Bool) = (0, true)
+    /// Whether the sidebar's address bar is on screen now (it's hidden, or the sidebar is
+    /// collapsed, otherwise), so Site Settings knows where to appear.
+    public var isSidebarAddressBarOnScreen = false
+    /// Whether the sidebar's address bar is showing, as the window last reported, for the View
+    /// menu's title.
+    public var isSidebarAddressBarShown = true
+    /// Copies a link instead of the system pasteboard, for tests, which mustn't change the
+    /// person's clipboard. The app sets one in UI testing mode.
+    @ObservationIgnored public var copyLink: ((URL) -> Void)?
     /// The command bar's rows, best first.
     public private(set) var commandResults: [CommandResult] = []
     /// The highlighted row.
@@ -657,6 +675,10 @@ public final class BrowserModel {
         if id != selectedTabID, isFindBarVisible {
             closeFindBar()
         }
+        // An address being edited is the tab being left's: Return mustn't load it there unseen.
+        if let edited = commandBarEditedTabID, id != edited {
+            hideCommandBar()
+        }
         // Another tab can't show while a page fills the screen.
         if let fullscreenTabID, id != fullscreenTabID {
             exitPageFullscreen()
@@ -743,9 +765,46 @@ public final class BrowserModel {
         showCommandBar()
     }
 
-    /// Asks the address field to take focus, with its address selected.
+    /// Asks the address field to take focus, with its address selected (⌘L). With the
+    /// navigation bar in the sidebar, the window answers by opening the command bar to edit the
+    /// address (``editAddress()``).
     public func focusAddressField() {
         addressFocusRequest += 1
+    }
+
+    /// Opens the command bar to edit the shown page's address, as Arc does: the full address,
+    /// selected, so typing replaces it and gets the command bar's results. Return loads in the
+    /// same tab; an unchanged address just closes the bar.
+    public func editAddress() {
+        // The address is the pinned tab's, under Peek; edit it, not something hidden behind.
+        if peek != nil { closePeek() }
+        guard let url = shownPageURL else {
+            showCommandBar()
+            return
+        }
+        showCommandBar()
+        pendingSplitAnchor = nil
+        commandBarEditedTabID = shownTab?.id
+        commandQuery = url.absoluteString
+        refreshCommandResults()
+        commandQuerySelectionRequest += 1
+    }
+
+    /// The shown page's address: its live URL, or the saved URL of a tab that hasn't loaded.
+    var shownPageURL: URL? {
+        selectedPage?.url ?? shownTab?.url
+    }
+
+    /// Copies the shown page's address (Copy Link, ⇧⌘C): Peek's page while Peek is open.
+    public func copyShownPageLink() {
+        guard let url = peekPage?.url ?? peek?.tab.url ?? shownPageURL else { return }
+        if let copyLink { copyLink(url) } else { copyToPasteboard(url) }
+        announce("Link copied")
+    }
+
+    /// Asks the windows to show or hide the sidebar's address bar.
+    public func setSidebarAddressBarShown(_ shown: Bool) {
+        sidebarAddressBarRequest = (sidebarAddressBarRequest.count + 1, shown)
     }
 
     /// Handles text submitted from the address field: loads it in the selected tab, or opens a
@@ -1190,6 +1249,7 @@ public final class BrowserModel {
         refreshDefaultBrowserStatus()
         isCommandBarVisible = true
         commandQuery = ""
+        commandBarEditedTabID = nil
         refreshCommandResults()
     }
 
@@ -1199,6 +1259,7 @@ public final class BrowserModel {
         let wasVisible = isCommandBarVisible
         isCommandBarVisible = false
         pendingSplitAnchor = nil
+        commandBarEditedTabID = nil
         if wasVisible { focusPage() }
     }
 
@@ -1221,7 +1282,9 @@ public final class BrowserModel {
         commandResults = CommandRanking.immediateResults(for: query, tabs: openTabs, availableActions: availableActions)
         commandSelection = 0
         commandSearchTask?.cancel()
-        guard let profileID = space?.profileID, !query.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        // A very long query (a data: page's address being edited) isn't worth searching history for.
+        guard let profileID = space?.profileID, !query.trimmingCharacters(in: .whitespaces).isEmpty,
+              query.count <= 512 else { return }
         let history = store.history
         commandSearchTask = Task { [weak self] in
             let items = (try? await history.search(query, profileID: profileID)) ?? []
@@ -1246,7 +1309,13 @@ public final class BrowserModel {
         let result = commandResults[index]
         // Add Split View: what's chosen joins this tab in a split.
         let splitAnchor = pendingSplitAnchor
+        // Editing the address: a page loads in the tab whose address it was.
+        let editedTabID = commandBarEditedTabID
         hideCommandBar()
+        if let editedTabID, let url = result.pageURL {
+            await loadEditedAddress(url, in: editedTabID)
+            return
+        }
         switch result {
         case .open(let url, _, _):
             await openTab(url: url)
@@ -1263,6 +1332,19 @@ public final class BrowserModel {
         case .action(let action):
             await perform(action)
         }
+    }
+
+    /// Loads an address edited in the command bar in its tab, unless it's the address already
+    /// shown (Return on an unchanged address just closes the bar) or the tab has gone.
+    private func loadEditedAddress(_ url: URL, in tabID: AxoCore.Tab.ID) async {
+        guard shownTab?.id == tabID else {
+            // The tab closed (or another Space showed) while the bar was open: what was typed
+            // opens in a new tab rather than going nowhere.
+            await openTab(url: url)
+            return
+        }
+        guard url != shownPageURL else { return }
+        pool.load(url, in: tabID)
     }
 
     /// Actions that make sense right now; for example, Pin Tab needs an unpinned selected tab.

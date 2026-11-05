@@ -138,7 +138,7 @@ extension BrowserModel {
         case .download(let url):
             menu.download(url)
         case .copyLink(let url), .copyAddress(let url):
-            copyToPasteboard(url)
+            if let copyLink { copyLink(url) } else { copyToPasteboard(url) }
         case .copyImage:
             menu.copyImage()
         case .lookUp:

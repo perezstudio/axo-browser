@@ -6,6 +6,8 @@ import SwiftUI
 struct CommandBarView: View {
     let model: BrowserModel
     @FocusState private var isFocused: Bool
+    /// The field's selection, so an address being edited starts selected and typing replaces it.
+    @State private var selection: TextSelection?
     /// The rows' height, so the list is only as tall as its rows (up to a limit).
     @State private var rowsHeight: CGFloat = 0
 
@@ -24,7 +26,7 @@ struct CommandBarView: View {
                     TextField(model.pendingSplitAnchor == nil ? "Search, enter an address, or run a command" : "Choose a tab or enter an address to show in split view", text: Binding(
                         get: { model.commandQuery },
                         set: { model.setCommandQuery($0) }
-                    ))
+                    ), selection: $selection)
                     .textFieldStyle(.plain)
                     .font(.title3)
                     .focused($isFocused)
@@ -75,7 +77,22 @@ struct CommandBarView: View {
         }
         .defaultFocus($isFocused, true)
         // The sidebar list holds focus when the bar appears; take it once the field is on screen.
-        .task { isFocused = true }
+        .task {
+            isFocused = true
+            selectAllIfEditingAddress()
+        }
+        .onChange(of: model.commandQuerySelectionRequest) { selectAllIfEditingAddress() }
+    }
+}
+
+extension CommandBarView {
+    /// Selects the whole address being edited, a turn later, once the field holds it and focus.
+    fileprivate func selectAllIfEditingAddress() {
+        guard model.commandBarEditedTabID != nil else { return }
+        Task {
+            let query = model.commandQuery
+            selection = TextSelection(range: query.startIndex..<query.endIndex)
+        }
     }
 }
 

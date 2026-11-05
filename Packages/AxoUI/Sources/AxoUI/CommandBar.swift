@@ -157,6 +157,15 @@ extension CommandResult {
         }
     }
 
+    /// The page the row opens, for a typed address or search and for history.
+    var pageURL: URL? {
+        switch self {
+        case .open(let url, _, _): url
+        case .history(let item): item.url
+        case .tab, .action: nil
+        }
+    }
+
     /// What Return does with the row, such as "Open" or "Switch to Tab".
     public var hint: String {
         switch self {

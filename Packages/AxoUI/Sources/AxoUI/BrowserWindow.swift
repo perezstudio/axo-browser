@@ -8,6 +8,7 @@ import SwiftUI
 public struct BrowserWindow: View {
     @Bindable private var model: BrowserModel
     @AppStorage(NavigationBarPlacement.storageKey) private var navigationBarPlacement = NavigationBarPlacement.sidebar
+    @AppStorage(AddressBarSettings.showsSidebarAddressBarKey) private var showsSidebarAddressBar = true
 
     /// Creates a window showing `model`.
     public init(model: BrowserModel) {
@@ -33,6 +34,15 @@ public struct BrowserWindow: View {
             }
         }
         .focusedSceneValue(\.browserModel, model)
+        // ⌘L: with the navigation bar in the sidebar, the address is edited in the command bar,
+        // as in Arc (also when the sidebar's address bar is hidden); above the page, its field
+        // takes focus itself.
+        .onChange(of: model.addressFocusRequest) {
+            if navigationBarPlacement == .sidebar { model.editAddress() }
+        }
+        // View › Show or Hide Address Bar in Sidebar, kept in the window's settings store.
+        .onChange(of: model.sidebarAddressBarRequest.count) { showsSidebarAddressBar = model.sidebarAddressBarRequest.shown }
+        .onChange(of: showsSidebarAddressBar, initial: true) { model.isSidebarAddressBarShown = showsSidebarAddressBar }
         .modifier(HandoffActivity(model: model))
         .pagePrompts(model: model)
         .task { await model.start() }
@@ -79,6 +89,19 @@ public struct BrowserWindow: View {
                     }
                 }
                 .modifier(PageTranslationTask(model: model))
+                // Site Settings hangs from the sidebar's address bar; when that isn't on screen
+                // (hidden, or the sidebar collapsed), from the top of the page instead.
+                .overlay(alignment: .top) {
+                    Color.clear
+                        .frame(width: 1, height: 1)
+                        .accessibilityHidden(true)
+                        .popover(isPresented: Binding(
+                            get: { navigationBarPlacement == .sidebar && !model.isSidebarAddressBarOnScreen && model.isShowingSiteSettings },
+                            set: { model.isShowingSiteSettings = $0 }
+                        ), arrowEdge: .top) {
+                            SiteSettingsView(model: model)
+                        }
+                }
                 .toolbar { NavigationToolbar(model: model, placement: navigationBarPlacement) }
                 // The address field already shows where you are.
                 .toolbar(removing: .title)

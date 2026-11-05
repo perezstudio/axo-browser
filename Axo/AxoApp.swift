@@ -238,6 +238,12 @@ enum AppEnvironment {
                 Task { await model?.openTab(url: UITestingExternalApps.openedPage) }
             }
             model.externalApps = externalApps
+            // Copy Link writes to a pasteboard of the test run's own, never the person's clipboard.
+            model.copyLink = { url in
+                let pasteboard = NSPasteboard(name: TestPasteboard.name)
+                pasteboard.clearContents()
+                pasteboard.setString(url.absoluteString, forType: .string)
+            }
         }
         browserModel = model
         return model
@@ -490,6 +496,11 @@ struct UITestingPageSummarizer: PageSummarizing {
     func summarize(title: String, url: URL?, text: String) async throws -> String {
         "• \(title): \(text.prefix(40))"
     }
+}
+
+/// The pasteboard test runs copy links to, which UI tests read, instead of the person's clipboard.
+enum TestPasteboard {
+    static let name = NSPasteboard.Name("com.perezstudio.Axo.testing")
 }
 
 /// Finds and opens the apps pages' links to other apps go to, through Launch Services.

@@ -142,13 +142,13 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["First"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["No Tab Open"].exists)
 
-        // After submitting, the field shows the loaded URL (which percent-encodes the markup),
-        // not the raw text that was typed.
-        let address = app.textFields["addressField"]
+        // After submitting, the address bar holds the loaded URL (which percent-encodes the
+        // markup), not the raw text that was typed.
+        let address = app.descendants(matching: .any)["sidebarAddressBar"]
         expectation(for: NSPredicate(format: "value CONTAINS '%3Ctitle%3E'"), evaluatedWith: address)
         waitForExpectations(timeout: 5)
 
-        // ⌘L edits the selected tab's address; the tab navigates in place.
+        // ⌘L edits the selected tab's address in the command bar; the tab navigates in place.
         app.typeKey("l", modifierFlags: .command)
         app.typeText(page("Second") + "\n")
         XCTAssertTrue(sidebar.staticTexts["Second"].waitForExistence(timeout: 10))
@@ -190,7 +190,7 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Alpha"].exists, "A new tab must not replace the previous one")
 
         sidebar.staticTexts["Alpha"].click()
-        let address = app.textFields["addressField"]
+        let address = app.descendants(matching: .any)["sidebarAddressBar"]
         let showsAlpha = NSPredicate(format: "value CONTAINS 'Alpha'")
         expectation(for: showsAlpha, evaluatedWith: address)
         waitForExpectations(timeout: 5)
@@ -245,6 +245,86 @@ final class AxoUITests: XCTestCase {
         dialog.buttons["Cancel"].firstMatch.click()
 
         XCTAssertTrue(sidebar.staticTexts["No"].waitForExistence(timeout: 10))
+    }
+
+    /// The sidebar's address bar shows the site, and clicking it (or ⌘L) edits the full address in
+    /// the command bar: selected, so typing replaces it, loading in the same tab; Esc closes it.
+    /// Copy Link copies the address, the full-address setting can be turned on, and the bar can be
+    /// hidden.
+    @MainActor
+    func testSidebarAddressBarEditsInTheCommandBar() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        let bar = app.descendants(matching: .any)["sidebarAddressBar"]
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
+        let commandField = app.textFields["commandField"]
+
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,<title>First</title>\n")
+        XCTAssertTrue(sidebar.staticTexts["First"].waitForExistence(timeout: 10))
+        XCTAssertEqual(bar.label, "Address")
+        expectation(for: NSPredicate(format: "value BEGINSWITH 'data:text/html,'"), evaluatedWith: bar)
+        waitForExpectations(timeout: 5)
+        XCTAssertFalse(app.textFields["addressField"].exists, "No editable field in the sidebar")
+        let screenshot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        screenshot.name = "Sidebar address bar"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        // Clicking it opens the command bar with the full address, selected.
+        bar.click()
+        XCTAssertTrue(commandField.waitForExistence(timeout: 5))
+        XCTAssertTrue((commandField.value as? String ?? "").hasPrefix("data:text/html,"), "The full address to edit")
+        // Esc closes it, leaving the page as it was.
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(commandField.waitForNonExistence(timeout: 5))
+
+        // ⌘L opens it too; typing replaces the selected address and Return loads in this tab.
+        app.typeKey("l", modifierFlags: .command)
+        XCTAssertTrue(commandField.waitForExistence(timeout: 5))
+        app.typeText("data:text/html,<title>Second</title>\n")
+        XCTAssertTrue(sidebar.staticTexts["Second"].waitForExistence(timeout: 10))
+        XCTAssertFalse(sidebar.staticTexts["First"].exists, "Loaded in place, not in a new tab")
+
+        // Copy Link (⇧⌘C) copies the address (to the test run's own pasteboard).
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("com.perezstudio.Axo.testing"))
+        pasteboard.clearContents()
+        app.typeKey("c", modifierFlags: [.command, .shift])
+        let copied = expectation(description: "the link is copied")
+        Task { @MainActor in
+            for _ in 0..<50 where pasteboard.string(forType: .string) == nil {
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            if pasteboard.string(forType: .string)?.contains("Second") == true { copied.fulfill() }
+        }
+        wait(for: [copied], timeout: 10)
+
+        // View › Hide Address Bar in Sidebar hides it; ⌘L still edits the address.
+        app.menuBarItems["View"].click()
+        app.menuItems["Hide Address Bar in Sidebar"].click()
+        XCTAssertTrue(bar.waitForNonExistence(timeout: 5))
+        app.typeKey("l", modifierFlags: .command)
+        XCTAssertTrue(commandField.waitForExistence(timeout: 5))
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(commandField.waitForNonExistence(timeout: 5))
+        app.menuBarItems["View"].click()
+        app.menuItems["Show Address Bar in Sidebar"].click()
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
+
+        // Settings › General › Show full website address.
+        app.typeKey(",", modifierFlags: .command)
+        let general = app.toolbars.buttons["General"]
+        XCTAssertTrue(general.waitForExistence(timeout: 5))
+        general.click()
+        let fullAddress = app.checkBoxes["showsFullAddressToggle"]
+        XCTAssertTrue(fullAddress.waitForExistence(timeout: 5))
+        XCTAssertEqual(fullAddress.value as? Int, 0, "Off by default")
+        fullAddress.click()
+        XCTAssertEqual(fullAddress.value as? Int, 1)
+        app.typeKey("w", modifierFlags: .command)
+        // What the pill then shows (the whole address) is covered by AddressDisplayTests.
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
     }
 
     /// Return in the prompt cancels: a page can ask while the person is typing, and their next
@@ -329,9 +409,10 @@ final class AxoUITests: XCTestCase {
         let app = launchApp()
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
-        let address = app.textFields["addressField"]
-        XCTAssertTrue(address.waitForExistence(timeout: 5))
-        XCTAssertLessThanOrEqual(address.frame.maxX, sidebar.frame.maxX + 1, "The sidebar holds the address field by default")
+        let sidebarBar = app.descendants(matching: .any)["sidebarAddressBar"]
+        XCTAssertTrue(sidebarBar.waitForExistence(timeout: 5))
+        XCTAssertLessThanOrEqual(sidebarBar.frame.maxX, sidebar.frame.maxX + 1, "The sidebar holds the address bar by default")
+        XCTAssertFalse(app.textFields["addressField"].exists, "There it's the pill, not a field")
         XCTAssertTrue(app.buttons["backButton"].exists)
 
         app.typeKey(",", modifierFlags: .command)
@@ -345,8 +426,9 @@ final class AxoUITests: XCTestCase {
 
         let pageBar = app.descendants(matching: .any)["pageAddressBar"]
         XCTAssertTrue(pageBar.waitForExistence(timeout: 5))
-        XCTAssertTrue(pageBar.textFields["addressField"].exists)
-        XCTAssertEqual(app.textFields.matching(identifier: "addressField").count, 1, "The sidebar no longer has one")
+        let address = pageBar.textFields["addressField"]
+        XCTAssertTrue(address.exists, "Above the page, it's an editable field, as in Safari")
+        XCTAssertFalse(sidebarBar.exists, "The sidebar no longer has one")
         XCTAssertGreaterThan(address.frame.minX, sidebar.frame.maxX - 1, "It sits in the page's toolbar")
         XCTAssertTrue(app.buttons["backButton"].exists && app.buttons["reloadButton"].exists)
         XCTAssertLessThan(app.buttons["reloadButton"].frame.maxX, pageBar.frame.minX,
@@ -523,7 +605,7 @@ final class AxoUITests: XCTestCase {
         app.typeKey("1", modifierFlags: .command)
         expectation(for: NSPredicate(format: "isSelected == true"), evaluatedWith: tile)
         waitForExpectations(timeout: 5)
-        expectation(for: NSPredicate(format: "value CONTAINS 'Mail'"), evaluatedWith: app.textFields["addressField"])
+        expectation(for: NSPredicate(format: "value CONTAINS 'Mail'"), evaluatedWith: app.descendants(matching: .any)["sidebarAddressBar"])
         waitForExpectations(timeout: 5)
 
         app.buttons["newSpaceButton"].click()
@@ -646,7 +728,7 @@ final class AxoUITests: XCTestCase {
         app.typeKey(.return, modifierFlags: [])
 
         XCTAssertFalse(app.textFields["commandField"].waitForExistence(timeout: 2))
-        let address = app.textFields["addressField"]
+        let address = app.descendants(matching: .any)["sidebarAddressBar"]
         expectation(for: NSPredicate(format: "value CONTAINS 'Garden'"), evaluatedWith: address)
         waitForExpectations(timeout: 5)
         XCTAssertEqual(sidebar.staticTexts.matching(identifier: "tabRow").count, 2, "Switching doesn't open a tab")
@@ -880,7 +962,7 @@ final class AxoUITests: XCTestCase {
             app.typeText("data:text/html,<title>\(title)</title>\n")
             XCTAssertTrue(sidebar.staticTexts[title].waitForExistence(timeout: 10))
         }
-        let address = app.textFields["addressField"]
+        let address = app.descendants(matching: .any)["sidebarAddressBar"]
         func expectSelected(_ title: String) {
             expectation(for: NSPredicate(format: "value CONTAINS %@", title), evaluatedWith: address)
             waitForExpectations(timeout: 5)

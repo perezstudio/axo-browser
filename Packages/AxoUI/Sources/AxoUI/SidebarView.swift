@@ -4,11 +4,12 @@ import SwiftUI
 // The Mac sidebar; iPhone and iPad have their own chrome.
 #if os(macOS)
 
-/// The sidebar: the address field, the Space's pinned tabs, and its other tabs.
+/// The sidebar: the address bar, the Space's pinned tabs, and its other tabs.
 struct SidebarView: View {
     let model: BrowserModel
     @State private var isShowingArchive = false
     @AppStorage(NavigationBarPlacement.storageKey) private var navigationBarPlacement = NavigationBarPlacement.sidebar
+    @AppStorage(AddressBarSettings.showsSidebarAddressBarKey) private var showsAddressBar = true
 
     var body: some View {
         // Folders are selectable too, so the keyboard can reach, open, and act on them.
@@ -60,9 +61,9 @@ struct SidebarView: View {
         }
         .safeAreaInset(edge: .top) {
             VStack(spacing: 8) {
-                // Like Arc, the address field can sit at the top of the sidebar.
-                if navigationBarPlacement == .sidebar {
-                    AddressBar(model: model)
+                // Like Arc, the address bar can sit at the top of the sidebar.
+                if navigationBarPlacement == .sidebar, showsAddressBar {
+                    SidebarAddressBar(model: model)
                 }
                 // Favorites sit above the pinned tabs, shared by the profile's Spaces.
                 FavoritesGrid(model: model)
