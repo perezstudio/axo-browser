@@ -56,6 +56,7 @@ extension BrowserModel {
     private func closePeek(focusingPage: Bool) {
         guard let peek else { return }
         self.peek = nil
+        prompts.dismissAll(from: peek.tab.id)
         pool.discard(peek.tab.id)
         if focusingPage { focusPage() }
     }

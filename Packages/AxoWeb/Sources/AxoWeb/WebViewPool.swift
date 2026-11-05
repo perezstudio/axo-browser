@@ -60,9 +60,17 @@ public final class WebViewPool {
     /// Dialogs are cancelled when this is `nil`.
     public var onJavaScriptDialog: ((JavaScriptDialog) async -> JavaScriptDialogResult)?
 
-    /// Asked when a page's file input wants files. Return the chosen files, or `nil` to cancel.
-    /// File selection is cancelled when this is `nil`.
+    /// Asked when a page's file input or File System Access picker wants files, or where to save
+    /// one (``FileSelectionRequest/kind``). Return the chosen files, or `nil` to cancel. File
+    /// selection is cancelled when this is `nil`.
     public var onFileSelection: ((FileSelectionRequest) async -> [URL]?)?
+    /// Called when the engine gives up on a tab's file panel (its page navigated, was hidden, or
+    /// closed): close it if it's still open, since its answer now goes nowhere.
+    public var onFileSelectionDismissed: ((Tab.ID) -> Void)?
+    /// Asked a page's File System Access question (``FileAccessRequest``): `nil` is no answer
+    /// (the question went away unanswered), which the engine doesn't record. Nothing is asked, and
+    /// there's no answer, when this is `nil`.
+    public var onFileAccess: ((FileAccessRequest) async -> Bool?)?
 
     /// Whether visible pages report their usage to Screen Time. Turn it off in tests, so test
     /// pages never count as the person's usage. Screen Time still blocks sites over their limit.

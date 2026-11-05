@@ -208,6 +208,10 @@ public final class BrowserModel {
     /// change counts even if its saved URL is unchanged, since that's a fresh load.
     @ObservationIgnored private var hasRecordedVisit: Set<AxoCore.Tab.ID> = []
     @ObservationIgnored let prompts = PagePromptQueue()
+    #if os(macOS)
+    /// The file panels open for pages, closed when a page gives up on its panel or its tab closes.
+    @ObservationIgnored let openFilePanels = OpenFilePanels()
+    #endif
     /// Hosts whose saved icon was already looked up, so each is read from the database once.
     @ObservationIgnored private var lookedUpFaviconHosts: Set<String> = []
     /// Speaks a short message to VoiceOver users. Tests replace it to record messages.
@@ -234,6 +238,7 @@ public final class BrowserModel {
         self.initialSpaceID = initialSpaceID
         pool.onPageChange = { [weak self] tabID, url, title in
             self?.forgetTranslation(ifPageChangedIn: tabID, to: url)
+            self?.prompts.dismissFileAccess(from: tabID, notFrom: PageOrigin(url: url))
             self?.persistPageChange(tabID: tabID, url: url, title: title)
         }
         pool.onFaviconChange = { [weak self] _, pageURL, data in
@@ -261,6 +266,13 @@ public final class BrowserModel {
         pool.onFileSelection = { [weak self] request in
             await self?.chooseFiles(for: request)
         }
+        pool.onFileAccess = { [weak self] request in
+            await self?.prompts.ask(request) ?? nil
+        }
+        #if os(macOS)
+        pool.onFileSelectionDismissed = { [weak self] tabID in self?.openFilePanels.dismiss(tabID) }
+        prompts.onDismissAll = { [weak self] tabID in self?.openFilePanels.dismiss(tabID) }
+        #endif
         pool.onWebViewFocus = { [weak self] tabID in self?.paneDidTakeFocus(tabID) }
         #if os(macOS)
         presentMiniWindow = { [weak self] mini in
@@ -1064,19 +1076,24 @@ public final class BrowserModel {
         prompts.answerCurrent(with: decision)
     }
 
+    /// Answers the current File System Access question: `true` for its button (allow, choose
+    /// another, or save anyway), `false` for Cancel.
+    public func answerFileAccess(_ answer: Bool) {
+        prompts.answerCurrent(fileAccess: answer)
+    }
+
     /// Answers the current JavaScript dialog.
     public func answerDialog(_ result: JavaScriptDialogResult) {
         prompts.answerCurrent(with: result)
     }
 
-    /// Shows an Open panel for a page's file input, as a sheet on the tab's window.
+    /// Shows an Open or Save panel for a page's file input or file picker, as a sheet on the tab's
+    /// window.
     private func chooseFiles(for request: FileSelectionRequest) async -> [URL]? {
         #if os(macOS)
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = request.allowsMultipleSelection
-        panel.canChooseDirectories = request.allowsDirectories
-        panel.canChooseFiles = true
-        panel.prompt = "Choose"
+        let panel = FilePanels.panel(for: request)
+        openFilePanels.begin(panel, for: request.tabID)
+        defer { openFilePanels.end(panel, for: request.tabID) }
         let response: NSApplication.ModalResponse
         if let window = pool.livePage(for: request.tabID)?.view.window {
             response = await panel.beginSheetModal(for: window)
@@ -1085,7 +1102,7 @@ public final class BrowserModel {
                 panel.begin { continuation.resume(returning: $0) }
             }
         }
-        return response == .OK ? panel.urls : nil
+        return FilePanels.chosenFiles(in: panel, response: response)
         #else
         // WebKit on iPhone and iPad shows its own file picker and never asks.
         return nil

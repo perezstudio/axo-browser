@@ -62,6 +62,7 @@ extension BrowserModel {
     func closeMiniWindowForEngine(_ id: MiniWindow.ID) {
         guard miniWindows.contains(where: { $0.id == id }) else { return }
         miniWindows.removeAll { $0.id == id }
+        prompts.dismissAll(from: id)
         dismissMiniWindow?(id)
     }
 
@@ -74,6 +75,7 @@ extension BrowserModel {
     public func closeMiniWindow(_ id: MiniWindow.ID) {
         guard miniWindows.contains(where: { $0.id == id }) else { return }
         miniWindows.removeAll { $0.id == id }
+        prompts.dismissAll(from: id)
         pool.discard(id)
     }
 

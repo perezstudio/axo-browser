@@ -400,6 +400,91 @@ struct ChromiumEngineTests {
         #expect(asked == [tab.id])
     }
 
+    @Test func aPagesFilePickerReachesThePoolAsARequest() async throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine)
+        let tab = Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial)
+        pool.page(for: tab, profileID: profileID)
+        let fake = try #require(FakePage.made.first)
+        var requests: [FileSelectionRequest] = []
+        let chosen = URL(filePath: "/tmp/notes.txt")
+        pool.onFileSelection = { requests.append($0); return [chosen] }
+        let delegate = try #require(fake.delegate)
+
+        let answer: [URL]? = await withCheckedContinuation { continuation in
+            delegate.page?(
+                fake, showsFilePanel: .save, title: "From the page", suggestedName: "notes.txt",
+                directory: URL(filePath: "/tmp", directoryHint: .isDirectory), extensions: ["txt"]
+            ) { continuation.resume(returning: $0) }
+        }
+        #expect(answer == [chosen])
+        let request = try #require(requests.first)
+        #expect(request.tabID == tab.id)
+        #expect(request.kind == .save)
+        #expect(request.suggestedName == "notes.txt")
+        #expect(request.directory?.path == "/tmp")
+        #expect(request.allowedExtensions == ["txt"])
+    }
+
+    @Test func aPagesFileAccessQuestionsAndDismissedPanelsReachThePool() async throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine)
+        let tab = Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial)
+        pool.page(for: tab, profileID: profileID)
+        let fake = try #require(FakePage.made.first)
+        let delegate = try #require(fake.delegate)
+        var requests: [FileAccessRequest] = []
+        var dismissed: [Tab.ID] = []
+        var answer: Bool? = true
+        pool.onFileAccess = { requests.append($0); return answer }
+        pool.onFileSelectionDismissed = { dismissed.append($0) }
+        let ask = { (kind: AXOFileAccessKind, url: URL?, origin: URL) async -> AXOFileAccessAnswer in
+            await withCheckedContinuation { continuation in
+                delegate.page?(fake, asksAboutFileAccess: kind, url: url, isDirectory: true, origin: origin) {
+                    continuation.resume(returning: $0)
+                }
+            }
+        }
+
+        let site = URL(string: "https://editor.example.com")!
+        #expect(await ask(.viewAndEdit, URL(filePath: "/tmp/Photos", directoryHint: .isDirectory), site) == .yes)
+        #expect(await ask(.dangerousFile, nil, site) == .yes)
+        #expect(requests.map(\.kind) == [.viewAndEdit, .dangerousFile])
+        #expect(requests.first?.name == "Photos")
+        #expect(requests.first?.origin == PageOrigin(scheme: "https", host: "editor.example.com"))
+        #expect(requests.allSatisfy { $0.tabID == tab.id })
+
+        #expect(await ask(.view, nil, URL(string: "about:blank")!) == .none, "No site to name: no answer, so nothing is recorded")
+        #expect(requests.count == 2)
+        answer = false
+        #expect(await ask(.edit, nil, site) == .no)
+        answer = nil
+        #expect(await ask(.edit, nil, site) == .none, "A question that went away unanswered")
+
+        delegate.pageDismissesFilePanel?(fake)
+        #expect(dismissed == [tab.id])
+    }
+
+    @Test func fileKindsMatchTheEngines() {
+        #expect(FilePanel.Kind(.openFile) == .openFile)
+        #expect(FilePanel.Kind(.openFiles) == .openFiles)
+        #expect(FilePanel.Kind(.folder) == .folder)
+        #expect(FilePanel.Kind(.save) == .save)
+        #expect(FileAccessRequest.Kind(.view) == .view)
+        #expect(FileAccessRequest.Kind(.edit) == .edit)
+        #expect(FileAccessRequest.Kind(.viewAndEdit) == .viewAndEdit)
+        #expect(FileAccessRequest.Kind(.restricted) == .restricted)
+        #expect(FileAccessRequest.Kind(.dangerousFile) == .dangerousFile)
+        #expect(FileAccessRequest.Kind(AXOFileAccessKind(rawValue: 99)!) == nil, "A newer engine's question has no answer")
+        #expect(FilePanel.Kind(AXOFilePanelKind(rawValue: 99)!) == nil, "A newer engine's panel is cancelled")
+    }
+
     @Test func downloadsReportToThePoolsList() throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)

@@ -210,6 +210,16 @@ public protocol EnginePageDelegate: AnyObject {
     func page(_ page: any EnginePage, showsDialog kind: JavaScriptDialog.Kind, message: String, origin: PageOrigin) async -> JavaScriptDialogResult
     /// The page's file input wants files. Return them, or `nil` to cancel.
     func page(_ page: any EnginePage, selectsFilesAllowingMultiple allowsMultipleSelection: Bool, directories allowsDirectories: Bool) async -> [URL]?
+    /// The page opened a File System Access picker, for engines that leave its panel to Axo.
+    /// Return the chosen files (one, except for ``FilePanel/Kind/openFiles``), or `nil` to cancel.
+    func page(_ page: any EnginePage, showsFilePanel panel: FilePanel) async -> [URL]?
+    /// The engine gave up on the panel the page's picker asked for (the page navigated, was
+    /// hidden, or closed). Close it if it's still open.
+    func pageDismissesFilePanel(_ page: any EnginePage)
+    /// A File System Access question for the person, for engines that ask Axo. Answer as
+    /// ``FileAccessRequest/Kind`` says, or `nil` for no answer (no one could ask, or the question
+    /// went away unanswered), which engines that keep answers don't record.
+    func page(_ page: any EnginePage, asksAboutFileAccess question: FileAccessQuestion) async -> Bool?
     /// A right-click, for engines that leave the menu to Axo. Show Axo's menu and return `true`,
     /// or return `false` to show none.
     func page(_ page: any EnginePage, showContextMenu menu: any PageContextMenu) -> Bool

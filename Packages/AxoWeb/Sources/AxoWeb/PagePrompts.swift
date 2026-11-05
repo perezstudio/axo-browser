@@ -153,19 +153,161 @@ public struct JavaScriptDialogResult: Hashable, Sendable {
     public static let cancelled = JavaScriptDialogResult(accepted: false)
 }
 
-/// A page's file input asking for files to upload.
+/// A page asking for files: its file input (`<input type="file">`), or, on engines that leave
+/// them to Axo, a File System Access picker (`showOpenFilePicker`, `showDirectoryPicker`, and
+/// `showSaveFilePicker`).
 public struct FileSelectionRequest: Hashable, Sendable {
+    /// Whether the page wants files to read, or where to save one.
+    public enum Kind: Hashable, Sendable {
+        /// Existing files or folders.
+        case open
+        /// Where to save a new file, or a file to replace.
+        case save
+    }
+
     /// The tab whose page asked.
     public var tabID: Tab.ID
+    /// Open or save.
+    public var kind: Kind
     /// Whether more than one file may be chosen.
     public var allowsMultipleSelection: Bool
     /// Whether folders may be chosen.
     public var allowsDirectories: Bool
+    /// Whether files may be chosen; `false` for a picker that wants only a folder.
+    public var allowsFiles: Bool
+    /// The name to save as.
+    public var suggestedName: String?
+    /// The folder to start in, or `nil` for the panel's own choice.
+    public var directory: URL?
+    /// The file extensions (without dots) the page accepts, or empty for any file.
+    public var allowedExtensions: [String]
 
     /// Creates a request.
-    public init(tabID: Tab.ID, allowsMultipleSelection: Bool, allowsDirectories: Bool) {
+    public init(
+        tabID: Tab.ID,
+        kind: Kind = .open,
+        allowsMultipleSelection: Bool,
+        allowsDirectories: Bool,
+        allowsFiles: Bool = true,
+        suggestedName: String? = nil,
+        directory: URL? = nil,
+        allowedExtensions: [String] = []
+    ) {
         self.tabID = tabID
+        self.kind = kind
         self.allowsMultipleSelection = allowsMultipleSelection
         self.allowsDirectories = allowsDirectories
+        self.allowsFiles = allowsFiles
+        self.suggestedName = suggestedName
+        self.directory = directory
+        self.allowedExtensions = allowedExtensions
+    }
+
+    /// The request for a page's File System Access picker in tab `tabID`.
+    public init(tabID: Tab.ID, panel: FilePanel) {
+        self.init(
+            tabID: tabID,
+            kind: panel.kind == .save ? .save : .open,
+            allowsMultipleSelection: panel.kind == .openFiles,
+            allowsDirectories: panel.kind == .folder,
+            allowsFiles: panel.kind != .folder,
+            suggestedName: panel.kind == .save ? panel.suggestedName : nil,
+            directory: panel.directory,
+            allowedExtensions: panel.kind == .folder ? [] : panel.allowedExtensions
+        )
+    }
+}
+
+/// A page's File System Access picker (`showOpenFilePicker`, `showDirectoryPicker`, or
+/// `showSaveFilePicker`), as an engine that leaves the panel to Axo reports it. WebKit has no such
+/// pickers.
+public struct FilePanel: Hashable, Sendable {
+    /// What the picker chooses.
+    public enum Kind: Hashable, Sendable {
+        /// One existing file.
+        case openFile
+        /// One or more existing files.
+        case openFiles
+        /// A folder.
+        case folder
+        /// Where to save a file.
+        case save
+    }
+
+    /// What the picker chooses.
+    public var kind: Kind
+    /// The name to save as.
+    public var suggestedName: String?
+    /// The folder to start in.
+    public var directory: URL?
+    /// The file extensions (without dots) the page accepts, or empty for any file.
+    public var allowedExtensions: [String]
+
+    /// Creates a picker request.
+    public init(kind: Kind, suggestedName: String? = nil, directory: URL? = nil, allowedExtensions: [String] = []) {
+        self.kind = kind
+        self.suggestedName = suggestedName
+        self.directory = directory
+        self.allowedExtensions = allowedExtensions
+    }
+}
+
+/// A File System Access question for the person, from a page with a handle to a file or folder,
+/// or about a choice in one of its pickers, for engines that ask Axo (Chromium).
+public struct FileAccessRequest: Hashable, Sendable {
+    /// What the page wants, or what's wrong with what the person chose.
+    public enum Kind: Hashable, Sendable {
+        /// Viewing a file, or the files in a folder. Allowing it answers `true`.
+        case view
+        /// Saving changes to a file, or to the files in a folder. Allowing it answers `true`.
+        case edit
+        /// Viewing and editing the files in a folder. Allowing it answers `true`.
+        case viewAndEdit
+        /// The person chose a file or folder pages can't have, because it holds system files.
+        /// Choosing another answers `true`, cancelling `false`.
+        case restricted
+        /// The page is about to save a file of a type that can harm the Mac. Saving it anyway
+        /// answers `true`.
+        case dangerousFile
+    }
+
+    /// The tab whose page asked.
+    public var tabID: Tab.ID
+    /// The asking site.
+    public var origin: PageOrigin
+    /// What the question is about.
+    public var kind: Kind
+    /// The file or folder's name, or `nil` when there's none to give (``Kind/restricted``).
+    public var name: String?
+    /// Whether it's about a folder rather than a file.
+    public var isDirectory: Bool
+
+    /// Creates a request.
+    public init(tabID: Tab.ID, origin: PageOrigin, kind: Kind, name: String?, isDirectory: Bool) {
+        self.tabID = tabID
+        self.origin = origin
+        self.kind = kind
+        self.name = name
+        self.isDirectory = isDirectory
+    }
+}
+
+/// A File System Access question as an engine reports it, before it's tied to a tab.
+public struct FileAccessQuestion: Hashable, Sendable {
+    /// What the question is about.
+    public var kind: FileAccessRequest.Kind
+    /// The file or folder, or `nil` when there's none to name.
+    public var url: URL?
+    /// Whether it's about a folder rather than a file.
+    public var isDirectory: Bool
+    /// The asking site.
+    public var origin: PageOrigin
+
+    /// Creates a question.
+    public init(kind: FileAccessRequest.Kind, url: URL?, isDirectory: Bool, origin: PageOrigin) {
+        self.kind = kind
+        self.url = url
+        self.isDirectory = isDirectory
+        self.origin = origin
     }
 }

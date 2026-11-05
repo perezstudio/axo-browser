@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 31
+#define AXO_ENGINE_API_VERSION 32
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -299,6 +299,47 @@ typedef NS_ENUM(NSInteger, AXODialogKind) {
   AXODialogKindPrompt,
 };
 
+/// What a page's file panel chooses (`AXOPageDelegate`'s `page:showsFilePanel:...`).
+typedef NS_ENUM(NSInteger, AXOFilePanelKind) {
+  /// One existing file (`showOpenFilePicker()`).
+  AXOFilePanelKindOpenFile,
+  /// One or more existing files (`showOpenFilePicker({multiple: true})`).
+  AXOFilePanelKindOpenFiles,
+  /// A folder (`showDirectoryPicker()`).
+  AXOFilePanelKindFolder,
+  /// Where to save a new file, or a file to replace (`showSaveFilePicker()`).
+  AXOFilePanelKindSave,
+};
+
+/// What a page's File System Access question is about (`AXOPageDelegate`'s
+/// `page:asksAboutFileAccess:...`).
+typedef NS_ENUM(NSInteger, AXOFileAccessKind) {
+  /// Viewing a file, or the files in a folder. Answer whether to allow it.
+  AXOFileAccessKindView,
+  /// Saving changes to a file, or to the files in a folder. Answer whether to allow it.
+  AXOFileAccessKindEdit,
+  /// Both viewing and editing the files in a folder. Answer whether to allow it.
+  AXOFileAccessKindViewAndEdit,
+  /// The person chose a file or folder pages can't have, because it holds system files (or is
+  /// the home folder itself). There's no file or folder to name. Answer YES to choose another, NO
+  /// to cancel.
+  AXOFileAccessKindRestricted,
+  /// The page is about to save a file of a type that can harm the Mac. Answer YES to save it
+  /// anyway, NO to cancel.
+  AXOFileAccessKindDangerousFile,
+};
+
+/// The answer to a File System Access question.
+typedef NS_ENUM(NSInteger, AXOFileAccessAnswer) {
+  /// Allow it (or choose another, or save anyway, as the question's kind says).
+  AXOFileAccessAnswerYes,
+  /// The person refused (or cancelled). Chrome remembers a refused permission for the handle.
+  AXOFileAccessAnswerNo,
+  /// No answer: the app couldn't ask, or the question went away unanswered. Chrome remembers
+  /// nothing, and the page's request is cancelled.
+  AXOFileAccessAnswerNone,
+};
+
 /// A page's events. Mirrors Axo's `EnginePageDelegate`.
 NS_SWIFT_UI_ACTOR
 @protocol AXOPageDelegate <NSObject>
@@ -370,6 +411,36 @@ NS_SWIFT_UI_ACTOR
 /// reloading a page that posted a form. Show its tab (and its window) when that's what the person
 /// meant.
 - (void)pageWantsToBeShown:(id<AXOPage>)page NS_SWIFT_NAME(pageWantsToBeShown(_:));
+/// Chrome would close the file panel `page:showsFilePanel:...` asked for: the page navigated,
+/// was hidden, or closed. Close it if it's still open; its answer now goes nowhere.
+- (void)pageDismissesFilePanel:(id<AXOPage>)page NS_SWIFT_NAME(pageDismissesFilePanel(_:));
+/// A File System Access question for the person: access to a file or folder the page has a
+/// handle to, or a choice in a file panel Chrome won't let through as it is. `url` is the file or
+/// folder (nil for `AXOFileAccessKindRestricted`), and `origin` the asking site. Answer as each
+/// kind says, or `AXOFileAccessAnswerNone` when the app can't ask. Without this method, nothing is
+/// asked and the page's request is cancelled. A permission question still open when the page
+/// navigates to another site should go away unanswered.
+- (void)page:(id<AXOPage>)page
+    asksAboutFileAccess:(AXOFileAccessKind)kind
+                    url:(nullable NSURL*)url
+            isDirectory:(BOOL)isDirectory
+                 origin:(NSURL*)origin
+             completion:(void (^)(AXOFileAccessAnswer answer))completion;
+/// The page asks for files or a folder through the File System Access API (`showOpenFilePicker`,
+/// `showSaveFilePicker`, `showDirectoryPicker`), after something the person did. Show the app's own
+/// Open or Save panel and answer the chosen URLs (one, except for `AXOFilePanelKindOpenFiles`), or
+/// nil to cancel; for saving, an existing file the person agreed to replace is fine. `title` is
+/// the page's own (usually nil), `suggestedName` the name to save as, `directory` the folder to
+/// start in, and `extensions` (without dots) the file types the page accepts, empty for any.
+/// Chrome then grants the page access to what was chosen. Without this method, Chrome shows its
+/// own panel. `<input type="file">` still uses `page:selectsFilesAllowingMultiple:...`.
+- (void)page:(id<AXOPage>)page
+    showsFilePanel:(AXOFilePanelKind)kind
+             title:(nullable NSString*)title
+     suggestedName:(nullable NSString*)suggestedName
+         directory:(nullable NSURL*)directory
+        extensions:(NSArray<NSString*>*)extensions
+        completion:(void (^)(NSArray<NSURL*>* _Nullable urls))completion;
 /// The page opened another page (`window.open`, a `target="_blank"` link, a link opened in a new
 /// tab): `newPage` is already loading `url`, with what the request carried (its opener, form
 /// data, referrer). Show it as a tab after this one, in the background when `inBackground`, or as

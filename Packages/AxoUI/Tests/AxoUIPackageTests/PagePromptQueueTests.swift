@@ -1,3 +1,6 @@
+#if os(macOS)
+import AppKit
+#endif
 import AxoCore
 import AxoWeb
 import Foundation
@@ -73,4 +76,79 @@ struct PagePromptQueueTests {
         model.answerDialog(.cancelled)
         _ = await fromOther.value
     }
+
+    @Test func fileAccessQuestionsReturnTheAnswer() async throws {
+        let request = FileAccessRequest(tabID: UUID(), origin: origin, kind: .edit, name: "notes.txt", isDirectory: false)
+        let allowed = Task { await pool.onFileAccess!(request) }
+        try await waitUntil { model.currentPrompt != nil }
+        guard case .fileAccess(let shown) = model.currentPrompt?.content else { Issue.record("Expected a file access question"); return }
+        #expect(shown == request)
+
+        model.answerPermission(.allow)
+        model.answerDialog(JavaScriptDialogResult(accepted: true))
+        #expect(model.currentPrompt != nil, "Other answers don't answer it")
+        model.answerFileAccess(true)
+        #expect(await allowed.value == true)
+
+        let refused = Task { await pool.onFileAccess!(request) }
+        try await waitUntil { model.currentPrompt != nil }
+        model.answerFileAccess(false)
+        #expect(await refused.value == false)
+    }
+
+    @Test func aPageGoingToAnotherSiteDropsItsAccessQuestions() async throws {
+        let tabID = UUID()
+        let editor = PageOrigin(scheme: "https", host: "editor.example.com")
+        let ask = { (kind: FileAccessRequest.Kind) in
+            Task { await pool.onFileAccess!(FileAccessRequest(tabID: tabID, origin: editor, kind: kind, name: "notes.txt", isDirectory: false)) }
+        }
+        var editAnswers: [Bool?] = []
+        Task { editAnswers.append(await ask(.edit).value) }
+        try await waitUntil { model.currentPrompt != nil }
+        let dangerous = ask(.dangerousFile)
+        let otherTab = Task { await pool.onFileAccess!(FileAccessRequest(tabID: UUID(), origin: editor, kind: .view, name: nil, isDirectory: true)) }
+        try await Task.sleep(for: .milliseconds(50))
+
+        pool.onPageChange?(tabID, URL(string: "https://editor.example.com/other")!, "Same site")
+        guard case .fileAccess(let stillShown) = model.currentPrompt?.content else { Issue.record("Expected the edit question"); return }
+        #expect(stillShown.kind == .edit, "The same site keeps its question")
+
+        pool.onPageChange?(tabID, URL(string: "https://elsewhere.example.org/")!, "Elsewhere")
+        try await waitUntil { editAnswers.count == 1 }
+        #expect(editAnswers == [nil], "Another site mustn't get the editor's access")
+        guard case .fileAccess(let next) = model.currentPrompt?.content else { Issue.record("Expected the next question"); return }
+        #expect(next.kind == .dangerousFile, "A question about the pick stays: Chrome checks it again")
+        model.answerFileAccess(false)
+        #expect(await dangerous.value == false)
+        model.answerFileAccess(true)
+        #expect(await otherTab.value == true, "Another tab's question stays")
+    }
+
+    #if os(macOS)
+    @Test func closingATabDropsItsFileAccessQuestionsAndClosesItsPanels() async throws {
+        let tabID = UUID()
+        let panel = NSSavePanel()
+        var closed: [NSSavePanel] = []
+        model.openFilePanels.close = { closed.append($0) }
+        model.openFilePanels.begin(panel, for: tabID)
+        let question = Task { await pool.onFileAccess!(FileAccessRequest(tabID: tabID, origin: origin, kind: .view, name: "Photos", isDirectory: true)) }
+        try await waitUntil { model.currentPrompt != nil }
+
+        model.prompts.dismissAll(from: tabID)
+        #expect(await question.value == nil, "No answer, so nothing is recorded")
+        #expect(closed == [panel])
+        #expect(model.currentPrompt == nil)
+    }
+
+    @Test func aPanelThePageGaveUpOnCloses() {
+        let tabID = UUID()
+        let panel = NSOpenPanel()
+        var closed: [NSSavePanel] = []
+        model.openFilePanels.close = { closed.append($0) }
+        model.openFilePanels.begin(panel, for: tabID)
+
+        pool.onFileSelectionDismissed?(tabID)
+        #expect(closed == [panel])
+    }
+    #endif
 }

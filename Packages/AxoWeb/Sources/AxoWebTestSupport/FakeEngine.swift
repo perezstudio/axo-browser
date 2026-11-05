@@ -220,6 +220,21 @@ public final class FakePage: EnginePage {
         delegate?.page(self, showContextMenu: menu) ?? false
     }
 
+    /// Plays a File System Access picker, as an engine that leaves its panel to Axo reports it.
+    public func showFilePanel(_ panel: FilePanel) async -> [URL]? {
+        await delegate?.page(self, showsFilePanel: panel)
+    }
+
+    /// Plays the engine giving up on the page's file panel.
+    public func dismissFilePanel() {
+        delegate?.pageDismissesFilePanel(self)
+    }
+
+    /// Plays a File System Access question, as an engine that asks Axo reports it.
+    public func askAboutFileAccess(_ question: FileAccessQuestion) async -> Bool? {
+        await delegate?.page(self, asksAboutFileAccess: question) ?? nil
+    }
+
     public func goBack() { navigation.append("back") }
     public func goForward() { navigation.append("forward") }
     public func reload() { navigation.append("reload") }

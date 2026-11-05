@@ -227,6 +227,31 @@ struct EngineNeutralModelTests {
         #expect(background.isClosed)
     }
 
+    @Test func closingPeekOrAMiniWindowDropsItsPagesQuestions() async throws {
+        _ = try await openPage(URL(string: "https://example.com/tab")!)
+        let tabID = try #require(model.selectedTabID)
+        model.openPeek(URL(string: "https://example.com/peek")!, from: tabID)
+        let peekID = try #require(model.peek?.tab.id)
+        let site = PageOrigin(scheme: "https", host: "example.com")
+        // Answers are kept as they come, so a question left open fails the wait, not hangs it.
+        var answers: [Bool?] = []
+        Task { answers.append(await model.pool.onFileAccess!(FileAccessRequest(tabID: peekID, origin: site, kind: .edit, name: "notes.txt", isDirectory: false))) }
+        try await waitUntil { model.currentPrompt != nil }
+
+        model.closePeek()
+        try await waitUntil { answers.count == 1 }
+        #expect(answers == [nil])
+        #expect(model.currentPrompt == nil)
+
+        model.openMiniWindow(URL(string: "https://example.com/mini")!)
+        let mini = try #require(model.miniWindows.last?.id)
+        Task { answers.append(await model.pool.onFileAccess!(FileAccessRequest(tabID: mini, origin: site, kind: .view, name: nil, isDirectory: true))) }
+        try await waitUntil { model.currentPrompt != nil }
+        model.closeMiniWindow(mini)
+        try await waitUntil { answers.count == 2 }
+        #expect(answers == [nil, nil])
+    }
+
     @Test func movingTheShownSpaceClosesPeekAndAnOldFavoriteGivesWay() async throws {
         let home = try #require(model.space)
         let work = try #require(await model.addProfile(named: "Work"))
