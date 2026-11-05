@@ -163,6 +163,11 @@ public final class BrowserModel {
     public var isShowingSiteSettings = false
     /// The saved permission answers for the selected page's site, while Site Settings is open.
     public internal(set) var sitePermissions: [SitePermission.Kind: SitePermission.Decision] = [:]
+    /// The kinds of links to other apps (schemes, such as `zoommtg`) Site Settings' site may open
+    /// without asking.
+    public internal(set) var siteExternalApps: [String] = []
+    /// How Site Settings names each of those: the app and the scheme, looked up when it opens.
+    public internal(set) var siteExternalAppTitles: [String: String] = [:]
     /// Turns iCloud sync on and off, for the iCloud pane in Settings. Set by the app.
     @ObservationIgnored public var iCloudSync: (any SyncControlling)?
     /// Reads and imports other browsers' data. Set by the app.
@@ -208,6 +213,14 @@ public final class BrowserModel {
     /// change counts even if its saved URL is unchanged, since that's a fresh load.
     @ObservationIgnored private var hasRecordedVisit: Set<AxoCore.Tab.ID> = []
     @ObservationIgnored let prompts = PagePromptQueue()
+    /// Finds and opens the apps pages' links to other apps go to. Names none and opens nothing
+    /// until the app connects the system's, so tests never open an app.
+    @ObservationIgnored public var externalApps: any ExternalAppOpening = NoExternalApps()
+    /// Tabs whose link to another app is being handled, so a page asks one at a time.
+    @ObservationIgnored var tabsOpeningExternalLinks: Set<AxoCore.Tab.ID> = []
+    /// Tabs whose page the person said no to (Cancel), with the page's address then: they can't
+    /// ask again without a click until they go to another address.
+    @ObservationIgnored var tabsMutedForExternalLinks: [AxoCore.Tab.ID: URL?] = [:]
     #if os(macOS)
     /// The file panels open for pages, closed when a page gives up on its panel or its tab closes.
     @ObservationIgnored let openFilePanels = OpenFilePanels()
@@ -239,6 +252,9 @@ public final class BrowserModel {
         pool.onPageChange = { [weak self] tabID, url, title in
             self?.forgetTranslation(ifPageChangedIn: tabID, to: url)
             self?.prompts.dismissFileAccess(from: tabID, notFrom: PageOrigin(url: url))
+            if let muted = self?.tabsMutedForExternalLinks[tabID], muted != url {
+                self?.tabsMutedForExternalLinks[tabID] = nil
+            }
             self?.persistPageChange(tabID: tabID, url: url, title: title)
         }
         pool.onFaviconChange = { [weak self] _, pageURL, data in
@@ -266,6 +282,7 @@ public final class BrowserModel {
         pool.onFileSelection = { [weak self] request in
             await self?.chooseFiles(for: request)
         }
+        pool.onExternalLink = { [weak self] link in self?.receiveExternalLink(link) }
         pool.onFileAccess = { [weak self] request in
             await self?.prompts.ask(request) ?? nil
         }

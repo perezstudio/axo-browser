@@ -225,6 +225,11 @@ public final class FakePage: EnginePage {
         await delegate?.page(self, showsFilePanel: panel)
     }
 
+    /// Plays the page asking to open a link in another app.
+    public func openExternal(_ url: URL, origin: PageOrigin?, userGesture: Bool = true) {
+        delegate?.page(self, opensExternalURL: url, origin: origin, userGesture: userGesture)
+    }
+
     /// Plays the engine giving up on the page's file panel.
     public func dismissFilePanel() {
         delegate?.pageDismissesFilePanel(self)

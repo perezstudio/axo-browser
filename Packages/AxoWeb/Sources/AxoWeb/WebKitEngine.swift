@@ -306,6 +306,20 @@ extension WebKitPage: WKNavigationDelegate, WKUIDelegate {
     ) async -> WKNavigationActionPolicy {
         // Links with a `download` attribute save instead of navigating.
         if navigationAction.shouldPerformDownload { return .download }
+        #if os(macOS)
+        // A link to another app (mailto:, zoommtg:), in any frame: Axo asks the person and opens
+        // it. WebKit would fail to load it. (On iPhone and iPad, WebKit hands such links to iOS.)
+        if let url = navigationAction.request.url, ExternalLinks.isExternal(url),
+           webView.configuration.urlSchemeHandler(forURLScheme: url.scheme ?? "") == nil {
+            // WebKit can give no source frame for a load the app started, despite the SDK.
+            let source = (navigationAction.sourceFrame as WKFrameInfo?)?.securityOrigin
+            // Only a web site can be named and remembered, as on Chromium.
+            let origin = source.flatMap { ["http", "https"].contains($0.protocol.lowercased()) && !$0.host.isEmpty ? PageOrigin($0) : nil }
+            let userGesture = navigationAction.navigationType == .linkActivated || navigationAction.navigationType == .formSubmitted
+            delegate?.page(self, opensExternalURL: url, origin: origin, userGesture: userGesture)
+            return .cancel
+        }
+        #endif
         if navigationAction.navigationType == .linkActivated,
            navigationAction.targetFrame?.isMainFrame == true,
            let url = navigationAction.request.url,

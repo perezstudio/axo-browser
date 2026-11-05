@@ -336,4 +336,24 @@ struct MigrationTests {
             #expect(try Bool.fetchOne(db, sql: "SELECT isDeletion FROM syncChange WHERE recordType = 'Favorite'") == true)
         }
     }
+
+    @Test func v15ExternalAppPermissionsAreOnePerSchemeGoWithTheirProfileAndDontSync() throws {
+        let database = try AppDatabase.makeInMemory()
+        let profileID = UUID()
+        try database.writer.write { db in
+            try db.execute(sql: "INSERT INTO profile (id, name) VALUES (?, 'Default')", arguments: [profileID])
+            try db.execute(sql: "DELETE FROM syncChange")
+            let insert = """
+                INSERT INTO externalAppPermission (profileID, origin, scheme, updatedAt)
+                VALUES (?, 'https://example.zoom.us', ?, CURRENT_TIMESTAMP)
+                """
+            try db.execute(sql: insert, arguments: [profileID, "zoommtg"])
+            try db.execute(sql: insert, arguments: [profileID, "mailto"])
+            #expect(throws: DatabaseError.self) { try db.execute(sql: insert, arguments: [profileID, "zoommtg"]) }
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM syncChange") == 0, "Not synced")
+
+            try db.execute(sql: "DELETE FROM profile")
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM externalAppPermission") == 0)
+        }
+    }
 }

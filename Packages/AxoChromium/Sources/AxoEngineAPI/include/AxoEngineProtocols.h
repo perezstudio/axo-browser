@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 32
+#define AXO_ENGINE_API_VERSION 33
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -414,6 +414,17 @@ NS_SWIFT_UI_ACTOR
 /// Chrome would close the file panel `page:showsFilePanel:...` asked for: the page navigated,
 /// was hidden, or closed. Close it if it's still open; its answer now goes nowhere.
 - (void)pageDismissesFilePanel:(id<AXOPage>)page NS_SWIFT_NAME(pageDismissesFilePanel(_:));
+/// The page asks to open `url` in another app: a link, redirect, or script going to a scheme that
+/// isn't the web's (`mailto:`, `zoommtg:`, `slack:`), from any of its frames. Chrome has already
+/// refused what it never allows (one-letter and denied schemes, and a second request with nothing
+/// the person did in between). Ask the person, and open it yourself if they agree: the engine
+/// doesn't. `origin` is the site that asked (nil when unknown), and `userGesture` whether it
+/// followed something the person did. Without this method, nothing opens.
+- (void)page:(id<AXOPage>)page
+    opensExternalURL:(NSURL*)url
+              origin:(nullable NSURL*)origin
+         userGesture:(BOOL)userGesture
+    NS_SWIFT_NAME(page(_:opensExternalURL:origin:userGesture:));
 /// A File System Access question for the person: access to a file or folder the page has a
 /// handle to, or a choice in a file panel Chrome won't let through as it is. `url` is the file or
 /// folder (nil for `AXOFileAccessKindRestricted`), and `origin` the asking site. Answer as each

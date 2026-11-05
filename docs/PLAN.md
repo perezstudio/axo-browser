@@ -377,7 +377,7 @@ Features beyond the milestones above, each a GitHub issue with its approach and 
   - [x] [#95](https://github.com/perezstudio/axo-browser/issues/95) Show a link's URL when hovering it.
   - [ ] [#96](https://github.com/perezstudio/axo-browser/issues/96) Connection security indicator and certificate details.
   - [x] [#97](https://github.com/perezstudio/axo-browser/issues/97) Swipe back and forward with two fingers on Chromium pages.
-  - [ ] [#98](https://github.com/perezstudio/axo-browser/issues/98) Ask before links open other apps (`mailto:`, `zoommtg:`, and the rest).
+  - [x] [#98](https://github.com/perezstudio/axo-browser/issues/98) Ask before links open other apps (`mailto:`, `zoommtg:`, and the rest): Axo asks, naming the site and the app, remembers Always Allow per site and scheme (listed in Site Settings), and says when no app opens a link, on both engines (API version 33).
   - [ ] [#99](https://github.com/perezstudio/axo-browser/issues/99) Now Playing and media keys for tabs playing media.
   - [ ] [#117](https://github.com/perezstudio/axo-browser/issues/117) Throttle page resizes during sidebar, split, and window resizing.
 - Memory and energy:

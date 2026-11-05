@@ -67,6 +67,9 @@ public final class WebViewPool {
     /// Called when the engine gives up on a tab's file panel (its page navigated, was hidden, or
     /// closed): close it if it's still open, since its answer now goes nowhere.
     public var onFileSelectionDismissed: ((Tab.ID) -> Void)?
+    /// Called when a page asks to open a link in another app (``ExternalLinkRequest``). Nothing
+    /// opens unless this opens it.
+    public var onExternalLink: ((ExternalLinkRequest) -> Void)?
     /// Asked a page's File System Access question (``FileAccessRequest``): `nil` is no answer
     /// (the question went away unanswered), which the engine doesn't record. Nothing is asked, and
     /// there's no answer, when this is `nil`.

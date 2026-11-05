@@ -8,8 +8,8 @@ extension View {
     }
 }
 
-/// Shows permission requests, JavaScript dialogs, and File System Access questions as alerts, one
-/// at a time.
+/// Shows permission requests, JavaScript dialogs, File System Access questions, and links to other
+/// apps as alerts, one at a time.
 ///
 /// Every alert names the asking site, so a page can't pass its dialogs off as Axo's or another
 /// site's.
@@ -45,6 +45,8 @@ struct PagePromptModifier: ViewModifier {
             "Allow “\(prompt.extensionName)” more access?"
         case .fileAccess(let request):
             Self.fileAccessCopy(for: request).title
+        case .externalApp(let request):
+            Self.externalAppCopy(for: request).title
         case nil:
             ""
         }
@@ -62,6 +64,19 @@ struct PagePromptModifier: ViewModifier {
             Button("Cancel", role: .cancel) { model.answerFileAccess(false) }
                 .keyboardShortcut(.defaultAction)
             Button(Self.fileAccessCopy(for: request).button) { model.answerFileAccess(true) }
+        case .externalApp(let request):
+            if request.appName == nil {
+                Button("OK") { model.answerExternalApp(.cancel) }
+            } else {
+                // Cancel is the default: a page can ask while the person is typing, and their next
+                // Return mustn't open an app, or allow one for good.
+                Button("Cancel", role: .cancel) { model.answerExternalApp(.cancel) }
+                    .keyboardShortcut(.defaultAction)
+                if request.canAlwaysAllow {
+                    Button("Always Allow") { model.answerExternalApp(.alwaysAllow) }
+                }
+                Button("Allow") { model.answerExternalApp(.allow) }
+            }
         case .dialog(let dialog):
             switch dialog.kind {
             case .alert:
@@ -89,6 +104,8 @@ struct PagePromptModifier: ViewModifier {
             Text("It wants to:\n" + request.lines.map { "• " + $0 }.joined(separator: "\n"))
         case .fileAccess(let request):
             Text(Self.fileAccessCopy(for: request).message)
+        case .externalApp(let request):
+            Text(Self.externalAppCopy(for: request).message)
         }
     }
 
@@ -114,6 +131,19 @@ struct PagePromptModifier: ViewModifier {
         case .dangerousFile:
             return ("\(name) can harm your Mac", "\(site) wants to save a file of a type that can run code. Save it only if you trust the site.", "Save Anyway")
         }
+    }
+
+    /// The words of a link to another app's alert: its title and message.
+    static func externalAppCopy(for request: ExternalAppRequest) -> (title: String, message: String) {
+        let scheme = request.url.scheme?.lowercased() ?? ""
+        guard let app = request.appName else {
+            return ("Axo can't open this link", "No app on this Mac opens “\(scheme):” links.")
+        }
+        let site = request.origin.map { "“\($0.displayName)”" } ?? "this page"
+        let message = !request.canAlwaysAllow
+            ? "The link opens in \(app)."
+            : "The link opens in \(app). With Always Allow, the site opens “\(scheme):” links without asking."
+        return ("Allow \(site) to open “\(app)”?", message)
     }
 
     /// The question a permission prompt asks.

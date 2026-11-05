@@ -73,9 +73,28 @@ extension BrowserModel {
     public func refreshSiteSettings() async {
         guard let origin = siteSettingsOrigin, let profileID = space?.profileID else {
             sitePermissions = [:]
+            siteExternalApps = []
+            siteExternalAppTitles = [:]
             return
         }
         sitePermissions = (try? await store.sitePermissions.decisions(origin: origin.serialized, profileID: profileID)) ?? [:]
+        siteExternalApps = (try? await store.externalAppPermissions.schemes(origin: origin.serialized, profileID: profileID)) ?? []
+        siteExternalAppTitles = Dictionary(uniqueKeysWithValues: siteExternalApps.map { ($0, externalAppTitle(for: $0)) })
+    }
+
+    /// Makes Site Settings' site ask again before opening `scheme` links in another app.
+    public func forgetSiteExternalApp(_ scheme: String) async {
+        guard let origin = siteSettingsOrigin, let profileID = space?.profileID else { return }
+        try? await store.externalAppPermissions.forget(scheme: scheme, origin: origin.serialized, profileID: profileID)
+        await refreshSiteSettings()
+    }
+
+    /// How Site Settings names the app that opens `scheme` links: the app and the scheme, or just
+    /// the scheme when no app opens it now. It asks the system, so the view reads
+    /// ``siteExternalAppTitles`` instead.
+    func externalAppTitle(for scheme: String) -> String {
+        let app = URL(string: "\(scheme):").flatMap { externalApps.appName(for: $0) }
+        return app.map { "\($0) (\(scheme):)" } ?? "\(scheme):"
     }
 
     /// Saves an answer for the selected page's site, or forgets it (`nil`) so the site asks again.
@@ -88,10 +107,11 @@ extension BrowserModel {
         await refreshSiteSettings()
     }
 
-    /// Forgets every answer for the selected page's site.
+    /// Forgets every answer for the selected page's site, and the apps it may open without asking.
     public func resetSiteSettings() async {
         guard let origin = siteSettingsOrigin, let profileID = space?.profileID else { return }
         try? await store.sitePermissions.reset(origin: origin.serialized, profileID: profileID)
+        try? await store.externalAppPermissions.reset(origin: origin.serialized, profileID: profileID)
         for kind in PermissionKind.allCases where kind.lastsInEngine {
             pool.setLastingPermission(kind, origin: origin, decision: nil, profileID: profileID)
         }
@@ -120,7 +140,7 @@ extension BrowserModel {
     public var siteSettingsKinds: [SitePermission.Kind] {
         guard let origin = siteSettingsOrigin else { return [] }
         let asked = pool.askedPermissionKinds
-        let secure = origin.scheme == "https" || ["localhost", "127.0.0.1", "::1"].contains(origin.host)
+        let secure = origin.isPotentiallyTrustworthy
         return SitePermission.Kind.allCases.filter { kind in
             guard let lasting = SitePermissionAdapter.lastingKind(for: kind) else { return true }
             return secure && asked.contains(lasting)
@@ -150,7 +170,7 @@ struct SiteSettingsButton: View {
 }
 
 /// What the selected page's site may use: camera, microphone, location, notifications, and the
-/// clipboard, each Ask, Allow, or Don't Allow.
+/// clipboard, each Ask, Allow, or Don't Allow; and the apps it may open without asking.
 struct SiteSettingsView: View {
     let model: BrowserModel
 
@@ -173,6 +193,26 @@ struct SiteSettingsView: View {
                 }
             }
             .formStyle(.columns)
+            if !model.siteExternalApps.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Opens without asking")
+                        .font(.subheadline.weight(.semibold))
+                        .accessibilityAddTraits(.isHeader)
+                    ForEach(model.siteExternalApps, id: \.self) { scheme in
+                        let title = model.siteExternalAppTitles[scheme] ?? "\(scheme):"
+                        HStack {
+                            Text(title)
+                            Spacer()
+                            Button("Remove") { Task { await model.forgetSiteExternalApp(scheme) } }
+                                .accessibilityLabel("Remove \(title)")
+                                .accessibilityIdentifier("forgetExternalApp-\(scheme)")
+                        }
+                        .accessibilityElement(children: .contain)
+                    }
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("siteExternalApps")
+            }
             HStack {
                 Text("Changes apply the next time the site asks.")
                     .font(.callout)
@@ -185,7 +225,7 @@ struct SiteSettingsView: View {
                 .help("Add your own CSS and JavaScript to this site")
                 .accessibilityIdentifier("customizeSiteButton")
                 Button("Reset") { Task { await model.resetSiteSettings() } }
-                    .disabled(model.sitePermissions.isEmpty)
+                    .disabled(model.sitePermissions.isEmpty && model.siteExternalApps.isEmpty)
                     .accessibilityIdentifier("resetSiteSettings")
             }
         }

@@ -213,6 +213,9 @@ public protocol EnginePageDelegate: AnyObject {
     /// The page opened a File System Access picker, for engines that leave its panel to Axo.
     /// Return the chosen files (one, except for ``FilePanel/Kind/openFiles``), or `nil` to cancel.
     func page(_ page: any EnginePage, showsFilePanel panel: FilePanel) async -> [URL]?
+    /// The page asks to open a link in another app (``ExternalLinks/isExternal(_:)``), from any of
+    /// its frames. The engine hasn't opened it: Axo asks the person and opens it.
+    func page(_ page: any EnginePage, opensExternalURL url: URL, origin: PageOrigin?, userGesture: Bool)
     /// The engine gave up on the panel the page's picker asked for (the page navigated, was
     /// hidden, or closed). Close it if it's still open.
     func pageDismissesFilePanel(_ page: any EnginePage)

@@ -357,6 +357,10 @@ extension ChromiumPage: AXOPageDelegate {
         }
     }
 
+    func page(_ page: any AXOPage, opensExternalURL url: URL, origin: URL?, userGesture: Bool) {
+        delegate?.page(self, opensExternalURL: url, origin: origin.flatMap(PageOrigin.init(url:)), userGesture: userGesture)
+    }
+
     func pageDismissesFilePanel(_ page: any AXOPage) {
         delegate?.pageDismissesFilePanel(self)
     }
