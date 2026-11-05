@@ -392,6 +392,7 @@ Features beyond the milestones above, each a GitHub issue with its approach and 
   - [ ] [#108](https://github.com/perezstudio/axo-browser/issues/108) Short tab titles, made on device.
   - [ ] [#104](https://github.com/perezstudio/axo-browser/issues/104) Close meeting launch pages after they open the app (after #98).
 - Window and feedback:
+  - [x] [#134](https://github.com/perezstudio/axo-browser/issues/134) The sidebar's address bar looks and works like Arc's: a pill showing the site, editing the full address in the command bar (click or ⌘L), with Copy Link (⇧⌘C), Site Settings, a loading line, a Not Secure mark for plain-http sites, "Show full website address", and View › Hide Address Bar in Sidebar. Certificate details wait for #96, and Copy Link's on-screen notice for #103.
   - [ ] [#103](https://github.com/perezstudio/axo-browser/issues/103) Brief on-screen notices for actions, with Undo.
   - [ ] [#107](https://github.com/perezstudio/axo-browser/issues/107) Tint the toolbar from the page's color.
   - [ ] [#110](https://github.com/perezstudio/axo-browser/issues/110) Site Settings becomes one panel for the current site (after #54 and #96).

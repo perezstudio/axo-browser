@@ -47,7 +47,7 @@ final class SidebarMenuUITests: XCTestCase {
 
     @MainActor
     private func expectSelected(_ title: String, in app: XCUIApplication) {
-        expectation(for: NSPredicate(format: "value CONTAINS %@", title), evaluatedWith: app.textFields["addressField"])
+        expectation(for: NSPredicate(format: "value CONTAINS %@", title), evaluatedWith: app.descendants(matching: .any)["sidebarAddressBar"])
         waitForExpectations(timeout: 10)
     }
 
