@@ -148,4 +148,23 @@ final class LiveTab: EnginePageDelegate {
         guard let handler = pool?.onFileSelection else { return nil }
         return await handler(FileSelectionRequest(tabID: tabID, allowsMultipleSelection: allowsMultipleSelection, allowsDirectories: allowsDirectories))
     }
+
+    func page(_ page: any EnginePage, showsFilePanel panel: FilePanel) async -> [URL]? {
+        guard let handler = pool?.onFileSelection else { return nil }
+        let chosen = await handler(FileSelectionRequest(tabID: tabID, panel: panel))
+        // A picker that chooses one file or folder gets one, whatever the handler returned.
+        return panel.kind == .openFiles ? chosen : chosen.map { Array($0.prefix(1)) }
+    }
+
+    func pageDismissesFilePanel(_ page: any EnginePage) {
+        pool?.onFileSelectionDismissed?(tabID)
+    }
+
+    func page(_ page: any EnginePage, asksAboutFileAccess question: FileAccessQuestion) async -> Bool? {
+        guard let handler = pool?.onFileAccess else { return nil }
+        return await handler(FileAccessRequest(
+            tabID: tabID, origin: question.origin, kind: question.kind,
+            name: question.url?.lastPathComponent, isDirectory: question.isDirectory
+        ))
+    }
 }

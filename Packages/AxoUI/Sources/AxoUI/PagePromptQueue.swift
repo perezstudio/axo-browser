@@ -5,13 +5,15 @@ import AxoCore
 import AxoWeb
 import Foundation
 
-/// A question from a page waiting for an answer: a permission request or a JavaScript dialog.
+/// A question from a page waiting for an answer: a permission request, a JavaScript dialog, or a
+/// File System Access question.
 public struct PagePrompt: Identifiable {
     /// What the page asked.
     public enum Content {
         case permission(PermissionRequest)
         case dialog(JavaScriptDialog)
         case extensionPermission(ExtensionPermissionPrompt)
+        case fileAccess(FileAccessRequest)
     }
 
     /// A stable identifier for presentation.
@@ -25,6 +27,7 @@ public struct PagePrompt: Identifiable {
         case .permission(let request): request.tabID
         case .dialog(let dialog): dialog.tabID
         case .extensionPermission: nil
+        case .fileAccess(let request): request.tabID
         }
     }
 }
@@ -36,11 +39,15 @@ final class PagePromptQueue {
         case permission(CheckedContinuation<PermissionDecision?, Never>)
         case dialog(CheckedContinuation<JavaScriptDialogResult, Never>)
         case extensionPermission(CheckedContinuation<Bool, Never>)
+        case fileAccess(CheckedContinuation<Bool?, Never>)
     }
 
     private var pending: [(prompt: PagePrompt, answer: Answer)] = []
     /// Called whenever the prompt at the front of the queue changes.
     var onChange: ((PagePrompt?) -> Void)?
+    /// Called when a tab's prompts are taken away (``dismissAll(from:)``), so other questions open
+    /// for it (its file panel) can go too.
+    var onDismissAll: ((AxoCore.Tab.ID) -> Void)?
 
     /// The prompt to show now.
     var current: PagePrompt? { pending.first?.prompt }
@@ -65,6 +72,42 @@ final class PagePromptQueue {
         }
     }
 
+    /// Asks a page's File System Access question: `true` to allow (or, for a restricted file or
+    /// folder, to choose another; for a dangerous file, to save it anyway), `false` to refuse, and
+    /// `nil` if the prompt went away unanswered.
+    func ask(_ request: FileAccessRequest) async -> Bool? {
+        await withCheckedContinuation { continuation in
+            enqueue(PagePrompt(content: .fileAccess(request)), .fileAccess(continuation))
+        }
+    }
+
+    /// Takes away a tab's File System Access permission questions from sites other than
+    /// `origin`, with no answer: its page went to another site, which shouldn't get the earlier
+    /// site's access, as Chrome's own dialog closes when the page navigates. Questions about a
+    /// pick the page just made (restricted folders, dangerous files) stay; Chrome checks those
+    /// again.
+    func dismissFileAccess(from tabID: AxoCore.Tab.ID, notFrom origin: PageOrigin?) {
+        let before = current?.id
+        pending.removeAll { entry in
+            guard case .fileAccess(let request) = entry.prompt.content, request.tabID == tabID,
+                  request.origin != origin,
+                  [.view, .edit, .viewAndEdit].contains(request.kind),
+                  case .fileAccess(let continuation) = entry.answer
+            else { return false }
+            continuation.resume(returning: nil)
+            return true
+        }
+        if current?.id != before { onChange?(current) }
+    }
+
+    /// Answers the current prompt if it's a File System Access question.
+    func answerCurrent(fileAccess answer: Bool) {
+        guard let first = pending.first, case .fileAccess(let continuation) = first.answer else { return }
+        pending.removeFirst()
+        continuation.resume(returning: answer)
+        onChange?(current)
+    }
+
     /// Answers the current prompt if it's a permission request (from a page or an extension).
     func answerCurrent(with decision: PermissionDecision) {
         guard let first = pending.first else { return }
@@ -75,7 +118,7 @@ final class PagePromptQueue {
         case .extensionPermission(let continuation):
             pending.removeFirst()
             continuation.resume(returning: decision == .allow)
-        case .dialog:
+        case .dialog, .fileAccess:
             return
         }
         onChange?(current)
@@ -90,7 +133,8 @@ final class PagePromptQueue {
     }
 
     /// Takes away every prompt from a tab, for example when it closes: a page's permission request
-    /// gets no answer (so nothing is saved), an extension's is refused, and a dialog is cancelled.
+    /// and a File System Access question get no answer (so nothing is saved), an extension's is
+    /// refused, and a dialog is cancelled.
     func dismissAll(from tabID: AxoCore.Tab.ID) {
         let before = current?.id
         let (dismissed, kept) = pending.reduce(into: ([(PagePrompt, Answer)](), [(PagePrompt, Answer)]())) { result, entry in
@@ -102,9 +146,11 @@ final class PagePromptQueue {
             case .permission(let continuation): continuation.resume(returning: nil)
             case .dialog(let continuation): continuation.resume(returning: .cancelled)
             case .extensionPermission(let continuation): continuation.resume(returning: false)
+            case .fileAccess(let continuation): continuation.resume(returning: nil)
             }
         }
         if current?.id != before { onChange?(current) }
+        onDismissAll?(tabID)
     }
 
     private func enqueue(_ prompt: PagePrompt, _ answer: Answer) {

@@ -8,7 +8,8 @@ extension View {
     }
 }
 
-/// Shows permission requests and JavaScript dialogs as alerts, one at a time.
+/// Shows permission requests, JavaScript dialogs, and File System Access questions as alerts, one
+/// at a time.
 ///
 /// Every alert names the asking site, so a page can't pass its dialogs off as Axo's or another
 /// site's.
@@ -42,6 +43,8 @@ struct PagePromptModifier: ViewModifier {
             dialog.origin.host.isEmpty ? "This page says" : "\(dialog.origin.displayName) says"
         case .extensionPermission(let prompt):
             "Allow “\(prompt.extensionName)” more access?"
+        case .fileAccess(let request):
+            Self.fileAccessCopy(for: request).title
         case nil:
             ""
         }
@@ -53,6 +56,12 @@ struct PagePromptModifier: ViewModifier {
         case .permission, .extensionPermission:
             Button("Don't Allow", role: .cancel) { model.answerPermission(.deny) }
             Button("Allow") { model.answerPermission(.allow) }
+        case .fileAccess(let request):
+            // Cancel is the default, as in Chrome: Return mustn't give a site access, or save a
+            // dangerous file, right after the person pressed it in the panel.
+            Button("Cancel", role: .cancel) { model.answerFileAccess(false) }
+                .keyboardShortcut(.defaultAction)
+            Button(Self.fileAccessCopy(for: request).button) { model.answerFileAccess(true) }
         case .dialog(let dialog):
             switch dialog.kind {
             case .alert:
@@ -78,6 +87,32 @@ struct PagePromptModifier: ViewModifier {
             Text(dialog.message)
         case .extensionPermission(let request):
             Text("It wants to:\n" + request.lines.map { "• " + $0 }.joined(separator: "\n"))
+        case .fileAccess(let request):
+            Text(Self.fileAccessCopy(for: request).message)
+        }
+    }
+
+    /// The words of a File System Access question's alert: its title, its message, and the button
+    /// that answers `true` (Cancel answers `false`).
+    static func fileAccessCopy(for request: FileAccessRequest) -> (title: String, message: String, button: String) {
+        let site = "“\(request.origin.displayName)”"
+        let name = "“\(request.name ?? (request.isDirectory ? "this folder" : "this file"))”"
+        switch request.kind {
+        case .view where !request.isDirectory:
+            return ("Let \(site) view \(name)?", "The site can see the file.", "View File")
+        case .view:
+            return ("Let \(site) view the files in \(name)?", "The site can see everything in the folder.", "View Files")
+        case .edit where request.isDirectory:
+            return ("Let \(site) save changes to the files in \(name)?", "The site can change, add, and delete files in the folder.", "Save Changes")
+        case .edit:
+            return ("Let \(site) save changes to \(name)?", "The site can change the file.", "Save Changes")
+        case .viewAndEdit:
+            return ("Let \(site) view and edit the files in \(name)?", "The site can see everything in the folder, and change, add, and delete files in it.", "View and Edit")
+        case .restricted:
+            let thing = request.isDirectory ? "folder" : "file"
+            return ("\(site) can't open this \(thing)", "It holds system files. Choose another \(thing), or cancel.", "Choose Another")
+        case .dangerousFile:
+            return ("\(name) can harm your Mac", "\(site) wants to save a file of a type that can run code. Save it only if you trust the site.", "Save Anyway")
         }
     }
 

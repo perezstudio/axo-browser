@@ -333,6 +333,58 @@ extension ChromiumPage: AXOPageDelegate {
         }
     }
 
+    func page(
+        _ page: any AXOPage,
+        showsFilePanel kind: AXOFilePanelKind,
+        title: String?,
+        suggestedName: String?,
+        directory: URL?,
+        extensions: [String],
+        completion: @escaping ([URL]?) -> Void
+    ) {
+        guard let delegate, let panelKind = FilePanel.Kind(kind) else {
+            completion(nil)
+            return
+        }
+        let panel = FilePanel(
+            kind: panelKind,
+            suggestedName: suggestedName,
+            directory: directory,
+            allowedExtensions: extensions
+        )
+        Task {
+            completion(await delegate.page(self, showsFilePanel: panel))
+        }
+    }
+
+    func pageDismissesFilePanel(_ page: any AXOPage) {
+        delegate?.pageDismissesFilePanel(self)
+    }
+
+    func page(
+        _ page: any AXOPage,
+        asksAboutFileAccess kind: AXOFileAccessKind,
+        url: URL?,
+        isDirectory: Bool,
+        origin: URL,
+        completion: @escaping (AXOFileAccessAnswer) -> Void
+    ) {
+        // No site to name (a file: or extension page), no one to ask, or a question from a newer
+        // engine: no answer, so the engine records nothing.
+        guard let delegate, let pageOrigin = PageOrigin(url: origin), let kind = FileAccessRequest.Kind(kind) else {
+            completion(.none)
+            return
+        }
+        let question = FileAccessQuestion(kind: kind, url: url, isDirectory: isDirectory, origin: pageOrigin)
+        Task {
+            switch await delegate.page(self, asksAboutFileAccess: question) {
+            case true?: completion(.yes)
+            case false?: completion(.no)
+            case nil: completion(.none)
+            }
+        }
+    }
+
     func page(_ page: any AXOPage, didStart download: any AXODownload) {
         guard let delegate else {
             download.cancel()
@@ -444,5 +496,32 @@ final class ChromiumPageView: NSView {
     override func resizeSubviews(withOldSize oldSize: NSSize) {
         super.resizeSubviews(withOldSize: oldSize)
         onResize?()
+    }
+}
+
+extension FilePanel.Kind {
+    /// The kind of panel the engine asks for, or `nil` for one Axo doesn't know, which is cancelled.
+    init?(_ kind: AXOFilePanelKind) {
+        switch kind {
+        case .openFile: self = .openFile
+        case .openFiles: self = .openFiles
+        case .folder: self = .folder
+        case .save: self = .save
+        @unknown default: return nil
+        }
+    }
+}
+
+extension FileAccessRequest.Kind {
+    /// The kind of question the engine asks, or `nil` for one Axo doesn't know, which is refused.
+    init?(_ kind: AXOFileAccessKind) {
+        switch kind {
+        case .view: self = .view
+        case .edit: self = .edit
+        case .viewAndEdit: self = .viewAndEdit
+        case .restricted: self = .restricted
+        case .dangerousFile: self = .dangerousFile
+        @unknown default: return nil
+        }
     }
 }
