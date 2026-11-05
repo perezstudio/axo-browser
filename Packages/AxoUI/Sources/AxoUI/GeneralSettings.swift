@@ -21,6 +21,8 @@ struct GeneralSettings: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
             Toggle("Show full website address", isOn: $showsFullAddress)
+                // A checkbox, as in Safari's settings (a grouped form would make it a switch).
+                .toggleStyle(.checkbox)
                 .disabled(navigationBarPlacement != .sidebar)
                 .accessibilityIdentifier("showsFullAddressToggle")
         }

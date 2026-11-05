@@ -1018,14 +1018,20 @@ final class AxoUITests: XCTestCase {
         let app = launchApp()
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["siteSettingsButton"].isEnabled, "No site without a web page")
+        // The address bar's Site Settings button shows only on hover, so this goes through the
+        // menu bar, as the keyboard does.
+        let siteSettings = app.menuBars.menuItems["Site Settings…"]
+        app.menuBars.menuBarItems["View"].click()
+        XCTAssertFalse(siteSettings.isEnabled, "No site without a web page")
+        app.typeKey(.escape, modifierFlags: [])
 
         // A closed loopback port: nothing loads, but the tab has a web address.
         app.typeKey("t", modifierFlags: .command)
         app.typeText("http://127.0.0.1:9/room\n")
         XCTAssertTrue(sidebar.staticTexts["127.0.0.1"].waitForExistence(timeout: 10))
 
-        app.buttons["siteSettingsButton"].click()
+        app.menuBars.menuBarItems["View"].click()
+        siteSettings.click()
         let camera = app.popUpButtons["sitePermission-camera"]
         XCTAssertTrue(camera.waitForExistence(timeout: 5))
         XCTAssertEqual(camera.value as? String, "Ask")
