@@ -364,6 +364,21 @@ public final class AppDatabase: Sendable {
                 """)
         }
 
+        // Sites allowed to open other apps without asking: links to a scheme that isn't the web's
+        // (`mailto:`, `zoommtg:`), per profile. `origin` is the site's origin
+        // ("https://example.zoom.us", with a port when it isn't the default) and `scheme` the
+        // link's scheme, lowercased. No row means Axo asks. Not synced.
+        migrator.registerMigration("v15-external-app-permissions") { db in
+            try db.create(table: "externalAppPermission") { t in
+                t.column("profileID", .blob).notNull()
+                    .references("profile", onDelete: .cascade)
+                t.column("origin", .text).notNull()
+                t.column("scheme", .text).notNull()
+                t.column("updatedAt", .datetime).notNull()
+                t.primaryKey(["profileID", "origin", "scheme"])
+            }
+        }
+
         return migrator
     }
 

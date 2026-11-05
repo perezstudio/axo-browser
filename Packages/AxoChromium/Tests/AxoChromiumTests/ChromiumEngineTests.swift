@@ -471,6 +471,26 @@ struct ChromiumEngineTests {
         #expect(dismissed == [tab.id])
     }
 
+    @Test func aPagesLinkToAnotherAppReachesThePool() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine)
+        let tab = Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial)
+        pool.page(for: tab, profileID: profileID)
+        let fake = try #require(FakePage.made.first)
+        var links: [ExternalLinkRequest] = []
+        pool.onExternalLink = { links.append($0) }
+
+        try #require(fake.delegate).page?(fake, opensExternalURL: URL(string: "mailto:a@example.com")!, origin: URL(string: "https://example.com/"), userGesture: true)
+        try #require(fake.delegate).page?(fake, opensExternalURL: URL(string: "zoommtg:join")!, origin: nil, userGesture: false)
+        #expect(links == [
+            ExternalLinkRequest(tabID: tab.id, url: URL(string: "mailto:a@example.com")!, origin: PageOrigin(scheme: "https", host: "example.com"), userGesture: true),
+            ExternalLinkRequest(tabID: tab.id, url: URL(string: "zoommtg:join")!, origin: nil, userGesture: false),
+        ])
+    }
+
     @Test func fileKindsMatchTheEngines() {
         #expect(FilePanel.Kind(.openFile) == .openFile)
         #expect(FilePanel.Kind(.openFiles) == .openFiles)

@@ -156,6 +156,10 @@ final class LiveTab: EnginePageDelegate {
         return panel.kind == .openFiles ? chosen : chosen.map { Array($0.prefix(1)) }
     }
 
+    func page(_ page: any EnginePage, opensExternalURL url: URL, origin: PageOrigin?, userGesture: Bool) {
+        pool?.onExternalLink?(ExternalLinkRequest(tabID: tabID, url: url, origin: origin, userGesture: userGesture))
+    }
+
     func pageDismissesFilePanel(_ page: any EnginePage) {
         pool?.onFileSelectionDismissed?(tabID)
     }

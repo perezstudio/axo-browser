@@ -247,6 +247,28 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["No"].waitForExistence(timeout: 10))
     }
 
+    /// A page's link to another app asks first; cancelling opens nothing (UI test runs never open
+    /// an app: `UITestingExternalApps`).
+    @MainActor
+    func testLinksToOtherAppsAskFirst() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+
+        app.typeKey("t", modifierFlags: .command)
+        // Follow the link after a moment, so the prompt doesn't open while the typed Return is
+        // still being delivered.
+        app.typeText("data:text/html,<title>Contact</title><a id=m href='mailto:someone@example.com'>Write</a><script>setTimeout(() => document.getElementById('m').click(), 300)</script>\n")
+
+        XCTAssertTrue(app.staticTexts["Allow this page to open “Mail”?"].waitForExistence(timeout: 10))
+        let dialog = app.sheets.firstMatch.exists ? app.sheets.firstMatch : app.dialogs.firstMatch
+        XCTAssertFalse(dialog.buttons["Always Allow"].exists, "A data: page has no site to remember")
+        dialog.buttons["Cancel"].firstMatch.click()
+
+        XCTAssertTrue(app.staticTexts["Allow this page to open “Mail”?"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(sidebar.staticTexts["Contact"].waitForExistence(timeout: 5), "The page stays")
+    }
+
     /// Create a Space from the switcher, see its tabs separately, and switch back with ⌃1.
     @MainActor
     func testCreatingAndSwitchingSpaces() throws {

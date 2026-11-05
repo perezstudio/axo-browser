@@ -90,6 +90,70 @@ struct PagePromptTests {
         #expect(requests.first?.tabID == tab.id)
     }
 
+    // MARK: Links to other apps
+
+    #if os(macOS)
+    // On iPhone and iPad, WebKit hands these links to iOS.
+    @Test func linksToOtherAppsGoToAxoAndThePageStays() async throws {
+        let (tab, webView) = try await loadedTab(body: """
+            <a id='zoom' href='axotest-app:join?id=42'>Join</a>
+            <a id='web' href='#here'>Here</a>
+            """)
+        var links: [ExternalLinkRequest] = []
+        pool.onExternalLink = { links.append($0) }
+
+        _ = try await run("document.getElementById('zoom').click()", in: webView)
+        try await waitUntil("the link") { !links.isEmpty }
+        #expect(links.first?.url == URL(string: "axotest-app:join?id=42"))
+        #expect(links.first?.tabID == tab.id)
+        #expect(links.first?.userGesture == true, "A link click")
+        #expect(links.first?.origin == nil, "A file: page has no site to name")
+
+        _ = try await run("document.getElementById('web').click(); location.href = 'mailto:someone@example.com'", in: webView)
+        try await waitUntil("the mailto: link") { links.count == 2 }
+        #expect(links.last?.url.scheme == "mailto")
+        #expect(links.last?.userGesture == false, "A script's navigation")
+        #expect(pool.state(for: tab.id)?.url?.fragment == "here", "The page stays")
+    }
+
+    @Test func aLinkToAnotherAppLoadedIntoATabHasNoSiteToName() async throws {
+        var links: [ExternalLinkRequest] = []
+        pool.onExternalLink = { links.append($0) }
+        // As a page's window.open('mailto:…') or a typed address arrives: a load Axo starts.
+        let tab = Tab.testTab(url: URL(string: "mailto:someone@example.com")!)
+        pool.page(for: tab, profileID: profileID)
+        try await waitUntil("the link") { !links.isEmpty }
+        #expect(links.first?.origin == nil)
+        #expect(links.first?.tabID == tab.id)
+    }
+
+    #endif
+
+    @Test func schemesNoPageMayOpenAreRefused() {
+        for link in ["applescript://com.apple.scripteditor?action=new", "vbscript:x", "C:/Windows/notepad.exe", "view-source:https://example.com", "disk:x"] {
+            #expect(ExternalLinks.isRefused(URL(string: link)!), "\(link)")
+        }
+        for link in ["mailto:a@example.com", "zoommtg://zoom.us/join", "slack://open"] {
+            #expect(!ExternalLinks.isRefused(URL(string: link)!), "\(link)")
+        }
+    }
+
+    @Test func onlyHTTPSSitesAndThisMacAreTrustworthy() {
+        #expect(PageOrigin(scheme: "https", host: "example.com").isPotentiallyTrustworthy)
+        #expect(PageOrigin(scheme: "http", host: "localhost", port: 3000).isPotentiallyTrustworthy)
+        #expect(PageOrigin(scheme: "http", host: "::1").isPotentiallyTrustworthy)
+        #expect(!PageOrigin(scheme: "http", host: "example.com").isPotentiallyTrustworthy)
+    }
+
+    @Test func onlyOtherAppsSchemesAreExternal() {
+        for link in ["mailto:a@example.com", "zoommtg://zoom.us/join", "slack://open", "tel:+15551234"] {
+            #expect(ExternalLinks.isExternal(URL(string: link)!), "\(link)")
+        }
+        for link in ["https://example.com", "http://example.com", "file:///tmp/a.html", "about:blank", "data:text/html,x", "blob:https://example.com/1", "javascript:void(0)", "webkit-extension://abc/popup.html", "chrome-extension://abc/popup.html"] {
+            #expect(!ExternalLinks.isExternal(URL(string: link)!), "\(link)")
+        }
+    }
+
     // MARK: Permissions
 
     @Test func answersAreRememberedPerProfileOriginAndKind() async {

@@ -5,8 +5,8 @@ import AxoCore
 import AxoWeb
 import Foundation
 
-/// A question from a page waiting for an answer: a permission request, a JavaScript dialog, or a
-/// File System Access question.
+/// A question from a page waiting for an answer: a permission request, a JavaScript dialog, a File
+/// System Access question, or a link to another app.
 public struct PagePrompt: Identifiable {
     /// What the page asked.
     public enum Content {
@@ -14,6 +14,7 @@ public struct PagePrompt: Identifiable {
         case dialog(JavaScriptDialog)
         case extensionPermission(ExtensionPermissionPrompt)
         case fileAccess(FileAccessRequest)
+        case externalApp(ExternalAppRequest)
     }
 
     /// A stable identifier for presentation.
@@ -28,6 +29,7 @@ public struct PagePrompt: Identifiable {
         case .dialog(let dialog): dialog.tabID
         case .extensionPermission: nil
         case .fileAccess(let request): request.tabID
+        case .externalApp(let request): request.tabID
         }
     }
 }
@@ -40,6 +42,7 @@ final class PagePromptQueue {
         case dialog(CheckedContinuation<JavaScriptDialogResult, Never>)
         case extensionPermission(CheckedContinuation<Bool, Never>)
         case fileAccess(CheckedContinuation<Bool?, Never>)
+        case externalApp(CheckedContinuation<ExternalAppAnswer, Never>)
     }
 
     private var pending: [(prompt: PagePrompt, answer: Answer)] = []
@@ -100,6 +103,22 @@ final class PagePromptQueue {
         if current?.id != before { onChange?(current) }
     }
 
+    /// Asks about a page's link to another app; ``ExternalAppAnswer/cancel`` if the prompt went
+    /// away unanswered.
+    func ask(_ request: ExternalAppRequest) async -> ExternalAppAnswer {
+        await withCheckedContinuation { continuation in
+            enqueue(PagePrompt(content: .externalApp(request)), .externalApp(continuation))
+        }
+    }
+
+    /// Answers the current prompt if it's a link to another app.
+    func answerCurrent(externalApp answer: ExternalAppAnswer) {
+        guard let first = pending.first, case .externalApp(let continuation) = first.answer else { return }
+        pending.removeFirst()
+        continuation.resume(returning: answer)
+        onChange?(current)
+    }
+
     /// Answers the current prompt if it's a File System Access question.
     func answerCurrent(fileAccess answer: Bool) {
         guard let first = pending.first, case .fileAccess(let continuation) = first.answer else { return }
@@ -118,7 +137,7 @@ final class PagePromptQueue {
         case .extensionPermission(let continuation):
             pending.removeFirst()
             continuation.resume(returning: decision == .allow)
-        case .dialog, .fileAccess:
+        case .dialog, .fileAccess, .externalApp:
             return
         }
         onChange?(current)
@@ -134,7 +153,7 @@ final class PagePromptQueue {
 
     /// Takes away every prompt from a tab, for example when it closes: a page's permission request
     /// and a File System Access question get no answer (so nothing is saved), an extension's is
-    /// refused, and a dialog is cancelled.
+    /// refused, and a dialog or a link to another app is cancelled.
     func dismissAll(from tabID: AxoCore.Tab.ID) {
         let before = current?.id
         let (dismissed, kept) = pending.reduce(into: ([(PagePrompt, Answer)](), [(PagePrompt, Answer)]())) { result, entry in
@@ -147,6 +166,7 @@ final class PagePromptQueue {
             case .dialog(let continuation): continuation.resume(returning: .cancelled)
             case .extensionPermission(let continuation): continuation.resume(returning: false)
             case .fileAccess(let continuation): continuation.resume(returning: nil)
+            case .externalApp(let continuation): continuation.resume(returning: .cancel)
             }
         }
         if current?.id != before { onChange?(current) }

@@ -92,6 +92,13 @@ public struct PageOrigin: Hashable, Sendable {
         return port == 0 ? "\(scheme)://\(host)" : "\(scheme)://\(host):\(port)"
     }
 
+    /// Whether the site is secure enough to remember lasting answers for, as Chrome decides
+    /// (`network::IsOriginPotentiallyTrustworthy`): https, or this Mac. A plain-http site's pages
+    /// can be changed by anyone on the network, so they mustn't keep what the person allowed.
+    public var isPotentiallyTrustworthy: Bool {
+        scheme == "https" || ["localhost", "127.0.0.1", "::1"].contains(host)
+    }
+
     /// How to name the origin to people: its host (with a non-default port), or "This page".
     public var displayName: String {
         guard !host.isEmpty else { return "This page" }
@@ -309,5 +316,56 @@ public struct FileAccessQuestion: Hashable, Sendable {
         self.url = url
         self.isDirectory = isDirectory
         self.origin = origin
+    }
+}
+
+/// A page asking to open a link in another app: one whose scheme isn't the web's (`mailto:`,
+/// `zoommtg:`, `slack:`).
+public struct ExternalLinkRequest: Hashable, Sendable {
+    /// The tab whose page asked.
+    public var tabID: Tab.ID
+    /// The link.
+    public var url: URL
+    /// The site that asked, or `nil` when it has none to name (a `file:` page, an opaque origin).
+    public var origin: PageOrigin?
+    /// Whether it followed something the person did, such as a click.
+    public var userGesture: Bool
+
+    /// Creates a request.
+    public init(tabID: Tab.ID, url: URL, origin: PageOrigin?, userGesture: Bool) {
+        self.tabID = tabID
+        self.url = url
+        self.origin = origin
+        self.userGesture = userGesture
+    }
+}
+
+/// Which links open in other apps rather than in the page.
+public enum ExternalLinks {
+    /// Schemes the engines show themselves, or that belong to extensions, which never go to
+    /// another app.
+    static let webSchemes: Set<String> = [
+        "http", "https", "file", "about", "data", "blob", "javascript", "ws", "wss",
+        "webkit-extension", "safari-web-extension", "chrome-extension", "chrome", "devtools",
+    ]
+
+    /// Schemes no page may open in another app, whoever asks, as Chrome refuses them: they run
+    /// scripts, open files or disks, or reach old Windows handlers.
+    static let refusedSchemes: Set<String> = [
+        "afp", "applescript", "disk", "disks", "hcp", "ie.http", "mk", "ms-help", "nntp", "res",
+        "shell", "vbscript", "view-source", "vnd.ms.radio",
+    ]
+
+    /// Whether `url` is for another app: it has a scheme, and not one of the web's.
+    public static func isExternal(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased(), !scheme.isEmpty else { return false }
+        return !webSchemes.contains(scheme)
+    }
+
+    /// Whether a page may never open `url` in another app: a scheme Chrome refuses, or one letter
+    /// long (a Windows drive, such as `C:`).
+    public static func isRefused(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased() else { return true }
+        return scheme.count == 1 || refusedSchemes.contains(scheme)
     }
 }

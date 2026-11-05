@@ -224,6 +224,7 @@ enum AppEnvironment {
             // Not in test runs either, so a test run never shows macOS's location prompt.
             model.locationAuthorization = SystemLocationAuthorization()
             model.pageSummarizer = SystemPageSummarizer()
+            model.externalApps = SystemExternalApps()
         } else {
             // Test runs never offer their pages to the person's other devices, and their pages
             // never count as the person's Screen Time usage.
@@ -231,6 +232,8 @@ enum AppEnvironment {
             model.pool.reportsScreenTimeUsage = false
             // The on-device model's answers vary, so test runs get a predictable stand-in.
             model.pageSummarizer = UITestingPageSummarizer()
+            // Test runs never open another app.
+            model.externalApps = UITestingExternalApps()
         }
         browserModel = model
         return model
@@ -483,6 +486,33 @@ struct UITestingPageSummarizer: PageSummarizing {
     func summarize(title: String, url: URL?, text: String) async throws -> String {
         "• \(title): \(text.prefix(40))"
     }
+}
+
+/// Finds and opens the apps pages' links to other apps go to, through Launch Services.
+@MainActor
+final class SystemExternalApps: ExternalAppOpening {
+    func appName(for url: URL) -> String? {
+        guard let app = NSWorkspace.shared.urlForApplication(toOpen: url),
+              // Axo opens nothing a page sends it this way.
+              Bundle(url: app)?.bundleIdentifier != Bundle.main.bundleIdentifier else { return nil }
+        let name = FileManager.default.displayName(atPath: app.path)
+        return name.hasSuffix(".app") ? String(name.dropLast(4)) : name
+    }
+
+    func open(_ url: URL) {
+        NSWorkspace.shared.open(url)
+    }
+}
+
+/// Names an app for `mailto:` links (Mail) and none for others, and opens nothing: UI tests see the
+/// prompt without any app opening.
+@MainActor
+final class UITestingExternalApps: ExternalAppOpening {
+    func appName(for url: URL) -> String? {
+        url.scheme?.lowercased() == "mailto" ? "Mail" : nil
+    }
+
+    func open(_ url: URL) {}
 }
 
 /// Connects AxoImport to the window model's Import sheet.
