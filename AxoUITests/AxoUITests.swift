@@ -247,6 +247,33 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["No"].waitForExistence(timeout: 10))
     }
 
+    /// Return in the prompt cancels: a page can ask while the person is typing, and their next
+    /// Return mustn't open an app. Allow does open it, which proves the test can tell. (UI test
+    /// runs never open an app: `UITestingExternalApps` opens a tab titled "Opened in another app"
+    /// instead.)
+    @MainActor
+    func testReturnCancelsALinkToAnotherApp() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        let question = app.staticTexts["Allow this page to open “Mail”?"]
+        let opened = sidebar.staticTexts["Opened in another app"]
+
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,<title>Contact</title><a id=m href='mailto:someone@example.com'>Write</a><script>setTimeout(() => document.getElementById('m').click(), 300)</script>\n")
+        XCTAssertTrue(question.waitForExistence(timeout: 10))
+        app.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(question.waitForNonExistence(timeout: 5), "Return answered the prompt")
+        XCTAssertFalse(opened.waitForExistence(timeout: 2), "Return cancelled: nothing opened")
+
+        // Loading the page again asks again; Allow opens the link.
+        app.typeKey("r", modifierFlags: .command)
+        XCTAssertTrue(question.waitForExistence(timeout: 10))
+        let dialog = app.sheets.firstMatch.exists ? app.sheets.firstMatch : app.dialogs.firstMatch
+        dialog.buttons["Allow"].firstMatch.click()
+        XCTAssertTrue(opened.waitForExistence(timeout: 10), "Allow opened the link")
+    }
+
     /// A page's link to another app asks first; cancelling opens nothing (UI test runs never open
     /// an app: `UITestingExternalApps`).
     @MainActor
@@ -267,6 +294,7 @@ final class AxoUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Allow this page to open “Mail”?"].waitForNonExistence(timeout: 5))
         XCTAssertTrue(sidebar.staticTexts["Contact"].waitForExistence(timeout: 5), "The page stays")
+        XCTAssertFalse(sidebar.staticTexts["Opened in another app"].exists, "Cancel opened nothing")
     }
 
     /// Create a Space from the switcher, see its tabs separately, and switch back with ⌃1.

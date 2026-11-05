@@ -232,8 +232,12 @@ enum AppEnvironment {
             model.pool.reportsScreenTimeUsage = false
             // The on-device model's answers vary, so test runs get a predictable stand-in.
             model.pageSummarizer = UITestingPageSummarizer()
-            // Test runs never open another app.
-            model.externalApps = UITestingExternalApps()
+            // Test runs never open another app; a tab stands in for one.
+            let externalApps = UITestingExternalApps()
+            externalApps.onOpen = { [weak model] _ in
+                Task { await model?.openTab(url: UITestingExternalApps.openedPage) }
+            }
+            model.externalApps = externalApps
         }
         browserModel = model
         return model
@@ -504,15 +508,24 @@ final class SystemExternalApps: ExternalAppOpening {
     }
 }
 
-/// Names an app for `mailto:` links (Mail) and none for others, and opens nothing: UI tests see the
-/// prompt without any app opening.
+/// Names an app for `mailto:` links (Mail) and none for others, and never opens an app: UI tests
+/// see the prompt without any app opening. What would have opened shows as a tab titled "Opened
+/// in another app" (`onOpen`), so a test can tell which answer the person gave.
 @MainActor
 final class UITestingExternalApps: ExternalAppOpening {
+    /// Called with each link that would have opened in another app.
+    var onOpen: (URL) -> Void = { _ in }
+
     func appName(for url: URL) -> String? {
         url.scheme?.lowercased() == "mailto" ? "Mail" : nil
     }
 
-    func open(_ url: URL) {}
+    func open(_ url: URL) {
+        onOpen(url)
+    }
+
+    /// The page the tab shows for an opened link.
+    static let openedPage = URL(string: "data:text/html,<title>Opened in another app</title>")!
 }
 
 /// Connects AxoImport to the window model's Import sheet.
