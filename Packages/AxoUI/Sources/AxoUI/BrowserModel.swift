@@ -182,7 +182,7 @@ public final class BrowserModel {
     @ObservationIgnored public var archiveAfter: TimeInterval = 12 * 60 * 60
     /// How often to look for idle tabs to archive while Axo runs.
     @ObservationIgnored public var archiveCheckInterval: Duration = .seconds(60 * 60)
-    @ObservationIgnored private let now: () -> Date
+    @ObservationIgnored let now: () -> Date
     @ObservationIgnored private var archiveTask: Task<Void, Never>?
     @ObservationIgnored private var commandSearchTask: Task<Void, Never>?
     /// Opens the Web Inspector. Set by the app.

@@ -73,7 +73,7 @@ struct TabActionTests {
         model.select(a)
         await model.moveTab(a, toSpace: work.id)
         #expect(paths == ["b"])
-        #expect(model.selectedTabID != a, "The tab next to it is selected")
+        #expect(model.selectedTabID == model.tabs.first?.id, "The tab next to it, b, is selected")
         #expect(model.pool.livePage(for: a) === page, "Same profile: the live page carries over")
         #expect(model.pageNotice?.message == "Moved a to Work")
 
@@ -120,5 +120,64 @@ struct TabActionTests {
         model.select(first)
         #expect(model.availableActions.contains(.closeOtherTabs))
         #expect(model.availableActions.contains(.closeTabsBelow))
+    }
+
+    @Test func duplicatingASplitPaneKeepsTheSplitTogether() async throws {
+        let a = try await open("a")
+        let b = try await open("b")
+        try await open("c")
+        model.select(a)
+        await model.addToSplit(b)
+
+        await model.duplicateTab(a)
+        let copy = try #require(model.selectedTabID)
+        let order = model.tabs.filter { !$0.isPinned }.map(\.id)
+        let split = try #require(model.split(of: a))
+        let paneIndexes = model.panes(of: split.id).compactMap { pane in order.firstIndex(of: pane.id) }
+        #expect(paneIndexes.max()! - paneIndexes.min()! == 1, "The split's tabs stay next to each other")
+        #expect(order.firstIndex(of: copy)! == paneIndexes.max()! + 1, "The copy goes right below the split")
+
+        // Close Tabs Below on the copy leaves the split above alone.
+        await model.closeTabs(below: copy)
+        #expect(model.split(of: a) != nil)
+        #expect(paths.count == 3, "Only c closed")
+        #expect(!paths.contains("c"))
+    }
+
+    @Test func closeTabsBelowASplitRowClosesWhatsBelowIt() async throws {
+        let a = try await open("a")
+        let b = try await open("b")
+        try await open("c")
+        model.select(a)
+        await model.addToSplit(b)
+        await model.closeTabs(below: a)
+        #expect(paths.sorted() == ["a", "b"])
+    }
+
+    @Test func closeOthersIsntForAPinnedTab() async throws {
+        let pinned = try await open("pinned")
+        await model.setPinned(true, tabID: pinned)
+        try await open("a")
+        try await open("b")
+        model.select(pinned)
+
+        #expect(model.otherUnpinnedTabs(than: pinned).isEmpty)
+        #expect(!model.availableActions.contains(.closeOtherTabs))
+        await model.closeOtherTabs(than: pinned)
+        #expect(paths == ["a", "b"], "Nothing closed")
+    }
+
+    @Test func moveToSpaceIsntForASplitPane() async throws {
+        let a = try await open("a")
+        let b = try await open("b")
+        await model.createSpace(name: "Work")
+        let work = try #require(model.space)
+        await model.selectSpace(try #require(model.spaces.first { $0.name != "Work" }).id)
+        model.select(a)
+        await model.addToSplit(b)
+
+        #expect(!model.canMoveToSpace(a))
+        await model.moveTab(a, toSpace: work.id)
+        #expect(model.split(of: a) != nil, "Not broken up")
     }
 }

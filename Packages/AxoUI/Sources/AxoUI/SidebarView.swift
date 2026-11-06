@@ -261,7 +261,7 @@ struct TabContextMenu: View {
         Button("Duplicate Tab") { Task { await model.duplicateTab(tab.id) } }
         Button("Copy Link") { model.copyLink(of: tab.id) }
         Button("Add to Favorites") { Task { await model.addToFavorites(tab.id) } }
-        if !model.spacesToMoveTabsTo.isEmpty {
+        if model.canMoveToSpace(tab.id) {
             Menu("Move to Space") {
                 ForEach(model.spacesToMoveTabsTo) { space in
                     Button(space.name) { Task { await model.moveTab(tab.id, toSpace: space.id) } }

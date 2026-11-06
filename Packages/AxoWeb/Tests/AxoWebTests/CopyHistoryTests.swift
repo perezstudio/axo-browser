@@ -48,4 +48,19 @@ struct CopyHistoryTests {
         pool.page(for: copy, profileID: profileID)
         #expect(engine.pages.last?.loads == [copy.url], "Loads its URL as usual")
     }
+
+    @Test func aKeptDiscardedSourcesHistoryIsCopied() async throws {
+        // Chromium hibernates by discarding: the page is kept, with its history in it.
+        pool.page(for: source, profileID: profileID)
+        let original = try #require(engine.pages.last)
+        original.canDiscard = true
+        original.navigate(to: URL(string: "https://example.com/second")!, title: "Second")
+        original.finishLoad()
+        #expect(await pool.hibernate(source.id))
+        #expect(original.isDiscarded)
+
+        #expect(pool.copyHistory(from: source.id, to: copy.id))
+        pool.page(for: copy, profileID: profileID)
+        #expect(engine.pages.last?.restoredState == "history:https://example.com/second")
+    }
 }

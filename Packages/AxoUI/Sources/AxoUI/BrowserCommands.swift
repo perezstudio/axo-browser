@@ -179,7 +179,7 @@ public struct BrowserCommands: Commands {
                 Task { await model.duplicateTab(id) }
             }
             .disabled(model?.selectedTab == nil || model?.selectedFolderID != nil)
-            if let model, let tab = model.selectedTab, !model.spacesToMoveTabsTo.isEmpty {
+            if let model, let tab = model.selectedTab, model.canMoveToSpace(tab.id) {
                 Menu("Move to Space") {
                     ForEach(model.spacesToMoveTabsTo) { space in
                         Button(space.name) { Task { await model.moveTab(tab.id, toSpace: space.id) } }
