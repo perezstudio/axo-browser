@@ -329,6 +329,19 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(bar.waitForExistence(timeout: 5))
     }
 
+    /// Clicks `element` where it is. XCUITest's own click first scrolls the list "to make it
+    /// visible", which moves the pointer off a row, so a button shown only on hover goes before
+    /// the click lands.
+    @MainActor
+    private func clickWithoutScrolling(_ element: XCUIElement, in app: XCUIApplication) {
+        let window = app.windows.firstMatch
+        let frame = element.frame
+        XCTAssertTrue(frame.width.isFinite && frame.width > 0, "The element is on screen: \(frame)")
+        window.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: frame.midX - window.frame.minX, dy: frame.midY - window.frame.minY))
+            .click()
+    }
+
     /// Hovering a tab row shows a close button (#69): it closes a tab, and unloads a pinned one,
     /// which stays in the sidebar.
     @MainActor
@@ -346,7 +359,7 @@ final class AxoUITests: XCTestCase {
 
         sidebar.staticTexts["Gone"].hover()
         XCTAssertTrue(closeButton.waitForExistence(timeout: 5))
-        closeButton.click()
+        clickWithoutScrolling(closeButton, in: app)
         XCTAssertTrue(sidebar.staticTexts["Gone"].waitForNonExistence(timeout: 5))
         XCTAssertTrue(sidebar.staticTexts["Keep"].exists)
 
@@ -357,7 +370,7 @@ final class AxoUITests: XCTestCase {
         let unload = app.descendants(matching: .any)["pinnedSection"].buttons["tabRowCloseButton"]
         XCTAssertTrue(unload.waitForExistence(timeout: 5))
         XCTAssertEqual(unload.label, "Unload Tab")
-        unload.click()
+        clickWithoutScrolling(unload, in: app)
         XCTAssertTrue(pinned.exists, "Unloaded, not closed")
     }
 

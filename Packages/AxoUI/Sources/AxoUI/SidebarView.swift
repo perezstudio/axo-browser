@@ -230,7 +230,8 @@ struct SplitRow: View {
             .accessibilityHidden(true)
         }
         .lineLimit(1)
-        .accessibilityValue(TabRow.stateDescription(isLoading: isLoading, isDimmed: isDimmed))
+        // Only when there's state to tell: a value replaces the text a row exposes.
+        .modifier(StateValue(description: TabRow.stateDescription(isLoading: isLoading, isDimmed: isDimmed)))
         .help(panes.map(TabRow.displayTitle(for:)).joined(separator: "\n"))
         .accessibilityLabel("Split view: " + panes.map(TabRow.displayTitle(for:)).formatted(.list(type: .and)))
         .accessibilityIdentifier("splitRow")
@@ -465,5 +466,19 @@ struct TabRowCloseSquare: View {
                         in: .rect(cornerRadius: 5, style: .continuous))
             .contentShape(.rect(cornerRadius: 5, style: .continuous))
             .onHover { isHovering = $0 }
+    }
+}
+
+/// Adds a row's state as its accessibility value, but only when there's some: an empty value
+/// would still replace the text the row exposes.
+private struct StateValue: ViewModifier {
+    let description: String
+
+    func body(content: Content) -> some View {
+        if description.isEmpty {
+            content
+        } else {
+            content.accessibilityValue(description)
+        }
     }
 }
