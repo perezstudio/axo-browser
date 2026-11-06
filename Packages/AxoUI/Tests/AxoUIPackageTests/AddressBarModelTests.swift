@@ -249,4 +249,29 @@ struct AddressBarModelTests {
         model.isSidebarAddressBarOnScreen = false
         #expect(model.showsPageLoadingBar, "With the bar hidden, the page's bar comes back")
     }
+
+    @Test func stoppingBecauseFocusMovedLeavesFocusWhereItWent() async throws {
+        _ = try await openPage(URL(string: "https://example.com/")!)
+        model.editsAddressInSidebar = true
+        model.isSidebarAddressBarOnScreen = true
+        model.editAddress()
+        let requests = model.pageFocusRequestCount
+
+        // The field lost focus (⌘F's find field, Tab, a click in the sidebar).
+        model.hideCommandBar(focusingPage: false)
+        #expect(!model.isAddressEditedInSidebar)
+        #expect(model.pageFocusRequestCount == requests, "Focus stays where the person moved it")
+
+        // The bar leaving the screen doesn't pull focus to the page either.
+        model.editAddress()
+        model.isSidebarAddressBarOnScreen = false
+        #expect(!model.isAddressEditedInSidebar)
+        #expect(model.pageFocusRequestCount == requests)
+
+        // Esc and Return still give the page focus.
+        model.isSidebarAddressBarOnScreen = true
+        model.editAddress()
+        model.hideCommandBar()
+        #expect(model.pageFocusRequestCount == requests + 1)
+    }
 }

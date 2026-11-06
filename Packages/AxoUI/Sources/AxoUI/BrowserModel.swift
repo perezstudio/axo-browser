@@ -97,6 +97,8 @@ public final class BrowserModel {
     /// the address in), as the window last reported. Only while that bar is on screen; the
     /// command bar opens otherwise.
     public var editsAddressInSidebar = false
+    /// How many times ``focusPage()`` was asked, for tests.
+    @ObservationIgnored var pageFocusRequestCount = 0
     /// Whether the shown page gets the loading bar along its top. Not while the address is edited
     /// in the sidebar and its bar is on screen: the bar's own loading line shows it there, so the
     /// page shows only one. (In a split view, the other panes keep theirs.)
@@ -109,7 +111,7 @@ public final class BrowserModel {
     /// collapsed, otherwise), so Site Settings knows where to appear.
     public var isSidebarAddressBarOnScreen = false {
         // The address being edited there has nowhere to show.
-        didSet { if !isSidebarAddressBarOnScreen, isAddressEditedInSidebar { hideCommandBar() } }
+        didSet { if !isSidebarAddressBarOnScreen, isAddressEditedInSidebar { hideCommandBar(focusingPage: false) } }
     }
     /// Whether the sidebar's address bar is showing, as the window last reported, for the View
     /// menu's title.
@@ -1268,15 +1270,16 @@ public final class BrowserModel {
         refreshCommandResults()
     }
 
-    /// Closes the command bar.
-    public func hideCommandBar() {
+    /// Closes the command bar, and gives the page focus unless `focusingPage` is false (when focus
+    /// has already gone where the person chose, such as the find field after ⌘F).
+    public func hideCommandBar(focusingPage: Bool = true) {
         commandSearchTask?.cancel()
         let wasVisible = isCommandBarVisible
         isCommandBarVisible = false
         pendingSplitAnchor = nil
         commandBarEditedTabID = nil
         isAddressEditedInSidebar = false
-        if wasVisible { focusPage() }
+        if wasVisible, focusingPage { focusPage() }
     }
 
     /// Updates the query and its results: typed-text, tab, and action rows right away, then

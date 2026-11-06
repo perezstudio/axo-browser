@@ -364,6 +364,17 @@ final class AxoUITests: XCTestCase {
         XCTAssertFalse(sidebar.staticTexts["First"].exists, "Loaded in place, not in a new tab")
         XCTAssertTrue(field.waitForNonExistence(timeout: 5))
 
+        // Clicking a suggestion runs it: the field keeps focus until the row's click lands.
+        app.typeKey("l", modifierFlags: .command)
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        app.typeText("data:text/html,<title>Third</title>")
+        let suggestion = app.descendants(matching: .any)["addressSuggestions"]
+            .descendants(matching: .any).matching(identifier: "commandResult").firstMatch
+        XCTAssertTrue(suggestion.waitForExistence(timeout: 5))
+        suggestion.click()
+        XCTAssertTrue(sidebar.staticTexts["Third"].waitForExistence(timeout: 10))
+        XCTAssertTrue(field.waitForNonExistence(timeout: 5))
+
         // ⌘L edits there too, and Esc stops.
         app.typeKey("l", modifierFlags: .command)
         XCTAssertTrue(field.waitForExistence(timeout: 5))

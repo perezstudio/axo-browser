@@ -18,7 +18,7 @@ struct GeneralSettings: View {
             }
             .pickerStyle(.radioGroup)
             .accessibilityIdentifier("navigationBarPlacementPicker")
-            Text("Back, forward, reload, and the address go at the top of the sidebar or above the page. In the sidebar, the address shows the site, and clicking it (or ⌘L) edits it in the command bar. Above the page, it's a field you edit in place, as in Safari.")
+            Text("Back, forward, reload, and the address go at the top of the sidebar or above the page. In the sidebar, the address shows the site, and clicking it (or ⌘L) edits it in the command bar or in the sidebar, as chosen below. Above the page, it's a field you edit in place, as in Safari.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
             Toggle("Show full website address", isOn: $showsFullAddress)

@@ -191,6 +191,8 @@ private struct AddressBarField: View {
         .padding(.horizontal, 12)
         .frame(height: FavoritesLayout.tileHeight)
         .addressBarMaterial(raised: true)
+        // The page's own loading bar gives way to this one in this mode, so it stays while editing.
+        .overlay(alignment: .bottom) { LoadingLine(page: model.selectedPage) }
         .clipShape(.rect(cornerRadius: FavoritesLayout.tileCornerRadius))
         .addressBarShadow(raised: true)
         .task {
@@ -198,13 +200,13 @@ private struct AddressBarField: View {
             selectAll()
         }
         .onChange(of: model.commandQuerySelectionRequest) { selectAll() }
-        // Clicking elsewhere (the page, the sidebar) stops editing, as in Dia. A turn later, so a
-        // click on a suggestion runs it first.
+        // Focus moving elsewhere (a click on the page or sidebar, Tab, ⌘F) stops editing, as in
+        // Dia, and leaves focus where it went. (Suggestions are buttons, which don't take focus.)
         .onChange(of: isFocused) {
             guard !isFocused else { return }
             Task {
                 guard !isFocused, model.isAddressEditedInSidebar else { return }
-                model.hideCommandBar()
+                model.hideCommandBar(focusingPage: false)
             }
         }
     }
@@ -232,10 +234,15 @@ struct AddressSuggestions: View {
                 ScrollView {
                     LazyVStack(spacing: 1) {
                         ForEach(Array(model.commandResults.enumerated()), id: \.element.id) { index, result in
-                            CommandRow(model: model, result: result, isSelected: index == model.commandSelection, showsHint: false)
-                                .id(result.id)
-                                .onTapGesture { Task { await model.runCommand(at: index) } }
-                                .accessibilityAction { Task { await model.runCommand(at: index) } }
+                            // A button, which a click doesn't give focus, so the field keeps it
+                            // until the row runs.
+                            Button {
+                                Task { await model.runCommand(at: index) }
+                            } label: {
+                                CommandRow(model: model, result: result, isSelected: index == model.commandSelection, showsHint: false)
+                            }
+                            .buttonStyle(.plain)
+                            .id(result.id)
                         }
                     }
                     .padding(4)

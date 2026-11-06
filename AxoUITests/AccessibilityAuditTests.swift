@@ -104,7 +104,9 @@ final class AccessibilityAuditTests: XCTestCase {
         let general = app.toolbars.buttons["General"]
         XCTAssertTrue(general.waitForExistence(timeout: 5))
         general.click()
-        app.radioButtons["Sidebar"].click()
+        let inSidebar = app.radioButtons["Sidebar"]
+        XCTAssertTrue(inSidebar.waitForExistence(timeout: 5))
+        inSidebar.click()
         app.typeKey("w", modifierFlags: .command)
 
         app.typeKey("l", modifierFlags: .command)
