@@ -158,4 +158,120 @@ struct AddressBarModelTests {
         model.copyShownPageLink()
         #expect(copied == [peekURL])
     }
+
+    // MARK: Editing in the sidebar (Settings › General › Edit the address in › Sidebar)
+
+    @Test func theSidebarSettingEditsInTheSidebarWithoutCoveringThePage() async throws {
+        let url = URL(string: "https://example.com/a")!
+        let (id, _) = try await openPage(url)
+        model.editsAddressInSidebar = true
+        model.isSidebarAddressBarOnScreen = true
+
+        model.editAddress()
+        #expect(model.isAddressEditedInSidebar)
+        #expect(model.isCommandBarVisible, "The command bar's query and results drive the field")
+        #expect(model.commandQuery == url.absoluteString)
+        #expect(model.commandBarEditedTabID == id)
+        #expect(!model.arePagesCovered, "Nothing covers the page, so its link label can show")
+    }
+
+    @Test func theCommandBarSettingStillUsesTheCommandBar() async throws {
+        _ = try await openPage(URL(string: "https://example.com/")!)
+        model.isSidebarAddressBarOnScreen = true
+        model.editAddress()
+        #expect(!model.isAddressEditedInSidebar)
+        #expect(model.arePagesCovered)
+    }
+
+    @Test func withTheBarOffScreenTheSidebarSettingFallsBackToTheCommandBar() async throws {
+        _ = try await openPage(URL(string: "https://example.com/")!)
+        model.editsAddressInSidebar = true
+        model.isSidebarAddressBarOnScreen = false // hidden, or the sidebar collapsed
+        model.editAddress()
+        #expect(!model.isAddressEditedInSidebar)
+        #expect(model.isCommandBarVisible)
+    }
+
+    @Test func withNoPageTheSidebarStillEdits() async throws {
+        model.editsAddressInSidebar = true
+        model.isSidebarAddressBarOnScreen = true
+        model.editAddress()
+        #expect(model.isAddressEditedInSidebar)
+        #expect(model.commandQuery.isEmpty)
+        #expect(model.commandBarEditedTabID == nil)
+    }
+
+    @Test func returnInTheSidebarLoadsInTheSameTab() async throws {
+        let (id, page) = try await openPage(URL(string: "https://example.com/")!)
+        let tabCount = model.tabs.count
+        model.editsAddressInSidebar = true
+        model.isSidebarAddressBarOnScreen = true
+
+        model.editAddress()
+        model.setCommandQuery("example.org")
+        await model.runCommand()
+        #expect(page.loads.last == URL(string: "https://example.org"))
+        #expect(model.selectedTabID == id)
+        #expect(model.tabs.count == tabCount)
+        #expect(!model.isAddressEditedInSidebar)
+        #expect(!model.isCommandBarVisible)
+    }
+
+    @Test func theBarLeavingTheScreenStopsEditingInIt() async throws {
+        _ = try await openPage(URL(string: "https://example.com/")!)
+        model.editsAddressInSidebar = true
+        model.isSidebarAddressBarOnScreen = true
+        model.editAddress()
+        #expect(model.isAddressEditedInSidebar)
+
+        model.isSidebarAddressBarOnScreen = false
+        #expect(!model.isAddressEditedInSidebar, "What's typed has nowhere to show")
+        #expect(!model.isCommandBarVisible)
+    }
+
+    @Test func aNewTabFromTheSidebarEditorOpensTheCommandBar() async throws {
+        _ = try await openPage(URL(string: "https://example.com/")!)
+        model.editsAddressInSidebar = true
+        model.isSidebarAddressBarOnScreen = true
+        model.editAddress()
+        model.showCommandBar() // ⌘T while editing
+        #expect(!model.isAddressEditedInSidebar)
+        #expect(model.isCommandBarVisible)
+        #expect(model.arePagesCovered)
+    }
+
+    @Test func thePageLoadingBarGivesWayToTheSidebarBarsLine() {
+        #expect(model.showsPageLoadingBar)
+        model.isSidebarAddressBarOnScreen = true
+        #expect(model.showsPageLoadingBar, "Editing in the command bar keeps the page's bar")
+        model.editsAddressInSidebar = true
+        #expect(!model.showsPageLoadingBar, "Only the address bar's line shows")
+        model.isSidebarAddressBarOnScreen = false
+        #expect(model.showsPageLoadingBar, "With the bar hidden, the page's bar comes back")
+    }
+
+    @Test func stoppingBecauseFocusMovedLeavesFocusWhereItWent() async throws {
+        _ = try await openPage(URL(string: "https://example.com/")!)
+        model.editsAddressInSidebar = true
+        model.isSidebarAddressBarOnScreen = true
+        model.editAddress()
+        let requests = model.pageFocusRequestCount
+
+        // The field lost focus (⌘F's find field, Tab, a click in the sidebar).
+        model.hideCommandBar(focusingPage: false)
+        #expect(!model.isAddressEditedInSidebar)
+        #expect(model.pageFocusRequestCount == requests, "Focus stays where the person moved it")
+
+        // The bar leaving the screen doesn't pull focus to the page either.
+        model.editAddress()
+        model.isSidebarAddressBarOnScreen = false
+        #expect(!model.isAddressEditedInSidebar)
+        #expect(model.pageFocusRequestCount == requests)
+
+        // Esc and Return still give the page focus.
+        model.isSidebarAddressBarOnScreen = true
+        model.editAddress()
+        model.hideCommandBar()
+        #expect(model.pageFocusRequestCount == requests + 1)
+    }
 }

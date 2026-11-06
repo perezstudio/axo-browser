@@ -156,6 +156,7 @@ extension BrowserModel {
     /// Gives keyboard focus to the selected page, as after closing the command bar or find bar,
     /// so typing and scrolling go to the page instead of nowhere.
     public func focusPage() {
+        pageFocusRequestCount += 1
         guard let selectedTabID else { return }
         let pool = pool
         // Wait a turn, so SwiftUI has removed the overlay that had focus.

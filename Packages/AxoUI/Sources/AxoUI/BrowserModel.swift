@@ -65,8 +65,9 @@ public final class BrowserModel {
     /// The live state of the selected tab's web view.
     public private(set) var selectedPage: WebTabState?
     /// Whether Peek or the command bar covers the window's pages. Their link status labels hide
-    /// then: the cover takes the pointer, so the engine never says it left the link.
-    public var arePagesCovered: Bool { peek != nil || isCommandBarVisible }
+    /// then: the cover takes the pointer, so the engine never says it left the link. An address
+    /// edited in the sidebar covers nothing.
+    public var arePagesCovered: Bool { peek != nil || (isCommandBarVisible && !isAddressEditedInSidebar) }
     /// Incremented to ask the address field to take focus.
     public private(set) var addressFocusRequest = 0
     /// A problem worth telling the user about, such as the database failing to open.
@@ -89,13 +90,29 @@ public final class BrowserModel {
     public private(set) var commandBarEditedTabID: AxoCore.Tab.ID?
     /// Incremented when the command bar should select everything typed in it.
     public private(set) var commandQuerySelectionRequest = 0
+    /// Whether the command bar's query is being edited in the sidebar's address bar (with its
+    /// results below it) instead of in the command bar over the page.
+    public private(set) var isAddressEditedInSidebar = false
+    /// Whether ``editAddress()`` edits in the sidebar's address bar (Settings › General › Edit
+    /// the address in), as the window last reported. Only while that bar is on screen; the
+    /// command bar opens otherwise.
+    public var editsAddressInSidebar = false
+    /// How many times ``focusPage()`` was asked, for tests.
+    @ObservationIgnored var pageFocusRequestCount = 0
+    /// Whether the shown page gets the loading bar along its top. Not while the address is edited
+    /// in the sidebar and its bar is on screen: the bar's own loading line shows it there, so the
+    /// page shows only one. (In a split view, the other panes keep theirs.)
+    public var showsPageLoadingBar: Bool { !(editsAddressInSidebar && isSidebarAddressBarOnScreen) }
     /// Asks the windows to show (`true`) or hide the sidebar's address bar (View menu), counted so
     /// each request is seen. The windows keep the setting, in their own settings store; every
     /// window sets the same value, so two windows can't undo each other.
     public private(set) var sidebarAddressBarRequest: (count: Int, shown: Bool) = (0, true)
     /// Whether the sidebar's address bar is on screen now (it's hidden, or the sidebar is
     /// collapsed, otherwise), so Site Settings knows where to appear.
-    public var isSidebarAddressBarOnScreen = false
+    public var isSidebarAddressBarOnScreen = false {
+        // The address being edited there has nowhere to show.
+        didSet { if !isSidebarAddressBarOnScreen, isAddressEditedInSidebar { hideCommandBar(focusingPage: false) } }
+    }
     /// Whether the sidebar's address bar is showing, as the window last reported, for the View
     /// menu's title.
     public var isSidebarAddressBarShown = true
@@ -774,16 +791,15 @@ public final class BrowserModel {
 
     /// Opens the command bar to edit the shown page's address, as Arc does: the full address,
     /// selected, so typing replaces it and gets the command bar's results. Return loads in the
-    /// same tab; an unchanged address just closes the bar.
+    /// same tab; an unchanged address just closes the bar. With ``editsAddressInSidebar``, the
+    /// sidebar's address bar becomes the field instead, with the results below it.
     public func editAddress() {
         // The address is the pinned tab's, under Peek; edit it, not something hidden behind.
         if peek != nil { closePeek() }
-        guard let url = shownPageURL else {
-            showCommandBar()
-            return
-        }
         showCommandBar()
         pendingSplitAnchor = nil
+        isAddressEditedInSidebar = editsAddressInSidebar && isSidebarAddressBarOnScreen
+        guard let url = shownPageURL else { return }
         commandBarEditedTabID = shownTab?.id
         commandQuery = url.absoluteString
         refreshCommandResults()
@@ -1250,17 +1266,20 @@ public final class BrowserModel {
         isCommandBarVisible = true
         commandQuery = ""
         commandBarEditedTabID = nil
+        isAddressEditedInSidebar = false
         refreshCommandResults()
     }
 
-    /// Closes the command bar.
-    public func hideCommandBar() {
+    /// Closes the command bar, and gives the page focus unless `focusingPage` is false (when focus
+    /// has already gone where the person chose, such as the find field after ⌘F).
+    public func hideCommandBar(focusingPage: Bool = true) {
         commandSearchTask?.cancel()
         let wasVisible = isCommandBarVisible
         isCommandBarVisible = false
         pendingSplitAnchor = nil
         commandBarEditedTabID = nil
-        if wasVisible { focusPage() }
+        isAddressEditedInSidebar = false
+        if wasVisible, focusingPage { focusPage() }
     }
 
     /// Updates the query and its results: typed-text, tab, and action rows right away, then

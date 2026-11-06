@@ -44,20 +44,20 @@ private struct FavoriteTile: View {
         } label: {
             icon
                 .frame(maxWidth: .infinity)
-                .frame(height: 40)
+                .frame(height: FavoritesLayout.tileHeight)
                 .background(
-                    RoundedRectangle(cornerRadius: 10)
+                    RoundedRectangle(cornerRadius: FavoritesLayout.tileCornerRadius)
                         .fill(isSelected ? AnyShapeStyle(.tint.opacity(0.25)) : AnyShapeStyle(.quaternary.opacity(0.6)))
                 )
                 .overlay {
-                    if isSelected { RoundedRectangle(cornerRadius: 10).strokeBorder(.tint, lineWidth: 1.5) }
+                    if isSelected { RoundedRectangle(cornerRadius: FavoritesLayout.tileCornerRadius).strokeBorder(.tint, lineWidth: 1.5) }
                 }
                 .overlay(alignment: .topTrailing) {
                     if hasLeftHome {
                         Circle().fill(.secondary).frame(width: 5, height: 5).padding(5)
                     }
                 }
-                .contentShape(.rect(cornerRadius: 10))
+                .contentShape(.rect(cornerRadius: FavoritesLayout.tileCornerRadius))
         }
         .buttonStyle(.plain)
         .help(title)

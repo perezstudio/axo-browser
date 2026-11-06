@@ -71,7 +71,7 @@ final class AccessibilityAuditTests: XCTestCase {
                     // HSplitView's and VSplitView's host for one pane of a split view.
                     if children.count == 1, children[0].identifier == "splitPane" { return true }
                     // The split view's sidebar column, which holds the address bar.
-                    if children.contains(where: { $0.identifier == "sidebarAddressBar" || $0.identifier == "addressField" }) { return true }
+                    if children.contains(where: { ["sidebarAddressBar", "sidebarAddressField", "addressField"].contains($0.identifier) }) { return true }
                     // A List section header row, which holds only its header text.
                     if children.count == 1, children[0].elementType == .staticText,
                        !children[0].label.isEmpty || !(children[0].value as? String ?? "").isEmpty {
@@ -87,6 +87,34 @@ final class AccessibilityAuditTests: XCTestCase {
             print("AUDIT [\(screen)] \(issue.compactDescription): \(describe(snapshot, depth: 0)) frame=\(snapshot.frame)")
             return false
         }
+    }
+
+    /// The address edited in the sidebar (Settings › General › Edit the address in › Sidebar),
+    /// with its suggestions below it.
+    @MainActor
+    func testAuditAddressEditedInTheSidebar() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,<title>Pond</title>\n")
+        XCTAssertTrue(sidebar.staticTexts["Pond"].waitForExistence(timeout: 10))
+
+        app.typeKey(",", modifierFlags: .command)
+        let general = app.toolbars.buttons["General"]
+        XCTAssertTrue(general.waitForExistence(timeout: 5))
+        general.click()
+        let inSidebar = app.radioButtons["Sidebar"]
+        XCTAssertTrue(inSidebar.waitForExistence(timeout: 5))
+        inSidebar.click()
+        app.typeKey("w", modifierFlags: .command)
+
+        app.typeKey("l", modifierFlags: .command)
+        XCTAssertTrue(app.textFields["sidebarAddressField"].waitForExistence(timeout: 5))
+        app.typeText("pond")
+        XCTAssertTrue(app.descendants(matching: .any)["addressSuggestions"].waitForExistence(timeout: 5))
+        try audit(app, "address edited in the sidebar")
+        app.typeKey(.escape, modifierFlags: [])
     }
 
     @MainActor

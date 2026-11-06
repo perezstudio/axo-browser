@@ -7,6 +7,7 @@ import SwiftUI
 struct GeneralSettings: View {
     @AppStorage(NavigationBarPlacement.storageKey) private var navigationBarPlacement = NavigationBarPlacement.sidebar
     @AppStorage(AddressBarSettings.showsFullAddressKey) private var showsFullAddress = false
+    @AppStorage(AddressEditingPlacement.storageKey) private var addressEditingPlacement = AddressEditingPlacement.commandBar
 
     var body: some View {
         Form {
@@ -17,7 +18,7 @@ struct GeneralSettings: View {
             }
             .pickerStyle(.radioGroup)
             .accessibilityIdentifier("navigationBarPlacementPicker")
-            Text("Back, forward, reload, and the address go at the top of the sidebar or above the page. In the sidebar, the address shows the site, and clicking it (or ⌘L) edits it in the command bar. Above the page, it's a field you edit in place, as in Safari.")
+            Text("Back, forward, reload, and the address go at the top of the sidebar or above the page. In the sidebar, the address shows the site, and clicking it (or ⌘L) edits it in the command bar or in the sidebar, as chosen below. Above the page, it's a field you edit in place, as in Safari.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
             Toggle("Show full website address", isOn: $showsFullAddress)
@@ -25,6 +26,17 @@ struct GeneralSettings: View {
                 .toggleStyle(.checkbox)
                 .disabled(navigationBarPlacement != .sidebar)
                 .accessibilityIdentifier("showsFullAddressToggle")
+            Picker("Edit the address in", selection: $addressEditingPlacement) {
+                ForEach(AddressEditingPlacement.allCases) { placement in
+                    Text(placement.title).tag(placement)
+                }
+            }
+            .pickerStyle(.radioGroup)
+            .disabled(navigationBarPlacement != .sidebar)
+            .accessibilityIdentifier("addressEditingPlacementPicker")
+            Text("Clicking the address bar or pressing ⌘L opens the command bar over the page, or edits the address right in the sidebar, with suggestions below it.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
         }
         .formStyle(.grouped)
     }
