@@ -16,7 +16,10 @@ struct SidebarAddressBar: View {
     @State private var isHovering = false
 
     var body: some View {
-        Group {
+        // One container, not a Group (which would hand each modifier to the branch showing), so
+        // the popover, the anchor, and on-screen tracking stay put while the bar switches between
+        // the pill and the field.
+        ZStack {
             if model.isAddressEditedInSidebar {
                 AddressBarField(model: model)
             } else {
@@ -247,6 +250,9 @@ struct AddressSuggestions: View {
                     }
                     .padding(4)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { rowsHeight = $0 }
+                    // The rows' container is what VoiceOver enters, so it carries the name.
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel("Suggestions")
                 }
                 .frame(height: min(rowsHeight, 320))
                 .onChange(of: model.commandSelection) {
