@@ -349,12 +349,12 @@ final class AxoUITests: XCTestCase {
         let app = launchApp()
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
-        for title in ["Keep", "Gone", "Pinned"] {
+        for title in ["Keep", "Gone", "Docs"] {
             app.typeKey("t", modifierFlags: .command)
             app.typeText("data:text/html,<title>\(title)</title>\n")
             XCTAssertTrue(sidebar.staticTexts[title].waitForExistence(timeout: 10))
         }
-        app.typeKey("p", modifierFlags: [.command, .control]) // Pin Tab, on "Pinned"
+        app.typeKey("p", modifierFlags: [.command, .control]) // Pin Tab, on "Docs"
         let closeButton = sidebar.buttons["tabRowCloseButton"]
 
         sidebar.staticTexts["Gone"].hover()
@@ -363,13 +363,14 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Gone"].waitForNonExistence(timeout: 5))
         XCTAssertTrue(sidebar.staticTexts["Keep"].exists)
 
-        // A pinned tab's button unloads it: it stays in the sidebar.
-        let pinned = app.descendants(matching: .any)["pinnedSection"].staticTexts["Pinned"]
+        // A pinned tab's button unloads it: it stays in the sidebar. (In the Pinned section, the
+        // section's identifier replaces its rows' and their buttons', so they're found by label.)
+        XCTAssertTrue(sidebar.staticTexts["Pinned"].waitForExistence(timeout: 5), "Docs is pinned")
+        let pinned = sidebar.staticTexts["Docs"]
         XCTAssertTrue(pinned.waitForExistence(timeout: 5))
         pinned.hover()
-        let unload = app.descendants(matching: .any)["pinnedSection"].buttons["tabRowCloseButton"]
+        let unload = sidebar.buttons["Unload Tab"]
         XCTAssertTrue(unload.waitForExistence(timeout: 5))
-        XCTAssertEqual(unload.label, "Unload Tab")
         clickWithoutScrolling(unload, in: app)
         XCTAssertTrue(pinned.exists, "Unloaded, not closed")
     }
