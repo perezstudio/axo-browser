@@ -14,6 +14,7 @@ struct SidebarAddressBar: View {
     let model: BrowserModel
     @AppStorage(AddressBarSettings.showsFullAddressKey) private var showsFullAddress = false
     @State private var isHovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         // One container, not a Group (which would hand each modifier to the branch showing), so
@@ -73,6 +74,7 @@ struct SidebarAddressBar: View {
             model.editAddress()
         } label: {
             label
+                .animation(.easeOut(duration: 0.18), value: model.addressBarNotice?.id)
         }
         .buttonStyle(.plain)
         .addressBarMaterial(raised: isEditing, hovered: isHovering)
@@ -88,6 +90,49 @@ struct SidebarAddressBar: View {
     }
 
     private var label: some View {
+        // A notice for the bar ("Link copied") takes the address's place for a moment: the
+        // address rises and fades out, then the notice rises into view; on the way back the
+        // notice sinks out and the address drops back in. Both stay inside the bar's frame, so
+        // nothing around them moves. With Reduce Motion, they only fade.
+        ZStack {
+            if let notice = model.addressBarNotice {
+                noticeLabel(notice)
+                    .transition(swapTransition(from: .bottom))
+            } else {
+                addressLabel
+                    .transition(swapTransition(from: .top))
+            }
+        }
+        .frame(height: FavoritesLayout.tileHeight)
+        .clipped()
+    }
+
+    /// Slides in from and out toward `edge` by a few points while fading; the incoming label
+    /// waits for the outgoing one to clear.
+    private func swapTransition(from edge: Edge) -> AnyTransition {
+        let slide = reduceMotion ? AnyTransition.opacity
+            : .offset(y: edge == .top ? -10 : 10).combined(with: .opacity)
+        return .asymmetric(
+            insertion: slide.animation(.easeOut(duration: 0.18).delay(0.12)),
+            removal: slide.animation(.easeIn(duration: 0.12))
+        )
+    }
+
+    private func noticeLabel(_ notice: Notice) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: "checkmark")
+                .fontWeight(.semibold)
+            Text(notice.message)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .font(.system(size: 14))
+        .padding(.horizontal, 12)
+        .frame(height: FavoritesLayout.tileHeight)
+        .contentShape(.rect(cornerRadius: FavoritesLayout.tileCornerRadius))
+    }
+
+    private var addressLabel: some View {
         let shown = AddressDisplay.shown(for: model.shownPageURL, fullAddress: showsFullAddress)
         return HStack(spacing: 5) {
             switch shown?.kind {

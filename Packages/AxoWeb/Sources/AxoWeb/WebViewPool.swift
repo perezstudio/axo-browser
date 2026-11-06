@@ -1,5 +1,6 @@
 import AxoCore
 import Foundation
+import Observation
 #if os(macOS)
 import AppKit
 #endif
@@ -137,7 +138,13 @@ public final class WebViewPool {
     private var awaitingAdoption: [Tab.ID: Profile.ID] = [:]
 
     private let now: () -> Date
-    private var live: [Tab.ID: LiveTab] = [:]
+    private var live: [Tab.ID: LiveTab] = [:] {
+        didSet { scheduleLivenessUpdate() }
+    }
+    /// Which tabs have a live page, observable, for the sidebar (dimmed rows, loading spinners).
+    /// It follows the pool a turn later, since pages are made while SwiftUI updates views.
+    public let liveness = PageLiveness()
+    private var isLivenessUpdatePending = false
     private var hibernated: [Tab.ID: HibernatedTab] = [:]
     private var visibleCounts: [Tab.ID: Int] = [:]
     /// Saves permission answers across launches. Set by the app. When it's `nil`, answers are
@@ -281,6 +288,18 @@ public final class WebViewPool {
     private func tabID(of page: any EnginePage) -> Tab.ID? {
         live.first { $0.value.page === page }?.key
             ?? hibernated.first { $0.value.kept?.page === page }?.key
+    }
+
+    /// Brings ``liveness`` up to date on the next turn, once however many changes come first.
+    private func scheduleLivenessUpdate() {
+        guard !isLivenessUpdatePending else { return }
+        isLivenessUpdatePending = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.isLivenessUpdatePending = false
+            let ids = Set(self.live.keys)
+            if self.liveness.liveTabIDs != ids { self.liveness.liveTabIDs = ids }
+        }
     }
 
     /// The tab's page if it is live, without creating one.
@@ -812,4 +831,18 @@ public struct LinkClick: Sendable {
         }
         return site(url) != site(sourceURL)
     }
+}
+
+/// Which tabs have a live page (not hibernated, unloaded, or never loaded), observable. Reading
+/// it redraws a view only when a tab becomes live or stops being live, not as pages load.
+@MainActor
+@Observable
+public final class PageLiveness {
+    /// The tabs with a live page.
+    public internal(set) var liveTabIDs: Set<Tab.ID> = []
+
+    nonisolated init() {}
+
+    /// Whether `tabID` has a live page.
+    public func isLive(_ tabID: Tab.ID) -> Bool { liveTabIDs.contains(tabID) }
 }

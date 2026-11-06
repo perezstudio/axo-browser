@@ -115,6 +115,12 @@ final class AccessibilityAuditTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["addressSuggestions"].waitForExistence(timeout: 5))
         try audit(app, "address edited in the sidebar")
         app.typeKey(.escape, modifierFlags: [])
+
+        // A notice with Undo, after closing the tab (#103).
+        XCTAssertTrue(app.textFields["sidebarAddressField"].waitForNonExistence(timeout: 5))
+        app.typeKey("w", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["noticeUndoButton"].waitForExistence(timeout: 5))
+        try audit(app, "notice")
     }
 
     @MainActor
