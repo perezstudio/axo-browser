@@ -258,6 +258,8 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
         let bar = app.descendants(matching: .any)["sidebarAddressBar"]
         XCTAssertTrue(bar.waitForExistence(timeout: 5))
+        // As tall as a favorite's tile (`FavoritesLayout.tileHeight`), as in Arc.
+        XCTAssertEqual(bar.frame.height, 40, accuracy: 1)
         let commandField = app.textFields["commandField"]
 
         app.typeKey("t", modifierFlags: .command)
@@ -324,6 +326,49 @@ final class AxoUITests: XCTestCase {
         XCTAssertEqual(fullAddress.value as? Int, 1)
         app.typeKey("w", modifierFlags: .command)
         // What the pill then shows (the whole address) is covered by AddressDisplayTests.
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
+    }
+
+    /// With Settings › General › Edit the address in › Sidebar, the sidebar's address bar becomes
+    /// the field, with suggestions below it and no command bar; Return loads in the same tab and
+    /// Esc stops editing.
+    @MainActor
+    func testAddressEditsInTheSidebar() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,<title>First</title>\n")
+        XCTAssertTrue(sidebar.staticTexts["First"].waitForExistence(timeout: 10))
+
+        app.typeKey(",", modifierFlags: .command)
+        let general = app.toolbars.buttons["General"]
+        XCTAssertTrue(general.waitForExistence(timeout: 5))
+        general.click()
+        let inSidebar = app.radioButtons["Sidebar"]
+        XCTAssertTrue(inSidebar.waitForExistence(timeout: 5))
+        inSidebar.click()
+        app.typeKey("w", modifierFlags: .command)
+
+        let bar = app.descendants(matching: .any)["sidebarAddressBar"]
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
+        bar.click()
+        let field = app.textFields["sidebarAddressField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["addressSuggestions"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.textFields["commandField"].exists, "No command bar over the page")
+
+        // Typing replaces the selected address; Return loads in this tab.
+        app.typeText("data:text/html,<title>Second</title>\n")
+        XCTAssertTrue(sidebar.staticTexts["Second"].waitForExistence(timeout: 10))
+        XCTAssertFalse(sidebar.staticTexts["First"].exists, "Loaded in place, not in a new tab")
+        XCTAssertTrue(field.waitForNonExistence(timeout: 5))
+
+        // ⌘L edits there too, and Esc stops.
+        app.typeKey("l", modifierFlags: .command)
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(field.waitForNonExistence(timeout: 5))
         XCTAssertTrue(bar.waitForExistence(timeout: 5))
     }
 

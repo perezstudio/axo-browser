@@ -96,11 +96,13 @@ extension CommandBarView {
     }
 }
 
-/// One command bar row: an icon, a title, a detail line, and what Return will do.
-private struct CommandRow: View {
+/// One command bar row: an icon, a title, a detail line, and what Return will do (left out
+/// where there's no room, as in the sidebar's suggestions).
+struct CommandRow: View {
     let model: BrowserModel
     let result: CommandResult
     let isSelected: Bool
+    var showsHint = true
 
     var body: some View {
         HStack(spacing: 10) {
@@ -114,9 +116,11 @@ private struct CommandRow: View {
                 }
             }
             Spacer(minLength: 8)
-            Text(result.hint)
-                .font(.caption)
-                .foregroundStyle(isSelected ? .secondary : .tertiary)
+            if showsHint {
+                Text(result.hint)
+                    .font(.caption)
+                    .foregroundStyle(isSelected ? .secondary : .tertiary)
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)

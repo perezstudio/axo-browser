@@ -21,3 +21,26 @@ nonisolated public enum NavigationBarPlacement: String, CaseIterable, Identifiab
         }
     }
 }
+
+/// Where the address is edited when the navigation bar is in the sidebar (Settings › General):
+/// in the command bar over the page, as in Arc, or right in the sidebar's address bar, with
+/// suggestions below it, as in Dia.
+nonisolated public enum AddressEditingPlacement: String, CaseIterable, Identifiable, Sendable {
+    /// The command bar opens over the page with the address selected.
+    case commandBar
+    /// The sidebar's address bar becomes a field, with suggestions dropping down below it.
+    case sidebar
+
+    /// The `@AppStorage` key, in the store the app picks (UI tests have their own).
+    public static let storageKey = "addressEditingPlacement"
+
+    public var id: Self { self }
+
+    /// The name shown in Settings.
+    public var title: String {
+        switch self {
+        case .commandBar: "Command bar"
+        case .sidebar: "Sidebar"
+        }
+    }
+}

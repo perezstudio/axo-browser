@@ -9,6 +9,7 @@ public struct BrowserWindow: View {
     @Bindable private var model: BrowserModel
     @AppStorage(NavigationBarPlacement.storageKey) private var navigationBarPlacement = NavigationBarPlacement.sidebar
     @AppStorage(AddressBarSettings.showsSidebarAddressBarKey) private var showsSidebarAddressBar = true
+    @AppStorage(AddressEditingPlacement.storageKey) private var addressEditingPlacement = AddressEditingPlacement.commandBar
 
     /// Creates a window showing `model`.
     public init(model: BrowserModel) {
@@ -43,6 +44,7 @@ public struct BrowserWindow: View {
         // View › Show or Hide Address Bar in Sidebar, kept in the window's settings store.
         .onChange(of: model.sidebarAddressBarRequest.count) { showsSidebarAddressBar = model.sidebarAddressBarRequest.shown }
         .onChange(of: showsSidebarAddressBar, initial: true) { model.isSidebarAddressBarShown = showsSidebarAddressBar }
+        .onChange(of: addressEditingPlacement, initial: true) { model.editsAddressInSidebar = addressEditingPlacement == .sidebar }
         .modifier(HandoffActivity(model: model))
         .pagePrompts(model: model)
         .task { await model.start() }
@@ -79,7 +81,8 @@ public struct BrowserWindow: View {
                     }
                 }
                 .overlay {
-                    if model.isCommandBarVisible {
+                    // An address edited in the sidebar shows its results there instead.
+                    if model.isCommandBarVisible, !model.isAddressEditedInSidebar {
                         CommandBarView(model: model)
                     }
                 }
@@ -123,7 +126,7 @@ public struct BrowserWindow: View {
                 }
                 .linkStatus(for: model.arePagesCovered ? nil : model.selectedPage)
                 .overlay(alignment: .top) { RestoringSnapshot(page: model.selectedPage) }
-                .overlay(alignment: .top) { LoadingBar(page: model.selectedPage) }
+                .overlay(alignment: .top) { if model.showsPageLoadingBar { LoadingBar(page: model.selectedPage) } }
         } else {
             ContentUnavailableView {
                 Label("No Tab Open", systemImage: "safari")
@@ -166,7 +169,11 @@ private struct SplitPanesView: View {
                 .frame(minWidth: 200, minHeight: 150)
                 .linkStatus(for: model.arePagesCovered ? nil : page)
                 .overlay(alignment: .top) { RestoringSnapshot(page: page) }
-                .overlay(alignment: .top) { LoadingBar(page: page) }
+                // The focused pane's loading shows in the sidebar's address bar instead, when
+                // that's where the address is edited.
+                .overlay(alignment: .top) {
+                    if tab.id != model.selectedTabID || model.showsPageLoadingBar { LoadingBar(page: page) }
+                }
                 .overlay {
                     if tab.id == model.selectedTabID {
                         Rectangle()

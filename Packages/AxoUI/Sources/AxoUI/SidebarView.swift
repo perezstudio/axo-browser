@@ -71,6 +71,18 @@ struct SidebarView: View {
             .padding(.horizontal, 10)
             .padding(.bottom, 6)
         }
+        // An address edited in the sidebar: its suggestions hang below the bar, over the
+        // favorites and tabs, as in Dia.
+        .overlayPreferenceValue(AddressBarBounds.self, alignment: .topLeading) { anchor in
+            if let anchor, model.isAddressEditedInSidebar {
+                GeometryReader { proxy in
+                    let bar = proxy[anchor]
+                    AddressSuggestions(model: model)
+                        .frame(width: bar.width)
+                        .offset(x: bar.minX, y: bar.maxY + 6)
+                }
+            }
+        }
         .toolbar {
             if navigationBarPlacement == .sidebar {
                 SidebarNavigationToolbar(model: model)

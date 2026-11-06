@@ -9,6 +9,10 @@ nonisolated public enum FavoritesLayout {
     public static let minimumTileWidth: CGFloat = 44
     /// The space between tiles.
     public static let spacing: CGFloat = 6
+    /// A tile's height, which the sidebar's address bar shares so the two line up, as in Arc.
+    public static let tileHeight: CGFloat = 40
+    /// A tile's corner radius, which the sidebar's address bar shares too.
+    public static let tileCornerRadius: CGFloat = 10
 
     /// The number of columns for `count` favorites in a grid `width` points wide.
     public static func columns(count: Int, width: CGFloat) -> Int {
