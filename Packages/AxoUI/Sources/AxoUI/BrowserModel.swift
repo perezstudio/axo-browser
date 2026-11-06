@@ -99,8 +99,8 @@ public final class BrowserModel {
     public var editsAddressInSidebar = false
     /// The notice showing (``postNotice(_:placement:undo:)``), if any.
     public internal(set) var notice: Notice?
-    /// Whether the pointer is over the notice, which keeps it up.
-    var isNoticeHeld = false
+    /// The notice the pointer is over, which keeps it up.
+    var heldNoticeID: Notice.ID?
     @ObservationIgnored var noticeDismissal: Task<Void, Never>?
     /// Waits out a notice's time on screen. Tests replace it to decide when notices go, and the
     /// app keeps notices up longer in test runs, where each UI query can take seconds.
@@ -895,8 +895,11 @@ public final class BrowserModel {
         if byPerson, !tab.isPinned {
             let spaceID = space.id
             postNotice("Closed \(TabRow.displayTitle(for: tab))") { [weak self] in
-                // Only in the Space it left; the archive brings it back from anywhere.
-                guard let self, self.space?.id == spaceID else { return }
+                // Only in the Space it left, and only while it's still archived there (not
+                // reopened with ⇧⌘T, or moved to another Space by sync). It comes back as a tab of
+                // its own, at the end, not in a split it was part of.
+                guard let self, self.space?.id == spaceID,
+                      await self.archivedTabs().contains(where: { $0.id == id }) else { return }
                 await self.restoreTab(id)
             }
         } else {

@@ -55,11 +55,17 @@ extension BrowserModel {
         return notice
     }
 
-    /// Keeps the notice up while the pointer is over it (`true`), and lets it go a moment after
-    /// the pointer leaves.
-    public func holdNotice(_ held: Bool) {
-        isNoticeHeld = held
-        if !held { scheduleNoticeDismissal(after: .seconds(1.5)) }
+    /// Keeps the notice `id` up while the pointer is over it (`true`), and lets it go a moment
+    /// after the pointer leaves or the notice's view goes. A hold belongs to one notice: a newer
+    /// notice, shown where the pointer rests, keeps its own time (macOS doesn't report the
+    /// pointer leaving a view that was replaced under it).
+    public func holdNotice(_ held: Bool, id: Notice.ID) {
+        if held {
+            heldNoticeID = id
+        } else if heldNoticeID == id {
+            heldNoticeID = nil
+            if notice?.id == id { scheduleNoticeDismissal(after: .seconds(1.5)) }
+        }
     }
 
     /// Runs the notice's Undo and closes it.
@@ -73,7 +79,7 @@ extension BrowserModel {
     public func dismissNotice() {
         noticeDismissal?.cancel()
         notice = nil
-        isNoticeHeld = false
+        heldNoticeID = nil
     }
 
     private func scheduleNoticeDismissal(after delay: Duration? = nil) {
@@ -83,7 +89,7 @@ extension BrowserModel {
         let sleep = noticeSleep
         noticeDismissal = Task { [weak self] in
             await sleep(delay)
-            guard let self, !Task.isCancelled, self.notice?.id == shown.id, !self.isNoticeHeld else { return }
+            guard let self, !Task.isCancelled, self.notice?.id == shown.id, self.heldNoticeID != shown.id else { return }
             self.notice = nil
         }
     }
@@ -91,9 +97,10 @@ extension BrowserModel {
 
 #if os(macOS)
 /// The notice at the bottom of the page column: a small capsule with the message and, when the
-/// action can be undone, an Undo button. It never takes focus (Undo is a VoiceOver action and a
-/// click away), keeps itself up while the pointer is over it, and fades instead of sliding with
-/// Reduce Motion.
+/// action can be undone, an Undo button. It never takes focus on its own (Undo is a VoiceOver
+/// action, a click, or a Tab away with Full Keyboard Access), keeps itself up while the pointer is
+/// over it, and fades instead of sliding with Reduce Motion. Unlike other overlays over pages it
+/// takes the pointer, for Undo and the hold; it's small and brief.
 struct NoticeView: View {
     let model: BrowserModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -115,10 +122,10 @@ struct NoticeView: View {
             Text(notice.message)
                 .lineLimit(1)
             if notice.canUndo {
+                // Reachable with Full Keyboard Access (Tab), but never focused on its own.
                 Button("Undo") { Task { await model.undoNotice() } }
                     .buttonStyle(.borderless)
                     .fontWeight(.semibold)
-                    .focusable(false)
                     .accessibilityIdentifier("noticeUndoButton")
             }
         }
@@ -128,7 +135,8 @@ struct NoticeView: View {
         .background(.regularMaterial, in: .capsule)
         .overlay(Capsule().strokeBorder(.separator, lineWidth: 0.5))
         .shadow(color: .black.opacity(0.15), radius: 10, y: 4)
-        .onHover { model.holdNotice($0) }
+        .onHover { model.holdNotice($0, id: notice.id) }
+        .onDisappear { model.holdNotice(false, id: notice.id) }
         // Contains, rather than combines, so the Undo button stays a button of its own.
         .accessibilityElement(children: .contain)
         .accessibilityLabel(notice.message)

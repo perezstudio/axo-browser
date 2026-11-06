@@ -1,19 +1,21 @@
 import AxoCore
 import AxoWebTestSupport
 import Foundation
-import Synchronization
 import Observation
+import Synchronization
 import Testing
 @testable import AxoWeb
 
-/// ``WebViewPool/liveness``: which tabs have a live page, observable, so sidebar rows can dim
-/// unloaded tabs (#72) and show loading (#70) without polling.
+/// ``WebViewPool/liveness(for:)``: each tab's liveness, observable on its own, so a sidebar row
+/// redraws only when its own tab becomes live or not, its page is replaced, or it starts or
+/// stops loading (#70, #72).
 @MainActor
 struct LivenessTests {
     let engine = FakeEngine()
     let pool: WebViewPool
     let profileID = UUID()
     let tab = Tab.testTab(url: URL(string: "https://example.com/start")!)
+    let other = Tab.testTab(url: URL(string: "https://example.com/other")!)
 
     init() {
         pool = WebViewPool.withFakeEngine(engine)
@@ -24,20 +26,31 @@ struct LivenessTests {
         for _ in 0..<5 { await Task.yield() }
     }
 
-    /// Whether reading `liveness` gets told when `change` runs.
-    private func notifies(_ change: () async -> Void) async -> Bool {
+    /// Whether a view reading `tabID`'s liveness and loading flag is told when `change` runs.
+    private func notifies(_ tabID: Tab.ID, _ change: () async -> Void) async -> Bool {
+        let entry = pool.liveness(for: tabID)
         let changed = Flag()
-        withObservationTracking { _ = pool.liveness.liveTabIDs } onChange: { changed.set() }
+        withObservationTracking { _ = (entry.isLive, entry.isLoading) } onChange: { changed.set() }
         await change()
         await settle()
         return changed.isSet
     }
 
     @Test func aPageMadeForATabMakesItLive() async {
-        #expect(!pool.liveness.isLive(tab.id))
-        let notified = await notifies { pool.page(for: tab, profileID: profileID) }
+        #expect(!pool.liveness(for: tab.id).isLive)
+        let notified = await notifies(tab.id) { pool.page(for: tab, profileID: profileID) }
         #expect(notified)
-        #expect(pool.liveness.isLive(tab.id))
+        #expect(pool.liveness(for: tab.id).isLive)
+    }
+
+    @Test func anotherTabChangingDoesntNotify() async {
+        pool.page(for: tab, profileID: profileID)
+        await settle()
+        let notified = await notifies(tab.id) {
+            pool.page(for: other, profileID: profileID)
+            pool.discard(other.id)
+        }
+        #expect(!notified, "Rows redraw only for their own tab")
     }
 
     @Test func hibernatingAndClosingMakeItNotLive() async throws {
@@ -46,16 +59,16 @@ struct LivenessTests {
         let page = try #require(engine.pages.last)
         page.finishLoad()
 
-        let notified = await notifies { _ = await pool.hibernate(tab.id) }
+        let notified = await notifies(tab.id) { _ = await pool.hibernate(tab.id) }
         #expect(notified)
-        #expect(!pool.liveness.isLive(tab.id))
+        #expect(!pool.liveness(for: tab.id).isLive)
 
         pool.page(for: tab, profileID: profileID) // wakes
         await settle()
-        #expect(pool.liveness.isLive(tab.id))
+        #expect(pool.liveness(for: tab.id).isLive)
         pool.discard(tab.id)
         await settle()
-        #expect(!pool.liveness.isLive(tab.id))
+        #expect(!pool.liveness(for: tab.id).isLive)
     }
 
     @Test func aKeptDiscardedPageIsntLive() async throws {
@@ -65,15 +78,42 @@ struct LivenessTests {
         page.finishLoad()
         #expect(await pool.hibernate(tab.id))
         await settle()
-        #expect(!pool.liveness.isLive(tab.id), "Kept by the engine, but without its renderer")
+        #expect(!pool.liveness(for: tab.id).isLive, "Kept by the engine, but without its renderer")
     }
 
-    @Test func loadingProgressDoesntNotify() async throws {
+    @Test func loadingNotifiesButProgressDoesnt() async throws {
         pool.page(for: tab, profileID: profileID)
         await settle()
         let page = try #require(engine.pages.last)
-        let notified = await notifies { page.navigate(to: URL(string: "https://example.com/next")!, title: "Next") }
-        #expect(!notified, "Rows don't redraw as pages load")
+        let started = await notifies(tab.id) {
+            page.isLoading = true
+            page.delegate?.pageStateDidChange(page)
+        }
+        #expect(started)
+        #expect(pool.liveness(for: tab.id).isLoading)
+
+        let progressed = await notifies(tab.id) {
+            page.estimatedProgress = 0.5
+            page.delegate?.pageStateDidChange(page)
+        }
+        #expect(!progressed, "Rows don't redraw as a page's progress moves")
+    }
+
+    @Test func aReplacedPageIsFollowed() async throws {
+        pool.page(for: tab, profileID: profileID)
+        await settle()
+        let first = try #require(engine.pages.last)
+        first.isLoading = true
+        first.delegate?.pageStateDidChange(first)
+        #expect(pool.liveness(for: tab.id).isLoading)
+
+        // Replaced in one turn (another profile's page, a page the engine opened): the old
+        // page's state, stuck loading, mustn't keep the row spinning.
+        pool.discard(tab.id)
+        pool.page(for: tab, profileID: profileID)
+        await settle()
+        #expect(pool.liveness(for: tab.id).isLive)
+        #expect(!pool.liveness(for: tab.id).isLoading)
     }
 }
 

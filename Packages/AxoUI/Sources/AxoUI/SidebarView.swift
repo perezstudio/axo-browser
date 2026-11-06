@@ -101,7 +101,7 @@ extension SidebarView {
     @ViewBuilder
     private func rows(for tabs: [AxoCore.Tab], pinned: Bool) -> some View {
         ForEach(tabs) { tab in
-            SidebarTabRow(model: model, tab: tab)
+            SidebarTabRow(model: model, tab: tab, isSelected: model.rowHoldsSelection(tab))
                 .tag(PinnedItem.tab(tab.id))
                 .contextMenu { menu(for: tab) }
                 .sidebarMoveActions(model: model, item: .tab(tab.id))
@@ -139,14 +139,24 @@ extension SidebarView {
 struct SidebarTabRow: View {
     let model: BrowserModel
     let tab: AxoCore.Tab
+    /// Whether the row holds the selection, from the parent, so rows don't each read it.
+    let isSelected: Bool
     @State private var isHovering = false
 
-    /// What the button and the accessibility action are called.
-    private var closeTitle: String { tab.isPinned ? "Unload Tab" : "Close Tab" }
+    /// What the button and the accessibility action are called. On a split row it closes the
+    /// row's tab, the first pane, so it names it.
+    private var closeTitle: String {
+        let verb = tab.isPinned ? "Unload" : "Close"
+        return model.split(of: tab.id) == nil ? "\(verb) Tab" : "\(verb) \(TabRow.displayTitle(for: tab))"
+    }
 
     var body: some View {
         HStack(spacing: 4) {
             content
+                // On the row's own element, which VoiceOver focuses, and always there.
+                .accessibilityActions {
+                    Button(closeTitle) { close() }
+                }
                 .frame(maxWidth: .infinity, alignment: .leading)
             if isHovering {
                 // A borderless button in a List row gets its click without selecting the row
@@ -166,9 +176,6 @@ struct SidebarTabRow: View {
         // (hibernated ones included).
         .contentShape(.rect)
         .onHover { isHovering = $0 }
-        .accessibilityActions {
-            Button(closeTitle) { close() }
-        }
     }
 
     @ViewBuilder
@@ -178,10 +185,10 @@ struct SidebarTabRow: View {
             SplitRow(panes: panes, favicon: model.favicon(for:),
                      isLoading: panes.contains { model.isTabLoading($0.id) },
                      // Dimmed only when every pane is unloaded.
-                     isDimmed: panes.allSatisfy { model.isTabDimmed($0.id) })
+                     isDimmed: panes.allSatisfy { model.isTabDimmed($0.id, isSelected: isSelected) })
         } else {
             TabRow(tab: tab, favicon: model.favicon(for: tab),
-                   isLoading: model.isTabLoading(tab.id), isDimmed: model.isTabDimmed(tab.id))
+                   isLoading: model.isTabLoading(tab.id), isDimmed: model.isTabDimmed(tab.id, isSelected: isSelected))
         }
     }
 
@@ -259,7 +266,7 @@ struct TabContextMenu: View {
                 .disabled(!tab.hasLeftHome)
             Button("Unpin Tab") { Task { await model.setPinned(false, tabID: tab.id) } }
             Divider()
-            Button("Unload Tab") { Task { await model.closeTab(tab.id) } }
+            Button("Unload Tab") { Task { await model.closeTab(tab.id, byPerson: true) } }
         } else {
             Button("Pin Tab") { Task { await model.setPinned(true, tabID: tab.id) } }
             Divider()
@@ -280,7 +287,7 @@ struct PinnedLevel: View {
         ForEach(nodes) { node in
             switch node {
             case .tab(let tab):
-                SidebarTabRow(model: model, tab: tab)
+                SidebarTabRow(model: model, tab: tab, isSelected: model.rowHoldsSelection(tab))
                     .tag(PinnedItem.tab(tab.id))
                     .contextMenu { TabContextMenu(model: model, tab: tab) }
                     .sidebarMoveActions(model: model, item: .tab(tab.id))

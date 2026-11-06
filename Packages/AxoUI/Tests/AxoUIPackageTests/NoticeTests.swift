@@ -136,11 +136,12 @@ struct NoticeTests {
         _ = try await openPage(URL(string: "https://example.com/")!)
         model.copyShownPageLink()
         await timerStarted()
-        model.holdNotice(true)
+        let held = try #require(model.notice)
+        model.holdNotice(true, id: held.id)
         await timers.elapse()
         #expect(model.notice != nil, "Held while the pointer is over it")
 
-        model.holdNotice(false)
+        model.holdNotice(false, id: held.id)
         await timerStarted()
         await timers.elapse()
         #expect(model.notice == nil, "Goes a moment after the pointer leaves")
@@ -172,5 +173,51 @@ struct NoticeTests {
 
         await model.createSpace(name: "Work")
         #expect(model.notice == nil)
+    }
+
+    @Test func aNewNoticeWhereThePointerRestsKeepsItsOwnTime() async throws {
+        let id = try await openPage(URL(string: "https://example.com/")!)
+        _ = try await openPage(URL(string: "https://example.org/")!)
+        model.copyShownPageLink()
+        let first = try #require(model.notice)
+        model.holdNotice(true, id: first.id) // the pointer rests on it
+
+        // ⌘W with the pointer still there: macOS never says it left the replaced view.
+        model.select(id)
+        await model.closeSelectedTab()
+        let second = try #require(model.notice)
+        #expect(second.id != first.id)
+        await timerStarted(count: 2)
+        await timers.elapse()
+        #expect(model.notice == nil, "The old notice's hold doesn't keep the new one up")
+    }
+
+    @Test func undoDoesNothingOnceTheTabIsBack() async throws {
+        let id = try await openPage(URL(string: "https://example.com/")!)
+        _ = try await openPage(URL(string: "https://example.org/")!)
+        model.select(id)
+        await model.closeSelectedTab()
+        let undo = try #require(model.notice?.undo)
+        await model.reopenLastClosedTab() // ⇧⌘T first
+        let other = try #require(model.tabs.first { $0.id != id }?.id)
+        model.select(other)
+
+        await undo()
+        #expect(model.selectedTabID == other, "Nothing to undo: it's already back")
+        #expect(model.tabs.filter { $0.id == id }.count == 1)
+    }
+
+    @Test func undoDoesNothingInAnotherSpace() async throws {
+        let id = try await openPage(URL(string: "https://example.com/")!)
+        _ = try await openPage(URL(string: "https://example.org/")!)
+        model.select(id)
+        await model.closeSelectedTab()
+        let undo = try #require(model.notice?.undo)
+
+        await model.createSpace(name: "Work")
+        await undo()
+        #expect(model.space?.name == "Work")
+        #expect(model.selectedTabID != id, "Not restored into a Space it isn't in")
+        #expect(!model.tabs.contains { $0.id == id })
     }
 }
