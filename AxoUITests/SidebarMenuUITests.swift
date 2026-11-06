@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 
 /// Every item in the sidebar's context menus: tabs, pinned tabs, split views, folders,
@@ -260,6 +261,65 @@ final class SidebarMenuUITests: XCTestCase {
         choose("Separate Split View", on: row, in: app)
         XCTAssertTrue(app.descendants(matching: .any)["splitView"].waitForNonExistence(timeout: 5))
         XCTAssertEqual(tabRows(in: sidebar).sorted(), ["Docs", "Notes"])
+    }
+
+    /// A tab's context menu duplicates it, copies its link, moves it to another of the profile's
+    /// Spaces, and closes the other tabs or those below it (#81).
+    @MainActor
+    func testTabContextMenuActions() throws {
+        let (app, sidebar) = launchApp()
+        for title in ["Alpha", "Beta", "Gamma", "Delta"] {
+            openTab(title, in: app, sidebar: sidebar)
+        }
+
+        // Duplicate: a second Alpha, selected.
+        choose("Duplicate Tab", on: sidebar.staticTexts["Alpha"], in: app)
+        expectation(for: NSPredicate(format: "count == 2"), evaluatedWith: sidebar.staticTexts.matching(NSPredicate(format: "label == 'Alpha'")))
+        waitForExpectations(timeout: 10)
+
+        // Copy Link: the tab's address, on the test run's own pasteboard.
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("com.perezstudio.Axo.testing"))
+        pasteboard.clearContents()
+        choose("Copy Link", on: sidebar.staticTexts["Gamma"], in: app)
+        let copied = expectation(description: "the link is copied")
+        Task { @MainActor in
+            for _ in 0..<50 where pasteboard.string(forType: .string) == nil {
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            if pasteboard.string(forType: .string)?.contains("Gamma") == true { copied.fulfill() }
+        }
+        wait(for: [copied], timeout: 10)
+
+        // Close Tabs Below Gamma: Delta goes.
+        choose("Close Tabs Below", on: sidebar.staticTexts["Gamma"], in: app)
+        XCTAssertTrue(sidebar.staticTexts["Delta"].waitForNonExistence(timeout: 5))
+
+        // Move to Space: Beta goes to a new Space of the same profile.
+        app.buttons["newSpaceButton"].click()
+        let nameField = app.textFields["spaceNameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.click()
+        nameField.typeText("Work")
+        app.buttons["createSpaceButton"].click()
+        XCTAssertTrue(sidebar.staticTexts["Work"].waitForExistence(timeout: 5))
+        app.typeKey("1", modifierFlags: .control)
+        XCTAssertTrue(sidebar.staticTexts["Beta"].waitForExistence(timeout: 5))
+        sidebar.staticTexts["Beta"].rightClick()
+        let moveMenu = app.windows.firstMatch.menuItems["Move to Space"]
+        XCTAssertTrue(moveMenu.waitForExistence(timeout: 5))
+        moveMenu.hover()
+        let work = app.windows.firstMatch.menuItems["Work"]
+        XCTAssertTrue(work.waitForExistence(timeout: 5))
+        work.click()
+        XCTAssertTrue(sidebar.staticTexts["Beta"].waitForNonExistence(timeout: 5))
+
+        // Close Other Tabs on Gamma: both Alphas go.
+        choose("Close Other Tabs", on: sidebar.staticTexts["Gamma"], in: app)
+        XCTAssertTrue(sidebar.staticTexts["Alpha"].waitForNonExistence(timeout: 5))
+        XCTAssertEqual(tabRows(in: sidebar), ["Gamma"])
+
+        app.typeKey("2", modifierFlags: .control)
+        XCTAssertTrue(sidebar.staticTexts["Beta"].waitForExistence(timeout: 5), "Beta is in Work")
     }
 
     /// The tab items on a split's row act on the split: Pin Tab and Unpin Tab pin it whole, Move

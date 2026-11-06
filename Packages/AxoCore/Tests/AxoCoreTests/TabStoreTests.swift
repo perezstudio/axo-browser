@@ -238,4 +238,43 @@ struct TabStoreTests {
         #expect(try await store.searchTabs(matching: "").map(\.id) == [mail.id, docs.id], "Most recently used first")
         #expect(try await store.searchTabs(matching: "", limit: 1).count == 1)
     }
+
+    // MARK: Moving to another Space
+
+    @Test func movingATabToAnotherSpaceAppendsItThere() async throws {
+        let home = try await store.bootstrap()
+        let work = try await store.createSpace(name: "Work", profileID: home.profileID)
+        let tab = try await store.openTab(url: url("a"), title: "A", in: home.id)
+        try await store.openTab(url: url("b"), title: "B", in: work.id)
+
+        try await store.moveTab(id: tab.id, toSpace: work.id)
+        #expect(try await titles(in: home).isEmpty)
+        #expect(try await titles(in: work) == ["B", "A"])
+    }
+
+    @Test func aMovedPinnedTabLeavesItsFolderAndStaysPinned() async throws {
+        let home = try await store.bootstrap()
+        let work = try await store.createSpace(name: "Work", profileID: home.profileID)
+        let tab = try await store.openTab(url: url("a"), title: "A", in: home.id)
+        try await store.setPinned(true, tabID: tab.id)
+        let folder = try await store.createFolder(named: "Reading", in: home.id)
+        try await store.movePinnedItem(.tab(tab.id), into: folder.id, after: nil)
+
+        try await store.moveTab(id: tab.id, toSpace: work.id)
+        let moved = try #require(try await store.tab(id: tab.id))
+        #expect(moved.spaceID == work.id)
+        #expect(moved.isPinned)
+        #expect(moved.folderID == nil, "A folder belongs to its Space")
+    }
+
+    @Test func aMovedTabLeavesItsSplit() async throws {
+        let home = try await store.bootstrap()
+        let work = try await store.createSpace(name: "Work", profileID: home.profileID)
+        let a = try await store.openTab(url: url("a"), title: "A", in: home.id)
+        let b = try await store.openTab(url: url("b"), title: "B", in: home.id)
+        _ = try await store.addToSplit(b.id, with: a.id)
+
+        try await store.moveTab(id: b.id, toSpace: work.id)
+        #expect(try await store.tab(id: b.id)?.splitID == nil)
+    }
 }

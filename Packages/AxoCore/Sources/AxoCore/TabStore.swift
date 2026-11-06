@@ -435,6 +435,23 @@ public final class TabStore: Sendable {
         }
     }
 
+    /// Moves a tab to the end of another Space's section (pinned or not), out of any folder or
+    /// split. Moving to its own Space does nothing.
+    ///
+    /// - Throws: ``TabStoreError/tabNotFound(_:)`` if the tab doesn't exist.
+    public func moveTab(id: Tab.ID, toSpace spaceID: Space.ID) async throws {
+        try await database.writer.write { db in
+            guard var tab = try Tab.fetchOne(db, id: id) else { throw TabStoreError.tabNotFound(id) }
+            guard tab.spaceID != spaceID else { return }
+            try Self.leaveSplit(id, db)
+            tab = try Tab.fetchOne(db, id: id) ?? tab
+            tab.sortKey = try Self.sortKey(for: .end, in: spaceID, pinned: tab.isPinned, folder: nil, excluding: id, db)
+            tab.spaceID = spaceID
+            tab.folderID = nil
+            try tab.update(db)
+        }
+    }
+
     /// Archives a tab: it leaves the sidebar but can be restored. Pinned tabs can be archived too
     /// (when unpinned first is preferred); archiving an archived tab does nothing.
     public func archiveTab(id: Tab.ID, at date: Date = Date()) async throws {
