@@ -385,6 +385,9 @@ public final class BrowserModel {
             Task { await self.adoptEngineOpenedPage(opened) }
         }
         pool.onEngineClosedTab = { [weak self] id in
+            // Logged, so a tab the engine closes (an extension, a page's window.close(), Chrome
+            // itself) can be told from one the person closed.
+            self?.logger.notice("The engine closed tab \(id, privacy: .public)")
             Task { await self?.closeTab(id) }
         }
         // Only tabs this window shows; another profile's window can't change the selection here.
@@ -863,6 +866,7 @@ public final class BrowserModel {
     /// `byPerson` (⌘W, the context menu) shows a notice with Undo for an unpinned tab; closes
     /// the engine or an extension asks for are only announced.
     public func closeTab(_ id: AxoCore.Tab.ID, byPerson: Bool = false) async {
+        logger.notice("Closing tab \(id, privacy: .public)\(byPerson ? " (by the person)" : "", privacy: .public); selected: \(self.selectedTabID?.uuidString ?? "none", privacy: .public)")
         if miniWindows.contains(where: { $0.id == id }) {
             closeMiniWindowForEngine(id)
             return
