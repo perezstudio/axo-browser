@@ -23,6 +23,16 @@ public enum PinnedNode: Identifiable, Hashable {
         }
     }
 
+    /// Every pinned tab in `tree`, at any depth.
+    static func allTabs(in tree: [PinnedNode]) -> [AxoCore.Tab] {
+        tree.flatMap { node -> [AxoCore.Tab] in
+            switch node {
+            case .tab(let tab): [tab]
+            case .folder(_, let children): allTabs(in: children)
+            }
+        }
+    }
+
     /// Builds the tree: at each level, folders and pinned tabs ordered by sort key (ties by ID).
     static func tree(folders: [Folder], pinnedTabs: [AxoCore.Tab]) -> [PinnedNode] {
         let foldersByParent = Dictionary(grouping: folders, by: \.parentID)

@@ -496,10 +496,12 @@ NS_SWIFT_UI_ACTOR
 /// discarded.
 - (void)loadIfDiscarded;
 
-/// Back and forward history, serialized, for hibernation. `nil` while unsupported (hibernation
-/// uses `-discard`, which keeps history).
+/// Back and forward history, serialized in Chrome's session format, for Duplicate Tab (handed to
+/// a new page's `-restoreNavigationState:`). `nil` before the page has committed a navigation.
+/// (Hibernation uses `-discard`, which keeps history in the page.)
 @property(nonatomic, readonly, nullable) NSData* navigationState;
-/// Restores history saved from `navigationState` and loads its current entry.
+/// Restores history saved from `navigationState` and loads its current entry. Only on a page with
+/// no history of its own yet (a new page); otherwise, or for data it can't read, it does nothing.
 - (void)restoreNavigationState:(NSData*)state;
 
 - (void)loadURL:(NSURL*)url;
