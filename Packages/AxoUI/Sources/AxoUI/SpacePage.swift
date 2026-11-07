@@ -31,6 +31,8 @@ struct SpacePage: View {
                 SidebarSections(model: model, data: data)
             }
         }
+        // The shown page's list is the sidebar UI tests and VoiceOver find, as before the pages.
+        .accessibilityIdentifier(isShown ? "sidebar" : "")
         // Favorites sit above the pinned tabs, each Space's page showing all of its profile's.
         .safeAreaInset(edge: .top, spacing: 0) {
             Group {

@@ -90,7 +90,9 @@ struct SidebarView: View {
 extension SidebarView {
     /// Every Space's page side by side, resting on the shown Space's and moved by a swipe that
     /// locks onto a page when the fingers lift. Only the shown page takes clicks and is in the
-    /// accessibility tree.
+    /// accessibility tree, where its list is the `sidebar` element. No accessibility container
+    /// wraps the pages: one around the lists' AppKit views gave them two parents (the audit's
+    /// "Parent/Child mismatch").
     private var spacePages: some View {
         GeometryReader { proxy in
             // The pages are an overlay of a sidebar-sized base, so the strip, as wide as all of
@@ -112,8 +114,6 @@ extension SidebarView {
                 .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .clipped()
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("sidebar")
     }
 
     /// How far page `index`'s favorites shift against its movement. Between the resting page and
