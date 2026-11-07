@@ -1,5 +1,6 @@
 import AxoCore
 import Foundation
+import Observation
 #if os(macOS)
 import AppKit
 #endif
@@ -137,7 +138,20 @@ public final class WebViewPool {
     private var awaitingAdoption: [Tab.ID: Profile.ID] = [:]
 
     private let now: () -> Date
-    private var live: [Tab.ID: LiveTab] = [:]
+    private var live: [Tab.ID: LiveTab] = [:] {
+        didSet { scheduleLivenessUpdate() }
+    }
+    /// Which tabs have a live page, observable per tab, for the sidebar (dimmed rows, loading
+    /// spinners). It follows the pool a turn later, since pages are made while SwiftUI updates
+    /// views.
+    public let liveness = PageLiveness()
+    private var isLivenessUpdatePending = false
+
+    /// The observable liveness of one tab, which a view reading it redraws for only when that
+    /// tab becomes live or not, its page is replaced, or its page starts or stops loading.
+    public func liveness(for tabID: Tab.ID) -> TabLiveness {
+        liveness.entry(for: tabID) { [live] in live[tabID]?.state }
+    }
     private var hibernated: [Tab.ID: HibernatedTab] = [:]
     private var visibleCounts: [Tab.ID: Int] = [:]
     /// Saves permission answers across launches. Set by the app. When it's `nil`, answers are
@@ -281,6 +295,17 @@ public final class WebViewPool {
     private func tabID(of page: any EnginePage) -> Tab.ID? {
         live.first { $0.value.page === page }?.key
             ?? hibernated.first { $0.value.kept?.page === page }?.key
+    }
+
+    /// Brings ``liveness`` up to date on the next turn, once however many changes come first.
+    private func scheduleLivenessUpdate() {
+        guard !isLivenessUpdatePending else { return }
+        isLivenessUpdatePending = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.isLivenessUpdatePending = false
+            self.liveness.update { self.live[$0]?.state }
+        }
     }
 
     /// The tab's page if it is live, without creating one.
@@ -812,4 +837,47 @@ public struct LinkClick: Sendable {
         }
         return site(url) != site(sourceURL)
     }
+}
+
+/// Which tabs have a live page (not hibernated, unloaded, or never loaded), observable per tab
+/// (``TabLiveness``), so a view redraws only when its own tab changes, not when any tab does.
+@MainActor
+public final class PageLiveness {
+    private var entries: [Tab.ID: TabLiveness] = [:]
+
+    nonisolated init() {}
+
+    /// The tab's entry, made on first use with its current state.
+    func entry(for tabID: Tab.ID, current: () -> WebTabState?) -> TabLiveness {
+        if let entry = entries[tabID] { return entry }
+        let entry = TabLiveness(state: current())
+        entries[tabID] = entry
+        return entry
+    }
+
+    /// Brings every entry up to date, changing only those whose page changed.
+    func update(state: (Tab.ID) -> WebTabState?) {
+        for (tabID, entry) in entries {
+            let now = state(tabID)
+            if entry.state !== now { entry.state = now }
+        }
+    }
+
+    /// Whether `tabID` has a live page, as of the last update.
+    public func isLive(_ tabID: Tab.ID) -> Bool { entries[tabID]?.isLive ?? false }
+}
+
+/// One tab's liveness: whether it has a live page, and that page's state.
+@MainActor
+@Observable
+public final class TabLiveness {
+    /// The live page's state, or `nil` without a live page. Replaced when the page is.
+    public internal(set) var state: WebTabState?
+
+    init(state: WebTabState?) { self.state = state }
+
+    /// Whether the tab has a live page.
+    public var isLive: Bool { state != nil }
+    /// Whether its page is loading. Reads only the loading flag, never progress.
+    public var isLoading: Bool { state?.isLoading ?? false }
 }

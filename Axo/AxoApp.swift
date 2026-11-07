@@ -244,6 +244,8 @@ enum AppEnvironment {
                 pasteboard.clearContents()
                 pasteboard.setString(url.absoluteString, forType: .string)
             }
+            // Notices stay longer, so a slow UI query still finds them.
+            model.noticeSleep = { duration in try? await Task.sleep(for: duration * 6) }
         }
         browserModel = model
         return model

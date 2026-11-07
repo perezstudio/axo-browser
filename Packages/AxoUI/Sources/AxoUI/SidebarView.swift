@@ -101,7 +101,7 @@ extension SidebarView {
     @ViewBuilder
     private func rows(for tabs: [AxoCore.Tab], pinned: Bool) -> some View {
         ForEach(tabs) { tab in
-            SidebarTabRow(model: model, tab: tab)
+            SidebarTabRow(model: model, tab: tab, isSelected: model.rowHoldsSelection(tab))
                 .tag(PinnedItem.tab(tab.id))
                 .contextMenu { menu(for: tab) }
                 .sidebarMoveActions(model: model, item: .tab(tab.id))
@@ -133,17 +133,69 @@ extension SidebarView {
 #endif
 
 
-/// A sidebar row for a tab, or for a split view when the tab's split stands behind it.
+/// A sidebar row for a tab, or for a split view when the tab's split stands behind it, with a
+/// close (or, for a pinned tab, unload) button while the pointer is over it (#69), a spinner
+/// while its page loads (#70), and dimmed while it has no live page (#72).
 struct SidebarTabRow: View {
     let model: BrowserModel
     let tab: AxoCore.Tab
+    /// Whether the row holds the selection, from the parent, so rows don't each read it.
+    let isSelected: Bool
+    @State private var isHovering = false
+
+    /// What the button and the accessibility action are called. On a split row it closes the
+    /// row's tab, the first pane, so it names it.
+    private var closeTitle: String {
+        let verb = tab.isPinned ? "Unload" : "Close"
+        return model.split(of: tab.id) == nil ? "\(verb) Tab" : "\(verb) \(TabRow.displayTitle(for: tab))"
+    }
 
     var body: some View {
-        if let split = model.split(of: tab.id) {
-            SplitRow(panes: model.panes(of: split.id), favicon: model.favicon(for:))
-        } else {
-            TabRow(tab: tab, favicon: model.favicon(for: tab))
+        HStack(spacing: 4) {
+            content
+                // On the row's own element, which VoiceOver focuses, and always there.
+                .accessibilityActions {
+                    Button(closeTitle) { close() }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if isHovering {
+                // A borderless button in a List row gets its click without selecting the row
+                // first; the square is drawn in its label.
+                Button { close() } label: {
+                    TabRowCloseSquare(systemImage: tab.isPinned ? "minus" : "xmark")
+                }
+                .buttonStyle(.borderless)
+                .help(closeTitle)
+                .accessibilityLabel(closeTitle)
+                // Shown only under the pointer; VoiceOver and the keyboard also get the row's
+                // action, which is always there.
+                .accessibilityIdentifier("tabRowCloseButton")
+            }
         }
+        // The whole row's width counts as over it, not just its icon and title, for every row
+        // (hibernated ones included).
+        .contentShape(.rect)
+        .onHover { isHovering = $0 }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let split = model.split(of: tab.id) {
+            let panes = model.panes(of: split.id)
+            SplitRow(panes: panes, favicon: model.favicon(for:),
+                     isLoading: panes.contains { model.isTabLoading($0.id) },
+                     // Dimmed only when every pane is unloaded.
+                     isDimmed: panes.allSatisfy { model.isTabDimmed($0.id, isSelected: isSelected) })
+        } else {
+            TabRow(tab: tab, favicon: model.favicon(for: tab),
+                   isLoading: model.isTabLoading(tab.id), isDimmed: model.isTabDimmed(tab.id, isSelected: isSelected))
+        }
+    }
+
+    /// Closes the tab, or unloads a pinned one, as its context menu does (for a split, the
+    /// row's tab, whose pane leaves the split).
+    private func close() {
+        Task { await model.closeTab(tab.id, byPerson: true) }
     }
 }
 
@@ -151,25 +203,35 @@ struct SidebarTabRow: View {
 struct SplitRow: View {
     let panes: [AxoCore.Tab]
     let favicon: (AxoCore.Tab) -> PlatformImage?
+    var isLoading = false
+    var isDimmed = false
 
     var body: some View {
         Label {
             Text(panes.map(TabRow.displayTitle(for:)).joined(separator: " | "))
+                .foregroundStyle(isDimmed ? .secondary : .primary)
         } icon: {
             HStack(spacing: 2) {
-                ForEach(panes) { pane in
-                    if let image = favicon(pane) {
-                        Image(platformImage: image).resizable().interpolation(.high)
-                            .frame(width: 14, height: 14)
-                            .clipShape(.rect(cornerRadius: 3))
-                    } else {
-                        Image(systemName: "globe").font(.system(size: 11))
+                if isLoading {
+                    TabRowSpinner()
+                } else {
+                    ForEach(panes) { pane in
+                        if let image = favicon(pane) {
+                            Image(platformImage: image).resizable().interpolation(.high)
+                                .frame(width: 14, height: 14)
+                                .clipShape(.rect(cornerRadius: 3))
+                        } else {
+                            Image(systemName: "globe").font(.system(size: 11))
+                        }
                     }
                 }
             }
+            .opacity(isDimmed ? TabRow.dimmedIconOpacity : 1)
             .accessibilityHidden(true)
         }
         .lineLimit(1)
+        // Only when there's state to tell: a value replaces the text a row exposes.
+        .modifier(StateValue(description: TabRow.stateDescription(isLoading: isLoading, isDimmed: isDimmed)))
         .help(panes.map(TabRow.displayTitle(for:)).joined(separator: "\n"))
         .accessibilityLabel("Split view: " + panes.map(TabRow.displayTitle(for:)).formatted(.list(type: .and)))
         .accessibilityIdentifier("splitRow")
@@ -205,11 +267,11 @@ struct TabContextMenu: View {
                 .disabled(!tab.hasLeftHome)
             Button("Unpin Tab") { Task { await model.setPinned(false, tabID: tab.id) } }
             Divider()
-            Button("Unload Tab") { Task { await model.closeTab(tab.id) } }
+            Button("Unload Tab") { Task { await model.closeTab(tab.id, byPerson: true) } }
         } else {
             Button("Pin Tab") { Task { await model.setPinned(true, tabID: tab.id) } }
             Divider()
-            Button("Close Tab") { Task { await model.closeTab(tab.id) } }
+            Button("Close Tab") { Task { await model.closeTab(tab.id, byPerson: true) } }
         }
         Divider()
         MoveToFolderMenu(model: model, item: .tab(tab.id), current: tab.isPinned ? tab.folderID : nil, excluding: [])
@@ -226,7 +288,7 @@ struct PinnedLevel: View {
         ForEach(nodes) { node in
             switch node {
             case .tab(let tab):
-                SidebarTabRow(model: model, tab: tab)
+                SidebarTabRow(model: model, tab: tab, isSelected: model.rowHoldsSelection(tab))
                     .tag(PinnedItem.tab(tab.id))
                     .contextMenu { TabContextMenu(model: model, tab: tab) }
                     .sidebarMoveActions(model: model, item: .tab(tab.id))
@@ -326,33 +388,97 @@ extension View {
 struct TabRow: View {
     let tab: AxoCore.Tab
     let favicon: PlatformImage?
+    /// Whether its page is loading: a spinner takes the icon's place.
+    var isLoading = false
+    /// Whether it has no live page: the icon fades and the title turns secondary, which keeps
+    /// it readable in light and dark mode.
+    var isDimmed = false
+
+    /// How faded a dimmed row's icon is.
+    static let dimmedIconOpacity = 0.5
 
     var body: some View {
         Label {
             Text(Self.displayTitle(for: tab))
+                .foregroundStyle(isDimmed ? .secondary : .primary)
         } icon: {
-            if let favicon {
-                Image(platformImage: favicon)
-                    .resizable()
-                    .interpolation(.high)
-                    .frame(width: 16, height: 16)
-                    .clipShape(.rect(cornerRadius: 3))
-                    .accessibilityHidden(true)
-            } else {
-                Image(systemName: "globe")
+            Group {
+                if isLoading {
+                    TabRowSpinner()
+                } else if let favicon {
+                    Image(platformImage: favicon)
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(width: 16, height: 16)
+                        .clipShape(.rect(cornerRadius: 3))
+                } else {
+                    Image(systemName: "globe")
+                }
             }
+            .opacity(isDimmed ? Self.dimmedIconOpacity : 1)
+            .accessibilityHidden(true)
         }
         .lineLimit(1)
         .help(Self.displayTitle(for: tab))
         // The title is the label, so a value can add state without replacing it.
         .accessibilityLabel(Self.displayTitle(for: tab))
-        .accessibilityValue(tab.hasLeftHome ? "Away from pinned page" : "")
+        .accessibilityValue(Self.stateDescription(
+            isLoading: isLoading, isDimmed: isDimmed, isAwayFromHome: tab.hasLeftHome))
         .accessibilityIdentifier("tabRow")
+    }
+
+    /// The row's state for VoiceOver: "Loading", "Unloaded", and "Away from pinned page", as
+    /// they apply.
+    static func stateDescription(isLoading: Bool, isDimmed: Bool, isAwayFromHome: Bool = false) -> String {
+        [isLoading ? "Loading" : nil, isDimmed ? "Unloaded" : nil, isAwayFromHome ? "Away from pinned page" : nil]
+            .compactMap(\.self)
+            .joined(separator: ", ")
     }
 
     /// The page title, or the host (or full URL) for pages without one.
     static func displayTitle(for tab: AxoCore.Tab) -> String {
         if !tab.title.isEmpty { return tab.title }
         return tab.url.host() ?? tab.url.absoluteString
+    }
+}
+
+/// The small spinner a row shows in place of its icon while its page loads, as Arc does.
+struct TabRowSpinner: View {
+    var body: some View {
+        ProgressView()
+            .controlSize(.mini)
+            .frame(width: 16, height: 16)
+    }
+}
+
+/// The row's close button's face: a small square with rounded corners, like an app icon, on a
+/// light fill that darkens under the pointer.
+struct TabRowCloseSquare: View {
+    let systemImage: String
+    @State private var isHovering = false
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(.secondary)
+            .frame(width: 20, height: 20)
+            .background(isHovering ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.quaternary.opacity(0.5)),
+                        in: .rect(cornerRadius: 5, style: .continuous))
+            .contentShape(.rect(cornerRadius: 5, style: .continuous))
+            .onHover { isHovering = $0 }
+    }
+}
+
+/// Adds a row's state as its accessibility value, but only when there's some: an empty value
+/// would still replace the text the row exposes.
+private struct StateValue: ViewModifier {
+    let description: String
+
+    func body(content: Content) -> some View {
+        if description.isEmpty {
+            content
+        } else {
+            content.accessibilityValue(description)
+        }
     }
 }

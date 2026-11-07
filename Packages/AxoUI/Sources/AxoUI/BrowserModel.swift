@@ -97,6 +97,14 @@ public final class BrowserModel {
     /// the address in), as the window last reported. Only while that bar is on screen; the
     /// command bar opens otherwise.
     public var editsAddressInSidebar = false
+    /// The notice showing (``postNotice(_:placement:undo:)``), if any.
+    public internal(set) var notice: Notice?
+    /// The notice the pointer is over, which keeps it up.
+    var heldNoticeID: Notice.ID?
+    @ObservationIgnored var noticeDismissal: Task<Void, Never>?
+    /// Waits out a notice's time on screen. Tests replace it to decide when notices go, and the
+    /// app keeps notices up longer in test runs, where each UI query can take seconds.
+    @ObservationIgnored public var noticeSleep: @MainActor (Duration) async -> Void = { try? await Task.sleep(for: $0) }
     /// How many times ``focusPage()`` was asked, for tests.
     @ObservationIgnored var pageFocusRequestCount = 0
     /// Whether the shown page gets the loading bar along its top. Not while the address is edited
@@ -377,6 +385,9 @@ public final class BrowserModel {
             Task { await self.adoptEngineOpenedPage(opened) }
         }
         pool.onEngineClosedTab = { [weak self] id in
+            // Logged, so a tab the engine closes (an extension, a page's window.close(), Chrome
+            // itself) can be told from one the person closed.
+            self?.logger.notice("The engine closed tab \(id, privacy: .public)")
             Task { await self?.closeTab(id) }
         }
         // Only tabs this window shows; another profile's window can't change the selection here.
@@ -608,6 +619,8 @@ public final class BrowserModel {
     private func show(_ target: Space) async throws {
         if let current = space {
             selectedTabBySpace[current.id] = selectedTabID
+            // A notice's Undo would act on the Space left behind.
+            if current.id != target.id { dismissNotice() }
         }
         space = target
         await observeFavorites(for: target.profileID)
@@ -815,7 +828,7 @@ public final class BrowserModel {
     public func copyShownPageLink() {
         guard let url = peekPage?.url ?? peek?.tab.url ?? shownPageURL else { return }
         if let copyLink { copyLink(url) } else { copyToPasteboard(url) }
-        announce("Link copied")
+        postNotice("Link copied", placement: .addressBar)
     }
 
     /// Asks the windows to show or hide the sidebar's address bar.
@@ -850,7 +863,10 @@ public final class BrowserModel {
     /// Closes a tab, the way Arc does: an unpinned tab is archived (⇧⌘T or the archive brings
     /// it back), and a pinned tab stays in the sidebar but unloads and returns to its home page.
     /// If the tab was selected, the tab below it (or above, if it was last) is selected.
-    public func closeTab(_ id: AxoCore.Tab.ID) async {
+    /// `byPerson` (⌘W, the context menu) shows a notice with Undo for an unpinned tab; closes
+    /// the engine or an extension asks for are only announced.
+    public func closeTab(_ id: AxoCore.Tab.ID, byPerson: Bool = false) async {
+        logger.notice("Closing tab \(id, privacy: .public)\(byPerson ? " (by the person)" : "", privacy: .public); selected: \(self.selectedTabID?.uuidString ?? "none", privacy: .public)")
         if miniWindows.contains(where: { $0.id == id }) {
             closeMiniWindowForEngine(id)
             return
@@ -876,7 +892,19 @@ public final class BrowserModel {
             report(error, "Axo couldn't close the tab.")
             return
         }
-        announce(tab.isPinned ? "Unloaded \(TabRow.displayTitle(for: tab))" : "Closed \(TabRow.displayTitle(for: tab))")
+        if byPerson, !tab.isPinned {
+            let spaceID = space.id
+            postNotice("Closed \(TabRow.displayTitle(for: tab))") { [weak self] in
+                // Only in the Space it left, and only while it's still archived there (not
+                // reopened with ⇧⌘T, or moved to another Space by sync). It comes back as a tab of
+                // its own, at the end, not in a split it was part of.
+                guard let self, self.space?.id == spaceID,
+                      await self.archivedTabs().contains(where: { $0.id == id }) else { return }
+                await self.restoreTab(id)
+            }
+        } else {
+            announce(tab.isPinned ? "Unloaded \(TabRow.displayTitle(for: tab))" : "Closed \(TabRow.displayTitle(for: tab))")
+        }
         guard selectedTabID == id else { return }
         // Closing one pane of a split keeps the rest of the split on screen.
         if !tab.isPinned, let pane = otherPanes.first(where: { remaining in tabs.contains { $0.id == remaining } }) {
@@ -898,7 +926,7 @@ public final class BrowserModel {
     /// Closes the selected tab, if any.
     public func closeSelectedTab() async {
         guard let selectedTabID else { return }
-        await closeTab(selectedTabID)
+        await closeTab(selectedTabID, byPerson: true)
     }
 
     /// Brings back the most recently closed (archived) tab in this Space and selects it.
@@ -1051,7 +1079,7 @@ public final class BrowserModel {
             try await self.store.movePinnedItem(item, into: folder, after: anchor)
         }
         let name = folder.flatMap { id in folders.first { $0.id == id }?.name }
-        announce(name.map { "Moved to \($0)" } ?? "Moved to Pinned")
+        postNotice(name.map { "Moved to \($0)" } ?? "Moved to Pinned")
     }
 
     /// Reorders a level of the pinned section after a drag, using `List.onMove` indices.

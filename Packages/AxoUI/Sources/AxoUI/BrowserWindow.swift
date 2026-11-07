@@ -86,6 +86,8 @@ public struct BrowserWindow: View {
                         CommandBarView(model: model)
                     }
                 }
+                // Notices for actions with no other visible result, at the page's bottom.
+                .overlay(alignment: .bottom) { NoticeView(model: model) }
                 .safeAreaInset(edge: .top, spacing: 0) {
                     if let translation = model.selectedTranslation {
                         TranslationBar(model: model, translation: translation)

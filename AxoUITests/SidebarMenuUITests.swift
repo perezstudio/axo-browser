@@ -121,8 +121,9 @@ final class SidebarMenuUITests: XCTestCase {
     /// The unpinned tabs' titles, in sidebar order.
     private func tabRows(in sidebar: XCUIElement) -> [String] {
         sidebar.staticTexts.matching(identifier: "tabRow").allElementsBoundByIndex.map { row in
-            // SwiftUI Text exposes its string as the value.
-            (row.value as? String).flatMap { $0.isEmpty ? nil : $0 } ?? row.label
+            // The row's label is its title; its value is its state ("Unloaded" for a tab not
+            // loaded since launch), when it has one.
+            row.label.isEmpty ? (row.value as? String) ?? "" : row.label
         }
     }
 
