@@ -1167,19 +1167,17 @@ final class AxoUITests: XCTestCase {
         app.typeKey("t", modifierFlags: .command)
         app.typeText("http://127.0.0.1:9/room\n")
         XCTAssertTrue(sidebar.staticTexts["127.0.0.1"].waitForExistence(timeout: 10))
+        // The row can appear a moment before the tab is selected; Site Settings is for the page
+        // showing, which the address bar names once it's shown.
+        let address = app.descendants(matching: .any)["sidebarAddressBar"]
+        expectation(for: NSPredicate(format: "value CONTAINS %@", "127.0.0.1"), evaluatedWith: address)
+        waitForExpectations(timeout: 10)
 
         app.menuBars.menuBarItems["View"].click()
-        XCTAssertTrue(siteSettings.isEnabled, "The tab's site has settings")
+        XCTAssertTrue(siteSettings.isEnabled, "The shown page's site has settings")
         siteSettings.click()
         let camera = app.popUpButtons["sitePermission-camera"]
-        if !camera.waitForExistence(timeout: 5) {
-            // Where the window stood when Site Settings didn't show, for the result bundle.
-            let shot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
-            shot.lifetime = .keepAlways
-            add(shot)
-            XCTFail("Site Settings didn't open")
-            return
-        }
+        XCTAssertTrue(camera.waitForExistence(timeout: 5))
         XCTAssertEqual(camera.value as? String, "Ask")
         XCTAssertTrue(app.popUpButtons["sitePermission-microphone"].exists)
         XCTAssertTrue(app.popUpButtons["sitePermission-location"].exists)
