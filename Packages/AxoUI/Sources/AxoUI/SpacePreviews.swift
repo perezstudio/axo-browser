@@ -31,6 +31,13 @@ public struct SpaceSidebarPreview: Equatable, Sendable {
     /// The favorites of the Space's profile, shown above its rows.
     public var favorites: [Favorite] = []
 
+    /// Whether the row standing for `tabID` holds the Space's selection: it's the selected tab,
+    /// or its split has it.
+    func holdsSelection(_ tabID: AxoCore.Tab.ID) -> Bool {
+        guard let selectedTabID else { return false }
+        return tabID == selectedTabID || splitPanes[tabID]?.contains { $0.id == selectedTabID } == true
+    }
+
     /// Builds a Space's rows from its records, as ``BrowserModel`` builds the shown Space's: a
     /// split of two or more panes is one row, standing for its first tab in sidebar order.
     static func make(

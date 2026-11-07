@@ -44,7 +44,7 @@ extension BrowserModel {
             tabs = try await store.tabs(in: space.id)
             onTabEvent?(.closed(tabID))
             if selectedTabID == tabID { activateSelectedTab() }
-            announce("Added \(Self.title(of: favorite)) to Favorites")
+            postNotice("Added \(Self.title(of: favorite)) to Favorites")
         } catch {
             report(error, "Axo couldn't add the favorite.")
         }
@@ -59,7 +59,7 @@ extension BrowserModel {
             prompts.dismissAll(from: id)
             pool.discard(id)
             if selectedTabID == id { select(visibleTabOrder.first) }
-            announce("Removed \(Self.title(of: favorite)) from Favorites")
+            postNotice("Removed \(Self.title(of: favorite)) from Favorites")
         } catch {
             report(error, "Axo couldn't remove the favorite.")
         }

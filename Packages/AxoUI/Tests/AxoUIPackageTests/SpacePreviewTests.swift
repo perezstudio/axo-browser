@@ -53,6 +53,9 @@ struct SpacePreviewTests {
         #expect(preview.rows.first == .split(leader: a.id, panes: [b, a]), "Panes in pane order")
         #expect(preview.pinnedTree.map(\.id) == [.tab(pinned.id)])
         #expect(preview.selectedTabID == b.id)
+        #expect(preview.holdsSelection(a.id), "A split's row holds the selection when any pane has it")
+        #expect(!preview.holdsSelection(c.id))
+        #expect(!preview.holdsSelection(pinned.id))
 
         let forgotten = SpaceSidebarPreview.make(space: space, tabs: [c], folders: [], splits: [], selectedTabID: UUID())
         #expect(forgotten.selectedTabID == c.id, "A remembered tab that's gone: the first tab, as switching does")

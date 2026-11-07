@@ -329,6 +329,88 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(bar.waitForExistence(timeout: 5))
     }
 
+    /// Clicks `element` where it is. XCUITest's own click first scrolls the list "to make it
+    /// visible", which moves the pointer off a row, so a button shown only on hover goes before
+    /// the click lands.
+    @MainActor
+    private func clickWithoutScrolling(_ element: XCUIElement, in app: XCUIApplication) {
+        let window = app.windows.firstMatch
+        let frame = element.frame
+        XCTAssertTrue(frame.width.isFinite && frame.width > 0, "The element is on screen: \(frame)")
+        window.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: frame.midX - window.frame.minX, dy: frame.midY - window.frame.minY))
+            .click()
+    }
+
+    /// Hovering a tab row shows a close button (#69): it closes a tab, and unloads a pinned one,
+    /// which stays in the sidebar.
+    @MainActor
+    func testTabRowCloseButtonClosesOrUnloads() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        for title in ["Keep", "Gone", "Docs"] {
+            app.typeKey("t", modifierFlags: .command)
+            app.typeText("data:text/html,<title>\(title)</title>\n")
+            XCTAssertTrue(sidebar.staticTexts[title].waitForExistence(timeout: 10))
+        }
+        app.typeKey("p", modifierFlags: [.command, .control]) // Pin Tab, on "Docs"
+        let closeButton = sidebar.buttons["tabRowCloseButton"]
+
+        sidebar.staticTexts["Gone"].hover()
+        XCTAssertTrue(closeButton.waitForExistence(timeout: 5))
+        clickWithoutScrolling(closeButton, in: app)
+        XCTAssertTrue(sidebar.staticTexts["Gone"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(sidebar.staticTexts["Keep"].exists)
+
+        // A pinned tab's button unloads it: it stays in the sidebar. (In the Pinned section, the
+        // section's identifier replaces its rows' and their buttons', so they're found by label.)
+        XCTAssertTrue(sidebar.staticTexts["Pinned"].waitForExistence(timeout: 5), "Docs is pinned")
+        let pinned = sidebar.staticTexts["Docs"]
+        XCTAssertTrue(pinned.waitForExistence(timeout: 5))
+        pinned.hover()
+        let unload = sidebar.buttons["Unload Tab"]
+        XCTAssertTrue(unload.waitForExistence(timeout: 5))
+        clickWithoutScrolling(unload, in: app)
+        XCTAssertTrue(pinned.exists, "Unloaded, not closed")
+    }
+
+    /// Actions with no other visible result show a brief notice (#103): Copy Link shows "Link
+    /// copied" over the page while the sidebar's address bar is hidden, and closing a tab offers
+    /// Undo, which brings it back.
+    @MainActor
+    func testNoticesShowAndUndoCloses() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,<title>Keep</title>\n")
+        XCTAssertTrue(sidebar.staticTexts["Keep"].waitForExistence(timeout: 10))
+        app.typeKey("t", modifierFlags: .command)
+        app.typeText("data:text/html,<title>Gone</title>\n")
+        XCTAssertTrue(sidebar.staticTexts["Gone"].waitForExistence(timeout: 10))
+
+        // With the address bar hidden, "Link copied" shows over the page.
+        app.menuBarItems["View"].click()
+        app.menuItems["Hide Address Bar in Sidebar"].click()
+        app.typeKey("c", modifierFlags: [.command, .shift])
+        let notice = app.descendants(matching: .any)["notice"]
+        XCTAssertTrue(notice.waitForExistence(timeout: 5))
+        XCTAssertEqual(notice.label, "Link copied")
+        app.menuBarItems["View"].click()
+        app.menuItems["Show Address Bar in Sidebar"].click()
+
+        // ⌘W shows "Closed Gone" with Undo, which brings the tab back.
+        app.typeKey("w", modifierFlags: .command)
+        XCTAssertTrue(sidebar.staticTexts["Gone"].waitForNonExistence(timeout: 5))
+        let undo = app.buttons["noticeUndoButton"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 5))
+        XCTAssertEqual(notice.label, "Closed Gone")
+        undo.click()
+        XCTAssertTrue(sidebar.staticTexts["Gone"].waitForExistence(timeout: 5))
+        XCTAssertTrue(undo.waitForNonExistence(timeout: 5))
+    }
+
     /// With Settings › General › Edit the address in › Sidebar, the sidebar's address bar becomes
     /// the field, with suggestions below it and no command bar; Return loads in the same tab and
     /// Esc stops editing.
