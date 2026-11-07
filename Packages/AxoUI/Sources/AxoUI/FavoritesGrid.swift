@@ -29,6 +29,49 @@ struct FavoritesGrid: View {
     }
 }
 
+/// A kept Space's favorites, drawn as ``FavoritesGrid`` draws the shown Space's, for its page in
+/// the sidebar's strip of Spaces (#84). It takes no clicks; the page turns live when shown.
+struct PreviewFavoritesGrid: View {
+    let model: BrowserModel
+    let preview: SpaceSidebarPreview
+    @State private var width: CGFloat = 0
+
+    var body: some View {
+        if !preview.favorites.isEmpty {
+            let columns = FavoritesLayout.columns(count: preview.favorites.count, width: width)
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: FavoritesLayout.spacing), count: max(columns, 1)),
+                spacing: FavoritesLayout.spacing
+            ) {
+                ForEach(preview.favorites) { favorite in
+                    let isSelected = preview.selectedTabID == favorite.id
+                    Group {
+                        if let image = model.favicon(for: favorite.tab(in: preview.space.id)) {
+                            Image(platformImage: image).resizable().interpolation(.high)
+                                .frame(width: 18, height: 18)
+                                .clipShape(.rect(cornerRadius: 4))
+                        } else {
+                            Image(systemName: "globe").font(.system(size: 15)).foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: FavoritesLayout.tileHeight)
+                    .background(
+                        RoundedRectangle(cornerRadius: FavoritesLayout.tileCornerRadius)
+                            .fill(isSelected ? AnyShapeStyle(.tint.opacity(0.25)) : AnyShapeStyle(.quaternary.opacity(0.6)))
+                    )
+                    .overlay {
+                        if isSelected {
+                            RoundedRectangle(cornerRadius: FavoritesLayout.tileCornerRadius).strokeBorder(.tint, lineWidth: 1.5)
+                        }
+                    }
+                }
+            }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        }
+    }
+}
+
 /// One favorite: its site's icon on a rounded tile, highlighted while it's showing.
 private struct FavoriteTile: View {
     let model: BrowserModel

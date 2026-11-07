@@ -15,4 +15,13 @@ struct FavoritesLayoutTests {
         #expect(FavoritesLayout.columns(count: 8, width: 10) == 1)
         #expect(FavoritesLayout.columns(count: 2, width: 144) == 2, "The count still caps it")
     }
+
+    @Test func anUnmeasuredWidthDoesntCrash() {
+        // A layout pass can measure with an unbounded width; converting it to a column count
+        // trapped (#84's favorites strip).
+        #expect(FavoritesLayout.columns(count: 6, width: .infinity) == FavoritesLayout.maximumColumns)
+        #expect(FavoritesLayout.columns(count: 2, width: .nan) == 2)
+        #expect(FavoritesLayout.columns(count: 3, width: -10) == 1)
+        #expect(FavoritesLayout.columns(count: 5, width: .greatestFiniteMagnitude) == FavoritesLayout.maximumColumns)
+    }
 }

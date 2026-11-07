@@ -14,10 +14,15 @@ nonisolated public enum FavoritesLayout {
     /// A tile's corner radius, which the sidebar's address bar shares too.
     public static let tileCornerRadius: CGFloat = 10
 
-    /// The number of columns for `count` favorites in a grid `width` points wide.
+    /// The number of columns for `count` favorites in a grid `width` points wide. A width that
+    /// isn't a finite size yet (a layout pass that measures with an unbounded width) gets the
+    /// most columns.
     public static func columns(count: Int, width: CGFloat) -> Int {
         guard count > 0 else { return 0 }
-        let fitting = max(1, Int((width + spacing) / (minimumTileWidth + spacing)))
+        guard width.isFinite else { return min(count, maximumColumns) }
+        // Capped before converting, so a huge width can't overflow Int.
+        let fits = min((max(width, 0) + spacing) / (minimumTileWidth + spacing), CGFloat(maximumColumns))
+        let fitting = max(1, Int(fits))
         return min(count, maximumColumns, fitting)
     }
 }

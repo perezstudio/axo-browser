@@ -16,7 +16,11 @@ import Translation
 @Observable
 public final class BrowserModel {
     /// Every Space, in switcher order.
-    public private(set) var spaces: [Space] = []
+    public private(set) var spaces: [Space] = [] {
+        // New, renamed, moved, or deleted Spaces: read their rows again for swiping.
+        didSet { if spaces != oldValue { scheduleSpacePreviewLoad() } }
+    }
+    @ObservationIgnored var spacePreviewLoad: Task<Void, Never>?
     /// The Space shown in the sidebar, once ``start()`` finishes.
     public private(set) var space: Space? {
         // An extension's side panel belongs to its profile's Spaces.
@@ -174,6 +178,15 @@ public final class BrowserModel {
     @ObservationIgnored var focusedPaneBySplit: [TabSplit.ID: AxoCore.Tab.ID] = [:]
     /// The tab each Space had selected, so switching back returns to it.
     @ObservationIgnored private var selectedTabBySpace: [Space.ID: AxoCore.Tab.ID] = [:]
+    /// The Space a switch is reading the records of, before showing it.
+    @ObservationIgnored private var spaceBeingShown: Space.ID?
+    /// Every other Space's sidebar rows, kept ready for a swipe between Spaces (#84).
+    public internal(set) var spacePreviews: [Space.ID: SpaceSidebarPreview] = [:]
+
+    /// The tab a Space selects when switched to: the one it had selected when left.
+    func rememberedSelection(in spaceID: Space.ID) -> AxoCore.Tab.ID? {
+        selectedTabBySpace[spaceID]
+    }
     /// The Space to show at launch, if it still exists.
     @ObservationIgnored private let initialSpaceID: Space.ID?
     /// Called with the Space's ID whenever the window switches Spaces, so the app can reopen it.
@@ -556,13 +569,17 @@ public final class BrowserModel {
     /// shows, and if the Space is deleted, the window moves to the first Space (creating one if
     /// none are left).
     func followShownSpace() async throws {
+        // A switch under way reads its Space's records before showing it; it'll show a Space
+        // that's still here, so there's nothing to follow.
+        if let pending = spaceBeingShown, spaces.contains(where: { $0.id == pending }) { return }
         guard let current = space else { return }
         if let fresh = spaces.first(where: { $0.id == current.id }) {
             await followShownSpaceChange(to: fresh)
             return
         }
         selectedTabBySpace[current.id] = nil
-        space = nil
+        // The deleted Space stays shown until the next one's records are read and it's shown in
+        // its place (a delete here may be showing a neighbor already).
         let target: Space
         if let first = spaces.first {
             target = first
@@ -615,18 +632,29 @@ public final class BrowserModel {
         return true
     }
 
-    /// Shows `target` in the window: its tabs, its remembered selection, and live updates.
+    /// Shows `target` in the window: its tabs, its remembered selection, and live updates. Its
+    /// records are read first and then shown together, with no suspension between, so the
+    /// sidebar never draws the new Space with the old one's rows (its page slides in already
+    /// filled, #84).
     private func show(_ target: Space) async throws {
-        if let current = space {
+        spaceBeingShown = target.id
+        defer { if spaceBeingShown == target.id { spaceBeingShown = nil } }
+        let newTabs = try await store.tabs(in: target.id)
+        let newFolders = try await store.folders(in: target.id)
+        let newSplits = try await store.splits(in: target.id)
+        await observeFavorites(for: target.profileID)
+        if let current = space, spaces.contains(where: { $0.id == current.id }) {
             selectedTabBySpace[current.id] = selectedTabID
+            keepPreviewOfShownSpace()
             // A notice's Undo would act on the Space left behind.
             if current.id != target.id { dismissNotice() }
         }
         space = target
-        await observeFavorites(for: target.profileID)
-        tabs = try await store.tabs(in: target.id)
-        folders = try await store.folders(in: target.id)
-        splits = try await store.splits(in: target.id)
+        tabs = newTabs
+        folders = newFolders
+        splits = newSplits
+        // The shown Space's rows are live; its kept copy goes. The others' stay for swiping.
+        spacePreviews[target.id] = nil
         observeFolders(in: target.id)
         observeSplits(in: target.id)
         // A favorite stays shown in every Space of its profile.
@@ -1541,8 +1569,19 @@ public final class BrowserModel {
     }
 
     /// Reads saved icons for hosts in the sidebar that haven't been looked up yet.
-    private func loadSavedFavicons() async {
-        let hosts = Set(tabs.compactMap { Favicon.key(for: $0.url) }).subtracting(lookedUpFaviconHosts)
+    func loadSavedFavicons() async {
+        // The other Spaces' rows too, so a swipe shows their icons.
+        let previewTabs = spacePreviews.values.flatMap { preview in
+            preview.rows.flatMap { row -> [AxoCore.Tab] in
+                switch row {
+                case .tab(let tab): [tab]
+                case .split(_, let panes): panes
+                }
+            } + preview.splitPanes.values.flatMap(\.self) + PinnedNode.allTabs(in: preview.pinnedTree)
+        }
+        let previewFavorites = spacePreviews.values.flatMap { $0.favorites.map(\.url) }
+        let hosts = Set(((tabs + previewTabs).map(\.url) + previewFavorites).compactMap(Favicon.key(for:)))
+            .subtracting(lookedUpFaviconHosts)
         guard !hosts.isEmpty else { return }
         lookedUpFaviconHosts.formUnion(hosts)
         do {

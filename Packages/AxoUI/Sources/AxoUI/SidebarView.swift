@@ -10,26 +10,12 @@ struct SidebarView: View {
     @State private var isShowingArchive = false
     @AppStorage(NavigationBarPlacement.storageKey) private var navigationBarPlacement = NavigationBarPlacement.sidebar
     @AppStorage(AddressBarSettings.showsSidebarAddressBarKey) private var showsAddressBar = true
+    /// The Spaces' pages and a swipe between them as it happens (#84).
+    @State private var swipe = SidebarSwipeState()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        // Folders are selectable too, so the keyboard can reach, open, and act on them.
-        List(selection: Binding(get: { model.selectedSidebarItem }, set: { model.selectSidebarItem($0) })) {
-            if !model.pinnedTree.isEmpty {
-                Section("Pinned") {
-                    PinnedLevel(model: model, nodes: model.pinnedTree, parent: nil)
-                }
-                .accessibilityIdentifier("pinnedSection")
-            }
-            Section {
-                rows(for: model.unpinnedTabs.filter { !model.isSplitFollower($0) }, pinned: false)
-            } header: {
-                if let space = model.space, let icon = space.icon {
-                    Label(space.name, systemImage: icon)
-                } else {
-                    Text(model.space?.name ?? "Tabs")
-                }
-            }
-        }
+        spacePages
         .sheet(isPresented: $isShowingArchive) {
             ArchivedTabsView(model: model)
         }
@@ -53,22 +39,27 @@ struct SidebarView: View {
                 Task { await model.renameSpace(space.id, to: name) }
             }
         }
+        // Two-finger swipes over the favorites and tabs move between Spaces (not over the
+        // address bar, which stays put).
+        .background { SidebarSwipeCatcher(model: model, state: swipe) }
         .onChange(of: model.isShowingArchive) { isShowingArchive = model.isShowingArchive }
         .onChange(of: isShowingArchive) { if !isShowingArchive { model.isShowingArchive = false } }
-        .accessibilityIdentifier("sidebar")
+        // Slide to the shown Space's page when it changes some other way (the keyboard, the
+        // dots, the menu); after a swipe the pages are already there.
+        .onChange(of: model.space?.id, initial: true) { followShownSpace(animated: true) }
+        .onChange(of: model.spaces.map(\.id)) { followShownSpace(animated: false) }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             SpaceSwitcher(model: model)
         }
-        .safeAreaInset(edge: .top) {
+        .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 8) {
-                // Like Arc, the address bar can sit at the top of the sidebar.
+                // Like Arc, the address bar can sit at the top of the sidebar; it stays put while
+                // the Spaces' pages slide beneath it.
                 if navigationBarPlacement == .sidebar, showsAddressBar {
                     SidebarAddressBar(model: model)
+                        .padding(.horizontal, 10)
                 }
-                // Favorites sit above the pinned tabs, shared by the profile's Spaces.
-                FavoritesGrid(model: model)
             }
-            .padding(.horizontal, 10)
             .padding(.bottom, 6)
         }
         // An address edited in the sidebar: its suggestions hang below the bar, over the
@@ -97,19 +88,64 @@ struct SidebarView: View {
 }
 
 extension SidebarView {
-    /// The rows of one section, reorderable within it.
-    @ViewBuilder
-    private func rows(for tabs: [AxoCore.Tab], pinned: Bool) -> some View {
-        ForEach(tabs) { tab in
-            SidebarTabRow(model: model, tab: tab, isSelected: model.rowHoldsSelection(tab))
-                .tag(PinnedItem.tab(tab.id))
-                .contextMenu { menu(for: tab) }
-                .sidebarMoveActions(model: model, item: .tab(tab.id))
+    /// Every Space's page side by side, resting on the shown Space's and moved by a swipe that
+    /// locks onto a page when the fingers lift. Only the shown page takes clicks and is in the
+    /// accessibility tree, where its list is the `sidebar` element. No accessibility container
+    /// wraps the pages: one around the lists' AppKit views gave them two parents (the audit's
+    /// "Parent/Child mismatch").
+    private var spacePages: some View {
+        GeometryReader { proxy in
+            // The pages are an overlay of a sidebar-sized base, so the strip, as wide as all of
+            // them, never sets the sidebar's size.
+            Color.clear
+                .overlay(alignment: .topLeading) {
+                    HStack(spacing: 0) {
+                        ForEach(Array(model.spaces.enumerated()), id: \.element.id) { index, space in
+                            SpacePage(model: model, space: space, isShown: space.id == model.space?.id,
+                                      favoritesOffset: favoritesOffset(forPage: index, width: proxy.size.width))
+                                .frame(width: proxy.size.width, height: proxy.size.height)
+                        }
+                    }
+                    // Only the width: each page's height is the sidebar's. Fixing the height
+                    // too let an empty Space's list set it, pushing the window's layout up.
+                    .fixedSize(horizontal: true, vertical: false)
+                    .offset(x: -CGFloat(swipe.pageIndex) * proxy.size.width + swipe.offset)
+                }
+                .frame(width: proxy.size.width, height: proxy.size.height)
         }
-        .onMove { source, destination in
-            Task { await model.moveTabs(fromOffsets: source, toOffset: destination, pinned: pinned) }
+        .clipped()
+    }
+
+    /// How far page `index`'s favorites shift against its movement. Between the resting page and
+    /// the one coming in, when both are the same profile's (the same favorites), all the way, so
+    /// they stay still where they are; otherwise not at all, and they slide with their page.
+    private func favoritesOffset(forPage index: Int, width: CGFloat) -> CGFloat {
+        let spaces = model.spaces
+        let resting = swipe.pageIndex
+        guard swipe.offset != 0, spaces.indices.contains(resting) else { return 0 }
+        let incoming = resting + (swipe.offset < 0 ? 1 : -1)
+        guard index == resting || index == incoming, spaces.indices.contains(incoming),
+              spaces[incoming].profileID == spaces[resting].profileID else { return 0 }
+        // The page sits at (index - resting) widths plus the swipe; this undoes that.
+        return -(CGFloat(index - resting) * width + swipe.offset)
+    }
+
+    /// Rests the pages on the shown Space's, sliding there unless `animated` is off or Reduce
+    /// Motion is on. Does nothing when they're already there, as after a swipe.
+    private func followShownSpace(animated: Bool) {
+        guard let index = model.spaces.firstIndex(where: { $0.id == model.space?.id }),
+              index != swipe.pageIndex || swipe.offset != 0 else { return }
+        if animated, !reduceMotion {
+            withAnimation(.spring(duration: 0.3, bounce: 0)) {
+                swipe.pageIndex = index
+                swipe.offset = 0
+            }
+        } else {
+            swipe.pageIndex = index
+            swipe.offset = 0
         }
     }
+
 
     @ViewBuilder
     private func folderNameSheet(for request: NamingRequest) -> some View {
@@ -125,20 +161,66 @@ extension SidebarView {
         }
     }
 
-    @ViewBuilder
-    private func menu(for tab: AxoCore.Tab) -> some View {
-        TabContextMenu(model: model, tab: tab)
+}
+
+/// A Space's sections in its sidebar page: pinned tabs and folders, then its other tabs, with
+/// their menus and actions. Every page uses these, built from the Space's rows
+/// (``SpaceSidebarPreview``: the model's for the shown Space, the kept ones for the others), so
+/// a page turning live when its Space is shown keeps the same rows and nothing reloads (#84).
+/// Only the shown page takes clicks, so only its menus and moves can be used.
+struct SidebarSections: View {
+    let model: BrowserModel
+    let data: SpaceSidebarPreview
+
+    var body: some View {
+        if !data.pinnedTree.isEmpty {
+            Section("Pinned") {
+                PinnedLevel(model: model, nodes: data.pinnedTree, parent: nil, splitPanes: data.splitPanes,
+                            selectedTabID: data.selectedTabID)
+            }
+            .accessibilityIdentifier("pinnedSection")
+        }
+        Section {
+            ForEach(data.rows) { row in
+                let tab = leader(of: row)
+                SidebarTabRow(model: model, tab: tab, panes: data.splitPanes[tab.id],
+                              isSelected: data.holdsSelection(tab.id))
+                    .tag(PinnedItem.tab(tab.id))
+                    .contextMenu { TabContextMenu(model: model, tab: tab) }
+                    .sidebarMoveActions(model: model, item: .tab(tab.id))
+            }
+            .onMove { source, destination in
+                Task { await model.moveTabs(fromOffsets: source, toOffset: destination, pinned: false) }
+            }
+        } header: {
+            if let icon = data.space.icon {
+                Label(data.space.name, systemImage: icon)
+            } else {
+                Text(data.space.name)
+            }
+        }
+    }
+
+    /// The tab a row stands for: a split's first tab in sidebar order.
+    private func leader(of row: SpaceSidebarPreview.Row) -> AxoCore.Tab {
+        switch row {
+        case .tab(let tab): tab
+        case .split(let leader, let panes): panes.first { $0.id == leader } ?? panes[0]
+        }
     }
 }
 #endif
 
 
-/// A sidebar row for a tab, or for a split view when the tab's split stands behind it, with a
+/// A sidebar row for a tab, or for a split view when the tab's split stands behind it (`panes`,
+/// in pane order, from the Space's rows), with a
 /// close (or, for a pinned tab, unload) button while the pointer is over it (#69), a spinner
 /// while its page loads (#70), and dimmed while it has no live page (#72).
 struct SidebarTabRow: View {
     let model: BrowserModel
     let tab: AxoCore.Tab
+    /// The split's panes, in pane order, when the row stands for a split.
+    var panes: [AxoCore.Tab]?
     /// Whether the row holds the selection, from the parent, so rows don't each read it.
     let isSelected: Bool
     @State private var isHovering = false
@@ -147,7 +229,7 @@ struct SidebarTabRow: View {
     /// row's tab, the first pane, so it names it.
     private var closeTitle: String {
         let verb = tab.isPinned ? "Unload" : "Close"
-        return model.split(of: tab.id) == nil ? "\(verb) Tab" : "\(verb) \(TabRow.displayTitle(for: tab))"
+        return panes == nil ? "\(verb) Tab" : "\(verb) \(TabRow.displayTitle(for: tab))"
     }
 
     var body: some View {
@@ -180,8 +262,7 @@ struct SidebarTabRow: View {
 
     @ViewBuilder
     private var content: some View {
-        if let split = model.split(of: tab.id) {
-            let panes = model.panes(of: split.id)
+        if let panes {
             SplitRow(panes: panes, favicon: model.favicon(for:),
                      isLoading: panes.contains { model.isTabLoading($0.id) },
                      // Dimmed only when every pane is unloaded.
@@ -283,12 +364,22 @@ struct PinnedLevel: View {
     let model: BrowserModel
     let nodes: [PinnedNode]
     let parent: Folder.ID?
+    /// Each split's panes, by the tab whose row stands for it.
+    var splitPanes: [AxoCore.Tab.ID: [AxoCore.Tab]] = [:]
+    /// The tab the page's Space shows, whose row (or split's row) holds the selection.
+    var selectedTabID: AxoCore.Tab.ID?
+
+    /// Whether `tab`'s row holds the selection: it's the selected tab, or its split has it.
+    private func holdsSelection(_ tab: AxoCore.Tab, _ selected: AxoCore.Tab.ID) -> Bool {
+        tab.id == selected || splitPanes[tab.id]?.contains { $0.id == selected } == true
+    }
 
     var body: some View {
         ForEach(nodes) { node in
             switch node {
             case .tab(let tab):
-                SidebarTabRow(model: model, tab: tab, isSelected: model.rowHoldsSelection(tab))
+                SidebarTabRow(model: model, tab: tab, panes: splitPanes[tab.id],
+                              isSelected: selectedTabID.map { holdsSelection(tab, $0) } ?? false)
                     .tag(PinnedItem.tab(tab.id))
                     .contextMenu { TabContextMenu(model: model, tab: tab) }
                     .sidebarMoveActions(model: model, item: .tab(tab.id))
@@ -298,7 +389,8 @@ struct PinnedLevel: View {
                     set: { expanded in Task { await model.setFolderExpanded(expanded, id: folder.id) } }
                 )) {
                     // Type-erased because the view contains itself.
-                    AnyView(PinnedLevel(model: model, nodes: children, parent: folder.id))
+                    AnyView(PinnedLevel(model: model, nodes: children, parent: folder.id, splitPanes: splitPanes,
+                                        selectedTabID: selectedTabID))
                 } label: {
                     Label(folder.name, systemImage: folder.isExpanded ? "folder" : "folder.fill")
                         .lineLimit(1)
