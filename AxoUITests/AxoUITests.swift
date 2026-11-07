@@ -1169,9 +1169,17 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["127.0.0.1"].waitForExistence(timeout: 10))
 
         app.menuBars.menuBarItems["View"].click()
+        XCTAssertTrue(siteSettings.isEnabled, "The tab's site has settings")
         siteSettings.click()
         let camera = app.popUpButtons["sitePermission-camera"]
-        XCTAssertTrue(camera.waitForExistence(timeout: 5))
+        if !camera.waitForExistence(timeout: 5) {
+            // Where the window stood when Site Settings didn't show, for the result bundle.
+            let shot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+            shot.lifetime = .keepAlways
+            add(shot)
+            XCTFail("Site Settings didn't open")
+            return
+        }
         XCTAssertEqual(camera.value as? String, "Ask")
         XCTAssertTrue(app.popUpButtons["sitePermission-microphone"].exists)
         XCTAssertTrue(app.popUpButtons["sitePermission-location"].exists)
