@@ -1167,8 +1167,18 @@ final class AxoUITests: XCTestCase {
         app.typeKey("t", modifierFlags: .command)
         app.typeText("http://127.0.0.1:9/room\n")
         XCTAssertTrue(sidebar.staticTexts["127.0.0.1"].waitForExistence(timeout: 10))
+        // The row can appear a moment before the tab is selected; Site Settings is for the page
+        // showing, which the address bar names once it's shown.
+        let address = app.descendants(matching: .any)["sidebarAddressBar"]
+        expectation(for: NSPredicate(format: "value CONTAINS %@", "127.0.0.1"), evaluatedWith: address)
+        waitForExpectations(timeout: 10)
 
         app.menuBars.menuBarItems["View"].click()
+        let toggle = app.menuBars.menuItems["Hide Address Bar in Sidebar"]
+        XCTAssertTrue(siteSettings.isEnabled, """
+            The shown page's site has settings (window's model in the menu: \(toggle.exists && toggle.isEnabled), \
+            Copy Link: \(app.menuBars.menuItems["Copy Link"].isEnabled), address: \(address.value ?? "none"))
+            """)
         siteSettings.click()
         let camera = app.popUpButtons["sitePermission-camera"]
         XCTAssertTrue(camera.waitForExistence(timeout: 5))
