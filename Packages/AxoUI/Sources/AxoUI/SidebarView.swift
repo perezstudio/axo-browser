@@ -102,7 +102,9 @@ extension SidebarView {
                     HStack(spacing: 0) {
                         ForEach(Array(model.spaces.enumerated()), id: \.element.id) { index, space in
                             SpacePage(model: model, space: space, isShown: space.id == model.space?.id,
-                                      favoritesOffset: favoritesOffset(forPage: index, width: proxy.size.width))
+                                      favorites: SpaceSwipe.favoritesPlacement(
+                                          forPage: index, resting: swipe.pageIndex, offset: swipe.offset,
+                                          width: proxy.size.width, profiles: model.spaces.map(\.profileID)))
                                 .frame(width: proxy.size.width, height: proxy.size.height)
                         }
                     }
@@ -116,24 +118,10 @@ extension SidebarView {
         .clipped()
     }
 
-    /// How far page `index`'s favorites shift against its movement. Between the resting page and
-    /// the one coming in, when both are the same profile's (the same favorites), all the way, so
-    /// they stay still where they are; otherwise not at all, and they slide with their page.
-    private func favoritesOffset(forPage index: Int, width: CGFloat) -> CGFloat {
-        let spaces = model.spaces
-        let resting = swipe.pageIndex
-        guard swipe.offset != 0, spaces.indices.contains(resting) else { return 0 }
-        let incoming = resting + (swipe.offset < 0 ? 1 : -1)
-        guard index == resting || index == incoming, spaces.indices.contains(incoming),
-              spaces[incoming].profileID == spaces[resting].profileID else { return 0 }
-        // The page sits at (index - resting) widths plus the swipe; this undoes that.
-        return -(CGFloat(index - resting) * width + swipe.offset)
-    }
-
     /// Rests the pages on the shown Space's, sliding there unless `animated` is off or Reduce
     /// Motion is on. Does nothing when they're already there, as after a swipe.
     private func followShownSpace(animated: Bool) {
-        guard let index = model.spaces.firstIndex(where: { $0.id == model.space?.id }),
+        guard let index = SpaceSwipe.restingPage(shown: model.space?.id, in: model.spaces),
               index != swipe.pageIndex || swipe.offset != 0 else { return }
         if animated, !reduceMotion {
             withAnimation(.spring(duration: 0.3, bounce: 0)) {

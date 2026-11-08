@@ -92,6 +92,7 @@ struct SidebarSwipeCatcher: NSViewRepresentable {
         func stop() {
             if let monitor { NSEvent.removeMonitor(monitor) }
             monitor = nil
+            idleTimer?.cancel()
         }
 
         /// Follows a swipe that begins over this view, consuming its events (and the momentum
@@ -133,13 +134,16 @@ struct SidebarSwipeCatcher: NSViewRepresentable {
                     || !event.momentumPhase.isEmpty || event.phase == .began || event.phase.isEmpty
                 if !current.didLift, lifted {
                     finish(&current)
+                    // The lifting event is the swipe's, unless it starts a new gesture.
+                    if event.phase != .began, event.momentumPhase.isEmpty { return nil }
                 }
-                // A new gesture, or a plain scroll, ends the one before.
-                if current.didLift, event.phase == .began || (event.phase.isEmpty && event.momentumPhase.isEmpty) {
+                // After the lift, only momentum belongs to the swipe, and doesn't move it.
+                // Anything else (a new gesture, fingers resting to stop a page's scrolling, a
+                // plain scroll) ends it and goes on as usual.
+                guard current.owns(afterLiftEventWithMomentum: !event.momentumPhase.isEmpty) else {
                     drag = nil
                     return begin(event)
                 }
-                // Momentum after the lift belongs to the swipe; it doesn't move it.
                 if !event.momentumPhase.isEmpty {
                     if event.momentumPhase.contains(.ended) || event.momentumPhase.contains(.cancelled) { drag = nil }
                     return nil
@@ -155,18 +159,17 @@ struct SidebarSwipeCatcher: NSViewRepresentable {
             return begin(event)
         }
 
-        /// The last moment the fingers moved, for ``finishIfIdle()``.
-        private var lastMove = Date.now
+        /// The wait for the fingers to move again, for ``finishIfIdle()``.
+        private var idleTimer: Task<Void, Never>?
 
         /// Locks the pages onto a page if the fingers don't move again for a moment: a trackpad
         /// can stop reporting without saying the fingers lifted, and the pages mustn't stay
-        /// stuck between two Spaces.
+        /// stuck between two Spaces. Each movement restarts the wait.
         private func finishIfIdle() {
-            lastMove = .now
-            Task { [weak self] in
+            idleTimer?.cancel()
+            idleTimer = Task { [weak self] in
                 try? await Task.sleep(for: .milliseconds(500))
-                guard let self, var current = self.drag, !current.didLift,
-                      Date.now.timeIntervalSince(self.lastMove) >= 0.45 else { return }
+                guard !Task.isCancelled, let self, var current = self.drag, !current.didLift else { return }
                 self.finish(&current)
             }
         }
@@ -190,7 +193,7 @@ struct SidebarSwipeCatcher: NSViewRepresentable {
                   let index = model.spaces.firstIndex(where: { $0.id == model.space?.id }),
                   SpaceSwipe.mayTrack(
                       isBeginning: event.phase == .began, hasPreciseDeltas: event.hasPreciseScrollingDeltas,
-                      spaceCount: model.spaces.count)
+                      spaceCount: model.spaces.count, isLanding: isLanding)
             else { return event }
             var lock = SwipeAxisLock()
             _ = lock.add(deltaX: event.scrollingDeltaX, deltaY: event.scrollingDeltaY)
@@ -204,6 +207,9 @@ struct SidebarSwipeCatcher: NSViewRepresentable {
             event.isDirectionInvertedFromDevice ? event.scrollingDeltaX : -event.scrollingDeltaX
         }
 
+        /// Whether a swipe is landing: from the lift until its Space is shown (or isn't).
+        private var isLanding = false
+
         /// Slides the rest of the way, so the neighboring Space's page fills the sidebar, rests
         /// the pages on it, and switches to its Space. The page is the Space's own, already
         /// drawn, so it only turns live: nothing reloads. With Reduce Motion it just switches.
@@ -211,10 +217,11 @@ struct SidebarSwipeCatcher: NSViewRepresentable {
             let spaces = model.spaces
             guard spaces.indices.contains(target) else { return }
             let destination = spaces[target].id
+            isLanding = true
             guard !reduceMotion else {
                 state.pageIndex = target
                 state.offset = 0
-                Task { await model.selectSpace(destination) }
+                switchSpace(to: destination)
                 return
             }
             let towardNext = target > swipe.index
@@ -228,7 +235,24 @@ struct SidebarSwipeCatcher: NSViewRepresentable {
                     state.pageIndex = target
                     state.offset = 0
                 }
-                Task { await model.selectSpace(destination) }
+                switchSpace(to: destination)
+            }
+        }
+
+        /// Shows the Space the pages landed on. If it didn't change (the Space was deleted
+        /// meanwhile, or couldn't be read), the pages slide back to the shown Space's page, the
+        /// only one that's live: they must never rest on a page that can't be used.
+        private func switchSpace(to destination: Space.ID) {
+            Task {
+                await model.selectSpace(destination)
+                isLanding = false
+                guard let shown = SpaceSwipe.restingPage(shown: model.space?.id, in: model.spaces),
+                      shown != state.pageIndex else { return }
+                if reduceMotion {
+                    state.pageIndex = shown
+                } else {
+                    withAnimation(.spring(duration: 0.25, bounce: 0)) { state.pageIndex = shown }
+                }
             }
         }
     }

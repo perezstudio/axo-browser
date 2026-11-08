@@ -1,4 +1,6 @@
+import AxoCore
 import CoreGraphics
+import Foundation
 import Testing
 @testable import AxoUI
 
@@ -42,6 +44,28 @@ struct SpaceSwipeTests {
         #expect(!may(began: false), "Only as a gesture starts")
         #expect(!may(precise: false), "A mouse's scroll wheel")
         #expect(!may(spaces: 1), "Nowhere to go")
+        #expect(!SpaceSwipe.mayTrack(isBeginning: true, hasPreciseDeltas: true, spaceCount: 3, isLanding: true),
+                "Not while the last swipe lands: it would start from the wrong Space")
+    }
+
+    @Test func afterTheLiftOnlyMomentumBelongsToTheSwipe() {
+        var drag = SpaceSwipeDrag(SpaceSwipe(index: 0, count: 2), width: 200)
+        _ = drag.move(by: -100)
+        #expect(drag.owns(afterLiftEventWithMomentum: false), "Still following the fingers")
+        _ = drag.lift()
+        #expect(drag.owns(afterLiftEventWithMomentum: true), "Its momentum")
+        #expect(!drag.owns(afterLiftEventWithMomentum: false),
+                "Fingers resting to stop a page's scrolling, or a new gesture, aren't the swipe's")
+    }
+
+    @Test func thePagesRestOnTheShownSpaceWhicheverWayASwitchWent() {
+        let profile = UUID()
+        let spaces = ["a", "b", "c"].map { Space(id: UUID(), profileID: profile, name: $0, sortKey: $0) }
+        #expect(SpaceSwipe.restingPage(shown: spaces[2].id, in: spaces) == 2)
+        // Landed on b, but b was deleted before it was shown: back to a, the live page.
+        let afterDeletion = [spaces[0], spaces[2]]
+        #expect(SpaceSwipe.restingPage(shown: spaces[0].id, in: afterDeletion) == 0)
+        #expect(SpaceSwipe.restingPage(shown: nil, in: spaces) == nil)
     }
 
     @Test func aVerticalScrollThatStartsSidewaysStaysAScroll() {
@@ -104,5 +128,17 @@ struct SpaceSwipeTests {
         var drag = SpaceSwipeDrag(SpaceSwipe(index: 0, count: 2), width: 200)
         #expect(drag.move(by: 120) == 20, "Past the first Space: a sixth of the way")
         #expect(drag.lift() == nil)
+    }
+
+    @Test func oneProfilesFavoritesAreHeldStillAndDrawnOnce() {
+        let home = UUID(), other = UUID()
+        func place(_ page: Int, offset: CGFloat, profiles: [Profile.ID] = [home, home, other]) -> SpaceSwipe.FavoritesPlacement {
+            SpaceSwipe.favoritesPlacement(forPage: page, resting: 0, offset: offset, width: 200, profiles: profiles)
+        }
+        #expect(place(0, offset: -50) == .init(offset: 50, isHidden: false), "The resting page's stay put")
+        #expect(place(1, offset: -50) == .init(offset: -150, isHidden: true),
+                "The incoming page's are in the same spot, hidden: one grid, not two")
+        #expect(place(1, offset: -50, profiles: [home, other]) == .init(), "Another profile's slide in with their page")
+        #expect(place(0, offset: 0) == .init(), "At rest")
     }
 }

@@ -90,19 +90,28 @@ struct SpacePreviewTests {
         #expect(model.spacePreviews[work.id]?.rows.map(\.id) == [moved], "Ready for a swipe to Work")
     }
 
+    @Test func theShownPageHighlightsOnlyWhatsSelected() async throws {
+        let first = try await open("first")
+        _ = try await open("second")
+        model.select(nil)
+        #expect(model.shownSpaceRows?.selectedTabID == nil, "Nothing selected: no row looks it")
+        #expect(model.shownSpaceRows?.holdsSelection(first) == false)
+    }
+
     @Test func leavingASpaceKeepsItsRowsAsTheyWere() async throws {
         let home = try #require(model.space)
         let kept = try await open("kept")
         await model.createSpace(name: "Work")
         await previewsSettle()
         await model.selectSpace(home.id)
-        _ = try await open("later")
+        let later = try await open("later")
         let work = try #require(model.spaces.first { $0.name == "Work" })
 
         await model.selectSpace(work.id)
-        let homePreview = try #require(model.spacePreviews[home.id])
-        #expect(homePreview.rows.count == 2, "The Space left, with the tab opened just before")
-        #expect(homePreview.selectedTabID != kept, "Its selection as it was left")
+        // Kept as the switch happens, not read again a turn later.
+        let homePreview = try #require(model.spacePreviews[home.id], "There as soon as the switch is done")
+        #expect(homePreview.rows.map(\.id) == [kept, later], "The Space left, with the tab opened just before")
+        #expect(homePreview.selectedTabID == later, "Its selection as it was left")
     }
 
     @Test func aSwipeReadsTheNeighborsAgain() async throws {

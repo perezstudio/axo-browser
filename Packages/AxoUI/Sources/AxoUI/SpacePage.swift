@@ -12,10 +12,9 @@ struct SpacePage: View {
     let model: BrowserModel
     let space: Space
     let isShown: Bool
-    /// How far to shift the page's favorites against the page's own movement: the whole way
-    /// while sliding between two Spaces of one profile, whose favorites are the same and so stay
-    /// still; otherwise none, and they slide with the page.
-    var favoritesOffset: CGFloat = 0
+    /// Where the page's favorites go during a swipe: held still between two Spaces of one
+    /// profile (drawn by one page only), otherwise sliding with the page.
+    var favorites = SpaceSwipe.FavoritesPlacement()
 
     /// The page's rows: the model's for the shown Space, the kept ones otherwise.
     private var data: SpaceSidebarPreview? { isShown ? model.shownSpaceRows : model.spacePreviews[space.id] }
@@ -44,7 +43,8 @@ struct SpacePage: View {
             }
             .padding(.horizontal, 10)
             .padding(.bottom, 6)
-            .offset(x: favoritesOffset)
+            .offset(x: favorites.offset)
+            .opacity(favorites.isHidden ? 0 : 1)
         }
         .allowsHitTesting(isShown)
         .accessibilityHidden(!isShown)

@@ -16,7 +16,7 @@ import Translation
 @Observable
 public final class BrowserModel {
     /// Every Space, in switcher order.
-    public private(set) var spaces: [Space] = [] {
+    public internal(set) var spaces: [Space] = [] {
         // New, renamed, moved, or deleted Spaces: read their rows again for swiping.
         didSet { if spaces != oldValue { scheduleSpacePreviewLoad() } }
     }
@@ -179,7 +179,7 @@ public final class BrowserModel {
     /// The tab each Space had selected, so switching back returns to it.
     @ObservationIgnored private var selectedTabBySpace: [Space.ID: AxoCore.Tab.ID] = [:]
     /// The Space a switch is reading the records of, before showing it.
-    @ObservationIgnored private var spaceBeingShown: Space.ID?
+    @ObservationIgnored private(set) var spaceBeingShown: Space.ID?
     /// Every other Space's sidebar rows, kept ready for a swipe between Spaces (#84).
     public internal(set) var spacePreviews: [Space.ID: SpaceSidebarPreview] = [:]
 
@@ -642,7 +642,28 @@ public final class BrowserModel {
         let newTabs = try await store.tabs(in: target.id)
         let newFolders = try await store.folders(in: target.id)
         let newSplits = try await store.splits(in: target.id)
-        await observeFavorites(for: target.profileID)
+        // The Space's record as it is now: it may have changed while its rows were read (iCloud,
+        // another window), and the follow that would apply it waits for this switch. Its favorites
+        // follow its latest profile, and its pages are made with that one.
+        var observedProfileID: Profile.ID?
+        var latest: Space?
+        while true {
+            latest = spaces.first { $0.id == target.id }
+            guard let latest, latest.profileID != observedProfileID else { break }
+            observedProfileID = latest.profileID
+            await observeFavorites(for: latest.profileID)
+        }
+        guard let target = latest else {
+            // Deleted meanwhile: the window stays where it is, or moves on as for any deletion
+            // when the Space it showed is gone too.
+            spaceBeingShown = nil
+            if space == nil, let first = spaces.first {
+                try await show(first)
+            } else {
+                try await followShownSpace()
+            }
+            return
+        }
         if let current = space, spaces.contains(where: { $0.id == current.id }) {
             selectedTabBySpace[current.id] = selectedTabID
             keepPreviewOfShownSpace()

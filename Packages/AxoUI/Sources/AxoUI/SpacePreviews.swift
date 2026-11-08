@@ -40,9 +40,12 @@ public struct SpaceSidebarPreview: Equatable, Sendable {
 
     /// Builds a Space's rows from its records, as ``BrowserModel`` builds the shown Space's: a
     /// split of two or more panes is one row, standing for its first tab in sidebar order.
+    ///
+    /// A kept Space whose remembered tab is gone shows its first tab selected, as switching to it
+    /// does (`fallsBackToFirstTab`); the shown Space shows only what's really selected.
     static func make(
         space: Space, tabs: [AxoCore.Tab], folders: [Folder], splits: [TabSplit], selectedTabID: AxoCore.Tab.ID?,
-        favorites: [Favorite] = []
+        favorites: [Favorite] = [], fallsBackToFirstTab: Bool = true
     ) -> SpaceSidebarPreview {
         let knownSplits = Set(splits.map(\.id))
         var panesBySplit: [TabSplit.ID: [AxoCore.Tab]] = [:]
@@ -70,7 +73,7 @@ public struct SpaceSidebarPreview: Equatable, Sendable {
             splitPanes: splitPanes,
             selectedTabID: selectedTabID.flatMap { id in
                 tabs.contains { $0.id == id } || favorites.contains { $0.id == id } ? id : nil
-            } ?? tabs.first?.id,
+            } ?? (fallsBackToFirstTab ? tabs.first?.id : nil),
             favorites: favorites
         )
     }
@@ -83,7 +86,7 @@ extension BrowserModel {
         space.map { space in
             SpaceSidebarPreview.make(
                 space: space, tabs: tabs, folders: folders, splits: splits, selectedTabID: selectedTabID,
-                favorites: favorites)
+                favorites: favorites, fallsBackToFirstTab: false)
         }
     }
 

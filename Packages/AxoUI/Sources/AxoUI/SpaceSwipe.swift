@@ -1,3 +1,4 @@
+import AxoCore
 import CoreFoundation
 import CoreGraphics
 import Foundation
@@ -55,8 +56,42 @@ nonisolated struct SpaceSwipe: Equatable {
     /// forward: inside Axo's process every way of reading it (`NSEvent.isSwipeTrackingFromScrollEventsEnabled`,
     /// the global preferences) sees it off for a while after launch, while the embedded Chromium
     /// engine starts, so swipes over the sidebar were ignored then.
-    static func mayTrack(isBeginning: Bool, hasPreciseDeltas: Bool, spaceCount: Int) -> Bool {
-        isBeginning && hasPreciseDeltas && spaceCount > 1
+    ///
+    /// Not while the last swipe is landing (`isLanding`): the pages already rest on a Space that
+    /// isn't shown yet, so a swipe from the shown one would go to the wrong neighbor.
+    static func mayTrack(isBeginning: Bool, hasPreciseDeltas: Bool, spaceCount: Int, isLanding: Bool = false) -> Bool {
+        isBeginning && hasPreciseDeltas && spaceCount > 1 && !isLanding
+    }
+
+    /// Where one page's favorites go while the pages move.
+    struct FavoritesPlacement: Equatable {
+        /// How far they shift against the page's own movement.
+        var offset: CGFloat = 0
+        /// Whether this page doesn't draw them, since another page draws the same ones in the
+        /// same spot (two grids of see-through tiles would show darker).
+        var isHidden = false
+    }
+
+    /// Where page `index`'s favorites go while the pages rest on page `resting`, moved by
+    /// `offset` points, each `width` wide; `profiles` are the Spaces' profiles in page order.
+    /// Between the resting page and the one coming in, when both are one profile's (the same
+    /// favorites), they're held still: the resting page's stay put and the incoming page's are
+    /// hidden in the same spot, until it lands. Otherwise they slide with their page.
+    static func favoritesPlacement(
+        forPage index: Int, resting: Int, offset: CGFloat, width: CGFloat, profiles: [Profile.ID]
+    ) -> FavoritesPlacement {
+        guard offset != 0, profiles.indices.contains(resting) else { return FavoritesPlacement() }
+        let incoming = resting + (offset < 0 ? 1 : -1)
+        guard index == resting || index == incoming, profiles.indices.contains(incoming),
+              profiles[incoming] == profiles[resting] else { return FavoritesPlacement() }
+        // The page sits at (index - resting) widths plus the swipe; this undoes that.
+        return FavoritesPlacement(offset: -(CGFloat(index - resting) * width + offset), isHidden: index == incoming)
+    }
+
+    /// The page the sidebar rests on once a switch settles: the shown Space's, the only live
+    /// page, whether or not the switch happened (its Space may have been deleted meanwhile).
+    static func restingPage(shown: Space.ID?, in spaces: [Space]) -> Int? {
+        spaces.firstIndex { $0.id == shown }
     }
 }
 
@@ -123,6 +158,13 @@ nonisolated struct SpaceSwipeDrag {
 
     /// The pages' offset for the distance so far.
     var offset: CGFloat { swipe.offset(for: distance / width, width: width) }
+
+    /// Whether a scroll event belongs to the swipe after the fingers lifted: only its momentum.
+    /// Anything else (a new gesture, fingers resting to stop a page's scrolling) ends the swipe
+    /// and goes on as usual.
+    func owns(afterLiftEventWithMomentum hasMomentum: Bool) -> Bool {
+        !didLift || hasMomentum
+    }
 
     /// The fingers lifted: the Space to switch to, or `nil` to spring back. Once.
     mutating func lift() -> Int? {
