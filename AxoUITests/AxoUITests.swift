@@ -1174,7 +1174,11 @@ final class AxoUITests: XCTestCase {
         waitForExpectations(timeout: 10)
 
         app.menuBars.menuBarItems["View"].click()
-        XCTAssertTrue(siteSettings.isEnabled, "The shown page's site has settings")
+        let toggle = app.menuBars.menuItems["Hide Address Bar in Sidebar"]
+        XCTAssertTrue(siteSettings.isEnabled, """
+            The shown page's site has settings (window's model in the menu: \(toggle.exists && toggle.isEnabled), \
+            Copy Link: \(app.menuBars.menuItems["Copy Link"].isEnabled), address: \(address.value ?? "none"))
+            """)
         siteSettings.click()
         let camera = app.popUpButtons["sitePermission-camera"]
         XCTAssertTrue(camera.waitForExistence(timeout: 5))
