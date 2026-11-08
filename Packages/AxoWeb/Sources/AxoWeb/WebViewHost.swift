@@ -82,6 +82,13 @@ extension WebViewHost: NSViewRepresentable {
     public static func dismantleNSView(_ container: WebViewContainer, coordinator: Coordinator) {
         coordinator.hide(from: container)
     }
+
+    /// Any size offered: a page has no size of its own. Without this SwiftUI asks AppKit, which
+    /// answers with Screen Time's view's own size (480 by 272 points), and a window with a page
+    /// couldn't get narrower than that plus the sidebar.
+    public func sizeThatFits(_ proposal: ProposedViewSize, nsView: WebViewContainer, context: Context) -> CGSize? {
+        proposal.replacingUnspecifiedDimensions()
+    }
 }
 #else
 extension WebViewHost: UIViewRepresentable {
@@ -95,6 +102,12 @@ extension WebViewHost: UIViewRepresentable {
 
     public static func dismantleUIView(_ container: WebViewContainer, coordinator: Coordinator) {
         coordinator.hide(from: container)
+    }
+
+    /// Any size offered: a page has no size of its own (Screen Time's view has one, which mustn't
+    /// become the page's).
+    public func sizeThatFits(_ proposal: ProposedViewSize, uiView: WebViewContainer, context: Context) -> CGSize? {
+        proposal.replacingUnspecifiedDimensions()
     }
 }
 #endif
