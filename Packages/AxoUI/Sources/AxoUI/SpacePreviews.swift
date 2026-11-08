@@ -125,6 +125,14 @@ extension BrowserModel {
         }
     }
 
+    /// Reads one Space's rows again, after a change to it from the shown Space (a tab moved
+    /// there), so a swipe to it shows the change.
+    func refreshPreview(of id: Space.ID) async {
+        guard id != space?.id, let target = spaces.first(where: { $0.id == id }),
+              let preview = await readPreview(of: target) else { return }
+        spacePreviews[id] = preview
+    }
+
     /// The shown Space's rows as they are now, kept as it's left, so swiping back is instant.
     func keepPreviewOfShownSpace() {
         guard let space else { return }

@@ -195,7 +195,7 @@ public final class BrowserModel {
     @ObservationIgnored public var archiveAfter: TimeInterval = 12 * 60 * 60
     /// How often to look for idle tabs to archive while Axo runs.
     @ObservationIgnored public var archiveCheckInterval: Duration = .seconds(60 * 60)
-    @ObservationIgnored private let now: () -> Date
+    @ObservationIgnored let now: () -> Date
     @ObservationIgnored private var archiveTask: Task<Void, Never>?
     @ObservationIgnored private var commandSearchTask: Task<Void, Never>?
     /// Opens the Web Inspector. Set by the app.
@@ -943,7 +943,7 @@ public final class BrowserModel {
     }
 
     /// The tab to select after `id` goes away: the next one in `order`, else the previous one.
-    private static func neighbor(of id: AxoCore.Tab.ID, in order: [AxoCore.Tab.ID], among remaining: [AxoCore.Tab.ID]) -> AxoCore.Tab.ID? {
+    static func neighbor(of id: AxoCore.Tab.ID, in order: [AxoCore.Tab.ID], among remaining: [AxoCore.Tab.ID]) -> AxoCore.Tab.ID? {
         guard let index = order.firstIndex(of: id) else { return remaining.first }
         let candidates = Set(remaining)
         let after = order[(index + 1)...].first { candidates.contains($0) }
@@ -1443,6 +1443,9 @@ public final class BrowserModel {
             case .translatePage: canTranslatePage
             case .showOriginalPage: selectedTranslation != nil
             case .summarizePage: canSummarizePage
+            case .duplicateTab: selectedTab != nil
+            case .closeOtherTabs: selectedTabID.map { !otherUnpinnedTabs(than: $0).isEmpty } ?? false
+            case .closeTabsBelow: selectedTabID.map { !unpinnedTabs(below: $0).isEmpty } ?? false
             default: true
             }
         }
@@ -1471,6 +1474,9 @@ public final class BrowserModel {
         case .translatePage: await translateSelectedPage()
         case .showOriginalPage: await showOriginalPage()
         case .summarizePage: await summarizeSelectedPage()
+        case .duplicateTab: if let id = selectedTab?.id { await duplicateTab(id) }
+        case .closeOtherTabs: if let id = selectedTabID { await closeOtherTabs(than: id) }
+        case .closeTabsBelow: if let id = selectedTabID { await closeTabs(below: id) }
         }
     }
 

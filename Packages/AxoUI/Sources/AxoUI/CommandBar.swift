@@ -24,6 +24,9 @@ public enum CommandAction: String, CaseIterable, Hashable, Sendable {
     case translatePage
     case showOriginalPage
     case summarizePage
+    case duplicateTab
+    case closeOtherTabs
+    case closeTabsBelow
 
     /// The name shown in the command bar.
     public var title: String {
@@ -49,6 +52,9 @@ public enum CommandAction: String, CaseIterable, Hashable, Sendable {
         case .translatePage: "Translate Page"
         case .showOriginalPage: "Show Original Page"
         case .summarizePage: "Summarize Page"
+        case .duplicateTab: "Duplicate Tab"
+        case .closeOtherTabs: "Close Other Tabs"
+        case .closeTabsBelow: "Close Tabs Below"
         }
     }
 
@@ -76,6 +82,9 @@ public enum CommandAction: String, CaseIterable, Hashable, Sendable {
         case .translatePage: "translate"
         case .showOriginalPage: "arrow.uturn.backward.circle"
         case .summarizePage: "text.line.3.summary"
+        case .duplicateTab: "plus.square.on.square"
+        case .closeOtherTabs: "xmark.square"
+        case .closeTabsBelow: "arrow.down.to.line"
         }
     }
 }

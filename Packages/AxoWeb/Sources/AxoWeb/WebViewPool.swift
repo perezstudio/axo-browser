@@ -328,6 +328,20 @@ public final class WebViewPool {
         live[tabID] != nil
     }
 
+    /// Gives `tabID`, a new tab with no page yet, a copy of `sourceID`'s back and forward
+    /// history (Duplicate Tab), so its page restores that history when first shown instead of
+    /// loading the tab's URL. Returns whether there was history to copy: none for a tab not
+    /// loaded since launch, which then loads its URL as usual.
+    @discardableResult
+    public func copyHistory(from sourceID: Tab.ID, to tabID: Tab.ID) -> Bool {
+        guard live[tabID] == nil, hibernated[tabID] == nil else { return false }
+        let source = live[sourceID] ?? hibernated[sourceID]?.kept
+        guard let state = source?.page.interactionState ?? hibernated[sourceID]?.interactionState else { return false }
+        let snapshot = live[sourceID]?.snapshot ?? hibernated[sourceID]?.snapshot
+        hibernated[tabID] = HibernatedTab(kept: nil, interactionState: state, snapshot: snapshot)
+        return true
+    }
+
     /// Whether the tab's page was discarded and its history saved for later.
     public func isHibernated(_ tabID: Tab.ID) -> Bool {
         hibernated[tabID] != nil

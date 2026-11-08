@@ -339,7 +339,16 @@ struct TabContextMenu: View {
             Button("Add to Split View") { Task { await model.addToSplit(tab.id) } }
             Divider()
         }
+        Button("Duplicate Tab") { Task { await model.duplicateTab(tab.id) } }
+        Button("Copy Link") { model.copyLink(of: tab.id) }
         Button("Add to Favorites") { Task { await model.addToFavorites(tab.id) } }
+        if model.canMoveToSpace(tab.id) {
+            Menu("Move to Space") {
+                ForEach(model.spacesToMoveTabsTo) { space in
+                    Button(space.name) { Task { await model.moveTab(tab.id, toSpace: space.id) } }
+                }
+            }
+        }
         Divider()
         if tab.isPinned {
             Button("Go to Pinned Page") { Task { await model.goToPinnedHome(tab.id) } }
@@ -353,6 +362,10 @@ struct TabContextMenu: View {
             Button("Pin Tab") { Task { await model.setPinned(true, tabID: tab.id) } }
             Divider()
             Button("Close Tab") { Task { await model.closeTab(tab.id, byPerson: true) } }
+            Button("Close Other Tabs") { Task { await model.closeOtherTabs(than: tab.id) } }
+                .disabled(model.otherUnpinnedTabs(than: tab.id).isEmpty)
+            Button("Close Tabs Below") { Task { await model.closeTabs(below: tab.id) } }
+                .disabled(model.unpinnedTabs(below: tab.id).isEmpty)
         }
         Divider()
         MoveToFolderMenu(model: model, item: .tab(tab.id), current: tab.isPinned ? tab.folderID : nil, excluding: [])

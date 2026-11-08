@@ -76,6 +76,20 @@ struct SpacePreviewTests {
         #expect(model.neighboringSpaces.next == nil)
     }
 
+    @Test func aTabMovedToAnotherSpaceShowsOnItsPage() async throws {
+        await model.createSpace(name: "Work")
+        let work = try #require(model.space)
+        let home = try #require(model.spaces.first { $0.id != work.id })
+        await model.selectSpace(home.id)
+        let moved = try await open("moved")
+        _ = try await open("stays")
+        await previewsSettle()
+        #expect(model.spacePreviews[work.id]?.rows.isEmpty == true)
+
+        await model.moveTab(moved, toSpace: work.id)
+        #expect(model.spacePreviews[work.id]?.rows.map(\.id) == [moved], "Ready for a swipe to Work")
+    }
+
     @Test func leavingASpaceKeepsItsRowsAsTheyWere() async throws {
         let home = try #require(model.space)
         let kept = try await open("kept")
