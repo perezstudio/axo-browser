@@ -579,9 +579,17 @@ final class AxoUITests: XCTestCase {
             let elements = app.descendants(matching: .any).matching(NSPredicate(format: "hasKeyboardFocus == true")).allElementsBoundByIndex
             return elements.map { "[\($0.elementType.rawValue) '\($0.identifier)' '\($0.label)' \($0.frame)]" }.joined(separator: " ")
         }
-        let afterClick = focused()
+        func selectedRows() -> String {
+            sidebar.descendants(matching: .any).matching(NSPredicate(format: "selected == true")).allElementsBoundByIndex
+                .map { "[\($0.elementType.rawValue) '\($0.label)' '\(($0.value as? String) ?? "")' \($0.frame.minY)]" }.joined(separator: " ")
+        }
+        let afterClick = focused() + " selected: " + selectedRows()
         app.typeKey(.downArrow, modifierFlags: [])
         sleep(1)
+        print("FOCUS rows after down: \(selectedRows()); address: \(address.value ?? "")")
+        sidebar.typeKey(.downArrow, modifierFlags: [])
+        sleep(1)
+        print("FOCUS rows after down sent to the sidebar: \(selectedRows()); address: \(address.value ?? "")")
         XCTContext.runActivity(named: "Focus after the click: \(afterClick); after ↓: \(focused()); address: \(address.value ?? "")") { _ in }
         print("FOCUS after click: \(afterClick); after down: \(focused()); address: \(address.value ?? "")")
         expectShown("HomeTwo", "The arrow keys move through Home's tabs")
