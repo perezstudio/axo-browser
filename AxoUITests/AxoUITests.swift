@@ -540,50 +540,24 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Home tab"].waitForExistence(timeout: 5))
     }
 
-    /// After switching Spaces from the keyboard, the arrow keys move through the new Space's tabs:
-    /// keyboard focus follows to its page in the sidebar rather than staying on the one left,
-    /// which is still drawn beside it but takes no input (#84).
+    /// Clicking a tab in the sidebar hands keyboard focus to its page, as in Arc: keys go to the
+    /// page, not the sidebar.
     @MainActor
-    func testArrowKeysMoveThroughTheSpaceSwitchedTo() throws {
+    func testClickingATabGivesItsPageTheKeyboard() throws {
         let app = launchApp()
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
-        for title in ["HomeOne", "HomeTwo"] {
-            AxoUITests.openPage("data:text/html,<title>\(title)</title>", in: app)
-            XCTAssertTrue(sidebar.staticTexts[title].waitForExistence(timeout: 10))
-        }
-        app.buttons["newSpaceButton"].click()
-        let nameField = app.textFields["spaceNameField"]
-        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
-        nameField.click()
-        nameField.typeText("Work")
-        app.buttons["createSpaceButton"].click()
-        XCTAssertTrue(sidebar.staticTexts["Work"].waitForExistence(timeout: 5))
-        for title in ["WorkOne", "WorkTwo"] {
-            AxoUITests.openPage("data:text/html,<title>\(title)</title>", in: app)
-            XCTAssertTrue(sidebar.staticTexts[title].waitForExistence(timeout: 10))
-        }
-        let address = app.descendants(matching: .any)["sidebarAddressBar"]
-        // Titles without spaces: the address bar shows the page's address, where a space is %20.
-        func expectShown(_ title: String) {
-            expectation(for: NSPredicate(format: "value CONTAINS %@", title), evaluatedWith: address)
-            waitForExpectations(timeout: 5)
-        }
+        // The page names the last key it got in its title.
+        AxoUITests.openPage("data:text/html,<title>Keys</title><script>addEventListener('keydown', e => document.title = 'Got ' + e.key)</script>", in: app)
+        XCTAssertTrue(sidebar.staticTexts["Keys"].waitForExistence(timeout: 10))
+        AxoUITests.openPage("data:text/html,<title>Other</title>", in: app)
+        XCTAssertTrue(sidebar.staticTexts["Other"].waitForExistence(timeout: 10))
 
-        // Home's list takes keyboard focus from a click on its row.
-        app.typeKey("1", modifierFlags: .control)
-        XCTAssertTrue(sidebar.staticTexts["HomeOne"].waitForExistence(timeout: 5))
-        sidebar.staticTexts["HomeOne"].click()
-        expectShown("HomeOne") // The clicked tab shows
+        sidebar.staticTexts["Keys"].click()
+        app.typeKey("x", modifierFlags: [])
+        XCTAssertTrue(sidebar.staticTexts["Got x"].waitForExistence(timeout: 5), "The page got the key")
         app.typeKey(.downArrow, modifierFlags: [])
-        expectShown("HomeTwo") // The arrow keys move through Home's tabs
-
-        // Switched from the keyboard: the arrow keys move through Work's tabs now.
-        app.typeKey("2", modifierFlags: .control)
-        XCTAssertTrue(sidebar.staticTexts["WorkTwo"].waitForExistence(timeout: 5))
-        expectShown("WorkTwo") // Work's remembered tab shows
-        app.typeKey(.upArrow, modifierFlags: [])
-        expectShown("WorkOne") // The arrow keys move through Work's tabs
+        XCTAssertTrue(sidebar.staticTexts["Got ArrowDown"].waitForExistence(timeout: 5), "Arrow keys go to the page too")
     }
 
     /// Settings › General moves the navigation bar from the sidebar to the page's toolbar, where

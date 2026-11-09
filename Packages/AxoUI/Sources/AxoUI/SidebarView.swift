@@ -12,9 +12,9 @@ struct SidebarView: View {
     @AppStorage(AddressBarSettings.showsSidebarAddressBarKey) private var showsAddressBar = true
     /// The Spaces' pages and a swipe between them as it happens (#84).
     @State private var swipe = SidebarSwipeState()
-    /// Which Space's list has keyboard focus, if any. On a switch it moves to the shown Space's
-    /// list, so the arrow keys move through the Space switched to rather than the one left,
-    /// which is still drawn beside it but takes no input.
+    /// Which Space's list has keyboard focus, if any (from Full Keyboard Access or VoiceOver).
+    /// On a switch it moves to the shown Space's list, so the arrow keys move through the Space
+    /// switched to rather than the one left, which is still drawn beside it but takes no input.
     @FocusState private var focusedList: Space.ID?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 

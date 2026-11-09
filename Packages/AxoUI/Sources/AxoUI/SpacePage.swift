@@ -13,8 +13,8 @@ struct SpacePage: View {
     let space: Space
     let isShown: Bool
     /// Which Space's list has keyboard focus, shared by every page (``SidebarView`` moves it to
-    /// the shown Space's list on a switch). A click on a row selects it without making the list
-    /// the first responder, so the list takes focus itself then, and the arrow keys move on.
+    /// the shown Space's list on a switch). The list gets it from the keyboard (Full Keyboard
+    /// Access, VoiceOver), and then the arrow keys move through its rows.
     var focusedList: FocusState<Space.ID?>.Binding
     /// Where the page's favorites go during a swipe: held still between two Spaces of one
     /// profile (drawn by one page only), otherwise sliding with the page.
@@ -28,10 +28,12 @@ struct SpacePage: View {
         // Folders are selectable too, so the keyboard can reach, open, and act on them.
         List(selection: Binding(
             get: { isShown ? model.selectedSidebarItem : previewSelection },
-            set: {
+            set: { item in
                 guard isShown else { return }
-                model.selectSidebarItem($0)
-                focusedList.wrappedValue = space.id
+                model.selectSidebarItem(item)
+                // A click on a tab hands keyboard focus to its page, as in Arc, so typing and
+                // scrolling go there; with the list focused (the keyboard), it stays in the list.
+                if case .tab = item, focusedList.wrappedValue != space.id { model.focusPage() }
             }
         )) {
             if let data {
