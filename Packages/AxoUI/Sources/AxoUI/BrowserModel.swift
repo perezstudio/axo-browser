@@ -447,7 +447,10 @@ public final class BrowserModel {
 
     /// The icon for a tab's site, if Axo has one.
     public func favicon(for tab: AxoCore.Tab) -> PlatformImage? {
+        // A pinned tab or favorite whose site has no icon of its own (a home that redirects)
+        // shows the one it showed at its home page.
         Favicon.key(for: tab.url).flatMap { favicons[$0] }
+            ?? (tab.homeURL == nil ? nil : favicons[Favicon.homeKey(for: tab.id)])
     }
 
     /// Loads the Spaces, opens the initial Space with its first tab selected, and starts
@@ -1613,10 +1616,12 @@ public final class BrowserModel {
                 }
             } + preview.splitPanes.values.flatMap(\.self) + PinnedNode.allTabs(in: preview.pinnedTree)
         }
-        let favoriteURLs = (favorites + spacePreviews.values.flatMap(\.favorites)).map(\.url)
+        let allFavorites = favorites + spacePreviews.values.flatMap(\.favorites)
         let allTabs = tabs + previewTabs
-        let urls = allTabs.map(\.url) + allTabs.compactMap(\.homeURL) + favoriteURLs
-        let hosts = Set(urls.compactMap(Favicon.key(for:))).subtracting(lookedUpFaviconHosts)
+        let homeKeys = allTabs.filter { $0.homeURL != nil }.map(\.id).map(Favicon.homeKey(for:))
+            + allFavorites.map(\.id).map(Favicon.homeKey(for:))
+        let urls = allTabs.map(\.url) + allTabs.compactMap(\.homeURL) + allFavorites.map(\.url)
+        let hosts = Set(urls.compactMap(Favicon.key(for:)) + homeKeys).subtracting(lookedUpFaviconHosts)
         guard !hosts.isEmpty else { return }
         do {
             for (host, data) in try await store.favicons(forHosts: hosts) where favicons[host] == nil {
@@ -1628,33 +1633,46 @@ public final class BrowserModel {
         }
     }
 
-    /// Keeps a page's icon for its host. For a pinned tab or favorite whose page is on another
-    /// host than its home page (a home that redirects, such as gmail.com to mail.google.com),
-    /// the icon is kept for the home host too when it has none, so the tab shows it at the next
-    /// launch or after a reset, with no page loaded. A home's own icon is never replaced.
+    /// Keeps a page's icon for its host, and, for a pinned tab's or favorite's page at its home
+    /// page, as its home icon too (``Favicon/homeKey(for:)``): that's the icon it shows with no
+    /// page when its home host has none of its own, as when the home redirects elsewhere
+    /// (gmail.com to mail.google.com). The page counts as at its home on the home's host, or
+    /// with no history of its own (only redirects led there, never a link the person
+    /// followed). A later home icon replaces an earlier one, so a wrong one (a login page the
+    /// home redirected to) doesn't last.
     private func saveFavicon(_ data: Data, for pageURL: URL, tabID: AxoCore.Tab.ID? = nil) {
         guard let host = Favicon.key(for: pageURL), let image = PlatformImage(data: data) else { return }
         favicons[host] = image
         lookedUpFaviconHosts.insert(host)
-        let home = tabID.flatMap(homeURL(of:)).flatMap { home in Favicon.key(for: home) == host ? nil : home }
+        let homeID = tabID.flatMap { id -> AxoCore.Tab.ID? in
+            guard let home = homeURL(of: id) else { return nil }
+            let atHome = Favicon.key(for: home) == host || pool.state(for: id)?.canGoBack == false
+            return atHome ? id : nil
+        }
+        if let homeID {
+            let key = Favicon.homeKey(for: homeID)
+            favicons[key] = image
+            lookedUpFaviconHosts.insert(key)
+        }
         Task {
             do {
                 try await store.saveFavicon(data, for: pageURL)
-                if let home {
-                    try await store.saveFaviconIfMissing(data, for: home)
-                    // Whichever icon the home host has now: this one, or its own saved before.
-                    await loadSavedFavicons()
-                }
+                if let homeID { try await store.saveHomeFavicon(data, for: homeID) }
             } catch {
                 logger.error("Couldn't save favicon: \(error)")
             }
         }
     }
 
-    /// The home page of a pinned tab or favorite, which its row shows without a page.
+    /// The home page of a pinned tab or favorite, in any Space or of any profile the window has
+    /// rows for, or `nil` for any other tab.
     private func homeURL(of tabID: AxoCore.Tab.ID) -> URL? {
-        if let favorite = favorites.first(where: { $0.id == tabID }) { return favorite.url }
-        return tabs.first { $0.id == tabID }?.homeURL
+        let favorite = (favorites + spacePreviews.values.flatMap(\.favorites)).first { $0.id == tabID }
+        if let favorite { return favorite.url }
+        if let tab = tabs.first(where: { $0.id == tabID }) { return tab.homeURL }
+        return spacePreviews.values.lazy
+            .compactMap { PinnedNode.allTabs(in: $0.pinnedTree).first { $0.id == tabID }?.homeURL }
+            .first
     }
 
     /// Saves a page change to the tab and to the profile's history. A new URL counts as a

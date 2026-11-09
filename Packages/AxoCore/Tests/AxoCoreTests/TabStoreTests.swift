@@ -208,14 +208,14 @@ struct TabStoreTests {
         #expect(icons == ["example.com": newer, "swift.org": png])
     }
 
-    @Test func aFaviconSavedIfMissingNeverReplacesOne() async throws {
-        let own = Data([1, 2, 3]), redirected = Data([4, 5, 6])
-        try await store.saveFaviconIfMissing(redirected, for: URL(string: "https://gmail.com")!)
-        #expect(try await store.favicons(forHosts: ["gmail.com"]) == ["gmail.com": redirected], "None yet: saved")
-
-        try await store.saveFavicon(own, for: URL(string: "https://example.com")!)
-        try await store.saveFaviconIfMissing(redirected, for: URL(string: "https://Example.com/home")!)
-        #expect(try await store.favicons(forHosts: ["example.com"]) == ["example.com": own], "Its own icon stays")
+    @Test func homeIconsAreKeptByIDApartFromHosts() async throws {
+        let id = UUID(), first = Data([1, 2, 3]), later = Data([4, 5, 6])
+        try await store.saveHomeFavicon(first, for: id)
+        try await store.saveHomeFavicon(later, for: id)
+        let key = Favicon.homeKey(for: id)
+        #expect(try await store.favicons(forHosts: [key]) == [key: later], "The latest replaces the last")
+        #expect(Favicon.key(for: URL(string: "https://home:1/")!) != key, "Never a host's key")
+        #expect(try await store.favicons(forHosts: ["home"]).isEmpty)
     }
 
     @Test func urlsWithoutAHostHaveNoFavicon() async throws {
