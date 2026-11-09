@@ -63,6 +63,17 @@ final class AxoUITests: XCTestCase {
         return app
     }
 
+    /// Opens `address` in a new tab through the command bar (⌘T). It types into the command
+    /// field itself, once it's there: typed at the app as the bar opens, the first letters could
+    /// be lost or go elsewhere, turning an address into a search.
+    @MainActor
+    static func openPage(_ address: String, in app: XCUIApplication) {
+        app.typeKey("t", modifierFlags: .command)
+        let field = app.textFields["commandField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "The command bar opens")
+        field.typeText(address + "\n")
+    }
+
     /// Waits for Axo to be the frontmost app, activating it if another app took focus during
     /// launch. Keystrokes fail with "not foreground" otherwise.
     @MainActor
@@ -137,8 +148,7 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
 
         // ⌘T focuses the address field for a new tab.
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText(page("First") + "\n")
+        AxoUITests.openPage(page("First"), in: app)
         XCTAssertTrue(sidebar.staticTexts["First"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["No Tab Open"].exists)
 
@@ -204,8 +214,7 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["downloadsButton"].exists, "No Downloads button before any download")
 
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Files</title><a href='data:text/plain,hello' download='hello.txt'>Get hello</a>\n")
+        AxoUITests.openPage("data:text/html,<title>Files</title><a href='data:text/plain,hello' download='hello.txt'>Get hello</a>", in: app)
         let link = app.links["Get hello"]
         XCTAssertTrue(link.waitForExistence(timeout: 10))
         link.click()
@@ -235,9 +244,8 @@ final class AxoUITests: XCTestCase {
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
 
-        app.typeKey("t", modifierFlags: .command)
         // Ask after a moment, so the dialog doesn't open while the typed Return is still being delivered.
-        app.typeText("data:text/html,<title>Ask</title><script>setTimeout(() => document.title = confirm('Delete everything?') ? 'Yes' : 'No', 300)</script>\n")
+        AxoUITests.openPage("data:text/html,<title>Ask</title><script>setTimeout(() => document.title = confirm('Delete everything?') ? 'Yes' : 'No', 300)</script>", in: app)
 
         XCTAssertTrue(app.staticTexts["This page says"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Delete everything?"].exists)
@@ -262,8 +270,7 @@ final class AxoUITests: XCTestCase {
         XCTAssertEqual(bar.frame.height, 40, accuracy: 1)
         let commandField = app.textFields["commandField"]
 
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>First</title>\n")
+        AxoUITests.openPage("data:text/html,<title>First</title>", in: app)
         XCTAssertTrue(sidebar.staticTexts["First"].waitForExistence(timeout: 10))
         XCTAssertEqual(bar.label, "Address")
         expectation(for: NSPredicate(format: "value BEGINSWITH 'data:text/html,'"), evaluatedWith: bar)
@@ -350,8 +357,7 @@ final class AxoUITests: XCTestCase {
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
         for title in ["Keep", "Gone", "Docs"] {
-            app.typeKey("t", modifierFlags: .command)
-            app.typeText("data:text/html,<title>\(title)</title>\n")
+            AxoUITests.openPage("data:text/html,<title>\(title)</title>", in: app)
             XCTAssertTrue(sidebar.staticTexts[title].waitForExistence(timeout: 10))
         }
         app.typeKey("p", modifierFlags: [.command, .control]) // Pin Tab, on "Docs"
@@ -383,11 +389,9 @@ final class AxoUITests: XCTestCase {
         let app = launchApp()
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Keep</title>\n")
+        AxoUITests.openPage("data:text/html,<title>Keep</title>", in: app)
         XCTAssertTrue(sidebar.staticTexts["Keep"].waitForExistence(timeout: 10))
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Gone</title>\n")
+        AxoUITests.openPage("data:text/html,<title>Gone</title>", in: app)
         XCTAssertTrue(sidebar.staticTexts["Gone"].waitForExistence(timeout: 10))
 
         // With the address bar hidden, "Link copied" shows over the page.
@@ -419,8 +423,7 @@ final class AxoUITests: XCTestCase {
         let app = launchApp()
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>First</title>\n")
+        AxoUITests.openPage("data:text/html,<title>First</title>", in: app)
         XCTAssertTrue(sidebar.staticTexts["First"].waitForExistence(timeout: 10))
 
         app.typeKey(",", modifierFlags: .command)
@@ -477,8 +480,7 @@ final class AxoUITests: XCTestCase {
         let question = app.staticTexts["Allow this page to open “Mail”?"]
         let opened = sidebar.staticTexts["Opened in another app"]
 
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Contact</title><a id=m href='mailto:someone@example.com'>Write</a><script>setTimeout(() => document.getElementById('m').click(), 300)</script>\n")
+        AxoUITests.openPage("data:text/html,<title>Contact</title><a id=m href='mailto:someone@example.com'>Write</a><script>setTimeout(() => document.getElementById('m').click(), 300)</script>", in: app)
         XCTAssertTrue(question.waitForExistence(timeout: 10))
         app.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(question.waitForNonExistence(timeout: 5), "Return answered the prompt")
@@ -500,10 +502,9 @@ final class AxoUITests: XCTestCase {
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
 
-        app.typeKey("t", modifierFlags: .command)
         // Follow the link after a moment, so the prompt doesn't open while the typed Return is
         // still being delivered.
-        app.typeText("data:text/html,<title>Contact</title><a id=m href='mailto:someone@example.com'>Write</a><script>setTimeout(() => document.getElementById('m').click(), 300)</script>\n")
+        AxoUITests.openPage("data:text/html,<title>Contact</title><a id=m href='mailto:someone@example.com'>Write</a><script>setTimeout(() => document.getElementById('m').click(), 300)</script>", in: app)
 
         XCTAssertTrue(app.staticTexts["Allow this page to open “Mail”?"].waitForExistence(timeout: 10))
         let dialog = app.sheets.firstMatch.exists ? app.sheets.firstMatch : app.dialogs.firstMatch
@@ -521,8 +522,7 @@ final class AxoUITests: XCTestCase {
         let app = launchApp()
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Home tab</title>\n")
+        AxoUITests.openPage("data:text/html,<title>Home tab</title>", in: app)
         XCTAssertTrue(sidebar.staticTexts["Home tab"].waitForExistence(timeout: 10))
 
         app.buttons["newSpaceButton"].click()
@@ -602,8 +602,7 @@ final class AxoUITests: XCTestCase {
             XCTAssertGreaterThan(button.frame.minX, sidebar.frame.maxX - 1, "\(id) sits over the page")
         }
 
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText(page("First") + "\n")
+        AxoUITests.openPage(page("First"), in: app)
         XCTAssertTrue(sidebar.staticTexts["First"].waitForExistence(timeout: 10))
         expectation(for: NSPredicate(format: "value CONTAINS '%3Ctitle%3EFirst'"), evaluatedWith: address)
         waitForExpectations(timeout: 5)
@@ -724,11 +723,9 @@ final class AxoUITests: XCTestCase {
         let app = launchApp()
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText(page("Mail") + "\n")
+        AxoUITests.openPage(page("Mail"), in: app)
         XCTAssertTrue(sidebar.staticTexts["Mail"].waitForExistence(timeout: 10))
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText(page("News") + "\n")
+        AxoUITests.openPage(page("News"), in: app)
         XCTAssertTrue(sidebar.staticTexts["News"].waitForExistence(timeout: 10))
 
         sidebar.staticTexts["Mail"].rightClick()
@@ -787,8 +784,7 @@ final class AxoUITests: XCTestCase {
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
         for title in ["Mail", "Article"] {
-            app.typeKey("t", modifierFlags: .command)
-            app.typeText("data:text/html,<title>\(title)</title>\n")
+            AxoUITests.openPage("data:text/html,<title>\(title)</title>", in: app)
             XCTAssertTrue(sidebar.staticTexts[title].waitForExistence(timeout: 10))
         }
 
@@ -817,8 +813,7 @@ final class AxoUITests: XCTestCase {
         let app = launchApp()
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Docs</title>\n")
+        AxoUITests.openPage("data:text/html,<title>Docs</title>", in: app)
         XCTAssertTrue(sidebar.staticTexts["Docs"].waitForExistence(timeout: 10))
 
         app.typeKey("n", modifierFlags: [.command, .control])
@@ -1005,8 +1000,7 @@ final class AxoUITests: XCTestCase {
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
         // The link points at a closed loopback port, so nothing leaves the machine.
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Home</title><a href='http://127.0.0.1:9/far'>Far away</a>\n")
+        AxoUITests.openPage("data:text/html,<title>Home</title><a href='http://127.0.0.1:9/far'>Far away</a>", in: app)
         XCTAssertTrue(sidebar.staticTexts["Home"].waitForExistence(timeout: 10))
         app.typeKey("p", modifierFlags: [.command, .control])
         XCTAssertTrue(sidebar.staticTexts["Pinned"].waitForExistence(timeout: 5))
@@ -1037,8 +1031,7 @@ final class AxoUITests: XCTestCase {
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
         // The link points at a closed loopback port, and isn't clicked.
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Pond</title><a href='http://127.0.0.1:9/axolotl'>An axolotl</a>\n")
+        AxoUITests.openPage("data:text/html,<title>Pond</title><a href='http://127.0.0.1:9/axolotl'>An axolotl</a>", in: app)
         XCTAssertTrue(sidebar.staticTexts["Pond"].waitForExistence(timeout: 10))
 
         let link = app.webViews.firstMatch.links["An axolotl"]
@@ -1048,7 +1041,11 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(status.waitForExistence(timeout: 5))
         XCTAssertEqual(status.value as? String, "http://127.0.0.1:9/axolotl")
 
-        sidebar.staticTexts["Pond"].hover()
+        // Off the link, onto the page's empty space below it. (Off the page altogether, onto
+        // the sidebar, WebKit doesn't always report the pointer leaving the link in UI tests;
+        // the Mac runs pages on Chromium, which reports it through its own hook, checked by the
+        // engine's test_hovered_links.sh.)
+        app.webViews.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6)).hover()
         XCTAssertTrue(status.waitForNonExistence(timeout: 5), "Leaving the link hides it")
     }
 
@@ -1060,8 +1057,7 @@ final class AxoUITests: XCTestCase {
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
         for title in ["Notes", "Docs"] {
-            app.typeKey("t", modifierFlags: .command)
-            app.typeText("data:text/html,<title>\(title)</title>\n")
+            AxoUITests.openPage("data:text/html,<title>\(title)</title>", in: app)
             XCTAssertTrue(sidebar.staticTexts[title].waitForExistence(timeout: 10))
         }
 
@@ -1101,8 +1097,7 @@ final class AxoUITests: XCTestCase {
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
         for title in ["Alpha", "Beta", "Gamma"] {
-            app.typeKey("t", modifierFlags: .command)
-            app.typeText("data:text/html,<title>\(title)</title>\n")
+            AxoUITests.openPage("data:text/html,<title>\(title)</title>", in: app)
             XCTAssertTrue(sidebar.staticTexts[title].waitForExistence(timeout: 10))
         }
         let address = app.descendants(matching: .any)["sidebarAddressBar"]
@@ -1225,8 +1220,7 @@ final class AxoUITests: XCTestCase {
         XCTAssertGreaterThan(app.buttons["summarizeButton"].frame.minX, window.frame.midX,
                              "The page's tools sit at the toolbar's trailing edge")
 
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Story</title><p>Axolotls regrow limbs.</p>\n")
+        AxoUITests.openPage("data:text/html,<title>Story</title><p>Axolotls regrow limbs.</p>", in: app)
         XCTAssertTrue(sidebar.staticTexts["Story"].waitForExistence(timeout: 10))
 
         app.buttons["summarizeButton"].click()
@@ -1294,7 +1288,9 @@ final class AxoUITests: XCTestCase {
 
         // Chrome's bookmarks go into the current Space.
         app.typeKey("t", modifierFlags: .command)
-        app.typeText("import")
+        let commandField = app.textFields["commandField"]
+        XCTAssertTrue(commandField.waitForExistence(timeout: 5))
+        commandField.typeText("import")
         let action = app.descendants(matching: .any)
             .matching(NSPredicate(format: "identifier == 'commandResult' AND label CONTAINS 'Import from Another Browser'")).firstMatch
         XCTAssertTrue(action.waitForExistence(timeout: 5))
@@ -1419,8 +1415,7 @@ final class AxoUITests: XCTestCase {
         let app = launchApp()
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Inspect</title><h1>Inspect me</h1>\n")
+        AxoUITests.openPage("data:text/html,<title>Inspect</title><h1>Inspect me</h1>", in: app)
         XCTAssertTrue(sidebar.staticTexts["Inspect"].waitForExistence(timeout: 10))
 
         app.typeKey("i", modifierFlags: [.command, .option])
@@ -1479,8 +1474,7 @@ final class AxoUITests: XCTestCase {
     func testFindInPage() throws {
         let app = launchApp()
         XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 5))
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Pond</title><p>Axolotls live in lakes.</p>\n")
+        AxoUITests.openPage("data:text/html,<title>Pond</title><p>Axolotls live in lakes.</p>", in: app)
         XCTAssertTrue(app.descendants(matching: .any)["sidebar"].staticTexts["Pond"].waitForExistence(timeout: 10))
 
         app.typeKey("f", modifierFlags: .command)
