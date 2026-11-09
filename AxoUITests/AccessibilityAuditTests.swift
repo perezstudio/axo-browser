@@ -96,8 +96,7 @@ final class AccessibilityAuditTests: XCTestCase {
         let app = launchApp()
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Pond</title>\n")
+        AxoUITests.openPage("data:text/html,<title>Pond</title>", in: app)
         XCTAssertTrue(sidebar.staticTexts["Pond"].waitForExistence(timeout: 10))
 
         app.typeKey(",", modifierFlags: .command)
@@ -142,8 +141,7 @@ final class AccessibilityAuditTests: XCTestCase {
         try audit(app, "page summary")
         app.typeKey(.escape, modifierFlags: [])
 
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Lake</title><p>Still water.</p>\n")
+        AxoUITests.openPage("data:text/html,<title>Lake</title><p>Still water.</p>", in: app)
         XCTAssertTrue(sidebar.staticTexts["Lake"].waitForExistence(timeout: 10))
         app.typeKey("=", modifierFlags: [.control, .shift])
         app.typeText("pond")
@@ -195,8 +193,7 @@ final class AccessibilityAuditTests: XCTestCase {
         app.typeKey(.escape, modifierFlags: [])
 
         // A favorite in the grid above the pinned tabs.
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Starred</title><p>Kept close.</p>\n")
+        AxoUITests.openPage("data:text/html,<title>Starred</title><p>Kept close.</p>", in: app)
         XCTAssertTrue(sidebar.staticTexts["Starred"].waitForExistence(timeout: 10))
         sidebar.staticTexts["Starred"].rightClick()
         app.windows.firstMatch.menuItems["Add to Favorites"].click()
@@ -206,8 +203,7 @@ final class AccessibilityAuditTests: XCTestCase {
         // Peek, from a link in a pinned tab (a closed loopback port, so nothing loads). Peek's
         // header shows the host while loading, and the audit doesn't count a bare IP address
         // as readable, so the link uses "localhost".
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Hub</title><a href='http://localhost:9/far'>Far away</a>\n")
+        AxoUITests.openPage("data:text/html,<title>Hub</title><a href='http://localhost:9/far'>Far away</a>", in: app)
         XCTAssertTrue(sidebar.staticTexts["Hub"].waitForExistence(timeout: 10))
         app.typeKey("p", modifierFlags: [.command, .control])
         let link = app.webViews.firstMatch.links["Far away"]

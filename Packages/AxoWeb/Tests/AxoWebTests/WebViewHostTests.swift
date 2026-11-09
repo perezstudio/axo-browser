@@ -1,6 +1,7 @@
 import AxoCore
 import Foundation
 import ScreenTime
+import SwiftUI
 import Testing
 import WebKit
 @testable import AxoWeb
@@ -119,6 +120,32 @@ struct WebViewHostTests {
 
         container.unmount()
         #expect(screenTime.url == nil, "Nothing is reported while no page is mounted")
+    }
+
+    /// Screen Time's view has a size of its own (480 by 272 points, resisting compression), which
+    /// SwiftUI took as the page's minimum, so a window with a page couldn't get narrower.
+    @Test func aPageCanShrinkPastScreenTimesOwnSize() async throws {
+        let pool = WebViewPool.forTesting()
+        let tab = Tab.testTab(url: try pages.page("blank"))
+        let controller = NSHostingController(rootView: WebViewHost(tab: tab, profileID: profileID, pool: pool))
+        let window = NSWindow(contentViewController: controller)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        window.setContentSize(NSSize(width: 800, height: 600))
+        window.orderBack(nil)
+        // Screen Time's view takes its size a moment after it's added; AppKit still reports it.
+        func container(in view: NSView) -> WebViewContainer? {
+            (view as? WebViewContainer) ?? view.subviews.lazy.compactMap { container(in: $0) }.first
+        }
+        let host = try #require(container(in: controller.view))
+        try await waitUntil("Screen Time's size") {
+            host.layoutSubtreeIfNeeded()
+            return host.fittingSize.width > 100
+        }
+
+        let smallest = controller.sizeThatFits(in: .zero)
+        #expect(smallest.width < 100, "Got \(smallest)")
+        #expect(smallest.height < 100, "Got \(smallest)")
     }
 
     @Test func remountingKeepsOneScreenTimeControllerBelowNothing() {

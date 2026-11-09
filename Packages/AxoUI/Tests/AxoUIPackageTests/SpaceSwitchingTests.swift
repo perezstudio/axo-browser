@@ -125,6 +125,43 @@ struct SpaceSwitchingTests {
     }
 
     /// Changes made elsewhere, such as by iCloud sync, reach the shown Space.
+    /// Starts switching to `target` and stops once its rows are being read, before it's shown.
+    private func startSwitching(to target: Space.ID) async -> Task<Void, Never> {
+        let switching = Task { await model.selectSpace(target) }
+        await Task.yield()
+        #expect(model.spaceBeingShown == target, "Reading its rows")
+        return switching
+    }
+
+    @Test func aSpaceDeletedWhileItsRowsAreReadIsNeverShown() async throws {
+        let home = try #require(model.space)
+        await model.createSpace(name: "Work")
+        let work = try #require(model.space)
+        await model.selectSpace(home.id)
+
+        let switching = await startSwitching(to: work.id)
+        // Deleted elsewhere (iCloud) meanwhile; the follow waits for the switch.
+        model.spaces.removeAll { $0.id == work.id }
+        try await model.followShownSpace()
+        await switching.value
+        #expect(model.space?.id == home.id, "Never a deleted Space")
+    }
+
+    @Test func aSpaceMovedToAnotherProfileWhileItsRowsAreReadShowsWithTheNewOne() async throws {
+        let home = try #require(model.space)
+        await model.createSpace(name: "Work")
+        let work = try #require(model.space)
+        await model.selectSpace(home.id)
+
+        let switching = await startSwitching(to: work.id)
+        var moved = work
+        moved.profileID = UUID()
+        model.spaces = model.spaces.map { $0.id == work.id ? moved : $0 }
+        try await model.followShownSpace()
+        await switching.value
+        #expect(model.space == moved, "Its pages are made with the new profile")
+    }
+
     @Test func theShownSpaceFollowsRenamesAndDeletionsFromElsewhere() async throws {
         let home = try #require(model.space)
         let work = try await store.createSpace(name: "Work", profileID: home.profileID)

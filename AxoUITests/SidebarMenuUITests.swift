@@ -32,9 +32,7 @@ final class SidebarMenuUITests: XCTestCase {
     /// Opens a tab on a page with only a title, so tests never touch the network.
     @MainActor
     private func openTab(_ title: String, in app: XCUIApplication, sidebar: XCUIElement) {
-        app.typeKey("t", modifierFlags: .command)
-        XCTAssertTrue(app.textFields["commandField"].waitForExistence(timeout: 5))
-        app.typeText("data:text/html,<title>\(title)</title>\n")
+        AxoUITests.openPage("data:text/html,<title>\(title)</title>", in: app)
         XCTAssertTrue(sidebar.staticTexts[title].waitForExistence(timeout: 10))
     }
 

@@ -77,6 +77,8 @@ extension BrowserModel {
             report(error, "Axo couldn't move the tab.")
             return
         }
+        // Its new Space's page in the sidebar shows it, for a swipe there (#84).
+        await refreshPreview(of: destination.id)
         // Gone from this Space's window, as for a closed tab (the WebKit extension bridge).
         onTabEvent?(.closed(id))
         postNotice("Moved \(TabRow.displayTitle(for: tab)) to \(destination.name)")

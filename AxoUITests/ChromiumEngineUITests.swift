@@ -65,8 +65,7 @@ final class ChromiumEngineUITests: XCTestCase {
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 10))
         // Toolbar buttons belong to a page, so open one.
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Page</title><p>Page</p>\n")
+        AxoUITests.openPage("data:text/html,<title>Page</title><p>Page</p>", in: app)
 
         let button = app.buttons.matching(NSPredicate(format: "identifier == 'extensionButton' AND label CONTAINS 'Axo Helper'")).firstMatch
         XCTAssertTrue(button.waitForExistence(timeout: 30))
@@ -100,8 +99,7 @@ final class ChromiumEngineUITests: XCTestCase {
 
         let app = launchChromiumApp(extensionFolder: folder)
         XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 10))
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Page</title><p>Page</p>\n")
+        AxoUITests.openPage("data:text/html,<title>Page</title><p>Page</p>", in: app)
         let button = app.buttons.matching(NSPredicate(format: "identifier == 'extensionButton' AND label CONTAINS 'Axo Shortcuts'")).firstMatch
         XCTAssertTrue(button.waitForExistence(timeout: 30))
 
@@ -139,8 +137,7 @@ final class ChromiumEngineUITests: XCTestCase {
 
         let app = launchChromiumApp(extensionFolder: folder)
         XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 10))
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Page</title><p>Page</p>\n")
+        AxoUITests.openPage("data:text/html,<title>Page</title><p>Page</p>", in: app)
         let button = app.buttons.matching(NSPredicate(format: "identifier == 'extensionButton' AND label CONTAINS 'Axo Asker'")).firstMatch
         XCTAssertTrue(button.waitForExistence(timeout: 30))
 
@@ -173,8 +170,7 @@ final class ChromiumEngineUITests: XCTestCase {
 
         let app = launchChromiumApp(extensionFolder: folder)
         XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 10))
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Page</title><p style='font-size:60px'>Right-click me</p>\n")
+        AxoUITests.openPage("data:text/html,<title>Page</title><p style='font-size:60px'>Right-click me</p>", in: app)
         let button = app.buttons.matching(NSPredicate(format: "identifier == 'extensionButton' AND label CONTAINS 'Axo Marker'")).firstMatch
         XCTAssertTrue(button.waitForExistence(timeout: 30))
 
@@ -252,8 +248,7 @@ final class ChromiumEngineUITests: XCTestCase {
 
         let app = launchChromiumApp(extensionFolder: folder)
         XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 10))
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Page</title><p>Page</p>\n")
+        AxoUITests.openPage("data:text/html,<title>Page</title><p>Page</p>", in: app)
         let button = app.buttons.matching(NSPredicate(format: "identifier == 'extensionButton' AND label CONTAINS 'Axo Panel'")).firstMatch
         XCTAssertTrue(button.waitForExistence(timeout: 30))
 
@@ -285,8 +280,7 @@ final class ChromiumEngineUITests: XCTestCase {
 
         let app = launchChromiumApp(extensionFolder: folder)
         XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 10))
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Page</title><p>Page</p>\n")
+        AxoUITests.openPage("data:text/html,<title>Page</title><p>Page</p>", in: app)
         let button = app.buttons.matching(NSPredicate(format: "identifier == 'extensionButton' AND label CONTAINS 'Axo Scripter'")).firstMatch
         XCTAssertTrue(button.waitForExistence(timeout: 30))
         button.click()
@@ -332,8 +326,7 @@ final class ChromiumEngineUITests: XCTestCase {
         let app = launchChromiumApp(extensionFolder: folder)
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 10))
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Page</title><p>Page</p>\n")
+        AxoUITests.openPage("data:text/html,<title>Page</title><p>Page</p>", in: app)
         let button = app.buttons.matching(NSPredicate(format: "identifier == 'extensionButton' AND label CONTAINS 'Axo Bookmarker'")).firstMatch
         XCTAssertTrue(button.waitForExistence(timeout: 30))
         button.click()
@@ -363,8 +356,7 @@ final class ChromiumEngineUITests: XCTestCase {
 
         let app = launchChromiumApp(extensionFolder: folder)
         XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 10))
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Page</title><p>Page</p>\n")
+        AxoUITests.openPage("data:text/html,<title>Page</title><p>Page</p>", in: app)
         let button = app.buttons.matching(NSPredicate(format: "identifier == 'extensionButton' AND label CONTAINS 'Axo Historian'")).firstMatch
         XCTAssertTrue(button.waitForExistence(timeout: 30))
         button.click()
@@ -372,7 +364,9 @@ final class ChromiumEngineUITests: XCTestCase {
         waitForExpectations(timeout: 15)
 
         app.typeKey("t", modifierFlags: .command)
-        app.typeText("axo-historian")
+        let commandField = app.textFields["commandField"]
+        XCTAssertTrue(commandField.waitForExistence(timeout: 5))
+        commandField.typeText("axo-historian")
         let result = app.descendants(matching: .any)["commandBar"].buttons
             .matching(NSPredicate(format: "label CONTAINS 'axo-historian.example'")).firstMatch
         XCTAssertTrue(result.waitForExistence(timeout: 10), "The command bar finds the page in Axo's history")
@@ -390,8 +384,7 @@ final class ChromiumEngineUITests: XCTestCase {
     private func openPage(_ html: String, titled title: String, in app: XCUIApplication) -> XCUIElement {
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 10))
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,\(html)\n")
+        AxoUITests.openPage("data:text/html,\(html)", in: app)
         XCTAssertTrue(sidebar.staticTexts[title].waitForExistence(timeout: 30))
         return sidebar
     }
@@ -531,8 +524,7 @@ final class ChromiumEngineUITests: XCTestCase {
         let app = launchChromiumApp()
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 10))
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Inspect</title><h1>Inspect me</h1>\n")
+        AxoUITests.openPage("data:text/html,<title>Inspect</title><h1>Inspect me</h1>", in: app)
         XCTAssertTrue(sidebar.staticTexts["Inspect"].waitForExistence(timeout: 15))
         let page = app.webViews.matching(NSPredicate(format: "label == 'Inspect'")).firstMatch
         XCTAssertTrue(page.waitForExistence(timeout: 10))
@@ -592,8 +584,7 @@ final class ChromiumEngineUITests: XCTestCase {
 
         let app = launchChromiumApp(extensionFolder: folder)
         XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 10))
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Page</title><p>Page</p>\n")
+        AxoUITests.openPage("data:text/html,<title>Page</title><p>Page</p>", in: app)
         let button = app.buttons.matching(NSPredicate(format: "identifier == 'extensionButton' AND label CONTAINS 'Axo Inspected'")).firstMatch
         XCTAssertTrue(button.waitForExistence(timeout: 30))
 
@@ -653,8 +644,7 @@ final class ChromiumEngineUITests: XCTestCase {
 
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 10))
-        app.typeKey("t", modifierFlags: .command)
-        app.typeText("data:text/html,<title>Loading</title><h1>Hello from Axo</h1><script>document.title = navigator.userAgent.includes('Chrome/') ? 'Chromium page' : 'WebKit page'</script>\n")
+        AxoUITests.openPage("data:text/html,<title>Loading</title><h1>Hello from Axo</h1><script>document.title = navigator.userAgent.includes('Chrome/') ? 'Chromium page' : 'WebKit page'</script>", in: app)
 
         let chromium = sidebar.staticTexts["Chromium page"]
         let webKit = sidebar.staticTexts["WebKit page"]
