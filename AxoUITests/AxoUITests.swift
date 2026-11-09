@@ -576,9 +576,8 @@ final class AxoUITests: XCTestCase {
         sidebar.staticTexts["HomeOne"].click()
         expectShown("HomeOne", "The clicked tab shows")
         func focused() -> String {
-            let element = app.descendants(matching: .any).element(matching: NSPredicate(format: "hasKeyboardFocus == true"))
-            guard element.exists else { return "nothing" }
-            return "\(element.elementType.rawValue) '\(element.identifier)' '\(element.label)'"
+            let elements = app.descendants(matching: .any).matching(NSPredicate(format: "hasKeyboardFocus == true")).allElementsBoundByIndex
+            return elements.map { "[\($0.elementType.rawValue) '\($0.identifier)' '\($0.label)' \($0.frame)]" }.joined(separator: " ")
         }
         let afterClick = focused()
         app.typeKey(.downArrow, modifierFlags: [])
