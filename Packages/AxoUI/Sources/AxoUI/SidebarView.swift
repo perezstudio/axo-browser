@@ -54,6 +54,11 @@ struct SidebarView: View {
             followShownSpace(animated: true)
             if focusedList != nil { focusedList = model.space?.id }
         }
+        // A hidden Space's list takes no input, so focus that lands on one (Full Keyboard
+        // Access's Tab still reaches it) goes to the shown Space's list instead.
+        .onChange(of: focusedList) {
+            if let focusedList, focusedList != model.space?.id { self.focusedList = model.space?.id }
+        }
         .onChange(of: model.spaces.map(\.id)) { followShownSpace(animated: false) }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             SpaceSwitcher(model: model)

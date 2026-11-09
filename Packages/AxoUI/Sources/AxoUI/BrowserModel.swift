@@ -111,6 +111,11 @@ public final class BrowserModel {
     @ObservationIgnored public var noticeSleep: @MainActor (Duration) async -> Void = { try? await Task.sleep(for: $0) }
     /// How many times ``focusPage()`` was asked, for tests.
     @ObservationIgnored var pageFocusRequestCount = 0
+    /// The request ``focusPage()`` is carrying out, waiting for the page to be in a window.
+    @ObservationIgnored var pageFocusTask: Task<Void, Never>?
+    /// How long ``focusPage()`` waits for a page to be in a window. Tests, whose main thread is
+    /// shared with the rest of the suite, wait longer.
+    @ObservationIgnored var pageFocusWaitLimit: Duration = .seconds(1)
     /// Whether the shown page gets the loading bar along its top. Not while the address is edited
     /// in the sidebar and its bar is on screen: the bar's own loading line shows it there, so the
     /// page shows only one. (In a split view, the other panes keep theirs.)
