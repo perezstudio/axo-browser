@@ -1,3 +1,6 @@
+#if os(macOS)
+import AppKit
+#endif
 import AxoCore
 import AxoWeb
 import Foundation
@@ -48,6 +51,43 @@ struct KeyboardAccessTests {
     private func names(_ tabs: [AxoCore.Tab]) -> [String] {
         tabs.map { $0.url.deletingPathExtension().lastPathComponent }
     }
+
+    // MARK: Page focus
+
+    #if os(macOS)
+    /// A page that isn't in the window yet when focus is asked for (a tab clicked whose page is
+    /// made or woken, and mounted on SwiftUI's next update) gets focus once it's there.
+    @Test func aPageGetsFocusOnceItsInTheWindow() async throws {
+        let tab = try await open("one")
+        let view = try #require(model.pool.livePage(for: tab.id)?.view)
+        #expect(view.window == nil, "Not mounted yet")
+        // The suite shares the main thread, so the wait is long here; the window comes at once.
+        model.pageFocusWaitLimit = .seconds(30)
+        model.focusPage()
+        for _ in 0..<5 { await Task.yield() }
+
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        window.contentView?.addSubview(view)
+        let deadline = ContinuousClock.now + .seconds(30)
+        while (window.firstResponder as? NSView).map({ $0 === view || $0.isDescendant(of: view) }) != true,
+              ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect((window.firstResponder as? NSView).map { $0 === view || $0.isDescendant(of: view) } == true)
+    }
+
+    /// Only a click on a row hands keyboard focus to the page; the arrow keys, VoiceOver, and
+    /// SwiftUI's own selection updates don't.
+    @Test func onlyAClickOnARowFocusesThePage() {
+        #expect(SidebarClick.isClick(.leftMouseDown))
+        #expect(SidebarClick.isClick(.leftMouseUp))
+        #expect(!SidebarClick.isClick(.keyDown), "The arrow keys")
+        #expect(!SidebarClick.isClick(nil), "No event: VoiceOver's action, or SwiftUI writing back")
+        #expect(!SidebarClick.isClick(.rightMouseDown), "A context menu")
+    }
+    #endif
 
     // MARK: Selection
 

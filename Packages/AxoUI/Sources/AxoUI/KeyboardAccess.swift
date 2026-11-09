@@ -154,20 +154,34 @@ extension BrowserModel {
     // MARK: Focus
 
     /// Gives keyboard focus to the selected page, as after closing the command bar or find bar,
-    /// so typing and scrolling go to the page instead of nowhere.
+    /// or a click on a tab, so typing and scrolling go to the page instead of nowhere.
+    ///
+    /// It waits a turn, so SwiftUI has removed the overlay that had focus, and then, for a page
+    /// not in a window yet (made or woken by the click, and mounted on SwiftUI's next update),
+    /// until it is, for up to ``pageFocusWaitLimit``. It gives up if another tab is selected
+    /// meanwhile, or another request replaces it.
     public func focusPage() {
         pageFocusRequestCount += 1
+        pageFocusTask?.cancel()
         guard let selectedTabID else { return }
         let pool = pool
-        // Wait a turn, so SwiftUI has removed the overlay that had focus.
-        Task { @MainActor in
-            guard let pageView = pool.livePage(for: selectedTabID)?.view, let window = pageView.window else { return }
-            #if os(macOS)
-            window.makeFirstResponder(pageView)
-            #else
-            _ = window
-            pageView.becomeFirstResponder()
-            #endif
+        let deadline = ContinuousClock.now + pageFocusWaitLimit
+        pageFocusTask = Task { @MainActor [weak self] in
+            await Task.yield()
+            while !Task.isCancelled, self?.selectedTabID == selectedTabID {
+                if let pageView = pool.livePage(for: selectedTabID)?.view, let window = pageView.window {
+                    #if os(macOS)
+                    window.makeFirstResponder(pageView)
+                    #else
+                    _ = window
+                    pageView.becomeFirstResponder()
+                    #endif
+                    return
+                }
+                guard ContinuousClock.now < deadline else { return }
+                try? await Task.sleep(for: .milliseconds(20))
+            }
         }
     }
+
 }

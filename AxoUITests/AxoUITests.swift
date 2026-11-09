@@ -540,6 +540,26 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Home tab"].waitForExistence(timeout: 5))
     }
 
+    /// Clicking a tab in the sidebar hands keyboard focus to its page, as in Arc: keys go to the
+    /// page, not the sidebar.
+    @MainActor
+    func testClickingATabGivesItsPageTheKeyboard() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        // The page names the last key it got in its title.
+        AxoUITests.openPage("data:text/html,<title>Keys</title><script>addEventListener('keydown', e => document.title = 'Got ' + e.key)</script>", in: app)
+        XCTAssertTrue(sidebar.staticTexts["Keys"].waitForExistence(timeout: 10))
+        AxoUITests.openPage("data:text/html,<title>Other</title>", in: app)
+        XCTAssertTrue(sidebar.staticTexts["Other"].waitForExistence(timeout: 10))
+
+        sidebar.staticTexts["Keys"].click()
+        app.typeKey("x", modifierFlags: [])
+        XCTAssertTrue(sidebar.staticTexts["Got x"].waitForExistence(timeout: 5), "The page got the key")
+        app.typeKey(.downArrow, modifierFlags: [])
+        XCTAssertTrue(sidebar.staticTexts["Got ArrowDown"].waitForExistence(timeout: 5), "Arrow keys go to the page too")
+    }
+
     /// Settings › General moves the navigation bar from the sidebar to the page's toolbar, where
     /// ⌘L still focuses the address field. (UI testing keeps settings in its own store.)
     @MainActor
