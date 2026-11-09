@@ -4,6 +4,12 @@ import Foundation
 /// Tab actions from a tab's context menu, the Tabs menu (for the selected tab), and the command
 /// bar (#81): Duplicate, Copy Link, Move to Space, Close Other Tabs, and Close Tabs Below.
 extension BrowserModel {
+    /// The tab the Tabs menu's tab actions act on: the selected tab, unless a folder's row is
+    /// selected (its page keeps showing, but the folder is what's highlighted).
+    public var tabForTabActions: AxoCore.Tab? {
+        selectedFolderID == nil ? selectedTab : nil
+    }
+
     /// The tab's current address: its live page's, or the saved one.
     func currentURL(of tab: AxoCore.Tab) -> URL {
         pool.state(for: tab.id)?.url ?? tab.url
@@ -13,9 +19,9 @@ extension BrowserModel {
     /// the unpinned ones), with its back and forward history, and selects it.
     public func duplicateTab(_ id: AxoCore.Tab.ID) async {
         guard let space, let tab = tabs.first(where: { $0.id == id }) else { return }
-        // Below the tab's whole sidebar row: after a split's last pane, so the split's tabs stay
-        // together.
-        let anchor = split(of: id).flatMap { split in panes(of: split.id).last?.id } ?? id
+        // Below the tab's whole sidebar row: after the split's lowest tab in the sidebar (not its
+        // last pane, which can come first), so the split's tabs stay together.
+        let anchor = split(of: id).flatMap { split in panes(of: split.id).max { $0.sortKey < $1.sortKey }?.id } ?? id
         do {
             let copy = try await store.openTab(
                 url: currentURL(of: tab), title: pool.state(for: id)?.title ?? tab.title,
@@ -61,6 +67,11 @@ extension BrowserModel {
         do {
             try await store.moveTab(id: id, toSpace: destination.id)
             tabs = try await store.tabs(in: space.id)
+            // The neighbor is selected at once, so the engine's window, sent with `tabs`, never
+            // goes without a selection while the sidebar's records are read.
+            if selectedTabID == id {
+                select(Self.neighbor(of: id, in: order, among: visibleTabOrder))
+            }
             try await refreshSidebar()
         } catch {
             report(error, "Axo couldn't move the tab.")
@@ -70,9 +81,6 @@ extension BrowserModel {
         await refreshPreview(of: destination.id)
         // Gone from this Space's window, as for a closed tab (the WebKit extension bridge).
         onTabEvent?(.closed(id))
-        if selectedTabID == id {
-            select(Self.neighbor(of: id, in: order, among: visibleTabOrder))
-        }
         postNotice("Moved \(TabRow.displayTitle(for: tab)) to \(destination.name)")
     }
 
@@ -130,6 +138,28 @@ extension BrowserModel {
             return
         }
         ids.forEach { onTabEvent?(.closed($0)) }
-        postNotice(ids.count == 1 ? "Closed 1 tab" : "Closed \(ids.count) tabs")
+        let spaceID = space.id
+        postNotice(ids.count == 1 ? "Closed 1 tab" : "Closed \(ids.count) tabs") { [weak self] in
+            // As for one closed tab: only in the Space they left, and only the ones still
+            // archived there. They come back in their order, at the end, each a tab of its own.
+            guard let self, self.space?.id == spaceID else { return }
+            let archived = Set(await self.archivedTabs().map(\.id))
+            await self.restoreTabs(ids.filter(archived.contains))
+        }
+    }
+
+    /// Restores archived tabs of the shown Space in the order given, each at the end, keeping
+    /// the selection (Undo for closing several tabs).
+    func restoreTabs(_ ids: [AxoCore.Tab.ID]) async {
+        guard let space, !ids.isEmpty else { return }
+        do {
+            for id in ids { try await store.restoreTab(id: id, at: now()) }
+            tabs = try await store.tabs(in: space.id)
+        } catch {
+            report(error, "Axo couldn't reopen the tabs.")
+            return
+        }
+        ids.forEach { onTabEvent?(.opened($0)) }
+        announce(ids.count == 1 ? "Reopened 1 tab" : "Reopened \(ids.count) tabs")
     }
 }

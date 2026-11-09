@@ -461,14 +461,18 @@ public final class TabStore: Sendable {
     }
 
     /// Archives several tabs in one write, as ``archiveTab(id:at:)`` does for one (Close Other
-    /// Tabs, Close Tabs Below). Tabs that don't exist are skipped.
+    /// Tabs, Close Tabs Below). Tabs that don't exist or are already archived are skipped.
+    ///
+    /// `ids` are in sidebar order. Each is archived a millisecond before the one above it, so
+    /// the most recently archived is the top one: Reopen Closed Tab, which takes the most recent
+    /// and puts it at the end, brings them back in their order.
     public func archiveTabs(ids: [Tab.ID], at date: Date = Date()) async throws {
         try await database.writer.write { db in
-            for id in ids {
+            for (index, id) in ids.enumerated() {
                 guard var tab = try Tab.fetchOne(db, id: id), tab.archivedAt == nil else { continue }
                 try Self.leaveSplit(id, db)
                 tab = try Tab.fetchOne(db, id: id) ?? tab
-                tab.archivedAt = date
+                tab.archivedAt = date.addingTimeInterval(-Double(index) / 1000)
                 try tab.update(db)
             }
         }
