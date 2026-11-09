@@ -232,6 +232,67 @@ struct BrowserModelTests {
         #expect(relaunched.favicon(for: tab) == nil)
     }
 
+    /// A second 1 px PNG, different from ``iconData()``.
+    private func otherIconData() throws -> Data {
+        try #require(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="))
+    }
+
+    @Test func aFavoritesSavedIconShowsAtLaunchWithNoPage() async throws {
+        let space = try await store.bootstrap()
+        let favorite = try await store.favorites.add(url: URL(string: "https://github.com")!, title: "GitHub", profileID: space.profileID)
+        try await store.saveFavicon(try iconData(), for: URL(string: "https://github.com/login")!)
+
+        let relaunched = BrowserModel(store: store, pool: WebViewPool(makeDataStore: { _ in .nonPersistent() }))
+        await relaunched.start()
+        try await waitUntil { relaunched.favorites.contains { $0.id == favorite.id } }
+        try await waitUntil { relaunched.favicon(for: favorite.tab(in: space.id)) != nil }
+    }
+
+    @Test func aPinnedTabWhoseHomeRedirectsKeepsItsIcon() async throws {
+        // gmail.com sends the page to mail.google.com, whose icon the page reports.
+        await model.openTab(url: URL(string: "https://gmail.com")!)
+        let id = try #require(model.selectedTabID)
+        await model.setPinned(true, tabID: id)
+        pool.onFaviconChange?(id, URL(string: "https://mail.google.com/mail/u/0")!, try iconData())
+        try await waitUntilAsync { try await store.favicons(forHosts: ["gmail.com"]).isEmpty == false }
+
+        // At the next launch, reset to its home page, with no page loaded.
+        let relaunched = BrowserModel(store: store, pool: WebViewPool(makeDataStore: { _ in .nonPersistent() }))
+        await relaunched.start()
+        let tab = try #require(relaunched.pinnedTabs.first { $0.id == id })
+        try await waitUntil { relaunched.favicon(for: tab) != nil }
+    }
+
+    @Test func aHomesOwnIconIsntReplacedByAnotherSitesIcon() async throws {
+        await model.openTab(url: URL(string: "https://example.com")!)
+        let id = try #require(model.selectedTabID)
+        await model.setPinned(true, tabID: id)
+        pool.onFaviconChange?(id, URL(string: "https://example.com")!, try iconData())
+        try await waitUntilAsync { try await store.favicons(forHosts: ["example.com"]).isEmpty == false }
+
+        // Later, the pinned tab is on another site, whose icon arrives.
+        pool.onFaviconChange?(id, URL(string: "https://swift.org")!, try otherIconData())
+        try await waitUntilAsync { try await store.favicons(forHosts: ["swift.org"]).isEmpty == false }
+        #expect(try await store.favicons(forHosts: ["example.com"])["example.com"] == (try iconData()))
+    }
+
+    @Test func anIconSavedAfterItsHostWasLookedUpShows() async throws {
+        let space = try #require(model.space)
+        await model.openTab(url: URL(string: "about:blank")!)
+        let id = try #require(model.selectedTabID)
+        try await store.updateTab(id: id, url: URL(string: "https://apple.com/mac")!, title: "Mac")
+        try await waitUntil { model.tabs.contains { $0.id == id && $0.url.host() == "apple.com" } }
+        await model.loadSavedFavicons()
+        let tab = try #require(model.tabs.first { $0.id == id })
+        #expect(model.favicon(for: tab) == nil, "Nothing saved yet")
+
+        // Saved elsewhere (another window, which keeps icons of its own).
+        try await store.saveFavicon(try iconData(), for: URL(string: "https://apple.com")!)
+        await model.loadSavedFavicons()
+        #expect(model.favicon(for: tab) != nil)
+        _ = space
+    }
+
 }
 
 /// How long the waits below give up after: a guard against a hang, not a time budget. These tests
