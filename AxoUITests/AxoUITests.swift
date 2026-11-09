@@ -849,14 +849,19 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
         for title in ["Garden notes", "Recipes"] {
             app.typeKey("t", modifierFlags: .command)
-            XCTAssertTrue(app.textFields["commandField"].waitForExistence(timeout: 5))
-            app.typeText("data:text/html,<title>\(title)</title>\n")
+            let field = app.textFields["commandField"]
+            XCTAssertTrue(field.waitForExistence(timeout: 5))
+            // Into the field itself: typed at the app as the bar opens, the first letter can be
+            // lost ("ata:…" is a search, not a page).
+            field.typeText("data:text/html,<title>\(title)</title>\n")
             XCTAssertTrue(sidebar.staticTexts[title].waitForExistence(timeout: 10))
             XCTAssertFalse(app.textFields["commandField"].exists, "The command bar closes after opening a page")
         }
 
         app.typeKey("t", modifierFlags: .command)
-        app.typeText("garden")
+        let field = app.textFields["commandField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.typeText("garden")
         let tabRow = app.descendants(matching: .any)
             .matching(NSPredicate(format: "identifier == 'commandResult' AND label CONTAINS 'Garden notes'"))
             .firstMatch
