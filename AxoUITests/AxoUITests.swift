@@ -565,7 +565,7 @@ final class AxoUITests: XCTestCase {
         }
         let address = app.descendants(matching: .any)["sidebarAddressBar"]
         // Titles without spaces: the address bar shows the page's address, where a space is %20.
-        func expectShown(_ title: String, _ message: String) {
+        func expectShown(_ title: String) {
             expectation(for: NSPredicate(format: "value CONTAINS %@", title), evaluatedWith: address)
             waitForExpectations(timeout: 5)
         }
@@ -574,32 +574,16 @@ final class AxoUITests: XCTestCase {
         app.typeKey("1", modifierFlags: .control)
         XCTAssertTrue(sidebar.staticTexts["HomeOne"].waitForExistence(timeout: 5))
         sidebar.staticTexts["HomeOne"].click()
-        expectShown("HomeOne", "The clicked tab shows")
-        func focused() -> String {
-            let elements = app.descendants(matching: .any).matching(NSPredicate(format: "hasKeyboardFocus == true")).allElementsBoundByIndex
-            return elements.map { "[\($0.elementType.rawValue) '\($0.identifier)' '\($0.label)' \($0.frame)]" }.joined(separator: " ")
-        }
-        func selectedRows() -> String {
-            sidebar.descendants(matching: .any).matching(NSPredicate(format: "selected == true")).allElementsBoundByIndex
-                .map { "[\($0.elementType.rawValue) '\($0.label)' '\(($0.value as? String) ?? "")' \($0.frame.minY)]" }.joined(separator: " ")
-        }
-        let afterClick = focused() + " selected: " + selectedRows()
+        expectShown("HomeOne") // The clicked tab shows
         app.typeKey(.downArrow, modifierFlags: [])
-        sleep(1)
-        print("FOCUS rows after down: \(selectedRows()); address: \(address.value ?? "")")
-        sidebar.typeKey(.downArrow, modifierFlags: [])
-        sleep(1)
-        print("FOCUS rows after down sent to the sidebar: \(selectedRows()); address: \(address.value ?? "")")
-        XCTContext.runActivity(named: "Focus after the click: \(afterClick); after ↓: \(focused()); address: \(address.value ?? "")") { _ in }
-        print("FOCUS after click: \(afterClick); after down: \(focused()); address: \(address.value ?? "")")
-        expectShown("HomeTwo", "The arrow keys move through Home's tabs")
+        expectShown("HomeTwo") // The arrow keys move through Home's tabs
 
         // Switched from the keyboard: the arrow keys move through Work's tabs now.
         app.typeKey("2", modifierFlags: .control)
         XCTAssertTrue(sidebar.staticTexts["WorkTwo"].waitForExistence(timeout: 5))
-        expectShown("WorkTwo", "Work's remembered tab shows")
+        expectShown("WorkTwo") // Work's remembered tab shows
         app.typeKey(.upArrow, modifierFlags: [])
-        expectShown("WorkOne", "The arrow keys move through Work's tabs")
+        expectShown("WorkOne") // The arrow keys move through Work's tabs
     }
 
     /// Settings › General moves the navigation bar from the sidebar to the page's toolbar, where

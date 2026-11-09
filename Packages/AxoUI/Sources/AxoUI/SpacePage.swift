@@ -12,12 +12,13 @@ struct SpacePage: View {
     let model: BrowserModel
     let space: Space
     let isShown: Bool
+    /// Which Space's list has keyboard focus, shared by every page (``SidebarView`` moves it to
+    /// the shown Space's list on a switch). A click on a row selects it without making the list
+    /// the first responder, so the list takes focus itself then, and the arrow keys move on.
+    var focusedList: FocusState<Space.ID?>.Binding
     /// Where the page's favorites go during a swipe: held still between two Spaces of one
     /// profile (drawn by one page only), otherwise sliding with the page.
     var favorites = SpaceSwipe.FavoritesPlacement()
-    /// Whether the list has keyboard focus. A click on a row selects it without making the list
-    /// the first responder, so the list takes focus itself then, and the arrow keys move on.
-    @FocusState private var isListFocused: Bool
 
     /// The page's rows: the model's for the shown Space, the kept ones otherwise.
     private var data: SpaceSidebarPreview? { isShown ? model.shownSpaceRows : model.spacePreviews[space.id] }
@@ -30,14 +31,14 @@ struct SpacePage: View {
             set: {
                 guard isShown else { return }
                 model.selectSidebarItem($0)
-                isListFocused = true
+                focusedList.wrappedValue = space.id
             }
         )) {
             if let data {
                 SidebarSections(model: model, data: data)
             }
         }
-        .focused($isListFocused)
+        .focused(focusedList, equals: space.id)
         // The shown page's list is the sidebar UI tests and VoiceOver find, as before the pages.
         .accessibilityIdentifier(isShown ? "sidebar" : "")
         // Favorites sit above the pinned tabs, each Space's page showing all of its profile's.

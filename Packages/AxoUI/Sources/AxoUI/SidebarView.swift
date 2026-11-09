@@ -12,6 +12,10 @@ struct SidebarView: View {
     @AppStorage(AddressBarSettings.showsSidebarAddressBarKey) private var showsAddressBar = true
     /// The Spaces' pages and a swipe between them as it happens (#84).
     @State private var swipe = SidebarSwipeState()
+    /// Which Space's list has keyboard focus, if any. On a switch it moves to the shown Space's
+    /// list, so the arrow keys move through the Space switched to rather than the one left,
+    /// which is still drawn beside it but takes no input.
+    @FocusState private var focusedList: Space.ID?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -46,7 +50,10 @@ struct SidebarView: View {
         .onChange(of: isShowingArchive) { if !isShowingArchive { model.isShowingArchive = false } }
         // Slide to the shown Space's page when it changes some other way (the keyboard, the
         // dots, the menu); after a swipe the pages are already there.
-        .onChange(of: model.space?.id, initial: true) { followShownSpace(animated: true) }
+        .onChange(of: model.space?.id, initial: true) {
+            followShownSpace(animated: true)
+            if focusedList != nil { focusedList = model.space?.id }
+        }
         .onChange(of: model.spaces.map(\.id)) { followShownSpace(animated: false) }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             SpaceSwitcher(model: model)
@@ -102,6 +109,7 @@ extension SidebarView {
                     HStack(spacing: 0) {
                         ForEach(Array(model.spaces.enumerated()), id: \.element.id) { index, space in
                             SpacePage(model: model, space: space, isShown: space.id == model.space?.id,
+                                      focusedList: $focusedList,
                                       favorites: SpaceSwipe.favoritesPlacement(
                                           forPage: index, resting: swipe.pageIndex, offset: swipe.offset,
                                           width: proxy.size.width, profiles: model.spaces.map(\.profileID)))
