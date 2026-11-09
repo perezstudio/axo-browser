@@ -33,7 +33,7 @@ struct SpacePage: View {
                 model.selectSidebarItem(item)
                 // A click on a tab hands keyboard focus to its page, as in Arc, so typing and
                 // scrolling go there; with the list focused (the keyboard), it stays in the list.
-                // XX baseline
+                if case .tab = item, focusedList.wrappedValue != space.id { model.focusPage() }
             }
         )) {
             if let data {
