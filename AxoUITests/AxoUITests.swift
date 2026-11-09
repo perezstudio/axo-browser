@@ -540,6 +540,51 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Home tab"].waitForExistence(timeout: 5))
     }
 
+    /// After switching Spaces from the keyboard, the arrow keys move through the new Space's tabs:
+    /// keyboard focus follows to its page in the sidebar rather than staying on the one left,
+    /// which is still drawn beside it but takes no input (#84).
+    @MainActor
+    func testArrowKeysMoveThroughTheSpaceSwitchedTo() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        for title in ["Home one", "Home two"] {
+            AxoUITests.openPage("data:text/html,<title>\(title)</title>", in: app)
+            XCTAssertTrue(sidebar.staticTexts[title].waitForExistence(timeout: 10))
+        }
+        app.buttons["newSpaceButton"].click()
+        let nameField = app.textFields["spaceNameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.click()
+        nameField.typeText("Work")
+        app.buttons["createSpaceButton"].click()
+        XCTAssertTrue(sidebar.staticTexts["Work"].waitForExistence(timeout: 5))
+        for title in ["Work one", "Work two"] {
+            AxoUITests.openPage("data:text/html,<title>\(title)</title>", in: app)
+            XCTAssertTrue(sidebar.staticTexts[title].waitForExistence(timeout: 10))
+        }
+        let address = app.descendants(matching: .any)["sidebarAddressBar"]
+        func expectShown(_ title: String, _ message: String) {
+            expectation(for: NSPredicate(format: "value CONTAINS %@", title), evaluatedWith: address)
+            waitForExpectations(timeout: 5)
+        }
+
+        // Home's list takes keyboard focus from a click on its row.
+        app.typeKey("1", modifierFlags: .control)
+        XCTAssertTrue(sidebar.staticTexts["Home one"].waitForExistence(timeout: 5))
+        sidebar.staticTexts["Home one"].click()
+        expectShown("Home one", "The clicked tab shows")
+        app.typeKey(.downArrow, modifierFlags: [])
+        expectShown("Home two", "The arrow keys move through Home's tabs")
+
+        // Switched from the keyboard: the arrow keys move through Work's tabs now.
+        app.typeKey("2", modifierFlags: .control)
+        XCTAssertTrue(sidebar.staticTexts["Work two"].waitForExistence(timeout: 5))
+        expectShown("Work two", "Work's remembered tab shows")
+        app.typeKey(.upArrow, modifierFlags: [])
+        expectShown("Work one", "The arrow keys move through Work's tabs")
+    }
+
     /// Settings › General moves the navigation bar from the sidebar to the page's toolbar, where
     /// ⌘L still focuses the address field. (UI testing keeps settings in its own store.)
     @MainActor
