@@ -575,7 +575,16 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["HomeOne"].waitForExistence(timeout: 5))
         sidebar.staticTexts["HomeOne"].click()
         expectShown("HomeOne", "The clicked tab shows")
+        func focused() -> String {
+            let element = app.descendants(matching: .any).element(matching: NSPredicate(format: "hasKeyboardFocus == true"))
+            guard element.exists else { return "nothing" }
+            return "\(element.elementType.rawValue) '\(element.identifier)' '\(element.label)'"
+        }
+        let afterClick = focused()
         app.typeKey(.downArrow, modifierFlags: [])
+        sleep(1)
+        XCTContext.runActivity(named: "Focus after the click: \(afterClick); after ↓: \(focused()); address: \(address.value ?? "")") { _ in }
+        print("FOCUS after click: \(afterClick); after down: \(focused()); address: \(address.value ?? "")")
         expectShown("HomeTwo", "The arrow keys move through Home's tabs")
 
         // Switched from the keyboard: the arrow keys move through Work's tabs now.
