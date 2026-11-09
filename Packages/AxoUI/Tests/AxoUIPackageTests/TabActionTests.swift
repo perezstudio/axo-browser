@@ -81,6 +81,59 @@ struct TabActionTests {
         #expect(paths == ["a"])
     }
 
+    @Test func closingSeveralTabsCanBeUndoneInTheirOrder() async throws {
+        let names = ["a", "b", "c", "d", "e", "f"]
+        var ids: [AxoCore.Tab.ID] = []
+        for name in names { ids.append(try await open(name)) }
+        model.select(ids[0])
+
+        await model.closeTabs(below: ids[0])
+        #expect(paths == ["a"])
+        #expect(model.notice?.message == "Closed 5 tabs")
+        let undo = try #require(model.notice?.undo)
+        // One of them is reopened meanwhile; Undo brings back the rest, in their order.
+        await model.restoreTab(ids[3])
+        model.select(ids[0])
+        await undo()
+        #expect(paths == ["a", "d", "b", "c", "e", "f"])
+        #expect(model.selectedTabID == ids[0], "The selection stays")
+    }
+
+    @Test func reopeningTabsClosedTogetherKeepsTheirOrder() async throws {
+        var ids: [AxoCore.Tab.ID] = []
+        for name in ["a", "b", "c", "d", "e", "f"] { ids.append(try await open(name)) }
+        await model.closeOtherTabs(than: ids[0])
+        for _ in 0..<5 { await model.reopenLastClosedTab() }
+        #expect(paths == ["a", "b", "c", "d", "e", "f"])
+    }
+
+    @Test func theTabsMenuActsOnATabRowNotOnASelectedFolder() async throws {
+        let tab = try await open("a")
+        #expect(model.tabForTabActions?.id == tab)
+        await model.createFolder(named: "Work")
+        let folder = try #require(model.folders.first)
+        model.selectSidebarItem(.folder(folder.id))
+        #expect(model.selectedTabID == tab, "The page keeps showing")
+        #expect(model.tabForTabActions == nil, "But the folder is what's selected")
+    }
+
+    @Test func aMovedTabLeavesTheEnginesWindowAndItsNeighborIsActive() async throws {
+        let a = try await open("a")
+        let b = try await open("b")
+        let home = try #require(model.space)
+        await model.createSpace(name: "Work")
+        let work = try #require(model.space)
+        await model.selectSpace(home.id)
+        model.select(b)
+
+        await model.moveTab(b, toSpace: work.id)
+        let window = try #require(engine.windowPages[home.profileID])
+        let pageA = try #require(model.pool.livePage(for: a))
+        let pageB = try #require(model.pool.livePage(for: b))
+        #expect(!window.pages.contains { $0 === pageB }, "Gone from this Space's window")
+        #expect(window.active === pageA, "Its neighbor is the active tab extensions see")
+    }
+
     @Test func closeOtherTabsLeavesPinnedTabsAndTheSplit() async throws {
         let pinned = try await open("pinned")
         await model.setPinned(true, tabID: pinned)
@@ -142,6 +195,26 @@ struct TabActionTests {
         #expect(model.split(of: a) != nil)
         #expect(paths.count == 3, "Only c closed")
         #expect(!paths.contains("c"))
+    }
+
+    @Test func duplicatingGoesBelowASplitWhoseFirstRowIsItsLastPane() async throws {
+        let a = try await open("a")
+        let b = try await open("b")
+        try await open("c")
+        model.select(a)
+        await model.addToSplit(b)
+        let split = try #require(model.split(of: a))
+        let lastPane = try #require(model.panes(of: split.id).last?.id)
+        // The split's last pane moved to the top: it now comes first in the sidebar.
+        try await model.store.moveTab(id: lastPane, to: .start)
+        model.tabs = try await model.store.tabs(in: try #require(model.space).id)
+
+        await model.duplicateTab(a)
+        let copy = try #require(model.selectedTabID)
+        let order = model.tabs.filter { !$0.isPinned }.map(\.id)
+        let paneIndexes = model.panes(of: split.id).compactMap { pane in order.firstIndex(of: pane.id) }
+        #expect(paneIndexes.max()! - paneIndexes.min()! == 1, "Not between the split's tabs")
+        #expect(order.firstIndex(of: copy)! == paneIndexes.max()! + 1, "Right below the split")
     }
 
     @Test func closeTabsBelowASplitRowClosesWhatsBelowIt() async throws {

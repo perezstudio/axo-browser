@@ -302,4 +302,29 @@ struct TabStoreTests {
         #expect(try await store.archivedTabs(in: home.id).count == 2)
         #expect(try await store.tab(id: b.id)?.splitID == nil, "The split ended with them")
     }
+
+    @Test func tabsArchivedTogetherReopenInTheirOrder() async throws {
+        let home = try await store.bootstrap()
+        // Eight, so random IDs can't put them in order by luck.
+        let names = ["a", "b", "c", "e", "f", "g", "h", "i"]
+        let tabs = try await names.asyncMap { try await store.openTab(url: url($0), title: $0.uppercased(), in: home.id) }
+        // Already archived: skipped, keeping its own date.
+        let earlier = try await store.openTab(url: url("d"), title: "D", in: home.id)
+        let earlierDate = Date(timeIntervalSince1970: 1_000)
+        try await store.archiveTab(id: earlier.id, at: earlierDate)
+
+        try await store.archiveTabs(ids: tabs.map(\.id) + [earlier.id], at: Date(timeIntervalSince1970: 2_000))
+        // Reopen Closed Tab takes the most recent first and puts it at the end: the top one first
+        // brings them back in their order.
+        #expect(try await store.archivedTabs(in: home.id).map(\.title) == names.map { $0.uppercased() } + ["D"])
+        #expect(try await store.tab(id: earlier.id)?.archivedAt == earlierDate)
+    }
+}
+
+private extension Array {
+    func asyncMap<T>(_ transform: (Element) async throws -> T) async rethrows -> [T] {
+        var result: [T] = []
+        for element in self { result.append(try await transform(element)) }
+        return result
+    }
 }
