@@ -1164,8 +1164,15 @@ final class AxoUITests: XCTestCase {
         app.typeKey(.escape, modifierFlags: [])
 
         // A closed loopback port: nothing loads, but the tab has a web address.
+        // Typed into the field itself: typed at the app just after the View menu closed, the
+        // first letter could be lost ("ttp://…", not a web address).
         app.typeKey("t", modifierFlags: .command)
-        app.typeText("http://127.0.0.1:9/room\n")
+        let field = app.textFields["commandField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.typeText("http://127.0.0.1:9/room")
+        expectation(for: NSPredicate(format: "value == %@", "http://127.0.0.1:9/room"), evaluatedWith: field)
+        waitForExpectations(timeout: 5)
+        field.typeText("\n")
         XCTAssertTrue(sidebar.staticTexts["127.0.0.1"].waitForExistence(timeout: 10))
         // The row can appear a moment before the tab is selected; Site Settings is for the page
         // showing, which the address bar names once it's shown.
