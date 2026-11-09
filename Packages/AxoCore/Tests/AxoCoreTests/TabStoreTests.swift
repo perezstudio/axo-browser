@@ -238,4 +238,93 @@ struct TabStoreTests {
         #expect(try await store.searchTabs(matching: "").map(\.id) == [mail.id, docs.id], "Most recently used first")
         #expect(try await store.searchTabs(matching: "", limit: 1).count == 1)
     }
+
+    // MARK: Moving to another Space
+
+    @Test func movingATabToAnotherSpaceAppendsItThere() async throws {
+        let home = try await store.bootstrap()
+        let work = try await store.createSpace(name: "Work", profileID: home.profileID)
+        let tab = try await store.openTab(url: url("a"), title: "A", in: home.id)
+        try await store.openTab(url: url("b"), title: "B", in: work.id)
+
+        try await store.moveTab(id: tab.id, toSpace: work.id)
+        #expect(try await titles(in: home).isEmpty)
+        #expect(try await titles(in: work) == ["B", "A"])
+    }
+
+    @Test func aMovedPinnedTabLeavesItsFolderAndStaysPinned() async throws {
+        let home = try await store.bootstrap()
+        let work = try await store.createSpace(name: "Work", profileID: home.profileID)
+        let tab = try await store.openTab(url: url("a"), title: "A", in: home.id)
+        try await store.setPinned(true, tabID: tab.id)
+        let folder = try await store.createFolder(named: "Reading", in: home.id)
+        try await store.movePinnedItem(.tab(tab.id), into: folder.id, after: nil)
+
+        try await store.moveTab(id: tab.id, toSpace: work.id)
+        let moved = try #require(try await store.tab(id: tab.id))
+        #expect(moved.spaceID == work.id)
+        #expect(moved.isPinned)
+        #expect(moved.folderID == nil, "A folder belongs to its Space")
+    }
+
+    @Test func aMovedTabLeavesItsSplit() async throws {
+        let home = try await store.bootstrap()
+        let work = try await store.createSpace(name: "Work", profileID: home.profileID)
+        let a = try await store.openTab(url: url("a"), title: "A", in: home.id)
+        let b = try await store.openTab(url: url("b"), title: "B", in: home.id)
+        _ = try await store.addToSplit(b.id, with: a.id)
+
+        try await store.moveTab(id: b.id, toSpace: work.id)
+        #expect(try await store.tab(id: b.id)?.splitID == nil)
+    }
+
+    @Test func aTabDoesntMoveToAnotherProfilesSpace() async throws {
+        let home = try await store.bootstrap()
+        let other = try await store.createProfile(name: "Personal")
+        let personal = try await store.createSpace(name: "Personal", profileID: other.id)
+        let tab = try await store.openTab(url: url("a"), title: "A", in: home.id)
+
+        await #expect(throws: TabStoreError.spaceOfAnotherProfile(personal.id)) {
+            try await store.moveTab(id: tab.id, toSpace: personal.id)
+        }
+        #expect(try await store.tab(id: tab.id)?.spaceID == home.id)
+    }
+
+    @Test func archivingSeveralTabsInOneWrite() async throws {
+        let home = try await store.bootstrap()
+        let a = try await store.openTab(url: url("a"), title: "A", in: home.id)
+        let b = try await store.openTab(url: url("b"), title: "B", in: home.id)
+        try await store.openTab(url: url("c"), title: "C", in: home.id)
+        _ = try await store.addToSplit(b.id, with: a.id)
+
+        try await store.archiveTabs(ids: [a.id, b.id, UUID()])
+        #expect(try await titles(in: home) == ["C"])
+        #expect(try await store.archivedTabs(in: home.id).count == 2)
+        #expect(try await store.tab(id: b.id)?.splitID == nil, "The split ended with them")
+    }
+
+    @Test func tabsArchivedTogetherReopenInTheirOrder() async throws {
+        let home = try await store.bootstrap()
+        // Eight, so random IDs can't put them in order by luck.
+        let names = ["a", "b", "c", "e", "f", "g", "h", "i"]
+        let tabs = try await names.asyncMap { try await store.openTab(url: url($0), title: $0.uppercased(), in: home.id) }
+        // Already archived: skipped, keeping its own date.
+        let earlier = try await store.openTab(url: url("d"), title: "D", in: home.id)
+        let earlierDate = Date(timeIntervalSince1970: 1_000)
+        try await store.archiveTab(id: earlier.id, at: earlierDate)
+
+        try await store.archiveTabs(ids: tabs.map(\.id) + [earlier.id], at: Date(timeIntervalSince1970: 2_000))
+        // Reopen Closed Tab takes the most recent first and puts it at the end: the top one first
+        // brings them back in their order.
+        #expect(try await store.archivedTabs(in: home.id).map(\.title) == names.map { $0.uppercased() } + ["D"])
+        #expect(try await store.tab(id: earlier.id)?.archivedAt == earlierDate)
+    }
+}
+
+private extension Array {
+    func asyncMap<T>(_ transform: (Element) async throws -> T) async rethrows -> [T] {
+        var result: [T] = []
+        for element in self { result.append(try await transform(element)) }
+        return result
+    }
 }

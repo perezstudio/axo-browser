@@ -174,6 +174,28 @@ public struct BrowserCommands: Commands {
                 Task { await model.makeCurrentPagePinnedHome(id) }
             }
             .disabled(model?.selectedTab?.hasLeftHome != true || model?.selectedFolderID != nil)
+            Button("Duplicate Tab") {
+                guard let model, let id = model.tabForTabActions?.id else { return }
+                Task { await model.duplicateTab(id) }
+            }
+            .disabled(model?.tabForTabActions == nil)
+            if let model, let tab = model.tabForTabActions, model.canMoveToSpace(tab.id) {
+                Menu("Move to Space") {
+                    ForEach(model.spacesToMoveTabsTo) { space in
+                        Button(space.name) { Task { await model.moveTab(tab.id, toSpace: space.id) } }
+                    }
+                }
+            }
+            Button("Close Other Tabs") {
+                guard let model, let id = model.tabForTabActions?.id else { return }
+                Task { await model.closeOtherTabs(than: id) }
+            }
+            .disabled(model?.tabForTabActions.map { model?.otherUnpinnedTabs(than: $0.id).isEmpty ?? true } ?? true)
+            Button("Close Tabs Below") {
+                guard let model, let id = model.tabForTabActions?.id else { return }
+                Task { await model.closeTabs(below: id) }
+            }
+            .disabled(model?.tabForTabActions.map { model?.unpinnedTabs(below: $0.id).isEmpty ?? true } ?? true)
             if let model, let item = model.selectedSidebarItem {
                 MoveToFolderMenu(
                     model: model,

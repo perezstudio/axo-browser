@@ -22,6 +22,8 @@ public enum TabStoreError: Error, Equatable {
     case anchorInDifferentSection(Tab.ID)
     /// No Space with this ID exists.
     case spaceNotFound(Space.ID)
+    /// The Space belongs to another profile: a tab's page keeps the profile it was made with.
+    case spaceOfAnotherProfile(Space.ID)
     /// The last Space can't be deleted; a window always shows one.
     case cannotDeleteLastSpace
     /// No folder with this ID exists.
@@ -432,6 +434,47 @@ public final class TabStore: Sendable {
     public func markActive(id: Tab.ID, at date: Date = Date()) async throws {
         _ = try await database.writer.write { db in
             try Tab.filter(id: id).updateAll(db, Tab.Columns.lastActiveAt.set(to: date))
+        }
+    }
+
+    /// Moves a tab to the end of another Space's section (pinned or not), out of any folder or
+    /// split. Moving to its own Space does nothing.
+    ///
+    /// - Throws: ``TabStoreError/tabNotFound(_:)``, ``TabStoreError/spaceNotFound(_:)``, or
+    ///   ``TabStoreError/spaceOfAnotherProfile(_:)``: a tab moves only between one profile's
+    ///   Spaces, since its live page keeps the profile it was made with.
+    public func moveTab(id: Tab.ID, toSpace spaceID: Space.ID) async throws {
+        try await database.writer.write { db in
+            guard var tab = try Tab.fetchOne(db, id: id) else { throw TabStoreError.tabNotFound(id) }
+            guard tab.spaceID != spaceID else { return }
+            guard let target = try Space.fetchOne(db, id: spaceID) else { throw TabStoreError.spaceNotFound(spaceID) }
+            guard let source = try Space.fetchOne(db, id: tab.spaceID), source.profileID == target.profileID else {
+                throw TabStoreError.spaceOfAnotherProfile(spaceID)
+            }
+            try Self.leaveSplit(id, db)
+            tab = try Tab.fetchOne(db, id: id) ?? tab
+            tab.sortKey = try Self.sortKey(for: .end, in: spaceID, pinned: tab.isPinned, folder: nil, excluding: id, db)
+            tab.spaceID = spaceID
+            tab.folderID = nil
+            try tab.update(db)
+        }
+    }
+
+    /// Archives several tabs in one write, as ``archiveTab(id:at:)`` does for one (Close Other
+    /// Tabs, Close Tabs Below). Tabs that don't exist or are already archived are skipped.
+    ///
+    /// `ids` are in sidebar order. Each is archived a millisecond before the one above it, so
+    /// the most recently archived is the top one: Reopen Closed Tab, which takes the most recent
+    /// and puts it at the end, brings them back in their order.
+    public func archiveTabs(ids: [Tab.ID], at date: Date = Date()) async throws {
+        try await database.writer.write { db in
+            for (index, id) in ids.enumerated() {
+                guard var tab = try Tab.fetchOne(db, id: id), tab.archivedAt == nil else { continue }
+                try Self.leaveSplit(id, db)
+                tab = try Tab.fetchOne(db, id: id) ?? tab
+                tab.archivedAt = date.addingTimeInterval(-Double(index) / 1000)
+                try tab.update(db)
+            }
         }
     }
 
