@@ -379,6 +379,39 @@ public final class AppDatabase: Sendable {
             }
         }
 
+        // A pinned tab or favorite keeps the icon of its home page under its own ID
+        // ("home:<uuid>", AxoCore's `Favicon.homeKey(for:)`). These triggers delete that icon
+        // once nothing can show it (#164): the tab or favorite is deleted (by Axo, a cascade from
+        // its Space or profile, or sync), or its home page changes. They skip the ID while the
+        // other table holds it, since a tab and a favorite made from each other share their ID:
+        // `FavoriteStore` inserts the new record before deleting the old one. Archiving keeps a
+        // tab, so it keeps its icon. The migration also deletes icons left by earlier builds.
+        migrator.registerMigration("v16-home-favicon-cleanup") { db in
+            func key(_ id: String) -> String {
+                let hex = "hex(\(id))"
+                let parts = [(1, 8), (9, 4), (13, 4), (17, 4), (21, 12)].map { "substr(\(hex), \($0.0), \($0.1))" }
+                return "('home:' || lower(\(parts.joined(separator: " || '-' || "))))"
+            }
+            let deleteOld = "DELETE FROM favicon WHERE host = \(key("OLD.id"));"
+            try db.execute(sql: """
+                CREATE TRIGGER tab_home_favicon_delete AFTER DELETE ON tab
+                WHEN NOT EXISTS (SELECT 1 FROM favorite WHERE id = OLD.id)
+                BEGIN \(deleteOld) END;
+                CREATE TRIGGER tab_home_favicon_update AFTER UPDATE OF homeURL ON tab
+                WHEN OLD.homeURL IS NOT NEW.homeURL AND NOT EXISTS (SELECT 1 FROM favorite WHERE id = OLD.id)
+                BEGIN \(deleteOld) END;
+                CREATE TRIGGER favorite_home_favicon_delete AFTER DELETE ON favorite
+                WHEN NOT EXISTS (SELECT 1 FROM tab WHERE id = OLD.id AND homeURL IS NOT NULL)
+                BEGIN \(deleteOld) END;
+                CREATE TRIGGER favorite_home_favicon_update AFTER UPDATE OF url ON favorite
+                WHEN OLD.url IS NOT NEW.url AND NOT EXISTS (SELECT 1 FROM tab WHERE id = OLD.id AND homeURL IS NOT NULL)
+                BEGIN \(deleteOld) END;
+                DELETE FROM favicon WHERE host LIKE 'home:%'
+                    AND host NOT IN (SELECT \(key("id")) FROM tab WHERE homeURL IS NOT NULL)
+                    AND host NOT IN (SELECT \(key("id")) FROM favorite);
+                """)
+        }
+
         return migrator
     }
 

@@ -356,4 +356,86 @@ struct MigrationTests {
             #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM externalAppPermission") == 0)
         }
     }
+    @Test func v16DeletesHomeIconsNothingCanShow() throws {
+        let queue = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(queue, upTo: "v15-external-app-permissions")
+        let profileID = UUID(), spaceID = UUID()
+        let pinned = UUID(), unpinned = UUID(), favorite = UUID(), gone = UUID()
+        func key(_ id: UUID) -> String { "home:" + id.uuidString.lowercased() }
+        try queue.write { db in
+            try db.execute(sql: "INSERT INTO profile (id, name) VALUES (?, 'Default')", arguments: [profileID])
+            try db.execute(sql: "INSERT INTO space (id, profileID, name, sortKey) VALUES (?, ?, 'Home', 'a0')", arguments: [spaceID, profileID])
+            try db.execute(sql: "INSERT INTO tab (id, spaceID, url, sortKey, isPinned, homeURL) VALUES (?, ?, 'https://a.com', 'a0', 1, 'https://a.com')", arguments: [pinned, spaceID])
+            try db.execute(sql: "INSERT INTO tab (id, spaceID, url, sortKey) VALUES (?, ?, 'https://b.com', 'a1')", arguments: [unpinned, spaceID])
+            try db.execute(sql: "INSERT INTO favorite (id, profileID, url, sortKey) VALUES (?, ?, 'https://c.com', 'a0')", arguments: [favorite, profileID])
+            for host in [key(pinned), key(unpinned), key(favorite), key(gone), "example.com"] {
+                try db.execute(sql: "INSERT INTO favicon (host, data, updatedAt) VALUES (?, x'01', CURRENT_TIMESTAMP)", arguments: [host])
+            }
+        }
+        try AppDatabase.migrator.migrate(queue)
+        try queue.read { db in
+            let hosts = try Set(String.fetchAll(db, sql: "SELECT host FROM favicon"))
+            #expect(hosts == [key(pinned), key(favorite), "example.com"], "Only icons of no pinned tab or favorite go")
+        }
+    }
+
+    @Test func v16DeletesAHomeIconWithItsTabOrFavoriteOrHomeOnly() throws {
+        let database = try AppDatabase.makeInMemory()
+        let profileID = UUID(), spaceID = UUID()
+        func key(_ id: UUID) -> String { "home:" + id.uuidString.lowercased() }
+        try database.writer.write { db in
+            try db.execute(sql: "INSERT INTO profile (id, name) VALUES (?, 'Default')", arguments: [profileID])
+            try db.execute(sql: "INSERT INTO space (id, profileID, name, sortKey) VALUES (?, ?, 'Home', 'a0')", arguments: [spaceID, profileID])
+            func icons() throws -> Set<String> { try Set(String.fetchAll(db, sql: "SELECT host FROM favicon")) }
+            func saveIcon(_ id: UUID) throws {
+                try db.execute(sql: "INSERT OR REPLACE INTO favicon (host, data, updatedAt) VALUES (?, x'01', CURRENT_TIMESTAMP)", arguments: [key(id)])
+            }
+            func pin(_ id: UUID) throws {
+                try db.execute(sql: "INSERT INTO tab (id, spaceID, url, sortKey, isPinned, homeURL) VALUES (?, ?, 'https://a.com', 'a0', 1, 'https://a.com')", arguments: [id, spaceID])
+                try saveIcon(id)
+            }
+
+            let tab = UUID()
+            try pin(tab)
+            try db.execute(sql: "UPDATE tab SET url = 'https://a.com/b', title = 'B', archivedAt = CURRENT_TIMESTAMP WHERE id = ?", arguments: [tab])
+            #expect(try icons() == [key(tab)], "Navigating and archiving keep it")
+            try db.execute(sql: "UPDATE tab SET homeURL = 'https://a.com/b' WHERE id = ?", arguments: [tab])
+            #expect(try icons().isEmpty, "A new home page needs a new icon")
+            try saveIcon(tab)
+            try db.execute(sql: "UPDATE tab SET isPinned = 0, homeURL = NULL WHERE id = ?", arguments: [tab])
+            #expect(try icons().isEmpty, "Unpinning deletes it")
+            try saveIcon(tab)
+            try db.execute(sql: "DELETE FROM tab WHERE id = ?", arguments: [tab])
+            #expect(try icons().isEmpty, "Deleting the tab deletes it")
+
+            let favorite = UUID()
+            try db.execute(sql: "INSERT INTO favorite (id, profileID, url, sortKey) VALUES (?, ?, 'https://c.com', 'a0')", arguments: [favorite, profileID])
+            try saveIcon(favorite)
+            try db.execute(sql: "UPDATE favorite SET title = 'C', sortKey = 'a1' WHERE id = ?", arguments: [favorite])
+            #expect(try icons() == [key(favorite)], "Renaming and moving keep it")
+            try db.execute(sql: "UPDATE favorite SET url = 'https://d.com' WHERE id = ?", arguments: [favorite])
+            #expect(try icons().isEmpty, "A new home page needs a new icon")
+            try saveIcon(favorite)
+            try db.execute(sql: "DELETE FROM favorite WHERE id = ?", arguments: [favorite])
+            #expect(try icons().isEmpty, "Removing the favorite deletes it")
+
+            // A favorite made from a pinned tab takes its ID (and icon): inserted first, so the
+            // tab's deletion keeps the icon, and the same the other way.
+            let shared = UUID()
+            try pin(shared)
+            try db.execute(sql: "INSERT INTO favorite (id, profileID, url, sortKey) VALUES (?, ?, 'https://a.com', 'a0')", arguments: [shared, profileID])
+            try db.execute(sql: "DELETE FROM tab WHERE id = ?", arguments: [shared])
+            #expect(try icons() == [key(shared)])
+            try db.execute(sql: "INSERT INTO tab (id, spaceID, url, sortKey, isPinned, homeURL) VALUES (?, ?, 'https://a.com', 'a0', 1, 'https://a.com')", arguments: [shared, spaceID])
+            try db.execute(sql: "DELETE FROM favorite WHERE id = ?", arguments: [shared])
+            #expect(try icons() == [key(shared)])
+
+            let other = UUID()
+            try db.execute(sql: "INSERT INTO favorite (id, profileID, url, sortKey) VALUES (?, ?, 'https://c.com', 'a1')", arguments: [other, profileID])
+            try saveIcon(other)
+            try db.execute(sql: "INSERT INTO favicon (host, data, updatedAt) VALUES ('example.com', x'01', CURRENT_TIMESTAMP)")
+            try db.execute(sql: "DELETE FROM profile")
+            #expect(try icons() == ["example.com"], "Deleting a profile, and its Spaces, deletes their tabs' and favorites' icons, and only those")
+        }
+    }
 }

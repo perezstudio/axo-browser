@@ -218,6 +218,53 @@ struct TabStoreTests {
         #expect(try await store.favicons(forHosts: ["home"]).isEmpty)
     }
 
+    @Test func homeIconsGoWhenNothingCanShowThem() async throws {
+        let space = try await store.bootstrap()
+        let icon = Data([1, 2, 3])
+        func hasIcon(_ id: UUID) async throws -> Bool {
+            try await !store.favicons(forHosts: [Favicon.homeKey(for: id)]).isEmpty
+        }
+        func pinnedTab() async throws -> Tab {
+            let tab = try await store.openTab(url: url("home"), title: "Home", in: space.id)
+            try await store.setPinned(true, tabID: tab.id)
+            try await store.saveHomeFavicon(icon, for: tab.id)
+            return tab
+        }
+
+        let archived = try await pinnedTab()
+        try await store.archiveTab(id: archived.id)
+        #expect(try await hasIcon(archived.id), "An archived tab can come back, with its icon")
+
+        let unpinned = try await pinnedTab()
+        try await store.setPinned(false, tabID: unpinned.id)
+        #expect(try await !hasIcon(unpinned.id))
+
+        let rehomed = try await pinnedTab()
+        try await store.setHomeURL(url("elsewhere"), tabID: rehomed.id)
+        #expect(try await !hasIcon(rehomed.id), "Its icon was the old home page's")
+
+        let deleted = try await pinnedTab()
+        try await store.deleteTab(id: deleted.id)
+        #expect(try await !hasIcon(deleted.id))
+
+        let madeFavorite = try await pinnedTab()
+        try await store.favorites.add(fromTab: madeFavorite.id)
+        #expect(try await hasIcon(madeFavorite.id), "The favorite takes the tab's ID and home")
+        try await store.favorites.moveToPinned(madeFavorite.id, in: space.id)
+        #expect(try await hasIcon(madeFavorite.id), "And back")
+        try await store.favorites.add(fromTab: madeFavorite.id)
+        try await store.favorites.remove(madeFavorite.id)
+        #expect(try await !hasIcon(madeFavorite.id))
+
+        let other = try await store.createSpace(name: "Other", profileID: space.profileID)
+        let inOther = try await store.openTab(url: url("home"), title: "Home", in: other.id)
+        try await store.setPinned(true, tabID: inOther.id)
+        try await store.saveHomeFavicon(icon, for: inOther.id)
+        _ = try await store.deleteSpace(id: other.id)
+        #expect(try await !hasIcon(inOther.id), "It goes with its Space")
+        #expect(try await hasIcon(archived.id), "Other tabs' icons stay")
+    }
+
     @Test func urlsWithoutAHostHaveNoFavicon() async throws {
         try await store.saveFavicon(Data([1]), for: URL(string: "about:blank")!)
         #expect(Favicon.key(for: URL(string: "about:blank")!) == nil)

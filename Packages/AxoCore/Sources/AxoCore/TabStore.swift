@@ -554,7 +554,7 @@ public final class TabStore: Sendable {
     }
 
     /// Saves the icon a pinned tab or favorite showed at its home page, replacing any older one
-    /// (``Favicon/homeKey(for:)``). Delete it with the tab or favorite (``deleteHomeFavicon(for:)``).
+    /// (``Favicon/homeKey(for:)``). The database deletes it once the tab or favorite is deleted or its home page changes (migration `v16-home-favicon-cleanup`).
     public func saveHomeFavicon(_ data: Data, for id: UUID) async throws {
         try await database.writer.write { db in
             try Favicon(host: Favicon.homeKey(for: id), data: data).save(db)
