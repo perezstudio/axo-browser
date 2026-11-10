@@ -208,6 +208,16 @@ struct TabStoreTests {
         #expect(icons == ["example.com": newer, "swift.org": png])
     }
 
+    @Test func homeIconsAreKeptByIDApartFromHosts() async throws {
+        let id = UUID(), first = Data([1, 2, 3]), later = Data([4, 5, 6])
+        try await store.saveHomeFavicon(first, for: id)
+        try await store.saveHomeFavicon(later, for: id)
+        let key = Favicon.homeKey(for: id)
+        #expect(try await store.favicons(forHosts: [key]) == [key: later], "The latest replaces the last")
+        #expect(Favicon.key(for: URL(string: "https://home:1/")!) != key, "Never a host's key")
+        #expect(try await store.favicons(forHosts: ["home"]).isEmpty)
+    }
+
     @Test func urlsWithoutAHostHaveNoFavicon() async throws {
         try await store.saveFavicon(Data([1]), for: URL(string: "about:blank")!)
         #expect(Favicon.key(for: URL(string: "about:blank")!) == nil)

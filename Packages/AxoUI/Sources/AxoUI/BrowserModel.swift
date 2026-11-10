@@ -286,7 +286,8 @@ public final class BrowserModel {
     /// The file panels open for pages, closed when a page gives up on its panel or its tab closes.
     @ObservationIgnored let openFilePanels = OpenFilePanels()
     #endif
-    /// Hosts whose saved icon was already looked up, so each is read from the database once.
+    /// Hosts whose saved icon was found, so each is read from the database once. Hosts with
+    /// none are looked up again later: another window may save one meanwhile.
     @ObservationIgnored private var lookedUpFaviconHosts: Set<String> = []
     /// Speaks a short message to VoiceOver users. Tests replace it to record messages.
     @ObservationIgnored public var announce: (String) -> Void = { message in
@@ -318,8 +319,8 @@ public final class BrowserModel {
             }
             self?.persistPageChange(tabID: tabID, url: url, title: title)
         }
-        pool.onFaviconChange = { [weak self] _, pageURL, data in
-            self?.saveFavicon(data, for: pageURL)
+        pool.onFaviconChange = { [weak self] tabID, pageURL, data in
+            self?.saveFavicon(data, for: pageURL, tabID: tabID)
         }
         prompts.onChange = { [weak self] prompt in self?.currentPrompt = prompt }
         pool.permissionStore = SitePermissionAdapter(store: store.sitePermissions)
@@ -446,7 +447,10 @@ public final class BrowserModel {
 
     /// The icon for a tab's site, if Axo has one.
     public func favicon(for tab: AxoCore.Tab) -> PlatformImage? {
+        // A pinned tab or favorite whose site has no icon of its own (a home that redirects)
+        // shows the one it showed at its home page.
         Favicon.key(for: tab.url).flatMap { favicons[$0] }
+            ?? (tab.homeURL == nil ? nil : favicons[Favicon.homeKey(for: tab.id)])
     }
 
     /// Loads the Spaces, opens the initial Space with its first tab selected, and starts
@@ -1600,7 +1604,8 @@ public final class BrowserModel {
         }
     }
 
-    /// Reads saved icons for hosts in the sidebar that haven't been looked up yet.
+    /// Reads saved icons for hosts in the sidebar (tabs, pinned tabs' home pages, and favorites,
+    /// the shown Space's and the others') that don't have one yet.
     func loadSavedFavicons() async {
         // The other Spaces' rows too, so a swipe shows their icons.
         let previewTabs = spacePreviews.values.flatMap { preview in
@@ -1611,31 +1616,63 @@ public final class BrowserModel {
                 }
             } + preview.splitPanes.values.flatMap(\.self) + PinnedNode.allTabs(in: preview.pinnedTree)
         }
-        let previewFavorites = spacePreviews.values.flatMap { $0.favorites.map(\.url) }
-        let hosts = Set(((tabs + previewTabs).map(\.url) + previewFavorites).compactMap(Favicon.key(for:)))
-            .subtracting(lookedUpFaviconHosts)
+        let allFavorites = favorites + spacePreviews.values.flatMap(\.favorites)
+        let allTabs = tabs + previewTabs
+        let homeKeys = allTabs.filter { $0.homeURL != nil }.map(\.id).map(Favicon.homeKey(for:))
+            + allFavorites.map(\.id).map(Favicon.homeKey(for:))
+        let urls = allTabs.map(\.url) + allTabs.compactMap(\.homeURL) + allFavorites.map(\.url)
+        let hosts = Set(urls.compactMap(Favicon.key(for:)) + homeKeys).subtracting(lookedUpFaviconHosts)
         guard !hosts.isEmpty else { return }
-        lookedUpFaviconHosts.formUnion(hosts)
         do {
             for (host, data) in try await store.favicons(forHosts: hosts) where favicons[host] == nil {
                 favicons[host] = PlatformImage(data: data)
+                lookedUpFaviconHosts.insert(host)
             }
         } catch {
             logger.error("Couldn't load favicons: \(error)")
         }
     }
 
-    private func saveFavicon(_ data: Data, for pageURL: URL) {
+    /// Keeps a page's icon for its host, and, for a pinned tab's or favorite's page at its home
+    /// page, as its home icon too (``Favicon/homeKey(for:)``): that's the icon it shows with no
+    /// page when its home host has none of its own, as when the home redirects elsewhere
+    /// (gmail.com to mail.google.com). The page counts as at its home on the home's host, or
+    /// with no history of its own (only redirects led there, never a link the person
+    /// followed). A later home icon replaces an earlier one, so a wrong one (a login page the
+    /// home redirected to) doesn't last.
+    private func saveFavicon(_ data: Data, for pageURL: URL, tabID: AxoCore.Tab.ID? = nil) {
         guard let host = Favicon.key(for: pageURL), let image = PlatformImage(data: data) else { return }
         favicons[host] = image
         lookedUpFaviconHosts.insert(host)
+        let homeID = tabID.flatMap { id -> AxoCore.Tab.ID? in
+            guard let home = homeURL(of: id) else { return nil }
+            let atHome = Favicon.key(for: home) == host || pool.state(for: id)?.canGoBack == false
+            return atHome ? id : nil
+        }
+        if let homeID {
+            let key = Favicon.homeKey(for: homeID)
+            favicons[key] = image
+            lookedUpFaviconHosts.insert(key)
+        }
         Task {
             do {
                 try await store.saveFavicon(data, for: pageURL)
+                if let homeID { try await store.saveHomeFavicon(data, for: homeID) }
             } catch {
                 logger.error("Couldn't save favicon: \(error)")
             }
         }
+    }
+
+    /// The home page of a pinned tab or favorite, in any Space or of any profile the window has
+    /// rows for, or `nil` for any other tab.
+    private func homeURL(of tabID: AxoCore.Tab.ID) -> URL? {
+        let favorite = (favorites + spacePreviews.values.flatMap(\.favorites)).first { $0.id == tabID }
+        if let favorite { return favorite.url }
+        if let tab = tabs.first(where: { $0.id == tabID }) { return tab.homeURL }
+        return spacePreviews.values.lazy
+            .compactMap { PinnedNode.allTabs(in: $0.pinnedTree).first { $0.id == tabID }?.homeURL }
+            .first
     }
 
     /// Saves a page change to the tab and to the profile's history. A new URL counts as a

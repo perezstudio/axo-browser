@@ -553,7 +553,15 @@ public final class TabStore: Sendable {
         }
     }
 
-    /// Returns the saved icons for these hosts, keyed by host. Hosts without an icon are omitted.
+    /// Saves the icon a pinned tab or favorite showed at its home page, replacing any older one
+    /// (``Favicon/homeKey(for:)``). Delete it with the tab or favorite (``deleteHomeFavicon(for:)``).
+    public func saveHomeFavicon(_ data: Data, for id: UUID) async throws {
+        try await database.writer.write { db in
+            try Favicon(host: Favicon.homeKey(for: id), data: data).save(db)
+        }
+    }
+
+    /// Returns the saved icons for these hosts (or ``Favicon/homeKey(for:)`` keys), keyed by host. Hosts without an icon are omitted.
     public func favicons(forHosts hosts: some Collection<String>) async throws -> [String: Data] {
         let keys = Set(hosts.map { $0.lowercased() })
         guard !keys.isEmpty else { return [:] }

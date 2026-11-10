@@ -161,6 +161,13 @@ public struct Favicon: Codable, Hashable, Sendable, FetchableRecord, Persistable
     public static func key(for url: URL) -> String? {
         url.host()?.lowercased()
     }
+
+    /// The key of the icon a pinned tab or favorite showed at its home page, by its ID: its
+    /// home may redirect to another host (gmail.com to mail.google.com), whose icon it is. Never
+    /// a host (hosts have no colon), and never shared between tabs or profiles.
+    public static func homeKey(for id: UUID) -> String {
+        "home:" + id.uuidString.lowercased()
+    }
 }
 
 /// A folder in a Space's pinned section. Folders can hold pinned tabs and other folders.

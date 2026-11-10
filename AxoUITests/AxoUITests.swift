@@ -71,6 +71,13 @@ final class AxoUITests: XCTestCase {
         app.typeKey("t", modifierFlags: .command)
         let field = app.textFields["commandField"]
         XCTAssertTrue(field.waitForExistence(timeout: 5), "The command bar opens")
+        // The field can appear a moment before it takes keyboard focus (typing then fails with
+        // "Neither element nor any descendant has keyboard focus"), so wait for focus, and click
+        // the field if it doesn't come.
+        let focused = NSPredicate(format: "hasKeyboardFocus == true")
+        if XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: focused, object: field)], timeout: 3) != .completed {
+            field.click()
+        }
         field.typeText(address + "\n")
     }
 
