@@ -114,6 +114,33 @@ struct SyncStoreTests {
         #expect(try await iPad.sync.pendingChanges().isEmpty)
     }
 
+    @Test func aPinnedTabMadeAFavoriteElsewhereKeepsItsHomeIcon() async throws {
+        let (space, _, tab) = try await makeSidebar()
+        try await mac.sync()
+        try await iPad.sync()
+        let icon = Data([1, 2, 3]), key = Favicon.homeKey(for: tab.id)
+        try await iPad.tabs.saveHomeFavicon(icon, for: tab.id, home: tab.url)
+
+        // The tab's deletion and the favorite's save arrive together.
+        try await mac.tabs.favorites.add(fromTab: tab.id)
+        try await mac.sync()
+        try await iPad.sync()
+        #expect(try await iPad.tabs.tab(id: tab.id) == nil)
+        #expect(try await iPad.tabs.favorites.favorites(for: space.profileID).map(\.id) == [tab.id])
+        #expect(try await iPad.tabs.favicons(forHosts: [key]) == [key: icon], "The favorite shows the tab's icon")
+
+        try await mac.tabs.favorites.moveToPinned(tab.id, in: space.id)
+        try await mac.sync()
+        try await iPad.sync()
+        #expect(try await iPad.tabs.tab(id: tab.id)?.isPinned == true)
+        #expect(try await iPad.tabs.favicons(forHosts: [key]) == [key: icon], "And back")
+
+        try await mac.tabs.deleteTab(id: tab.id)
+        try await mac.sync()
+        try await iPad.sync()
+        #expect(try await iPad.tabs.favicons(forHosts: [key]).isEmpty, "A deletion from elsewhere deletes it")
+    }
+
     @Test func recordsWaitForParentsThatArriveLater() async throws {
         let (space, folder, tab) = try await makeSidebar()
         let inner = try await mac.tabs.createFolder(named: "Inner", in: space.id, parent: folder.id)

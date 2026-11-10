@@ -553,11 +553,21 @@ public final class TabStore: Sendable {
         }
     }
 
-    /// Saves the icon a pinned tab or favorite showed at its home page, replacing any older one
-    /// (``Favicon/homeKey(for:)``). The database deletes it once the tab or favorite is deleted or its home page changes (migration `v16-home-favicon-cleanup`).
-    public func saveHomeFavicon(_ data: Data, for id: UUID) async throws {
+    /// Saves the icon a pinned tab or favorite showed at its home page `home`, replacing any
+    /// older one (``Favicon/homeKey(for:)``). The database deletes it once the tab or favorite
+    /// is deleted or its home page changes (migration `v16-home-favicon-cleanup`), so it saves
+    /// nothing unless a pinned tab or favorite with this ID still has `home` as its home page:
+    /// an icon that arrives after an unpin, a deletion, or Set Home would otherwise stay.
+    ///
+    /// - Returns: Whether the icon was saved.
+    @discardableResult
+    public func saveHomeFavicon(_ data: Data, for id: UUID, home: URL) async throws -> Bool {
         try await database.writer.write { db in
+            let tabHome = try Tab.fetchOne(db, id: id)?.homeURL
+            let favoriteHome = try Favorite.fetchOne(db, id: id)?.url
+            guard tabHome == home || favoriteHome == home else { return false }
             try Favicon(host: Favicon.homeKey(for: id), data: data).save(db)
+            return true
         }
     }
 

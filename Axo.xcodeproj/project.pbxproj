@@ -898,7 +898,6 @@
 				11D4C20A30705F800027735E /* Debug configuration for PBXNativeTarget "AxoiOS" */,
 				11D4C20B30705F800027735E /* Release configuration for PBXNativeTarget "AxoiOS" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		11D4C21030705F800027735E /* Build configuration list for PBXNativeTarget "AxoiOSUITests" */ = {
@@ -907,7 +906,6 @@
 				11D4C21130705F800027735E /* Debug configuration for PBXNativeTarget "AxoiOSUITests" */,
 				11D4C21230705F800027735E /* Release configuration for PBXNativeTarget "AxoiOSUITests" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */

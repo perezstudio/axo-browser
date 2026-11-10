@@ -1644,20 +1644,20 @@ public final class BrowserModel {
         guard let host = Favicon.key(for: pageURL), let image = PlatformImage(data: data) else { return }
         favicons[host] = image
         lookedUpFaviconHosts.insert(host)
-        let homeID = tabID.flatMap { id -> AxoCore.Tab.ID? in
+        let homePage = tabID.flatMap { id -> (id: AxoCore.Tab.ID, url: URL)? in
             guard let home = homeURL(of: id) else { return nil }
             let atHome = Favicon.key(for: home) == host || pool.state(for: id)?.canGoBack == false
-            return atHome ? id : nil
+            return atHome ? (id, home) : nil
         }
-        if let homeID {
-            let key = Favicon.homeKey(for: homeID)
+        if let homePage {
+            let key = Favicon.homeKey(for: homePage.id)
             favicons[key] = image
             lookedUpFaviconHosts.insert(key)
         }
         Task {
             do {
                 try await store.saveFavicon(data, for: pageURL)
-                if let homeID { try await store.saveHomeFavicon(data, for: homeID) }
+                if let homePage { try await store.saveHomeFavicon(data, for: homePage.id, home: homePage.url) }
             } catch {
                 logger.error("Couldn't save favicon: \(error)")
             }
