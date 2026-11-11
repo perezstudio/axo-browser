@@ -28,8 +28,9 @@ struct SpaceSwitcher: View {
                     .accessibilityIdentifier("newSpaceButton")
             }
         }
-        // The toolbar's inset from the window's edges (8 pt on macOS 27), so the footer's
-        // buttons line up under the toolbar's. `testSidebarFooterMatchesTheToolbar` checks it.
+        // The toolbar's buttons are centered 26 pt from the window's top on macOS 27 (their
+        // 36 pt glass in a 52 pt slot); 8 pt here centers the footer's 26 pt from the bottom
+        // and leading edges. `testSidebarFooterMatchesTheToolbar` checks the centers.
         .padding(.horizontal, 8)
         .padding(.vertical, 8)
         .accessibilityElement(children: .contain)
@@ -53,8 +54,11 @@ struct SpaceSwitcher: View {
 }
 
 /// The footer's round glass buttons, sized like the window toolbar's (#135): an extra large
-/// glass circle is the toolbar's 36 pt on macOS 27. `testSidebarFooterMatchesTheToolbar`
-/// compares them, so a release that changes either size fails the test.
+/// glass circle around a 15 pt icon is 36 pt, the toolbar's glass on macOS 27 (measured from
+/// window screenshots; accessibility reports only the toolbar item's 52 pt slot).
+/// `testSidebarFooterMatchesTheToolbar` checks the footer is 36 pt and the slot still 52 pt.
+/// It can't see the toolbar's glass itself, so check the screenshots it attaches when macOS
+/// changes the toolbar.
 private struct FooterButtonStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
@@ -99,6 +103,7 @@ private struct SpaceDots: View {
         .padding(.vertical, (Self.buttonHeight - SpaceDot.height) / 2)
         .glassEffect(.regular, in: .capsule)
         .accessibilityElement(children: .contain)
+        .accessibilityLabel("Space list")
         .accessibilityIdentifier("spaceDots")
     }
 

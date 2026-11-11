@@ -634,6 +634,44 @@ final class AxoUITests: XCTestCase {
         }
     }
 
+    /// With many Spaces the dots scroll inside their capsule, which stays the buttons' height
+    /// and fits between them, at the sidebar's narrowest.
+    @MainActor
+    func testSidebarFooterFitsManySpaces() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        for index in 1...10 {
+            app.buttons["newSpaceButton"].click()
+            let nameField = app.textFields["spaceNameField"]
+            XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+            nameField.click()
+            nameField.typeText("Space\(index)")
+            app.buttons["createSpaceButton"].click()
+            XCTAssertTrue(sidebar.staticTexts["Space\(index)"].waitForExistence(timeout: 5))
+        }
+        XCTAssertEqual(app.buttons.matching(identifier: "spaceButton").count, 11)
+        // Drag the sidebar's edge as far left as it goes.
+        let window = app.windows.firstMatch
+        let edge = window.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: sidebar.frame.maxX - window.frame.minX + 1, dy: window.frame.height / 2))
+        edge.press(forDuration: 0.2, thenDragTo: edge.withOffset(CGVector(dx: -400, dy: 0)))
+
+        let settings = app.buttons["settingsButton"].frame
+        let newSpace = app.buttons["newSpaceButton"].frame
+        let dots = app.descendants(matching: .any)["spaceDots"].frame
+        XCTAssertEqual(dots.height, 36, accuracy: 1, "The capsule keeps the buttons' height")
+        XCTAssertEqual(dots.midY, settings.midY, accuracy: 1)
+        XCTAssertGreaterThanOrEqual(dots.minX, settings.maxX, "The dots don't run under Settings")
+        XCTAssertLessThanOrEqual(dots.maxX, newSpace.minX, "Or under New Space")
+        XCTAssertEqual(settings.height, 36, accuracy: 1)
+        XCTAssertEqual(newSpace.height, 36, accuracy: 1)
+        let shot = XCTAttachment(screenshot: window.screenshot())
+        shot.name = "Footer with eleven Spaces at the narrowest sidebar"
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+
     @MainActor
     private func checkFooterMatchesToolbar(in app: XCUIApplication, appearance: String, placement: String) {
         let window = app.windows.firstMatch.frame

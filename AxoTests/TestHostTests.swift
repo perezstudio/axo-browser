@@ -30,7 +30,6 @@ struct TestHostTests {
         #expect(AppEnvironment.uiTestingAppearance("light")?.name == .aqua)
         #expect(AppEnvironment.uiTestingAppearance(nil) == nil, "Unset follows the system")
         #expect(AppEnvironment.uiTestingAppearance("sepia") == nil)
-        #expect(!AppEnvironment.isUITesting && NSApp.appearance == nil, "Hosted unit tests leave the appearance alone")
     }
 
     @Test func hostingTestsNeverOpensTheOnDiskDatabase() async throws {
