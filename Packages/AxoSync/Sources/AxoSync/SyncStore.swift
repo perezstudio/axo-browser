@@ -121,7 +121,20 @@ public final class SyncStore: Sendable {
     public func applyRemoteChanges(saved: [StampedSyncRecord], deleted: [SyncRecordID]) async throws {
         try await database.writer.write { db in
             try db.execute(sql: "INSERT INTO syncApplying (flag) VALUES (1)")
-            for id in deleted.sorted(by: { $0.type > $1.type }) {
+            // A pinned tab made a favorite elsewhere, or the reverse, arrives as one record's
+            // deletion and the other's save under the same ID. That deletion waits until after
+            // the saves, so the database keeps the home icon they share (migration
+            // v16-home-favicon-cleanup deletes it only when neither holds the ID).
+            let savedIDs = Set(saved.map(\.record.id))
+            func isMove(_ id: SyncRecordID) -> Bool {
+                switch id.type {
+                case .tab: savedIDs.contains(SyncRecordID(.favorite, id.id))
+                case .favorite: savedIDs.contains(SyncRecordID(.tab, id.id))
+                default: false
+                }
+            }
+            let sortedDeletions = deleted.sorted(by: { $0.type > $1.type })
+            for id in sortedDeletions where !isMove(id) {
                 try Self.applyDeletion(of: id, db)
             }
             for stamped in saved.sorted(by: { $0.record.id.type < $1.record.id.type }) {
@@ -132,6 +145,9 @@ public final class SyncStore: Sendable {
                 }
                 try db.execute(sql: "DELETE FROM syncChange WHERE recordType = ? AND recordID = ?", arguments: [id.type.rawValue, id.id])
                 if try !Self.apply(stamped, db) { try Self.park(stamped, db) }
+            }
+            for id in sortedDeletions where isMove(id) {
+                try Self.applyDeletion(of: id, db)
             }
             try Self.retryParkedRecords(db)
             try db.execute(sql: "DELETE FROM syncApplying")

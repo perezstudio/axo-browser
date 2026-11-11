@@ -102,8 +102,11 @@ public final class FavoriteStore: Sendable {
             guard let tab = try Tab.fetchOne(db, id: tabID) else { throw TabStoreError.tabNotFound(tabID) }
             guard let space = try Space.fetchOne(db, id: tab.spaceID) else { throw TabStoreError.spaceNotFound(tab.spaceID) }
             try TabStore.leaveSplit(tabID, db)
+            // The favorite first, so the tab's home icon stays (the database deletes it with
+            // the tab only when no favorite has its ID).
+            let favorite = try Self.insert(id: tabID, url: tab.homeURL ?? tab.url, title: tab.title, profileID: space.profileID, db)
             try Tab.deleteOne(db, id: tabID)
-            return try Self.insert(id: tabID, url: tab.homeURL ?? tab.url, title: tab.title, profileID: space.profileID, db)
+            return favorite
         }
     }
 
@@ -156,10 +159,12 @@ public final class FavoriteStore: Sendable {
         try await database.writer.write { db in
             guard let favorite = try Favorite.fetchOne(db, id: id) else { throw FavoriteError.favoriteNotFound(id) }
             guard try Space.exists(db, id: spaceID) else { throw TabStoreError.spaceNotFound(spaceID) }
-            try Favorite.deleteOne(db, id: id)
             let sortKey = try TabStore.sortKey(for: .end, in: spaceID, pinned: true, folder: nil, excluding: nil, db)
             let tab = Tab(id: id, spaceID: spaceID, url: favorite.url, title: favorite.title, sortKey: sortKey, isPinned: true, homeURL: favorite.url)
+            // The tab first, so the favorite's home icon stays (the database deletes it with
+            // the favorite only when no pinned tab has its ID).
             try tab.insert(db)
+            try Favorite.deleteOne(db, id: id)
             return try Tab.fetchOne(db, id: id) ?? tab
         }
     }

@@ -23,6 +23,7 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
 | `v2-favicons` | `favicon` (site icons as 64 px PNGs, keyed by host) |
 | `v14-favorites` | `favorite` (a profile's favorites: home URL, title, sort key; → profile, cascade), with sync triggers |
 | `v15-external-app-permissions` | `externalAppPermission` (sites allowed to open links of a scheme in another app without asking, per profile; → profile, cascade). Not synced |
+| `v16-home-favicon-cleanup` | Triggers that delete a pinned tab's or favorite's home icon (`home:<id>` in `favicon`) when the tab or favorite is deleted (also by cascade or sync) or its home page changes, unless the other table holds the same ID; deletes icons already left over |
 | `v13-space-appearance` | `space.color` (a palette name) and `space.icon` (an SF Symbol name), both optional; the Space sync trigger is recreated to include them |
 | `v12-sync` | iCloud sync bookkeeping: `syncChange` (local changes to profiles, Spaces, folders, and pinned tabs not yet sent, kept by triggers), `syncApplying` (set while changes from iCloud are written, so the triggers skip them), `syncRecordMetadata` (CloudKit system fields), `syncParkedRecord` (records waiting for a parent), `syncSetting` (engine state and the first-sync flag) |
 | `v11-site-customizations` | `siteCustomization` (custom CSS and JavaScript for a domain and its subdomains; unique per domain; on by default) |
