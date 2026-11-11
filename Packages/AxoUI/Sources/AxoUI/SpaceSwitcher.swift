@@ -67,11 +67,16 @@ private struct FooterButtonStyle: ViewModifier {
 
 /// Only the icon, in a square of one size for every symbol: the glass circle sizes itself from
 /// its content, and a plus is smaller than a gear, which left New Space a few points smaller
-/// than Settings.
+/// than Settings. The title stays, as `.iconOnly` keeps it, so VoiceOver still names the button.
 private struct FooterIconLabelStyle: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.icon
-            .frame(width: Self.iconSide, height: Self.iconSide)
+        Label {
+            configuration.title
+        } icon: {
+            configuration.icon
+                .frame(width: Self.iconSide, height: Self.iconSide)
+        }
+        .labelStyle(.iconOnly)
     }
 
     /// The square each footer icon sits in.
