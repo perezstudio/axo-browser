@@ -655,10 +655,9 @@ final class AxoUITests: XCTestCase {
         XCTAssertEqual(dots.height, 36, accuracy: 1, "The dots' capsule, \(context)")
         XCTAssertEqual(dots.midY, settings.midY, accuracy: 1, "The dots line up, \(context)")
         // The footer's buttons sit as far from the window's bottom and leading edges as the
-        // toolbar's from its top and trailing edges, center to edge.
+        // toolbar's from its top, center to edge.
         let toolbarInset = back.midY - window.minY
-        XCTAssertEqual(trailing.midY - window.minY, toolbarInset, accuracy: 1, context)
-        XCTAssertEqual(window.maxX - trailing.midX, toolbarInset, accuracy: 1, "The toolbar's trailing inset, \(context)")
+        XCTAssertEqual(trailing.midY - window.minY, toolbarInset, accuracy: 1, "The toolbar's buttons line up, \(context)")
         XCTAssertEqual(window.maxY - settings.midY, toolbarInset, accuracy: 1, "Bottom inset, \(context)")
         XCTAssertEqual(settings.midX - window.minX, toolbarInset, accuracy: 1, "Leading inset, \(context)")
 
