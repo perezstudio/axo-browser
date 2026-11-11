@@ -58,11 +58,24 @@ struct SpaceSwitcher: View {
 private struct FooterButtonStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .labelStyle(.iconOnly)
+            .labelStyle(FooterIconLabelStyle())
             .buttonStyle(.glass)
             .buttonBorderShape(.circle)
             .controlSize(.extraLarge)
     }
+}
+
+/// Only the icon, in a square of one size for every symbol: the glass circle sizes itself from
+/// its content, and a plus is smaller than a gear, which left New Space a few points smaller
+/// than Settings.
+private struct FooterIconLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.icon
+            .frame(width: Self.iconSide, height: Self.iconSide)
+    }
+
+    /// The square each footer icon sits in.
+    static let iconSide: CGFloat = 15
 }
 
 /// A dot for each Space in a glass capsule, the current one filled. Many Spaces scroll. The
