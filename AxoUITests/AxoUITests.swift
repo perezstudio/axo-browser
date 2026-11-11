@@ -636,28 +636,33 @@ final class AxoUITests: XCTestCase {
 
     @MainActor
     private func checkFooterMatchesToolbar(in app: XCUIApplication, appearance: String, placement: String) {
-        let window = app.windows.firstMatch
-        let toolbarHeight = app.buttons["backButton"].frame.height
-        let reload = app.buttons["reloadButton"].frame
+        let window = app.windows.firstMatch.frame
+        let back = app.buttons["backButton"].frame
+        let trailing = app.buttons["summarizeButton"].frame
         let settings = app.buttons["settingsButton"].frame
         let newSpace = app.buttons["newSpaceButton"].frame
         let dots = app.descendants(matching: .any)["spaceDots"].frame
         let context = "\(appearance), navigation bar \(placement)"
-        XCTAssertEqual(reload.height, toolbarHeight, accuracy: 1, context)
-        XCTAssertEqual(settings.height, toolbarHeight, accuracy: 1, "Settings, \(context)")
-        XCTAssertEqual(settings.width, settings.height, accuracy: 1, "Settings is round, \(context)")
-        XCTAssertEqual(newSpace.height, toolbarHeight, accuracy: 1, "New Space, \(context)")
-        XCTAssertEqual(newSpace.width, newSpace.height, accuracy: 1, "New Space is round, \(context)")
-        XCTAssertEqual(dots.height, toolbarHeight, accuracy: 1, "The dots' capsule, \(context)")
-        XCTAssertEqual(dots.midY, settings.midY, accuracy: 1, "The footer's pieces line up, \(context)")
-        XCTAssertEqual(newSpace.midY, settings.midY, accuracy: 1, context)
-        // The toolbar's buttons sit as far from the window's top as the footer's from its bottom
-        // and sides.
-        let toolbarInset = reload.minY - window.frame.minY
-        XCTAssertEqual(window.frame.maxY - settings.maxY, toolbarInset, accuracy: 1, "Bottom inset, \(context)")
-        XCTAssertEqual(settings.minX - window.frame.minX, toolbarInset, accuracy: 1, "Leading inset, \(context)")
+        // A toolbar item's frame is its whole 52 pt slot, the 36 pt glass button centered in it
+        // (measured from window screenshots on macOS 27). If the slot changes, measure the
+        // glass again and update FooterButtonStyle and SpaceDots.
+        XCTAssertEqual(back.height, 52, accuracy: 1, "The toolbar's slot, \(context)")
+        for (name, frame) in [("Settings", settings), ("New Space", newSpace)] {
+            XCTAssertEqual(frame.height, 36, accuracy: 1, "\(name) is the toolbar's glass size, \(context)")
+            XCTAssertEqual(frame.width, frame.height, accuracy: 1, "\(name) is round, \(context)")
+            XCTAssertEqual(frame.midY, settings.midY, accuracy: 1, "\(name) lines up, \(context)")
+        }
+        XCTAssertEqual(dots.height, 36, accuracy: 1, "The dots' capsule, \(context)")
+        XCTAssertEqual(dots.midY, settings.midY, accuracy: 1, "The dots line up, \(context)")
+        // The footer's buttons sit as far from the window's bottom and leading edges as the
+        // toolbar's from its top and trailing edges, center to edge.
+        let toolbarInset = back.midY - window.minY
+        XCTAssertEqual(trailing.midY - window.minY, toolbarInset, accuracy: 1, context)
+        XCTAssertEqual(window.maxX - trailing.midX, toolbarInset, accuracy: 1, "The toolbar's trailing inset, \(context)")
+        XCTAssertEqual(window.maxY - settings.midY, toolbarInset, accuracy: 1, "Bottom inset, \(context)")
+        XCTAssertEqual(settings.midX - window.minX, toolbarInset, accuracy: 1, "Leading inset, \(context)")
 
-        let shot = XCTAttachment(screenshot: window.screenshot())
+        let shot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
         shot.name = "Toolbar and footer, \(context)"
         shot.lifetime = .keepAlways
         add(shot)
