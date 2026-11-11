@@ -614,7 +614,7 @@ final class AxoUITests: XCTestCase {
     func testSidebarFooterMatchesTheToolbar() throws {
         for appearance in ["Light", "Dark"] {
             let app = Self.makeApp()
-            app.launchArguments += ["-AppleInterfaceStyle", appearance]
+            app.launchEnvironment["AXO_UI_TESTING_APPEARANCE"] = appearance
             app.launch()
             Self.bringToFront(app)
             let window = app.windows.firstMatch
