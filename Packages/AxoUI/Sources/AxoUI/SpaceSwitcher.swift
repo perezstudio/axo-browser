@@ -28,7 +28,9 @@ struct SpaceSwitcher: View {
                     .accessibilityIdentifier("newSpaceButton")
             }
         }
-        .padding(.horizontal, 10)
+        // The toolbar's inset from the window's edges (8 pt on macOS 27), so the footer's
+        // buttons line up under the toolbar's. `testSidebarFooterMatchesTheToolbar` checks it.
+        .padding(.horizontal, 8)
         .padding(.vertical, 8)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Spaces")
@@ -50,18 +52,22 @@ struct SpaceSwitcher: View {
     }
 }
 
-/// The footer's round glass buttons, styled like toolbar buttons.
+/// The footer's round glass buttons, sized like the window toolbar's (#135): an extra large
+/// glass circle is the toolbar's 36 pt on macOS 27. `testSidebarFooterMatchesTheToolbar`
+/// compares them, so a release that changes either size fails the test.
 private struct FooterButtonStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
             .labelStyle(.iconOnly)
             .buttonStyle(.glass)
             .buttonBorderShape(.circle)
-            .controlSize(.large)
+            .controlSize(.extraLarge)
     }
 }
 
-/// A dot for each Space in a glass capsule, the current one filled. Many Spaces scroll.
+/// A dot for each Space in a glass capsule, the current one filled. Many Spaces scroll. The
+/// capsule is as tall as the footer's buttons: each dot's target is ``SpaceDot/height`` tall,
+/// plus the capsule's padding.
 private struct SpaceDots: View {
     let model: BrowserModel
 
@@ -72,9 +78,14 @@ private struct SpaceDots: View {
                 .scrollIndicators(.never)
         }
         .padding(.horizontal, 6)
-        .padding(.vertical, 4)
+        .padding(.vertical, (Self.buttonHeight - SpaceDot.height) / 2)
         .glassEffect(.regular, in: .capsule)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("spaceDots")
     }
+
+    /// The footer's buttons' height (``FooterButtonStyle``), which the capsule matches.
+    static let buttonHeight: CGFloat = 36
 
     private var dots: some View {
         HStack(spacing: 0) {
@@ -100,6 +111,9 @@ private struct SpaceDot: View {
     let action: () -> Void
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
 
+    /// The height of a dot's click target.
+    static let height: CGFloat = 28
+
     var body: some View {
         Button(action: action) {
             Circle()
@@ -111,7 +125,7 @@ private struct SpaceDot: View {
                         Circle().strokeBorder(.primary, lineWidth: 1.5).padding(-3)
                     }
                 }
-                .frame(width: 18, height: 22)
+                .frame(width: 18, height: Self.height)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)

@@ -606,6 +606,63 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Above"].waitForExistence(timeout: 10), "⌘L focuses the address field above the page")
     }
 
+    /// The sidebar's footer matches the window toolbar (#135): Settings, New Space, and the Space
+    /// dots' capsule are as tall as the toolbar's buttons, the buttons are round, and the footer
+    /// sits as far from the window's edges as the toolbar. Checked with the navigation bar in the
+    /// sidebar and above the page, with window screenshots in light and dark mode.
+    @MainActor
+    func testSidebarFooterMatchesTheToolbar() throws {
+        for appearance in ["Light", "Dark"] {
+            let app = Self.makeApp()
+            app.launchArguments += ["-AppleInterfaceStyle", appearance]
+            app.launch()
+            Self.bringToFront(app)
+            let window = app.windows.firstMatch
+            XCTAssertTrue(app.buttons["settingsButton"].waitForExistence(timeout: 5))
+            checkFooterMatchesToolbar(in: app, appearance: appearance, placement: "sidebar")
+
+            app.typeKey(",", modifierFlags: .command)
+            let general = app.toolbars.buttons["General"]
+            XCTAssertTrue(general.waitForExistence(timeout: 5))
+            general.click()
+            app.radioButtons["Above the page"].click()
+            app.typeKey("w", modifierFlags: .command)
+            XCTAssertTrue(app.descendants(matching: .any)["pageAddressBar"].waitForExistence(timeout: 5))
+            XCTAssertTrue(window.exists)
+            checkFooterMatchesToolbar(in: app, appearance: appearance, placement: "above the page")
+            app.terminate()
+        }
+    }
+
+    @MainActor
+    private func checkFooterMatchesToolbar(in app: XCUIApplication, appearance: String, placement: String) {
+        let window = app.windows.firstMatch
+        let toolbarHeight = app.buttons["backButton"].frame.height
+        let reload = app.buttons["reloadButton"].frame
+        let settings = app.buttons["settingsButton"].frame
+        let newSpace = app.buttons["newSpaceButton"].frame
+        let dots = app.descendants(matching: .any)["spaceDots"].frame
+        let context = "\(appearance), navigation bar \(placement)"
+        XCTAssertEqual(reload.height, toolbarHeight, accuracy: 1, context)
+        XCTAssertEqual(settings.height, toolbarHeight, accuracy: 1, "Settings, \(context)")
+        XCTAssertEqual(settings.width, settings.height, accuracy: 1, "Settings is round, \(context)")
+        XCTAssertEqual(newSpace.height, toolbarHeight, accuracy: 1, "New Space, \(context)")
+        XCTAssertEqual(newSpace.width, newSpace.height, accuracy: 1, "New Space is round, \(context)")
+        XCTAssertEqual(dots.height, toolbarHeight, accuracy: 1, "The dots' capsule, \(context)")
+        XCTAssertEqual(dots.midY, settings.midY, accuracy: 1, "The footer's pieces line up, \(context)")
+        XCTAssertEqual(newSpace.midY, settings.midY, accuracy: 1, context)
+        // The toolbar's buttons sit as far from the window's top as the footer's from its bottom
+        // and sides.
+        let toolbarInset = reload.minY - window.frame.minY
+        XCTAssertEqual(window.frame.maxY - settings.maxY, toolbarInset, accuracy: 1, "Bottom inset, \(context)")
+        XCTAssertEqual(settings.minX - window.frame.minX, toolbarInset, accuracy: 1, "Leading inset, \(context)")
+
+        let shot = XCTAttachment(screenshot: window.screenshot())
+        shot.name = "Toolbar and footer, \(context)"
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+
     /// With the navigation bar above the page, its address field and buttons work like the
     /// sidebar's: the field shows the page's address, clicking it and typing navigates the tab,
     /// and back and forward follow the history. Everything sits over the page, not the sidebar.
