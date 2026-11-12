@@ -98,8 +98,7 @@ private struct SpaceDots: View {
             dots
             ScrollView(.horizontal) { dots }
                 .scrollIndicators(.never)
-                // A scroll view doesn't take its content's height, which shrank the capsule
-                // once the dots scrolled.
+                // As tall as the dots, so the capsule is the buttons' height either way.
                 .frame(height: SpaceDot.height)
         }
         .padding(.horizontal, 6)
