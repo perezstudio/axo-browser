@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// An sRGB color a page declares or draws, for tinting the toolbar to the page (#107).
@@ -80,9 +81,9 @@ nonisolated public struct PageColors: Equatable, Sendable {
     }
 
     /// Colors from the page's `theme-color` tags (each a CSS color and its `media` attribute)
-    /// and the CSS color at its top. Colors that don't parse, or are mostly see-through, are
-    /// left out.
-    public init(themeColors: [(color: String, media: String)], topColor: String?) {
+    /// and the color its top edge draws in. Colors that don't parse, or are mostly see-through,
+    /// are left out.
+    public init(themeColors: [(color: String, media: String)], topColor: PageColor?) {
         self.init()
         for (css, media) in themeColors {
             guard let color = PageColor(css: css), color.isOpaqueEnough else { continue }
@@ -95,9 +96,12 @@ nonisolated public struct PageColors: Equatable, Sendable {
                 themeColor = color
             }
         }
-        if let topColor, let color = PageColor(css: topColor), color.isOpaqueEnough {
-            self.topColor = color
-        }
+        if let topColor, topColor.isOpaqueEnough { self.topColor = topColor }
+    }
+
+    /// Whether some appearance has no `theme-color`, so the page's top color would be used.
+    var needsTopColor: Bool {
+        themeColor == nil && (lightThemeColor == nil || darkThemeColor == nil)
     }
 
     /// The color to tint with in the light or dark appearance: the matching `theme-color`, the
@@ -106,19 +110,62 @@ nonisolated public struct PageColors: Equatable, Sendable {
         (isDark ? darkThemeColor : lightThemeColor) ?? themeColor ?? topColor
     }
 
-    /// Reads a page's colors, in Axo's page-text world so the page can't see or change it. It
-    /// normalizes colors through a detached canvas, which leaves the page's DOM untouched.
+    /// Reads a page's colors: its `theme-color` tags, in Axo's page-text world so the page can't
+    /// see or change the lookup (normalized through a detached canvas, which leaves the DOM
+    /// untouched), and, when some appearance has none, the color its top edge draws in, from a
+    /// small snapshot. Pixels, not styles: a transparent header over a photo or video draws the
+    /// photo, while its styles would name the body's color behind it.
     @MainActor
     static func read(from page: any EnginePage) async -> PageColors? {
         guard let result = try? await page.callJavaScript(script, arguments: [:], in: PageText.world),
-              let values = result as? [String: Any] else { return nil }
-        let metas = (values["metas"] as? [[String]] ?? []).compactMap { row -> (color: String, media: String)? in
+              let rows = result as? [[String]] else { return nil }
+        let metas = rows.compactMap { row -> (color: String, media: String)? in
             row.count == 2 ? (row[0], row[1]) : nil
         }
-        return PageColors(themeColors: metas, topColor: values["top"] as? String)
+        var colors = PageColors(themeColors: metas, topColor: nil)
+        if colors.needsTopColor, let image = await page.snapshot(width: snapshotWidth),
+           let cgImage = PageSnapshot.cgImage(from: image) {
+            colors.topColor = topEdgeColor(of: cgImage)
+        }
+        return colors
     }
 
-    /// The script `read(from:)` runs.
+    /// The width, in points, of the snapshot the top color comes from: small, since only its top
+    /// edge is read.
+    static let snapshotWidth: CGFloat = 64
+
+    /// The average color of an image's top rows (the top 2%, at least one), in sRGB, or `nil` if
+    /// it's mostly see-through.
+    nonisolated static func topEdgeColor(of image: CGImage) -> PageColor? {
+        let width = 16
+        let height = max(1, Int((Double(image.height) * Double(width) / Double(max(image.width, 1))).rounded()))
+        let rows = max(1, height / 50)
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                      space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+              let data = context.data
+        else { return nil }
+        // Drawn into sRGB, so the image's own colour space (often the display's) is converted.
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let pixels = data.bindMemory(to: UInt8.self, capacity: width * height * 4)
+        var totals = [Double](repeating: 0, count: 4)
+        // Memory starts at the image's top row.
+        for row in 0..<rows {
+            for column in 0..<width {
+                let offset = (row * width + column) * 4
+                for channel in 0..<4 { totals[channel] += Double(pixels[offset + channel]) }
+            }
+        }
+        let count = Double(rows * width) * 255
+        let alpha = totals[3] / count
+        guard alpha > 0 else { return nil }
+        // Premultiplied, so divide the alpha back out.
+        let color = PageColor(red: totals[0] / count / alpha, green: totals[1] / count / alpha,
+                              blue: totals[2] / count / alpha, alpha: alpha)
+        return color.isOpaqueEnough ? color : nil
+    }
+
+    /// The script `read(from:)` runs: each `theme-color` tag's color, normalized, and its media.
     static let script = """
         const context = document.createElement('canvas').getContext('2d');
         const sentinel = '#010203';
@@ -129,21 +176,8 @@ nonisolated public struct PageColors: Equatable, Sendable {
           const result = String(context.fillStyle);
           return result === sentinel && value.trim().toLowerCase() !== sentinel ? null : result;
         };
-        const metas = Array.from(document.querySelectorAll('meta[name="theme-color" i]'))
+        return Array.from(document.querySelectorAll('meta[name="theme-color" i]'))
           .map(meta => [normalize(meta.getAttribute('content') || ''), meta.getAttribute('media') || ''])
           .filter(row => row[0]);
-        const clear = (color) => !color || color === 'transparent' || /^rgba\\(.*,\\s*0\\)$/.test(color);
-        let top = null;
-        const start = document.elementFromPoint(Math.floor(window.innerWidth / 2), 1);
-        for (let element = start; element && !top; element = element.parentElement) {
-          const color = getComputedStyle(element).backgroundColor;
-          if (!clear(color)) top = color;
-        }
-        for (const element of [document.body, document.documentElement]) {
-          if (top || !element) continue;
-          const color = getComputedStyle(element).backgroundColor;
-          if (!clear(color)) top = color;
-        }
-        return { metas, top };
         """
 }

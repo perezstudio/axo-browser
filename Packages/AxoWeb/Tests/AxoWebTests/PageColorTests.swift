@@ -1,4 +1,5 @@
 import AxoCore
+import CoreGraphics
 import Foundation
 import Testing
 @testable import AxoWeb
@@ -25,7 +26,7 @@ struct PageColorTests {
             (color: "#111111", media: "(prefers-color-scheme: dark)"),
             (color: "#eeeeee", media: "(prefers-color-scheme:light)"),
             (color: "#888888", media: ""),
-        ], topColor: "rgb(1, 2, 3)")
+        ], topColor: PageColor(css: "rgb(1, 2, 3)"))
         #expect(colors.color(isDark: true) == PageColor(css: "#111111"))
         #expect(colors.color(isDark: false) == PageColor(css: "#eeeeee"))
     }
@@ -34,17 +35,36 @@ struct PageColorTests {
         let plain = PageColors(themeColors: [
             (color: "#111111", media: "(prefers-color-scheme: dark)"),
             (color: "#888888", media: "screen"),
-        ], topColor: "rgb(1, 2, 3)")
+        ], topColor: PageColor(css: "rgb(1, 2, 3)"))
         #expect(plain.color(isDark: true) == PageColor(css: "#111111"))
         #expect(plain.color(isDark: false) == PageColor(css: "#888888"), "A query not about the scheme counts as plain")
 
-        let top = PageColors(themeColors: [], topColor: "rgb(1, 2, 3)")
+        let top = PageColors(themeColors: [], topColor: PageColor(css: "rgb(1, 2, 3)"))
         #expect(top.color(isDark: false) == PageColor(css: "rgb(1, 2, 3)"))
         #expect(PageColors(themeColors: [], topColor: nil).color(isDark: false) == nil)
     }
 
+    @Test func averagesTheTopRowsOfASnapshot() throws {
+        // 100 rows: the top 10 orange, the rest white, so only the top edge counts.
+        let colorSpace = try #require(CGColorSpace(name: CGColorSpace.sRGB))
+        let context = try #require(CGContext(data: nil, width: 50, height: 100, bitsPerComponent: 8, bytesPerRow: 0,
+                                             space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.setFillColor(CGColor(colorSpace: colorSpace, components: [1, 1, 1, 1])!)
+        context.fill(CGRect(x: 0, y: 0, width: 50, height: 100))
+        context.setFillColor(CGColor(colorSpace: colorSpace, components: [240 / 255, 120 / 255, 0, 1])!)
+        context.fill(CGRect(x: 0, y: 90, width: 50, height: 10)) // y counts up, so this is the top
+        let image = try #require(context.makeImage())
+        let color = try #require(PageColors.topEdgeColor(of: image))
+        #expect(abs(color.red - 240 / 255) < 0.02 && abs(color.green - 120 / 255) < 0.02 && color.blue < 0.02, "\(color)")
+
+        let clear = try #require(CGContext(data: nil, width: 50, height: 100, bitsPerComponent: 8, bytesPerRow: 0,
+                                           space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        let clearImage = try #require(clear.makeImage())
+        #expect(PageColors.topEdgeColor(of: clearImage) == nil, "A see-through top says nothing")
+    }
+
     @Test func ignoresMostlySeeThroughColors() {
-        let colors = PageColors(themeColors: [(color: "rgba(255, 0, 0, 0.2)", media: "")], topColor: "rgba(0, 0, 0, 0)")
+        let colors = PageColors(themeColors: [(color: "rgba(255, 0, 0, 0.2)", media: "")], topColor: PageColor(css: "rgba(0, 0, 0, 0)"))
         #expect(colors.color(isDark: false) == nil)
         #expect(PageColors(themeColors: [(color: "rgba(255, 0, 0, 0.6)", media: "")], topColor: nil).themeColor != nil)
     }
@@ -94,7 +114,23 @@ struct PageColorLoadingTests {
         try await waitUntil("page colors") { pool.state(for: tab.id)?.pageColors != nil }
         let colors = try #require(pool.state(for: tab.id)?.pageColors)
         #expect(colors.themeColor == nil)
-        #expect(colors.topColor == PageColor(red: 10 / 255, green: 120 / 255, blue: 200 / 255))
+        let top = try #require(colors.topColor)
+        #expect(abs(top.red - 10 / 255) < 0.04 && abs(top.green - 120 / 255) < 0.04 && abs(top.blue - 200 / 255) < 0.04, "\(top)")
+    }
+
+    @Test func takesTheColorThePageDrawsNotItsStyles() async throws {
+        // A transparent header over a picture, on a dark body: the styles behind the top edge
+        // name the body's black, but the page draws the picture's orange there.
+        let (pool, tab, _) = try await load("""
+            <!doctype html><title>Picture</title>
+            <body style="margin:0;background:rgb(10, 10, 10)">
+            <div style="position:absolute;top:0;left:0;right:0;height:300px;background-image:linear-gradient(rgb(240, 120, 0), rgb(240, 120, 0))"></div>
+            <header style="position:absolute;top:0;left:0;right:0;height:60px">Menu</header>
+            </body>
+            """, named: "picture.html")
+        try await waitUntil("page colors") { pool.state(for: tab.id)?.pageColors != nil }
+        let top = try #require(pool.state(for: tab.id)?.pageColors?.topColor)
+        #expect(top.red > 0.8 && abs(top.green - 120 / 255) < 0.08 && top.blue < 0.1, "\(top)")
     }
 
     @Test func pagesCantBreakTheLookup() async throws {
