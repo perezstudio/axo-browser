@@ -80,13 +80,13 @@ public final class WebViewPool {
     /// pages never count as the person's usage. Screen Time still blocks sites over their limit.
     public var reportsScreenTimeUsage = true
 
-    /// Whether pages' colors are read after each load (`WebTabState.pageColors`), for tinting the
-    /// toolbar (#107). Off by default and while nothing shows the tint, since a page with no
-    /// `theme-color` is snapshotted for it. Turning it on reads the live pages that have loaded.
+    /// Whether shown pages' colors are read (`WebTabState.pageColors`), for tinting the toolbar
+    /// (#107). Off by default and while nothing shows the tint, since a page with no
+    /// `theme-color` is snapshotted for it. Turning it on reads the shown pages.
     public var readsPageColors = false {
         didSet {
             guard readsPageColors, !oldValue else { return }
-            for (tabID, liveTab) in live where !liveTab.state.isLoading { loadPageColors(for: tabID) }
+            for liveTab in live.values { refreshPageColors(of: liveTab) }
         }
     }
 
@@ -453,6 +453,7 @@ public final class WebViewPool {
     public func beginShowing(_ tabID: Tab.ID) {
         visibleCounts[tabID, default: 0] += 1
         live[tabID]?.lastUsed = now()
+        if let liveTab = live[tabID] { refreshPageColors(of: liveTab) }
     }
 
     /// Marks a tab as no longer shown in one place. Its idle timer starts now.
@@ -721,15 +722,34 @@ public final class WebViewPool {
 
     // MARK: Page colors
 
-    /// Reads the colors the tab's current page offers for the toolbar (#107) into its state,
-    /// unless the tab moved on to another page or another live page meanwhile.
-    func loadPageColors(for tabID: Tab.ID) {
-        guard readsPageColors, let liveTab = live[tabID], let pageURL = liveTab.page.url else { return }
-        Task { [weak self] in
-            let colors = await PageColors.read(from: liveTab.page)
-            guard let self, self.live[tabID] === liveTab, liveTab.page.url == pageURL else { return }
-            if liveTab.state.pageColors != colors { liveTab.state.pageColors = colors }
+    /// Reads the colors a shown tab's page offers for the toolbar (#107) into its state, once
+    /// per load: when the page finishes loading while shown, or when it's shown after loading
+    /// hidden (a hidden page may never have been drawn, so it has no top color to read). A read
+    /// for an earlier load, or for a page the tab no longer has, is dropped. The colors stay
+    /// until a later load's read replaces them.
+    func refreshPageColors(of liveTab: LiveTab) {
+        guard readsPageColors, isVisible(liveTab.tabID), live[liveTab.tabID] === liveTab, liveTab.colorsTask == nil,
+              liveTab.finishedLoads > 0, liveTab.colorsLoad != liveTab.finishedLoads else { return }
+        let load = liveTab.finishedLoads
+        liveTab.colorsTask = Task { [weak self] in
+            let read = await PageColors.read(from: liveTab.page)
+            liveTab.colorsTask = nil
+            guard !Task.isCancelled, let self, self.live[liveTab.tabID] === liveTab else { return }
+            guard liveTab.finishedLoads == load else {
+                // The page loaded again meanwhile: read that load instead.
+                self.refreshPageColors(of: liveTab)
+                return
+            }
+            guard let read else { return }
+            if liveTab.state.pageColors != read.colors { liveTab.state.pageColors = read.colors }
+            // A page that couldn't be drawn for its top color is read again when next shown.
+            if read.isComplete { liveTab.colorsLoad = load }
         }
+    }
+
+    /// Whether the tab's page colors are being read, for tests.
+    func isReadingPageColors(_ tabID: Tab.ID) -> Bool {
+        live[tabID]?.colorsTask != nil
     }
 
     // MARK: Profiles

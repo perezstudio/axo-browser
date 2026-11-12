@@ -40,16 +40,15 @@ struct PageToolbarTint: ViewModifier {
     let placement: NavigationBarPlacement
     @AppStorage(ToolbarTintSettings.storageKey) private var isEnabled = true
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         let tint = ToolbarTint.tint(for: page?.pageColors, isDark: colorScheme == .dark, isEnabled: isEnabled, placement: placement)
         // One view either way (the page column must never be rebuilt, or its page would remount);
-        // only the toolbar's style changes.
+        // only the toolbar's style changes. No animation: one here would also animate whatever
+        // else changes in the page column in the same update (a split opening, a notice).
         content
             .toolbarBackground(tint.map { Color(pageColor: $0.color) } ?? Color.clear, for: .windowToolbar)
             .toolbarBackgroundVisibility(tint == nil ? .automatic : .visible, for: .windowToolbar)
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: tint)
             .onChange(of: ToolbarTint.showsTint(isEnabled: isEnabled, placement: placement), initial: true) { _, shows in
                 pool.readsPageColors = shows
             }

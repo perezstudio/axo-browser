@@ -114,6 +114,13 @@ public final class FakePage: EnginePage {
     public private(set) var downloadRequests: [URL] = []
     /// Whether the pool closed the page.
     public private(set) var isClosed = false
+    /// What every script run returns (`nil` by default).
+    public var scriptResult: Any?
+    /// Whether scripts wait for ``answerHeldScript()`` instead of answering at once.
+    public var holdsScripts = false
+    /// How many scripts are waiting for ``answerHeldScript()``.
+    public var heldScriptCount: Int { heldScripts.count }
+    private var heldScripts: [CheckedContinuation<Void, Never>] = []
     /// What ``snapshot(width:)`` returns.
     public var snapshotImage: PlatformImage?
     /// How many snapshots the pool asked for.
@@ -261,7 +268,15 @@ public final class FakePage: EnginePage {
 
     public func callJavaScript(_ functionBody: String, arguments: [String: Any], in world: String) async throws -> Any? {
         scripts.append((functionBody, world))
-        return nil
+        guard holdsScripts else { return scriptResult }
+        await withCheckedContinuation { heldScripts.append($0) }
+        return scriptResult
+    }
+
+    /// Answers the oldest held script with ``scriptResult``.
+    public func answerHeldScript() {
+        guard !heldScripts.isEmpty else { return }
+        heldScripts.removeFirst().resume()
     }
 
     public func snapshot(width: CGFloat) async -> PlatformImage? {

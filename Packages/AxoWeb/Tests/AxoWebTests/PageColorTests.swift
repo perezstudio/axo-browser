@@ -4,7 +4,7 @@ import Foundation
 import Testing
 @testable import AxoWeb
 
-/// Parsing pages' colors and choosing toolbar contrast (#107).
+/// Parsing pages' colors and picking one for the toolbar (#107).
 struct PageColorTests {
     @Test func parsesTheFormsEnginesReturn() {
         #expect(PageColor(css: "#9b2a5c") == PageColor(red: 155 / 255, green: 42 / 255, blue: 92 / 255))
@@ -16,7 +16,7 @@ struct PageColorTests {
     }
 
     @Test func rejectsWhatItCantRead() {
-        for css in ["", "red", "#12", "#gggggg", "rgb(1, 2)", "hsl(0, 100%, 50%)", "color(display-p3 1 0 0)", "rgb(a, b, c)"] {
+        for css in ["", "red", "#12", "#gggggg", "rgb(1, 2)", "hsl(0, 100%, 50%)", "color(display-p3 1 0 0)", "rgb(a, b, c)", "rgb(nan, 0, 0)", "rgb(0, inf, 0)", "rgba(0, 0, 0, nan)"] {
             #expect(PageColor(css: css) == nil, "\(css)")
         }
     }
@@ -54,13 +54,28 @@ struct PageColorTests {
         context.setFillColor(CGColor(colorSpace: colorSpace, components: [240 / 255, 120 / 255, 0, 1])!)
         context.fill(CGRect(x: 0, y: 90, width: 50, height: 10)) // y counts up, so this is the top
         let image = try #require(context.makeImage())
-        let color = try #require(PageColors.topEdgeColor(of: image))
+        let color = try #require(PageColors.topEdgeColor(of: image, widthInPoints: 50))
         #expect(abs(color.red - 240 / 255) < 0.02 && abs(color.green - 120 / 255) < 0.02 && color.blue < 0.02, "\(color)")
 
         let clear = try #require(CGContext(data: nil, width: 50, height: 100, bitsPerComponent: 8, bytesPerRow: 0,
                                            space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
         let clearImage = try #require(clear.makeImage())
-        #expect(PageColors.topEdgeColor(of: clearImage) == nil, "A see-through top says nothing")
+        #expect(PageColors.topEdgeColor(of: clearImage, widthInPoints: 50) == nil, "A see-through top says nothing")
+    }
+
+    @Test func readsOnlyTheTopPointsOfAWindowShapedSnapshot() throws {
+        // A 320-point snapshot of a wide window at 2x: 640 by 400 pixels, with a thin dark header
+        // (6 points) over a white page. Averaging a deeper band would give a muddy grey.
+        let colorSpace = try #require(CGColorSpace(name: CGColorSpace.sRGB))
+        let context = try #require(CGContext(data: nil, width: 640, height: 400, bitsPerComponent: 8, bytesPerRow: 0,
+                                             space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.setFillColor(CGColor(colorSpace: colorSpace, components: [1, 1, 1, 1])!)
+        context.fill(CGRect(x: 0, y: 0, width: 640, height: 400))
+        context.setFillColor(CGColor(colorSpace: colorSpace, components: [0.1, 0.1, 0.1, 1])!)
+        context.fill(CGRect(x: 0, y: 388, width: 640, height: 12))
+        let image = try #require(context.makeImage())
+        let color = try #require(PageColors.topEdgeColor(of: image, widthInPoints: 320))
+        #expect(abs(color.red - 0.1) < 0.02 && abs(color.green - 0.1) < 0.02 && abs(color.blue - 0.1) < 0.02, "\(color)")
     }
 
     @Test func ignoresMostlySeeThroughColors() {
@@ -81,20 +96,23 @@ struct PageColorLoadingTests {
         pages = try TestPages()
     }
 
-    private func load(_ html: String, named name: String, readsColors: Bool = true) async throws -> (WebViewPool, Tab, URL) {
+    private func load(_ html: String, named name: String) async throws -> (WebViewPool, Tab, URL) {
         let url = pages.directory.appending(path: name)
         try html.write(to: url, atomically: true, encoding: .utf8)
         let pool = WebViewPool.forTesting()
-        pool.readsPageColors = readsColors
+        pool.readsPageColors = true
         let tab = Tab.testTab(url: url)
         // Sized like a page in a window, so there's something at its top.
         pool.webView(for: tab, profileID: profileID).frame = CGRect(x: 0, y: 0, width: 800, height: 600)
+        // Colors are read for shown pages.
+        pool.beginShowing(tab.id)
         return (pool, tab, url)
     }
 
     @Test func readsThemeColorsAfterThePageLoads() async throws {
         let (pool, tab, _) = try await load("""
             <!doctype html><title>Themed</title>
+            <meta name="theme-color" media="(max-width: 10px)" content="rgb(255, 0, 0)">
             <meta name="theme-color" content="#9B2A5C">
             <meta name="Theme-Color" media="(prefers-color-scheme: dark)" content="rgb(28, 27, 31)">
             <meta name="theme-color" content="not a color">
@@ -102,31 +120,10 @@ struct PageColorLoadingTests {
             """, named: "themed.html")
         try await waitUntil("page colors") { pool.state(for: tab.id)?.pageColors != nil }
         let colors = try #require(pool.state(for: tab.id)?.pageColors)
-        #expect(colors.themeColor == PageColor(css: "#9b2a5c"))
+        #expect(colors.themeColor == PageColor(css: "#9b2a5c"), "A width query that doesn't match is left out")
         #expect(colors.darkThemeColor == PageColor(red: 28 / 255, green: 27 / 255, blue: 31 / 255))
         // The lookup's own placeholder color is still a color a page can choose.
         #expect(colors.lightThemeColor == PageColor(css: "#010203"))
-    }
-
-    @Test func readsColorsOnlyWhileAskedAndCatchesUpWhenTurnedOn() async throws {
-        // Off by default (nothing shows the tint), so pages aren't snapshotted for it.
-        #expect(WebViewPool.forTesting().readsPageColors == false)
-        let (pool, tab, _) = try await load("""
-            <!doctype html><title>Later</title>
-            <meta name="theme-color" content="rgb(10, 20, 30)">
-            """, named: "later.html", readsColors: false)
-        try await waitUntil("page loaded") {
-            pool.state(for: tab.id)?.title == "Later" && pool.state(for: tab.id)?.isLoading == false
-        }
-        // A call in the same world after the load: a read started at the load would answer first.
-        let page = try #require(pool.livePage(for: tab.id))
-        _ = try await page.callJavaScript("return 1", arguments: [:], in: PageText.world)
-        await Task.yield()
-        #expect(pool.state(for: tab.id)?.pageColors == nil)
-
-        pool.readsPageColors = true
-        try await waitUntil("page colors") { pool.state(for: tab.id)?.pageColors != nil }
-        #expect(pool.state(for: tab.id)?.pageColors?.themeColor == PageColor(red: 10 / 255, green: 20 / 255, blue: 30 / 255))
     }
 
     @Test func fallsBackToTheColorAtThePagesTop() async throws {

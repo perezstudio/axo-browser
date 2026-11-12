@@ -606,39 +606,51 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Above"].waitForExistence(timeout: 10), "⌘L focuses the address field above the page")
     }
 
-    /// Above the page, the toolbar takes the page's `theme-color`, as in Safari (#107), unless
-    /// Settings turns it off. Checked on a pixel of the toolbar between Reload and the address
-    /// field, in a window screenshot.
+    /// Above the page, the toolbar takes the page's `theme-color`, as in Safari (#107), and
+    /// turning "Tint the toolbar to match the page" off in Settings clears it. Checked on a pixel
+    /// of the toolbar between Reload and the address field, in window screenshots.
     @MainActor
     func testToolbarTakesThePagesThemeColor() throws {
         let raspberry = (red: 155.0 / 255, green: 42.0 / 255, blue: 92.0 / 255)
-        for tints in [true, false] {
-            let app = Self.makeApp()
-            app.launchArguments += ["-navigationBarPlacement", "page", "-tintsToolbarFromPage", tints ? "YES" : "NO"]
-            app.launch()
-            Self.bringToFront(app)
-            let sidebar = app.descendants(matching: .any)["sidebar"]
-            XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
-            AxoUITests.openPage("data:text/html,<meta name=theme-color content=rgb(155,42,92)><title>Tinted</title>", in: app)
-            XCTAssertTrue(sidebar.staticTexts["Tinted"].waitForExistence(timeout: 10))
+        let app = Self.makeApp()
+        // The tint setting is left to its default (on): an argument would override the switch.
+        app.launchArguments += ["-navigationBarPlacement", "page"]
+        app.launch()
+        Self.bringToFront(app)
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        AxoUITests.openPage("data:text/html,<meta name=theme-color content=rgb(155,42,92)><title>Tinted</title>", in: app)
+        XCTAssertTrue(sidebar.staticTexts["Tinted"].waitForExistence(timeout: 10))
 
-            let window = app.windows.firstMatch
-            let reload = app.buttons["reloadButton"].frame
-            let address = app.descendants(matching: .any)["pageAddressBar"].frame
-            let point = CGPoint(x: (reload.maxX + address.minX) / 2 - window.frame.minX, y: reload.midY - window.frame.minY)
+        let window = app.windows.firstMatch
+        let reload = app.buttons["reloadButton"].frame
+        let address = app.descendants(matching: .any)["pageAddressBar"].frame
+        let point = CGPoint(x: (reload.maxX + address.minX) / 2 - window.frame.minX, y: reload.midY - window.frame.minY)
+        func waitForToolbar(tinted: Bool, _ name: String) {
             var color = Self.color(at: point, in: window)
             let deadline = Date.now.addingTimeInterval(5)
-            while tints, !Self.isClose(color, to: raspberry), Date.now < deadline {
+            while Self.isClose(color, to: raspberry) != tinted, Date.now < deadline {
                 RunLoop.current.run(until: .now.addingTimeInterval(0.25))
                 color = Self.color(at: point, in: window)
             }
             let shot = XCTAttachment(screenshot: window.screenshot())
-            shot.name = tints ? "Toolbar tinted to the page" : "Toolbar with tinting off"
+            shot.name = name
             shot.lifetime = .keepAlways
             add(shot)
-            XCTAssertEqual(Self.isClose(color, to: raspberry), tints, "Toolbar pixel \(color), tinting \(tints ? "on" : "off")")
-            app.terminate()
+            XCTAssertEqual(Self.isClose(color, to: raspberry), tinted, "\(name): toolbar pixel \(color)")
         }
+        waitForToolbar(tinted: true, "Toolbar tinted to the page")
+
+        app.typeKey(",", modifierFlags: .command)
+        let general = app.toolbars.buttons["General"]
+        XCTAssertTrue(general.waitForExistence(timeout: 5))
+        general.click()
+        let toggle = app.checkBoxes["tintsToolbarToggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        XCTAssertTrue(toggle.isEnabled, "Above the page, the setting can be changed")
+        toggle.click()
+        app.typeKey("w", modifierFlags: .command)
+        waitForToolbar(tinted: false, "Toolbar with tinting turned off")
     }
 
     /// The sRGB color of the pixel at `point` (in points from the window's top left) in a

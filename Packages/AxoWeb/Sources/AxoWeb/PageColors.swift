@@ -36,13 +36,16 @@ nonisolated public struct PageColor: Equatable, Hashable, Sendable {
         let inside = text[text.index(after: open)..<text.index(before: text.endIndex)]
         let parts = inside.split(whereSeparator: { $0 == "," || $0 == " " || $0 == "/" }).map(String.init)
         guard parts.count == 3 || parts.count == 4 else { return nil }
+        func number(_ part: Substring) -> Double? {
+            Double(part).flatMap { $0.isFinite ? $0 : nil }
+        }
         func channel(_ part: String) -> Double? {
-            if part.hasSuffix("%") { return Double(part.dropLast()).map { $0 / 100 } }
-            return Double(part).map { $0 / 255 }
+            if part.hasSuffix("%") { return number(part.dropLast()).map { $0 / 100 } }
+            return number(Substring(part)).map { $0 / 255 }
         }
         func opacity(_ part: String) -> Double? {
-            if part.hasSuffix("%") { return Double(part.dropLast()).map { $0 / 100 } }
-            return Double(part)
+            if part.hasSuffix("%") { return number(part.dropLast()).map { $0 / 100 } }
+            return number(Substring(part))
         }
         guard let red = channel(parts[0]), let green = channel(parts[1]), let blue = channel(parts[2]),
               let alpha = parts.count == 4 ? opacity(parts[3]) : 1 else { return nil }
@@ -115,46 +118,54 @@ nonisolated public struct PageColors: Equatable, Sendable {
     /// untouched), and, when some appearance has none, the color its top edge draws in, from a
     /// small snapshot. Pixels, not styles: a transparent header over a photo or video draws the
     /// photo, while its styles would name the body's color behind it.
+    ///
+    /// `isComplete` is false when the top color was needed but the page couldn't be drawn (it has
+    /// no size yet, or the snapshot failed), so it's worth reading again. `nil` if the script
+    /// failed (the page navigated meanwhile).
     @MainActor
-    static func read(from page: any EnginePage) async -> PageColors? {
+    static func read(from page: any EnginePage) async -> (colors: PageColors, isComplete: Bool)? {
         guard let result = try? await page.callJavaScript(script, arguments: [:], in: PageText.world),
               let rows = result as? [[String]] else { return nil }
         let metas = rows.compactMap { row -> (color: String, media: String)? in
             row.count == 2 ? (row[0], row[1]) : nil
         }
         var colors = PageColors(themeColors: metas, topColor: nil)
-        if colors.needsTopColor, let image = await page.snapshot(width: snapshotWidth),
-           let cgImage = PageSnapshot.cgImage(from: image) {
-            colors.topColor = topEdgeColor(of: cgImage)
-        }
-        return colors
+        guard colors.needsTopColor else { return (colors, true) }
+        guard !page.view.bounds.isEmpty, let image = await page.snapshot(width: snapshotWidth),
+              let cgImage = PageSnapshot.cgImage(from: image) else { return (colors, false) }
+        colors.topColor = topEdgeColor(of: cgImage, widthInPoints: snapshotWidth)
+        return (colors, true)
     }
 
-    /// The width, in points, of the snapshot the top color comes from: small, since only its top
-    /// edge is read.
-    static let snapshotWidth: CGFloat = 64
+    /// The width, in points, of the snapshot the top color comes from: wide enough that its top
+    /// few points are a pixel row or more.
+    static let snapshotWidth: CGFloat = 320
 
-    /// The average color of an image's top rows (the top 2%, at least one), in sRGB, or `nil` if
-    /// it's mostly see-through.
-    nonisolated static func topEdgeColor(of image: CGImage) -> PageColor? {
-        let width = 16
-        let height = max(1, Int((Double(image.height) * Double(width) / Double(max(image.width, 1))).rounded()))
-        let rows = max(1, height / 50)
+    /// How far down from the page's top, in points, its top color is averaged: about what meets
+    /// the toolbar, so a thin header's color isn't mixed with the page below it.
+    static let topEdgeDepth: CGFloat = 4
+
+    /// The average color of an image's top ``topEdgeDepth`` points (at least one pixel row), in
+    /// sRGB, or `nil` if it's mostly see-through. `widthInPoints` is the width the image shows,
+    /// for its scale.
+    nonisolated static func topEdgeColor(of image: CGImage, widthInPoints: CGFloat) -> PageColor? {
+        guard image.width > 0, image.height > 0 else { return nil }
+        let scale = Double(image.width) / Double(max(widthInPoints, 1))
+        let rows = min(image.height, max(1, Int((Double(topEdgeDepth) * scale).rounded())))
+        // CGImage crops from its top-left corner.
+        guard let strip = image.cropping(to: CGRect(x: 0, y: 0, width: image.width, height: rows)) else { return nil }
+        let width = min(strip.width, 64)
         guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+              let context = CGContext(data: nil, width: width, height: rows, bitsPerComponent: 8, bytesPerRow: width * 4,
                                       space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
               let data = context.data
         else { return nil }
         // Drawn into sRGB, so the image's own colour space (often the display's) is converted.
-        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-        let pixels = data.bindMemory(to: UInt8.self, capacity: width * height * 4)
+        context.draw(strip, in: CGRect(x: 0, y: 0, width: width, height: rows))
+        let pixels = data.bindMemory(to: UInt8.self, capacity: width * rows * 4)
         var totals = [Double](repeating: 0, count: 4)
-        // Memory starts at the image's top row.
-        for row in 0..<rows {
-            for column in 0..<width {
-                let offset = (row * width + column) * 4
-                for channel in 0..<4 { totals[channel] += Double(pixels[offset + channel]) }
-            }
+        for offset in stride(from: 0, to: width * rows * 4, by: 4) {
+            for channel in 0..<4 { totals[channel] += Double(pixels[offset + channel]) }
         }
         let count = Double(rows * width) * 255
         let alpha = totals[3] / count
@@ -180,8 +191,14 @@ nonisolated public struct PageColors: Equatable, Sendable {
           const first = parse(value, '#010203');
           return first === parse(value, '#030201') ? first : null;
         };
+        // Queries about the color scheme are sorted out in Swift, for both appearances; any other
+        // query (a width) counts only if it matches now.
+        const applies = (media) => {
+          if (!media.trim() || /prefers-color-scheme/i.test(media)) return true;
+          try { return window.matchMedia(media).matches; } catch { return false; }
+        };
         return Array.from(document.querySelectorAll('meta[name="theme-color" i]'))
           .map(meta => [normalize(meta.getAttribute('content') || ''), meta.getAttribute('media') || ''])
-          .filter(row => row[0]);
+          .filter(row => row[0] && applies(row[1]));
         """
 }
