@@ -657,6 +657,10 @@ final class AxoUITests: XCTestCase {
             .withOffset(CGVector(dx: sidebar.frame.maxX - window.frame.minX + 1, dy: window.frame.height / 2))
         edge.press(forDuration: 0.2, thenDragTo: edge.withOffset(CGVector(dx: -400, dy: 0)))
 
+        let shot = XCTAttachment(screenshot: window.screenshot())
+        shot.name = "Footer with eleven Spaces at the narrowest sidebar"
+        shot.lifetime = .keepAlways
+        add(shot)
         let settings = app.buttons["settingsButton"].frame
         let newSpace = app.buttons["newSpaceButton"].frame
         let dots = app.descendants(matching: .any)["spaceDots"].frame
@@ -666,10 +670,6 @@ final class AxoUITests: XCTestCase {
         XCTAssertLessThanOrEqual(dots.maxX, newSpace.minX, "Or under New Space")
         XCTAssertEqual(settings.height, 36, accuracy: 1)
         XCTAssertEqual(newSpace.height, 36, accuracy: 1)
-        let shot = XCTAttachment(screenshot: window.screenshot())
-        shot.name = "Footer with eleven Spaces at the narrowest sidebar"
-        shot.lifetime = .keepAlways
-        add(shot)
     }
 
     @MainActor
