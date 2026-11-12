@@ -24,6 +24,14 @@ struct TestHostTests {
         #expect(AppEnvironment.isTestRun, "These tests host in Axo")
     }
 
+    @Test func uiTestsCanAskForLightOrDarkMode() {
+        #expect(AppEnvironment.uiTestingAppearance("dark")?.name == .darkAqua)
+        #expect(AppEnvironment.uiTestingAppearance("Dark")?.name == .darkAqua)
+        #expect(AppEnvironment.uiTestingAppearance("light")?.name == .aqua)
+        #expect(AppEnvironment.uiTestingAppearance(nil) == nil, "Unset follows the system")
+        #expect(AppEnvironment.uiTestingAppearance("sepia") == nil)
+    }
+
     @Test func hostingTestsNeverOpensTheOnDiskDatabase() async throws {
         let store = try #require(await launchedStore(), "The test host launched the browser")
         let path = store.database.writer.path

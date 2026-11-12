@@ -606,6 +606,103 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Above"].waitForExistence(timeout: 10), "⌘L focuses the address field above the page")
     }
 
+    /// The sidebar's footer matches the window toolbar (#135): Settings, New Space, and the Space
+    /// dots' capsule are as tall as the toolbar's buttons, the buttons are round, and the footer
+    /// sits as far from the window's edges as the toolbar. Checked with the navigation bar in the
+    /// sidebar and above the page, with window screenshots in light and dark mode.
+    @MainActor
+    func testSidebarFooterMatchesTheToolbar() throws {
+        for appearance in ["Light", "Dark"] {
+            let app = Self.makeApp()
+            app.launchEnvironment["AXO_UI_TESTING_APPEARANCE"] = appearance
+            app.launch()
+            Self.bringToFront(app)
+            let window = app.windows.firstMatch
+            XCTAssertTrue(app.buttons["settingsButton"].waitForExistence(timeout: 5))
+            checkFooterMatchesToolbar(in: app, appearance: appearance, placement: "sidebar")
+
+            app.typeKey(",", modifierFlags: .command)
+            let general = app.toolbars.buttons["General"]
+            XCTAssertTrue(general.waitForExistence(timeout: 5))
+            general.click()
+            app.radioButtons["Above the page"].click()
+            app.typeKey("w", modifierFlags: .command)
+            XCTAssertTrue(app.descendants(matching: .any)["pageAddressBar"].waitForExistence(timeout: 5))
+            XCTAssertTrue(window.exists)
+            checkFooterMatchesToolbar(in: app, appearance: appearance, placement: "above the page")
+            app.terminate()
+        }
+    }
+
+    /// With many Spaces the dots scroll inside their capsule, which stays between the buttons,
+    /// lined up with them. Accessibility reports the scroll area inside the capsule (a dot's
+    /// height), not the capsule, so the capsule's own height is checked in the attached
+    /// screenshot.
+    @MainActor
+    func testSidebarFooterFitsManySpaces() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        for index in 1...10 {
+            app.buttons["newSpaceButton"].click()
+            let nameField = app.textFields["spaceNameField"]
+            XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+            nameField.click()
+            nameField.typeText("Space\(index)")
+            app.buttons["createSpaceButton"].click()
+            XCTAssertTrue(sidebar.staticTexts["Space\(index)"].waitForExistence(timeout: 5))
+        }
+        XCTAssertEqual(app.buttons.matching(identifier: "spaceButton").count, 11)
+        let window = app.windows.firstMatch
+
+        let shot = XCTAttachment(screenshot: window.screenshot())
+        shot.name = "Footer with eleven Spaces"
+        shot.lifetime = .keepAlways
+        add(shot)
+        let settings = app.buttons["settingsButton"].frame
+        let newSpace = app.buttons["newSpaceButton"].frame
+        let dots = app.descendants(matching: .any)["spaceDots"].frame
+        XCTAssertLessThanOrEqual(dots.height, 36 + 1, "The dots fit in a capsule the buttons' height")
+        XCTAssertEqual(dots.midY, settings.midY, accuracy: 1)
+        XCTAssertGreaterThanOrEqual(dots.minX, settings.maxX, "The dots don't run under Settings")
+        XCTAssertLessThanOrEqual(dots.maxX, newSpace.minX, "Or under New Space")
+        XCTAssertEqual(settings.height, 36, accuracy: 1)
+        XCTAssertEqual(newSpace.height, 36, accuracy: 1)
+    }
+
+    @MainActor
+    private func checkFooterMatchesToolbar(in app: XCUIApplication, appearance: String, placement: String) {
+        let window = app.windows.firstMatch.frame
+        let back = app.buttons["backButton"].frame
+        let trailing = app.buttons["summarizeButton"].frame
+        let settings = app.buttons["settingsButton"].frame
+        let newSpace = app.buttons["newSpaceButton"].frame
+        let dots = app.descendants(matching: .any)["spaceDots"].frame
+        let context = "\(appearance), navigation bar \(placement)"
+        // A toolbar item's frame is its whole 52 pt slot, the 36 pt glass button centered in it
+        // (measured from window screenshots on macOS 27). If the slot changes, measure the
+        // glass again and update FooterButtonStyle and SpaceDots.
+        XCTAssertEqual(back.height, 52, accuracy: 1, "The toolbar's slot, \(context)")
+        for (name, frame) in [("Settings", settings), ("New Space", newSpace)] {
+            XCTAssertEqual(frame.height, 36, accuracy: 1, "\(name) is the toolbar's glass size, \(context)")
+            XCTAssertEqual(frame.width, frame.height, accuracy: 1, "\(name) is round, \(context)")
+            XCTAssertEqual(frame.midY, settings.midY, accuracy: 1, "\(name) lines up, \(context)")
+        }
+        XCTAssertEqual(dots.height, 36, accuracy: 1, "The dots' capsule, \(context)")
+        XCTAssertEqual(dots.midY, settings.midY, accuracy: 1, "The dots line up, \(context)")
+        // The footer's buttons sit as far from the window's bottom and leading edges as the
+        // toolbar's from its top, center to edge.
+        let toolbarInset = back.midY - window.minY
+        XCTAssertEqual(trailing.midY - window.minY, toolbarInset, accuracy: 1, "The toolbar's buttons line up, \(context)")
+        XCTAssertEqual(window.maxY - settings.midY, toolbarInset, accuracy: 1, "Bottom inset, \(context)")
+        XCTAssertEqual(settings.midX - window.minX, toolbarInset, accuracy: 1, "Leading inset, \(context)")
+
+        let shot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        shot.name = "Toolbar and footer, \(context)"
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+
     /// With the navigation bar above the page, its address field and buttons work like the
     /// sidebar's: the field shows the page's address, clicking it and typing navigates the tab,
     /// and back and forward follow the history. Everything sits over the page, not the sidebar.

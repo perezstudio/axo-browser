@@ -28,7 +28,10 @@ struct SpaceSwitcher: View {
                     .accessibilityIdentifier("newSpaceButton")
             }
         }
-        .padding(.horizontal, 10)
+        // The toolbar's buttons are centered 26 pt from the window's top on macOS 27 (their
+        // 36 pt glass in a 52 pt slot); 8 pt here centers the footer's 26 pt from the bottom
+        // and leading edges. `testSidebarFooterMatchesTheToolbar` checks the centers.
+        .padding(.horizontal, 8)
         .padding(.vertical, 8)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Spaces")
@@ -50,18 +53,43 @@ struct SpaceSwitcher: View {
     }
 }
 
-/// The footer's round glass buttons, styled like toolbar buttons.
+/// The footer's round glass buttons, sized like the window toolbar's (#135): an extra large
+/// glass circle around a 15 pt icon is 36 pt, the toolbar's glass on macOS 27 (measured from
+/// window screenshots; accessibility reports only the toolbar item's 52 pt slot).
+/// `testSidebarFooterMatchesTheToolbar` checks the footer is 36 pt and the slot still 52 pt.
+/// It can't see the toolbar's glass itself, so check the screenshots it attaches when macOS
+/// changes the toolbar.
 private struct FooterButtonStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .labelStyle(.iconOnly)
+            .labelStyle(FooterIconLabelStyle())
             .buttonStyle(.glass)
             .buttonBorderShape(.circle)
-            .controlSize(.large)
+            .controlSize(.extraLarge)
     }
 }
 
-/// A dot for each Space in a glass capsule, the current one filled. Many Spaces scroll.
+/// Only the icon, in a square of one size for every symbol: the glass circle sizes itself from
+/// its content, and a plus is smaller than a gear, which left New Space a few points smaller
+/// than Settings. The title stays, as `.iconOnly` keeps it, so VoiceOver still names the button.
+private struct FooterIconLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Label {
+            configuration.title
+        } icon: {
+            configuration.icon
+                .frame(width: Self.iconSide, height: Self.iconSide)
+        }
+        .labelStyle(.iconOnly)
+    }
+
+    /// The square each footer icon sits in.
+    static let iconSide: CGFloat = 15
+}
+
+/// A dot for each Space in a glass capsule, the current one filled. Many Spaces scroll. The
+/// capsule is as tall as the footer's buttons: each dot's target is ``SpaceDot/height`` tall,
+/// plus the capsule's padding.
 private struct SpaceDots: View {
     let model: BrowserModel
 
@@ -70,11 +98,19 @@ private struct SpaceDots: View {
             dots
             ScrollView(.horizontal) { dots }
                 .scrollIndicators(.never)
+                // As tall as the dots, so the capsule is the buttons' height either way.
+                .frame(height: SpaceDot.height)
         }
         .padding(.horizontal, 6)
-        .padding(.vertical, 4)
+        .padding(.vertical, (Self.buttonHeight - SpaceDot.height) / 2)
         .glassEffect(.regular, in: .capsule)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Space list")
+        .accessibilityIdentifier("spaceDots")
     }
+
+    /// The footer's buttons' height (``FooterButtonStyle``), which the capsule matches.
+    static let buttonHeight: CGFloat = 36
 
     private var dots: some View {
         HStack(spacing: 0) {
@@ -100,6 +136,9 @@ private struct SpaceDot: View {
     let action: () -> Void
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
 
+    /// The height of a dot's click target.
+    static let height: CGFloat = 28
+
     var body: some View {
         Button(action: action) {
             Circle()
@@ -111,7 +150,7 @@ private struct SpaceDot: View {
                         Circle().strokeBorder(.primary, lineWidth: 1.5).padding(-3)
                     }
                 }
-                .frame(width: 18, height: 22)
+                .frame(width: 18, height: Self.height)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)

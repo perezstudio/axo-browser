@@ -31,6 +31,11 @@ struct AxoApp: App {
             // Start from the default window size and sidebar width, not an earlier test's.
             TestWindows.forgetSavedFrames(in: .standard)
         }
+        if AppEnvironment.isUITesting, let appearance = AppEnvironment.uiTestingAppearance {
+            // `shared`, not `NSApp`: on WebKit nothing has created the application yet (the
+            // Chromium engine creates its own before SwiftUI starts, which `shared` returns).
+            NSApplication.shared.appearance = appearance
+        }
     }
 
     var body: some Scene {
@@ -101,6 +106,22 @@ enum AppEnvironment {
     /// Set by UI tests: use an in-memory database, non-persistent website data, and a temporary
     /// downloads folder, so every launch starts empty and nothing touches the user's real data.
     static let isUITesting = ProcessInfo.processInfo.environment["AXO_UI_TESTING"] == "1"
+
+    /// The appearance UI tests ask for with `AXO_UI_TESTING_APPEARANCE` ("light" or "dark"), so
+    /// they can check both without changing the Mac's own setting. The `-AppleInterfaceStyle`
+    /// launch argument doesn't change Axo's appearance. `nil` follows the system.
+    static var uiTestingAppearance: NSAppearance? {
+        uiTestingAppearance(ProcessInfo.processInfo.environment["AXO_UI_TESTING_APPEARANCE"])
+    }
+
+    /// The appearance named by an `AXO_UI_TESTING_APPEARANCE` value.
+    static func uiTestingAppearance(_ value: String?) -> NSAppearance? {
+        switch value?.lowercased() {
+        case "dark": NSAppearance(named: .darkAqua)
+        case "light": NSAppearance(named: .aqua)
+        default: nil
+        }
+    }
 
     /// Whether this launch runs tests: UI testing mode, or hosting the app's unit tests (XCTest
     /// sets `XCTestConfigurationFilePath`). Test runs get the same isolation as UI testing mode:
