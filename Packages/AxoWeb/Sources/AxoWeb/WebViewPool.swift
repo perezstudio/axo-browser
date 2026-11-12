@@ -709,6 +709,19 @@ public final class WebViewPool {
         }
     }
 
+    // MARK: Page colors
+
+    /// Reads the colors the tab's current page offers for the toolbar (#107) into its state,
+    /// unless the tab moved on to another page or another live page meanwhile.
+    func loadPageColors(for tabID: Tab.ID) {
+        guard let liveTab = live[tabID], let pageURL = liveTab.page.url else { return }
+        Task { [weak self] in
+            let colors = await PageColors.read(from: liveTab.page)
+            guard let self, self.live[tabID] === liveTab, liveTab.page.url == pageURL else { return }
+            if liveTab.state.pageColors != colors { liveTab.state.pageColors = colors }
+        }
+    }
+
     // MARK: Profiles
 
     /// Removes a profile's cookies, caches, and other website data, signing it out of sites.

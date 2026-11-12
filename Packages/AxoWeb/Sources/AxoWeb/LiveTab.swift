@@ -72,6 +72,7 @@ final class LiveTab: EnginePageDelegate {
         state.restoringSnapshot = nil
         pool?.keptPageMayHaveWoken(self)
         pool?.loadFavicon(for: tabID)
+        pool?.loadPageColors(for: tabID)
     }
 
     func pageWantsToBeShown(_ page: any EnginePage) {
@@ -85,6 +86,7 @@ final class LiveTab: EnginePageDelegate {
     func pageDidFailLoad(_ page: any EnginePage) {
         contentVersion += 1
         state.restoringSnapshot = nil
+        state.pageColors = nil
     }
 
     func pageDidTakeFocus(_ page: any EnginePage) {

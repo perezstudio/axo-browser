@@ -110,6 +110,8 @@ public struct BrowserWindow: View {
                 .toolbar { NavigationToolbar(model: model, placement: navigationBarPlacement) }
                 // The address field already shows where you are.
                 .toolbar(removing: .title)
+                // Above the page, the toolbar takes the page's color, as in Safari.
+                .modifier(PageToolbarTint(page: model.selectedPage, placement: navigationBarPlacement))
         }
     }
 
