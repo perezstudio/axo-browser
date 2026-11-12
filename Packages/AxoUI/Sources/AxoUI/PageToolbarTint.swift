@@ -16,8 +16,14 @@ nonisolated struct ToolbarTint: Equatable, Sendable {
     /// navigation bar is in the sidebar (where the page has no toolbar of its own), or the page
     /// offers no color.
     static func tint(for colors: PageColors?, isDark: Bool, isEnabled: Bool, placement: NavigationBarPlacement) -> ToolbarTint? {
-        guard isEnabled, placement == .page, let color = colors?.color(isDark: isDark) else { return nil }
+        guard showsTint(isEnabled: isEnabled, placement: placement), let color = colors?.color(isDark: isDark) else { return nil }
         return ToolbarTint(color: color)
+    }
+
+    /// Whether the toolbar shows pages' colors at all, so the pool reads them
+    /// (`WebViewPool.readsPageColors`): the setting is on and the navigation bar is above the page.
+    static func showsTint(isEnabled: Bool, placement: NavigationBarPlacement) -> Bool {
+        isEnabled && placement == .page
     }
 }
 
@@ -29,6 +35,8 @@ nonisolated struct ToolbarTint: Equatable, Sendable {
 /// colors made white text on pale tinted glass. The sidebar's list keeps Axo's own colors.
 struct PageToolbarTint: ViewModifier {
     let page: WebTabState?
+    /// The pool, told whether to read pages' colors while this toolbar shows them.
+    let pool: WebViewPool
     let placement: NavigationBarPlacement
     @AppStorage(ToolbarTintSettings.storageKey) private var isEnabled = true
     @Environment(\.colorScheme) private var colorScheme
@@ -42,6 +50,9 @@ struct PageToolbarTint: ViewModifier {
             .toolbarBackground(tint.map { Color(pageColor: $0.color) } ?? Color.clear, for: .windowToolbar)
             .toolbarBackgroundVisibility(tint == nil ? .automatic : .visible, for: .windowToolbar)
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: tint)
+            .onChange(of: ToolbarTint.showsTint(isEnabled: isEnabled, placement: placement), initial: true) { _, shows in
+                pool.readsPageColors = shows
+            }
     }
 }
 

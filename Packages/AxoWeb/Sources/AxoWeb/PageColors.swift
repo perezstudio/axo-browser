@@ -168,13 +168,17 @@ nonisolated public struct PageColors: Equatable, Sendable {
     /// The script `read(from:)` runs: each `theme-color` tag's color, normalized, and its media.
     static let script = """
         const context = document.createElement('canvas').getContext('2d');
-        const sentinel = '#010203';
+        // An invalid color leaves fillStyle as it was, so set it to two placeholders in turn: a
+        // valid color gives the same answer after both, an invalid one gives each placeholder.
+        const parse = (value, placeholder) => {
+          context.fillStyle = placeholder;
+          context.fillStyle = value;
+          return String(context.fillStyle);
+        };
         const normalize = (value) => {
           if (!context || !value) return null;
-          context.fillStyle = sentinel;
-          context.fillStyle = value;
-          const result = String(context.fillStyle);
-          return result === sentinel && value.trim().toLowerCase() !== sentinel ? null : result;
+          const first = parse(value, '#010203');
+          return first === parse(value, '#030201') ? first : null;
         };
         return Array.from(document.querySelectorAll('meta[name="theme-color" i]'))
           .map(meta => [normalize(meta.getAttribute('content') || ''), meta.getAttribute('media') || ''])

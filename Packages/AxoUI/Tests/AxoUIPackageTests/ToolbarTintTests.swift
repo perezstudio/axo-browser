@@ -21,3 +21,12 @@ struct ToolbarTintTests {
         #expect(ToolbarTint.tint(for: PageColors(), isDark: false, isEnabled: true, placement: .page) == nil, "It offers no color")
     }
 }
+
+/// Pages' colors are read only while a toolbar shows them, so pages aren't snapshotted otherwise.
+struct ToolbarTintReadingTests {
+    @Test func readsPageColorsOnlyWhileTheTintShows() {
+        #expect(ToolbarTint.showsTint(isEnabled: true, placement: .page))
+        #expect(!ToolbarTint.showsTint(isEnabled: false, placement: .page))
+        #expect(!ToolbarTint.showsTint(isEnabled: true, placement: .sidebar))
+    }
+}

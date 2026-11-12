@@ -80,6 +80,16 @@ public final class WebViewPool {
     /// pages never count as the person's usage. Screen Time still blocks sites over their limit.
     public var reportsScreenTimeUsage = true
 
+    /// Whether pages' colors are read after each load (`WebTabState.pageColors`), for tinting the
+    /// toolbar (#107). Off by default and while nothing shows the tint, since a page with no
+    /// `theme-color` is snapshotted for it. Turning it on reads the live pages that have loaded.
+    public var readsPageColors = false {
+        didSet {
+            guard readsPageColors, !oldValue else { return }
+            for (tabID, liveTab) in live where !liveTab.state.isLoading { loadPageColors(for: tabID) }
+        }
+    }
+
     /// Applies per-site custom CSS and JavaScript to every page: new ones, and live ones from
     /// their next page load (reload a page to see changes right away). Turned-off customizations
     /// are skipped.
@@ -714,7 +724,7 @@ public final class WebViewPool {
     /// Reads the colors the tab's current page offers for the toolbar (#107) into its state,
     /// unless the tab moved on to another page or another live page meanwhile.
     func loadPageColors(for tabID: Tab.ID) {
-        guard let liveTab = live[tabID], let pageURL = liveTab.page.url else { return }
+        guard readsPageColors, let liveTab = live[tabID], let pageURL = liveTab.page.url else { return }
         Task { [weak self] in
             let colors = await PageColors.read(from: liveTab.page)
             guard let self, self.live[tabID] === liveTab, liveTab.page.url == pageURL else { return }
