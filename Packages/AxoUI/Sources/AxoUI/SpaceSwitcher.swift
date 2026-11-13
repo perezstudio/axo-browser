@@ -37,7 +37,7 @@ struct SpaceSwitcher: View {
         .accessibilityLabel("Spaces")
         .accessibilityIdentifier("spaceSwitcher")
         .sheet(isPresented: $model.isCreatingSpace) {
-            NewSpaceSheet(model: model)
+            NewSpaceSheet(model: model).windowAppearance()
         }
         .confirmationDialog(
             "Delete “\(model.spaceToDelete?.name ?? "")”?",
@@ -92,8 +92,6 @@ private struct FooterIconLabelStyle: LabelStyle {
 /// plus the capsule's padding.
 private struct SpaceDots: View {
     let model: BrowserModel
-    @Environment(\.windowColorScheme) private var windowColorScheme
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -114,11 +112,12 @@ private struct SpaceDots: View {
             get: { model.themeEditing.map { $0.isOpen && $0.placement == .sidebar } ?? false },
             // Clicking outside keeps what the window shows, as other Mac popovers do; Esc and
             // Cancel restore the old theme first.
-            set: { if !$0 { Task { await model.finishEditingTheme(save: true) } } }
+            // Only this popover's own closing: another editor replacing it isn't a Done.
+            set: { if !$0, model.themeEditing?.placement == .sidebar { model.closeThemeEditor(save: true) } }
         ), arrowEdge: .top) {
             SpaceThemeEditor(model: model)
                 // The popover follows the window's appearance; the sidebar has the theme's.
-                .environment(\.colorScheme, windowColorScheme ?? colorScheme)
+                .windowAppearance()
         }
     }
 

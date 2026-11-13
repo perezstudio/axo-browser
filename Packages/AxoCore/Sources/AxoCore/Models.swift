@@ -37,7 +37,9 @@ public struct Space: Codable, Hashable, Identifiable, Sendable, FetchableRecord,
     /// The Space's icon: an SF Symbol name, or `nil` for none.
     public var icon: String?
     /// The theme for the window's background while the Space is shown (#137), or `nil` for the
-    /// system's sidebar material. Stored as JSON.
+    /// system's sidebar material. Stored as JSON. Write it only on purpose (`setSpaceTheme`):
+    /// other writes must name their columns, since re-encoding a theme from another device or a
+    /// newer Axo would drop what this one can't read, and sync that loss everywhere.
     public var theme: SpaceTheme?
 
     /// Creates a Space.
@@ -158,6 +160,10 @@ extension Space {
         public static let id = Column(CodingKeys.id)
         public static let profileID = Column(CodingKeys.profileID)
         public static let sortKey = Column(CodingKeys.sortKey)
+        public static let name = Column(CodingKeys.name)
+        public static let color = Column(CodingKeys.color)
+        public static let icon = Column(CodingKeys.icon)
+        public static let theme = Column(CodingKeys.theme)
     }
 }
 

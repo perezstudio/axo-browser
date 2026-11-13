@@ -95,11 +95,13 @@ nonisolated public struct ThemeColor: Hashable, Sendable {
     /// The blue component, from 0 to 1.
     public var blue: Double
 
-    /// A color from components, clamped to 0...1.
+    /// A color from components, clamped to 0...1 and rounded to the 8 bits per channel it's
+    /// stored with, so a color equals itself read back (the editor compares them).
     public init(red: Double, green: Double, blue: Double) {
-        self.red = SpaceTheme.unit(red)
-        self.green = SpaceTheme.unit(green)
-        self.blue = SpaceTheme.unit(blue)
+        func channel(_ value: Double) -> Double { (SpaceTheme.unit(value) * 255).rounded() / 255 }
+        self.red = channel(red)
+        self.green = channel(green)
+        self.blue = channel(blue)
     }
 
     /// A color from `#rrggbb` (the `#` is optional), or `nil` for anything else.
@@ -165,7 +167,8 @@ extension ThemeColor: Codable {
 nonisolated public struct ResolvedSpaceTheme: Hashable, Sendable {
     /// Whether the sidebar is drawn dark, with light text.
     public var isDark: Bool
-    /// The colors to draw, top to bottom.
+    /// The colors to draw, top to bottom and evenly spaced: the theme's colors, and for a
+    /// gradient, readable stops between them.
     public var colors: [ThemeColor]
     /// The color layer's opacity over the system material, from 0 to 1.
     public var colorOpacity: Double
@@ -174,6 +177,10 @@ nonisolated public struct ResolvedSpaceTheme: Hashable, Sendable {
 }
 
 extension SpaceTheme {
+    /// How many parts each step of a gradient is split into for its contrast stops.
+    static let gradientSteps = 8
+    /// How much higher than the target a gradient's stops' contrast is.
+    static let gradientMargin = 1.05
     /// The color layer's opacity at full transparency: a little color stays, so the theme still
     /// shows over the desktop.
     static let leastColorOpacity = 0.15
@@ -207,9 +214,21 @@ extension SpaceTheme {
         let material = isDark ? Self.darkMaterial : Self.lightMaterial
         let text = isDark ? Self.darkText : Self.lightText
         let target = increaseContrast ? 7.0 : 4.5
-        let drawn = colors.map { color in
-            let faded = isActive ? color : color.mixed(with: material, amount: 0.3)
-            return Self.readable(faded, over: material, opacity: colorOpacity, text: text, toward: isDark ? .black : .white, target: target)
+        // A gradient's stops aim a little higher, since the colors drawn between two stops can
+        // dip slightly below both.
+        let stopTarget = colors.count > 1 ? target * Self.gradientMargin : target
+        func readable(_ color: ThemeColor) -> ThemeColor {
+            Self.readable(color, over: material, opacity: colorOpacity, text: text, toward: isDark ? .black : .white, target: stopTarget)
+        }
+        let stops = colors.map { readable(isActive ? $0 : $0.mixed(with: material, amount: 0.3)) }
+        // Between two colors a gradient can be darker or lighter than both (red to green dips
+        // through a dull olive), so stops every eighth of the way are made readable too.
+        var drawn = [stops[0]]
+        for (from, to) in zip(stops, stops.dropFirst()) {
+            for step in 1..<Self.gradientSteps {
+                drawn.append(readable(from.mixed(with: to, amount: Double(step) / Double(Self.gradientSteps))))
+            }
+            drawn.append(to)
         }
         return ResolvedSpaceTheme(
             isDark: isDark,

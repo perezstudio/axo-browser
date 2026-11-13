@@ -65,7 +65,7 @@ struct SpaceThemeEditor: View {
     }
 
     private func finish(save: Bool) {
-        Task { await model.finishEditingTheme(save: save) }
+        model.closeThemeEditor(save: save)
     }
 
     /// The colors, each with the system's color picker, and buttons to add and remove one.

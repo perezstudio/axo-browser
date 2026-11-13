@@ -88,6 +88,14 @@ final class SpaceThemeUITests: XCTestCase {
         XCTAssertTrue(editor.waitForNonExistence(timeout: 5))
         waitForSidebar("Cancelled") { AxoUITests.isClose($0, to: plain) }
 
+        // Esc cancels too, though the popover also closes itself.
+        editor = openEditor()
+        editor.buttons["themePresetEmber"].click()
+        waitForSidebar("Ember, previewed") { !AxoUITests.isClose($0, to: plain) }
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(editor.waitForNonExistence(timeout: 5))
+        waitForSidebar("Esc") { AxoUITests.isClose($0, to: plain) }
+
         // Done keeps it.
         editor = openEditor()
         editor.buttons["themePresetSky"].click()

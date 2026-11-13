@@ -148,6 +148,35 @@ struct SpaceStoreTests {
         }
     }
 
+    @Test func otherSpaceChangesLeaveTheThemeAsStored() async throws {
+        // Themes from another device or a newer Axo: an extra field, and a shape this one can't
+        // read. Renaming, recoloring, reordering, or moving the Space must not rewrite them, or
+        // the loss would sync everywhere.
+        let home = try await store.bootstrap()
+        let work = try await store.createSpace(name: "Work", profileID: home.profileID)
+        for json in [##"{"angle":45,"colors":["#ABCDEF"],"mode":"dark"}"##, ##"{"colors":[{"hex":"#336699"}]}"##] {
+            try await store.database.writer.write { db in
+                try db.execute(sql: "UPDATE space SET theme = ? WHERE id = ?", arguments: [json, home.id])
+            }
+            let other = try await store.createProfile(name: "Other")
+            func stored() async throws -> String? {
+                try await store.database.writer.read { db in
+                    try String.fetchOne(db, sql: "SELECT theme FROM space WHERE id = ?", arguments: [home.id])
+                }
+            }
+            try await store.renameSpace(id: home.id, to: "Personal")
+            #expect(try await stored() == json, "Rename")
+            try await store.setSpaceAppearance(id: home.id, color: "blue", icon: "house")
+            #expect(try await stored() == json, "Color and icon")
+            try await store.moveSpace(id: home.id, after: work.id)
+            #expect(try await stored() == json, "Reorder")
+            try await store.moveSpace(id: home.id, toProfile: other.id)
+            #expect(try await stored() == json, "Another profile")
+            try await store.deleteProfile(id: other.id, movingSpacesTo: home.profileID)
+            #expect(try await stored() == json, "Its profile deleted")
+        }
+    }
+
     @Test func spacesReorderByMovingOneRow() async throws {
         let home = try await store.bootstrap()
         let work = try await store.createSpace(name: "Work", profileID: home.profileID)

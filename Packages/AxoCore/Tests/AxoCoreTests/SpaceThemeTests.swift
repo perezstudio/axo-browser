@@ -77,11 +77,36 @@ struct SpaceThemeTests {
         }
     }
 
-    @Test func everyColorOfAGradientIsReadable() {
-        let gradient = SpaceTheme(colors: [ThemeColor(hex: "#ffffff")!, ThemeColor(hex: "#777777")!, ThemeColor(hex: "#000000")!], mode: .dark)
-        let resolved = gradient.resolved(systemIsDark: false)
-        #expect(resolved.colors.count == 3)
-        for index in resolved.colors.indices { #expect(textContrast(resolved, index) >= 4.5, "Color \(index)") }
+    @Test func aGradientIsReadableAllTheWayDown() {
+        // Red to green dips through an olive darker than both; white to black passes mid-gray.
+        let gradients = [
+            [ThemeColor(hex: "#ff0000")!, ThemeColor(hex: "#00ff00")!],
+            [ThemeColor(hex: "#ffffff")!, ThemeColor(hex: "#777777")!, ThemeColor(hex: "#000000")!],
+        ]
+        for colors in gradients {
+            for mode in [SpaceTheme.Mode.light, .dark] {
+                let resolved = SpaceTheme(colors: colors, mode: mode).resolved(systemIsDark: false)
+                #expect(resolved.colors.count == (colors.count - 1) * SpaceTheme.gradientSteps + 1)
+                for index in resolved.colors.indices { #expect(textContrast(resolved, index) >= 4.5, "\(mode) stop \(index)") }
+                // Between the stops, as the gradient draws it (each pair mixed in sRGB).
+                var weakest = Double.infinity
+                for (from, to) in zip(resolved.colors, resolved.colors.dropFirst()) {
+                    for step in 0...8 {
+                        var between = resolved
+                        between.colors = [from.mixed(with: to, amount: Double(step) / 8)]
+                        weakest = min(weakest, textContrast(between))
+                    }
+                }
+                #expect(weakest >= 4.5, "\(mode): \(weakest) between stops")
+            }
+        }
+    }
+
+    @Test func colorsRoundToWhatTheyStore() throws {
+        let picked = ThemeColor(red: 0.123456, green: 0.5, blue: 0.987654)
+        #expect(ThemeColor(hex: picked.hex) == picked, "A color equals itself read back")
+        let theme = SpaceTheme(colors: [picked])
+        #expect(try JSONDecoder().decode(SpaceTheme.self, from: JSONEncoder().encode(theme)) == theme)
     }
 
     @Test func transparencyShowsTheMaterialUnlessReduceTransparencyIsOn() {

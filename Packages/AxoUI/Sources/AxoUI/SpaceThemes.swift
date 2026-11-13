@@ -10,7 +10,8 @@ nonisolated public struct ThemeEditing: Equatable, Sendable {
     public var original: SpaceTheme?
     /// The theme as edited so far.
     public var draft: SpaceTheme?
-    /// Where the editor shows: a popover over the sidebar's Space dots, or a sheet in Settings.
+    /// Where the editor shows: a popover over the sidebar's Space dots, a sheet on the window,
+    /// or a sheet in Settings.
     public var placement: Placement
     /// Whether the editor is open. After Done it closes while the draft stays shown until the
     /// saved theme has been read back.
@@ -20,6 +21,9 @@ nonisolated public struct ThemeEditing: Equatable, Sendable {
     public enum Placement: Sendable {
         /// A popover from a Space's context menu in the sidebar.
         case sidebar
+        /// A sheet on the browser window, from the Spaces menu, which works with the sidebar
+        /// hidden too.
+        case window
         /// A sheet in Settings › Spaces.
         case settings
     }
@@ -119,10 +123,13 @@ extension BrowserModel {
     }
 
     /// Opens the theme editor for a Space. The window shows the draft as it changes when that
-    /// Space is shown.
+    /// Space is shown. While an earlier Done for the same Space is still saving, the editor
+    /// starts from the theme being saved, not the older one `spaces` still has.
     public func beginEditingTheme(for spaceID: Space.ID, in placement: ThemeEditing.Placement) {
         guard let space = spaces.first(where: { $0.id == spaceID }) else { return }
-        themeEditing = ThemeEditing(spaceID: spaceID, original: space.theme, draft: space.theme, placement: placement)
+        var theme = space.theme
+        if let saving = themeEditing, !saving.isOpen, saving.spaceID == spaceID { theme = saving.draft }
+        themeEditing = ThemeEditing(spaceID: spaceID, original: theme, draft: theme, placement: placement)
     }
 
     /// Changes the theme being edited, which the window shows at once.
@@ -131,22 +138,46 @@ extension BrowserModel {
         themeEditing?.draft = theme
     }
 
-    /// Closes the theme editor: Done saves the draft, Cancel puts the old theme back. After
-    /// Done the draft stays shown until the saved Space has been read back, so the old theme
-    /// never flashes. Only the first call counts (Esc and the popover closing both end up here).
+    /// Closes the theme editor at once: Cancel puts the old theme back, Done starts saving the
+    /// draft. Only the first call for an editor counts, so when Esc's Cancel and the popover
+    /// closing both ask, whichever comes first decides. A Space deleted meanwhile is a cancel.
+    public func closeThemeEditor(save: Bool) {
+        guard let editing = beginClosingTheme(save: save) else { return }
+        Task { await saveTheme(editing) }
+    }
+
+    /// ``closeThemeEditor(save:)``, waiting for the save and read-back to finish.
     public func finishEditingTheme(save: Bool) async {
-        guard var editing = themeEditing, editing.isOpen else { return }
-        guard save, editing.draft != editing.original else {
+        guard let editing = beginClosingTheme(save: save) else { return }
+        await saveTheme(editing)
+    }
+
+    /// Closes the editor and returns what to save, if anything.
+    private func beginClosingTheme(save: Bool) -> ThemeEditing? {
+        guard var editing = themeEditing, editing.isOpen else { return nil }
+        guard save, editing.draft != editing.original, spaces.contains(where: { $0.id == editing.spaceID }) else {
             themeEditing = nil
-            return
+            return nil
         }
         editing.isOpen = false
         themeEditing = editing
-        await setSpaceTheme(editing.spaceID, theme: editing.draft)
-        // Every read from here on sees the saved theme; one can be dropped for a newer read
-        // still on its way, so read until one lands.
-        for _ in 0..<3 where spaces.first(where: { $0.id == editing.spaceID })?.theme != editing.draft {
-            _ = try? await refreshSpaces()
+        return editing
+    }
+
+    /// Saves a closed editor's draft, keeping it shown until the saved Space has been read back
+    /// so the old theme never flashes.
+    private func saveTheme(_ editing: ThemeEditing) async {
+        do {
+            try await store.setSpaceTheme(id: editing.spaceID, theme: editing.draft)
+            // Every read from here on sees the saved theme; one can be dropped for a newer read
+            // still on its way, so read until one lands.
+            for _ in 0..<3 where spaces.first(where: { $0.id == editing.spaceID })?.theme != editing.draft {
+                _ = try? await refreshSpaces()
+            }
+        } catch TabStoreError.spaceNotFound {
+            // Deleted while the editor was open: nothing to save.
+        } catch {
+            report(error, "Axo couldn't change the Space's theme.")
         }
         // A newer editor may have opened meanwhile.
         if themeEditing == editing { themeEditing = nil }

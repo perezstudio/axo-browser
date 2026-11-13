@@ -54,14 +54,61 @@ struct SpaceThemeModelTests {
         #expect(try await store.spaces().first?.theme == ocean)
     }
 
-    @Test func onlyTheFirstWayOfClosingCounts() async throws {
-        // Esc cancels, then the popover closing asks to save: the cancel wins.
+    @Test func escCancelsEvenWhenThePopoverThenAsksToSave() async throws {
+        // Esc runs Cancel, then the popover's closing asks to save, with no wait in between.
         let home = try #require(model.space)
         model.beginEditingTheme(for: home.id, in: .sidebar)
         model.previewTheme(ocean)
-        await model.finishEditingTheme(save: false)
+        model.closeThemeEditor(save: false)
+        model.closeThemeEditor(save: true)
+        #expect(model.themeEditing == nil)
+        #expect(model.shownTheme == nil)
         await model.finishEditingTheme(save: true)
-        #expect(try await store.spaces().first?.theme == nil)
+        #expect(try await store.spaces().first?.theme == nil, "Nothing was saved")
+    }
+
+    @Test func aPickedColorSavesAndReadsBackTheSame() async throws {
+        let home = try #require(model.space)
+        model.beginEditingTheme(for: home.id, in: .sidebar)
+        // A color from the color picker, with more precision than a theme stores.
+        model.previewTheme(SpaceTheme(colors: [ThemeColor(color: Color(.sRGB, red: 0.123456, green: 0.5, blue: 0.987654))]))
+        let draft = try #require(model.themeEditing?.draft)
+        await model.finishEditingTheme(save: true)
+        #expect(model.spaces.first { $0.id == home.id }?.theme == draft, "Read back equal, so the draft gave way to it")
+        #expect(model.shownTheme == draft)
+    }
+
+    @Test func reopeningWhileSavingStartsFromTheSavedTheme() async throws {
+        let home = try #require(model.space)
+        model.beginEditingTheme(for: home.id, in: .sidebar)
+        model.previewTheme(ocean)
+        model.closeThemeEditor(save: true)
+        // Before the save lands, `spaces` still has the old theme.
+        model.beginEditingTheme(for: home.id, in: .settings)
+        #expect(model.themeEditing?.original == ocean && model.themeEditing?.draft == ocean)
+        #expect(model.shownTheme == ocean, "No flash back to the old theme")
+        try await waitUntilAsync { try await store.spaces().first?.theme == ocean }
+        #expect(model.themeEditing?.isOpen == true, "The new editor stays open")
+    }
+
+    @Test func aSpaceDeletedWhileEditingIsACancel() async throws {
+        let home = try #require(model.space)
+        await model.createSpace(name: "Work")
+        try await waitUntil { model.spaces.count == 2 }
+        let work = try #require(model.spaces.first { $0.id != home.id })
+        model.beginEditingTheme(for: work.id, in: .settings)
+        model.previewTheme(ocean)
+        await model.deleteSpace(work.id)
+        try await waitUntil { model.spaces.count == 1 }
+        await model.finishEditingTheme(save: true)
+        #expect(model.themeEditing == nil)
+        #expect(model.alertMessage == nil, "No error for a Space that's gone")
+    }
+
+    @Test func theSpacesMenuEditsInASheetOnTheWindow() throws {
+        let home = try #require(model.space)
+        model.beginEditingTheme(for: home.id, in: .window)
+        #expect(model.themeEditing?.placement == .window)
     }
 
     @Test func theSystemMaterialIsAThemeChoiceToo() async throws {
@@ -117,9 +164,12 @@ struct SpaceThemeModelTests {
         #expect(Set(ThemePreset.allCases.map(\.title)).count == ThemePreset.allCases.count)
         for preset in ThemePreset.allCases {
             let theme = preset.theme
-            // Presets are chosen to need no adjustment for their text in either system appearance.
+            // Presets are chosen to need no adjustment for their text in either system appearance:
+            // their own colors are drawn as they are (a gradient adds stops between them).
             for systemIsDark in [false, true] {
-                #expect(theme.resolved(systemIsDark: systemIsDark).colors == theme.colors, "\(preset.title)")
+                let drawn = theme.resolved(systemIsDark: systemIsDark).colors
+                let steps = theme.colors.count > 1 ? (drawn.count - 1) / (theme.colors.count - 1) : 1
+                #expect(theme.colors.indices.map { drawn[$0 * steps] } == theme.colors, "\(preset.title)")
             }
         }
     }

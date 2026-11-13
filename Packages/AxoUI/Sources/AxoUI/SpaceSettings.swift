@@ -173,7 +173,7 @@ private struct SpaceDetail: View {
         .formStyle(.grouped)
         .sheet(isPresented: Binding(
             get: { model.themeEditing.map { $0.isOpen && $0.placement == .settings && $0.spaceID == space.id } ?? false },
-            set: { if !$0 { Task { await model.finishEditingTheme(save: false) } } }
+            set: { if !$0, model.themeEditing?.placement == .settings { model.closeThemeEditor(save: false) } }
         )) {
             SpaceThemeEditor(model: model)
         }

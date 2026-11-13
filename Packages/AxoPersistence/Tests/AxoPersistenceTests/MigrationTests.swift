@@ -339,6 +339,27 @@ struct MigrationTests {
         }
     }
 
+    @Test func v17KeepsExistingSpacesAsTheyWere() throws {
+        let queue = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(queue, upTo: "v16-home-favicon-cleanup")
+        let profileID = UUID(), spaceID = UUID()
+        try queue.write { db in
+            try db.execute(sql: "INSERT INTO profile (id, name) VALUES (?, 'Default')", arguments: [profileID])
+            try db.execute(sql: "INSERT INTO space (id, profileID, name, sortKey, color, icon) VALUES (?, ?, 'Home', 'a0', 'teal', 'leaf')",
+                           arguments: [spaceID, profileID])
+            try db.execute(sql: "DELETE FROM syncChange")
+        }
+        try AppDatabase.migrator.migrate(queue)
+        try queue.write { db in
+            let row = try #require(try Row.fetchOne(db, sql: "SELECT name, color, icon, theme FROM space"))
+            #expect(row["name"] as String == "Home" && row["color"] as String == "teal" && row["icon"] as String == "leaf")
+            #expect(row["theme"] as String? == nil, "Existing Spaces keep the system's material")
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM syncChange") == 0, "Adding the column changes nothing to sync")
+            try db.execute(sql: "UPDATE space SET theme = '{}'")
+            #expect(try String.fetchAll(db, sql: "SELECT recordType FROM syncChange") == ["Space"], "The recreated trigger sees the theme")
+        }
+    }
+
     @Test func v14FavoritesBelongToAProfileAndSync() throws {
         let database = try AppDatabase.makeInMemory()
         let profileID = UUID(), favoriteID = UUID()

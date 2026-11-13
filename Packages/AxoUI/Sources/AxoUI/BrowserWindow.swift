@@ -45,6 +45,14 @@ public struct BrowserWindow: View {
         .onChange(of: model.sidebarAddressBarRequest.count) { showsSidebarAddressBar = model.sidebarAddressBarRequest.shown }
         .onChange(of: showsSidebarAddressBar, initial: true) { model.isSidebarAddressBarShown = showsSidebarAddressBar }
         .onChange(of: addressEditingPlacement, initial: true) { model.editsAddressInSidebar = addressEditingPlacement == .sidebar }
+        // The Space theme editor from the Spaces menu (#137), outside the sidebar so it has the
+        // window's appearance, not the theme's.
+        .sheet(isPresented: Binding(
+            get: { model.themeEditing.map { $0.isOpen && $0.placement == .window } ?? false },
+            set: { if !$0, model.themeEditing?.placement == .window { model.closeThemeEditor(save: false) } }
+        )) {
+            SpaceThemeEditor(model: model)
+        }
         .modifier(HandoffActivity(model: model))
         .pagePrompts(model: model)
         .task { await model.start() }
@@ -66,7 +74,7 @@ public struct BrowserWindow: View {
         NavigationSplitView {
             SidebarView(model: model)
                 // The shown Space's theme behind the sidebar, its footer, and the toolbar above it.
-                .modifier(SpaceThemeModifier(theme: model.shownTheme, spaceID: model.space?.id))
+                .modifier(SpaceThemeModifier(model: model))
                 .navigationSplitViewColumnWidth(min: 180, ideal: 240, max: 400)
         } detail: {
             HStack(spacing: 0) {

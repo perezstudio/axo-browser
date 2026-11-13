@@ -11,10 +11,9 @@ import AppKit
 /// The theme is resolved here, from the window's appearance (before this view overrides it for
 /// the sidebar), Reduce Transparency, Increase Contrast, and whether the window is active.
 struct SpaceThemeModifier: ViewModifier {
-    let theme: SpaceTheme?
-    /// The Space shown, so switching Spaces cross-fades the background while editing a theme
-    /// changes it at once.
-    let spaceID: Space.ID?
+    /// The model, read here rather than by the window, so a theme change (each tick of a
+    /// slider) redraws only the sidebar.
+    let model: BrowserModel
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -22,6 +21,10 @@ struct SpaceThemeModifier: ViewModifier {
     @Environment(\.appearsActive) private var appearsActive
 
     func body(content: Content) -> some View {
+        let theme = model.shownTheme
+        // The Space shown, so switching Spaces cross-fades the background while editing a theme
+        // changes it at once.
+        let spaceID = model.space?.id
         let resolved = theme?.resolved(systemIsDark: colorScheme == .dark, reduceTransparency: reduceTransparency,
                                        increaseContrast: contrast == .increased, isActive: appearsActive)
         content
@@ -51,6 +54,27 @@ extension EnvironmentValues {
     /// The window's own color scheme, which the sidebar's themed content keeps for popovers and
     /// other windows it opens.
     @Entry var windowColorScheme: ColorScheme?
+}
+
+/// Puts a sheet's or popover's content back in the window's appearance. Anything presented from
+/// inside the sidebar inherits the Space theme's light or dark appearance, while its window
+/// (the sheet, the popover) follows the browser window's, which made white text on light
+/// panels. Every presentation from inside the sidebar uses this.
+struct WindowAppearance: ViewModifier {
+    @Environment(\.windowColorScheme) private var windowColorScheme
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content.environment(\.colorScheme, windowColorScheme ?? colorScheme)
+    }
+}
+
+extension View {
+    /// Shows the view in the browser window's appearance rather than the sidebar's theme's; see
+    /// ``WindowAppearance``.
+    func windowAppearance() -> some View {
+        modifier(WindowAppearance())
+    }
 }
 
 /// A resolved theme's layers: the system's behind-window material in the theme's appearance,
