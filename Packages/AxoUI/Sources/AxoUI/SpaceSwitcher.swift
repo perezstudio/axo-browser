@@ -92,6 +92,8 @@ private struct FooterIconLabelStyle: LabelStyle {
 /// plus the capsule's padding.
 private struct SpaceDots: View {
     let model: BrowserModel
+    @Environment(\.windowColorScheme) private var windowColorScheme
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -115,6 +117,8 @@ private struct SpaceDots: View {
             set: { if !$0 { Task { await model.finishEditingTheme(save: true) } } }
         ), arrowEdge: .top) {
             SpaceThemeEditor(model: model)
+                // The popover follows the window's appearance; the sidebar has the theme's.
+                .environment(\.colorScheme, windowColorScheme ?? colorScheme)
         }
     }
 

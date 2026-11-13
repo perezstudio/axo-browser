@@ -32,8 +32,9 @@ final class SpaceThemeUITests: XCTestCase {
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
         let window = app.windows.firstMatch
-        // An empty part of the sidebar, below the Space's name.
-        let point = CGPoint(x: sidebar.frame.minX + 30 - window.frame.minX, y: sidebar.frame.midY - window.frame.minY)
+        // An empty part of the sidebar: the top right of its list, beside the Space's name and
+        // clear of the editor's popover, which rises from the Space dots at the bottom.
+        let point = CGPoint(x: sidebar.frame.maxX - 25 - window.frame.minX, y: sidebar.frame.minY + 50 - window.frame.minY)
         let plain = AxoUITests.color(at: point, in: window)
         func sidebarColor() -> RGB { AxoUITests.color(at: point, in: window) }
         func waitForSidebar(_ name: String, _ matches: (RGB) -> Bool) {
@@ -69,6 +70,7 @@ final class SpaceThemeUITests: XCTestCase {
         // A preset changes the window as soon as it's chosen.
         editor.buttons["themePresetMidnight"].click()
         waitForSidebar("Midnight, previewed") { luminance($0) < 0.3 }
+        XCTAssertTrue(editor.staticTexts["Theme for Home"].exists)
         let transparency = editor.sliders["themeTransparencySlider"]
         XCTAssertTrue(transparency.waitForExistence(timeout: 5))
         transparency.adjust(toNormalizedSliderPosition: 1)

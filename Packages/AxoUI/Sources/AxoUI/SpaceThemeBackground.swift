@@ -26,6 +26,9 @@ struct SpaceThemeModifier: ViewModifier {
                                        increaseContrast: contrast == .increased, isActive: appearsActive)
         content
             .environment(\.colorScheme, resolved.map { $0.isDark ? .dark : .light } ?? colorScheme)
+            // For windows that open from the sidebar (the theme editor's popover), which follow
+            // the window's appearance, not the theme's.
+            .environment(\.windowColorScheme, colorScheme)
             .background {
                 ZStack {
                     if let resolved {
@@ -42,6 +45,12 @@ struct SpaceThemeModifier: ViewModifier {
                 .accessibilityHidden(true)
             }
     }
+}
+
+extension EnvironmentValues {
+    /// The window's own color scheme, which the sidebar's themed content keeps for popovers and
+    /// other windows it opens.
+    @Entry var windowColorScheme: ColorScheme?
 }
 
 /// A resolved theme's layers: the system's behind-window material in the theme's appearance,

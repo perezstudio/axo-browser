@@ -109,17 +109,17 @@ struct SpaceThemeEditor: View {
     private func slider(_ title: String, value: Binding<Double>, identifier: String, low: String, high: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-            Slider(value: value, in: 0...1) {
-                Text(title)
-            } minimumValueLabel: {
-                Text(low).font(.caption).foregroundStyle(.secondary)
-            } maximumValueLabel: {
-                Text(high).font(.caption).foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            HStack(spacing: 6) {
+                // The ends' names are for sight; VoiceOver reads the value as a percentage.
+                Text(low).font(.caption).foregroundStyle(.secondary).accessibilityHidden(true)
+                Slider(value: value, in: 0...1) { Text(title) }
+                    .labelsHidden()
+                    .accessibilityLabel(title)
+                    .accessibilityValue("\(Int((value.wrappedValue * 100).rounded())) percent")
+                    .accessibilityIdentifier(identifier)
+                Text(high).font(.caption).foregroundStyle(.secondary).accessibilityHidden(true)
             }
-            .labelsHidden()
-            .accessibilityLabel(title)
-            .accessibilityValue("\(Int((value.wrappedValue * 100).rounded())) percent")
-            .accessibilityIdentifier(identifier)
         }
     }
 }
