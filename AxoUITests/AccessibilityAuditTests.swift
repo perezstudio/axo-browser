@@ -38,6 +38,7 @@ final class AccessibilityAuditTests: XCTestCase {
     private func audit(_ app: XCUIApplication, _ screen: String) throws {
         let containerFrames = (app.windows.allElementsBoundByIndex + app.sheets.allElementsBoundByIndex
             + app.popovers.allElementsBoundByIndex).map(\.frame)
+        let sliderFrames = app.sliders.allElementsBoundByIndex.filter { !$0.label.isEmpty }.map(\.frame)
         try app.performAccessibilityAudit(for: .all.subtracting(.contrast)) { issue in
             guard let element = issue.element else {
                 // Reported with no element while a text field's system field editor has focus.
@@ -57,6 +58,11 @@ final class AccessibilityAuditTests: XCTestCase {
             // with no text while it appears. The text belongs to the control's `.help`, which
             // VoiceOver reads on the control itself, and the audit checks those controls.
             if snapshot.elementType == .helpTag { return true }
+            // A slider's thumb: AppKit's NSSlider exposes it as a value indicator child with no
+            // description of its own. VoiceOver reads the slider, which has a label and value,
+            // so only thumbs inside a labeled slider are let through.
+            if snapshot.elementType == .valueIndicator,
+               sliderFrames.contains(where: { $0.contains(snapshot.frame) }) { return true }
             // Containers SwiftUI creates and gives no way to label. VoiceOver moves straight into
             // unlabeled groups, so they don't get in the way.
             if snapshot.identifier.isEmpty, snapshot.label.isEmpty {

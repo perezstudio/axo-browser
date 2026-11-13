@@ -73,11 +73,13 @@ final class SpaceThemeUITests: XCTestCase {
         XCTAssertTrue(editor.staticTexts["Theme for Home"].exists)
         let transparency = editor.sliders["themeTransparencySlider"]
         XCTAssertTrue(transparency.waitForExistence(timeout: 5))
+        XCTAssertEqual(transparency.label, "Transparency")
         transparency.adjust(toNormalizedSliderPosition: 1)
-        XCTAssertEqual(transparency.value as? String, "100 percent")
+        XCTAssertEqual(transparency.normalizedSliderPosition, 1, accuracy: 0.05)
         let grain = editor.sliders["themeGrainSlider"]
+        XCTAssertEqual(grain.label, "Grain")
         grain.adjust(toNormalizedSliderPosition: 0.5)
-        XCTAssertEqual(grain.value as? String, "50 percent")
+        XCTAssertEqual(grain.normalizedSliderPosition, 0.5, accuracy: 0.05)
         editor.buttons["themeAddColorButton"].click()
         XCTAssertTrue(editor.colorWells["themeColor2"].waitForExistence(timeout: 5), "Up to three colors make a gradient")
 
