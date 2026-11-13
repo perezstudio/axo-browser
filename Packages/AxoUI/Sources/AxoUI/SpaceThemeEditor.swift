@@ -113,9 +113,9 @@ struct SpaceThemeEditor: View {
             HStack(spacing: 6) {
                 // The ends' names are for sight; VoiceOver reads the value as a percentage.
                 Text(low).font(.caption).foregroundStyle(.secondary).accessibilityHidden(true)
+                // The slider's own label is its accessibility label (another would be read twice).
                 Slider(value: value, in: 0...1) { Text(title) }
                     .labelsHidden()
-                    .accessibilityLabel(title)
                     .accessibilityValue("\(Int((value.wrappedValue * 100).rounded())) percent")
                     .accessibilityIdentifier(identifier)
                 Text(high).font(.caption).foregroundStyle(.secondary).accessibilityHidden(true)
