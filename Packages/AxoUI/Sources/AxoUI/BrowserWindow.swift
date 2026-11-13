@@ -65,6 +65,8 @@ public struct BrowserWindow: View {
     private var splitView: some View {
         NavigationSplitView {
             SidebarView(model: model)
+                // The shown Space's theme behind the sidebar, its footer, and the toolbar above it.
+                .modifier(SpaceThemeModifier(theme: model.shownTheme, spaceID: model.space?.id))
                 .navigationSplitViewColumnWidth(min: 180, ideal: 240, max: 400)
         } detail: {
             HStack(spacing: 0) {

@@ -107,6 +107,15 @@ private struct SpaceDots: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Space list")
         .accessibilityIdentifier("spaceDots")
+        // The theme editor (#137) hangs from the Space dots, beside the sidebar it changes.
+        .popover(isPresented: Binding(
+            get: { model.themeEditing.map { $0.isOpen && $0.placement == .sidebar } ?? false },
+            // Clicking outside keeps what the window shows, as other Mac popovers do; Esc and
+            // Cancel restore the old theme first.
+            set: { if !$0 { Task { await model.finishEditingTheme(save: true) } } }
+        ), arrowEdge: .top) {
+            SpaceThemeEditor(model: model)
+        }
     }
 
     /// The footer's buttons' height (``FooterButtonStyle``), which the capsule matches.
@@ -120,6 +129,7 @@ private struct SpaceDots: View {
                 }
                 .contextMenu {
                     Button("Rename…") { model.spaceToRename = space }
+                    Button("Edit Theme…") { model.beginEditingTheme(for: space.id, in: .sidebar) }
                     Button("Delete Space…", role: .destructive) { model.spaceToDelete = space }
                         .disabled(model.spaces.count < 2)
                 }
@@ -164,7 +174,7 @@ private struct SpaceDot: View {
     /// The Space's color when it has one (faded when it isn't the current Space), otherwise
     /// the primary color.
     private var fill: AnyShapeStyle {
-        if let color = space.spaceColor?.color {
+        if let color = space.markerColor {
             return AnyShapeStyle(isSelected ? color : color.opacity(0.5))
         }
         return isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary)

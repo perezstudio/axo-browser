@@ -317,6 +317,28 @@ struct MigrationTests {
         }
     }
 
+    @Test func v17SpacesHaveAnOptionalThemeThatSyncs() throws {
+        let database = try AppDatabase.makeInMemory()
+        let profileID = UUID(), spaceID = UUID()
+        try database.writer.write { db in
+            try db.execute(sql: "INSERT INTO profile (id, name) VALUES (?, 'Default')", arguments: [profileID])
+            try db.execute(sql: "INSERT INTO space (id, profileID, name, sortKey) VALUES (?, ?, 'Home', 'a0')", arguments: [spaceID, profileID])
+            #expect(try String.fetchOne(db, sql: "SELECT theme FROM space") == nil, "Spaces start with the system's material")
+
+            try db.execute(sql: "DELETE FROM syncChange")
+            try db.execute(sql: ##"UPDATE space SET theme = '{"colors":["#336699"]}'"##)
+            #expect(try String.fetchAll(db, sql: "SELECT recordType FROM syncChange") == ["Space"])
+            try db.execute(sql: "DELETE FROM syncChange")
+            try db.execute(sql: ##"UPDATE space SET theme = '{"colors":["#336699"]}'"##)
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM syncChange") == 0, "Unchanged writes aren't changes")
+            try db.execute(sql: "UPDATE space SET theme = NULL")
+            #expect(try String.fetchAll(db, sql: "SELECT recordType FROM syncChange") == ["Space"], "Clearing it is a change")
+            try db.execute(sql: "DELETE FROM syncChange")
+            try db.execute(sql: "UPDATE space SET color = 'blue'")
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM syncChange") == 1, "The older columns still count")
+        }
+    }
+
     @Test func v14FavoritesBelongToAProfileAndSync() throws {
         let database = try AppDatabase.makeInMemory()
         let profileID = UUID(), favoriteID = UUID()

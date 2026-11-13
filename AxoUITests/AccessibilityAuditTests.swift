@@ -238,6 +238,16 @@ final class AccessibilityAuditTests: XCTestCase {
         XCTAssertTrue(app.textFields["spaceNameSettingsField"].waitForExistence(timeout: 5))
         try audit(app, "spaces")
 
+        // The Space theme editor, with a theme chosen so all its controls show (#137).
+        app.buttons["editThemeSettingsButton"].click()
+        let themeEditor = app.descendants(matching: .any)["spaceThemeEditor"]
+        XCTAssertTrue(themeEditor.waitForExistence(timeout: 5))
+        themeEditor.buttons["themePresetOcean"].click()
+        XCTAssertTrue(themeEditor.sliders["themeGrainSlider"].waitForExistence(timeout: 5))
+        try audit(app, "space theme")
+        themeEditor.buttons["themeCancelButton"].click()
+        XCTAssertTrue(themeEditor.waitForNonExistence(timeout: 5))
+
         app.toolbars.buttons["Site Customizations"].click()
         XCTAssertTrue(app.buttons["addSiteCustomizationButton"].waitForExistence(timeout: 5))
         try audit(app, "site customizations")

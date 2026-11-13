@@ -58,7 +58,7 @@ public struct SyncRecordID: Hashable, Codable, Sendable, CustomStringConvertible
 /// | --- | --- |
 /// | Profile | `name` |
 /// | Favorite | `profileID`, `url` (its home page), `title`, `sortKey` |
-/// | Space | `profileID`, `name`, `sortKey`, `color`, `icon` |
+/// | Space | `profileID`, `name`, `sortKey`, `color`, `icon`, `theme` (JSON) |
 /// | Folder | `spaceID`, `parentID`, `name`, `sortKey` |
 /// | Tab (pinned) | `spaceID`, `folderID`, `url` (its home page), `title`, `sortKey` |
 public struct SyncRecord: Equatable, Codable, Sendable {
@@ -79,7 +79,7 @@ public struct SyncRecord: Equatable, Codable, Sendable {
         switch type {
         case .profile: ["name"]
         case .favorite: ["profileID", "url", "title", "sortKey"]
-        case .space: ["profileID", "name", "sortKey", "color", "icon"]
+        case .space: ["profileID", "name", "sortKey", "color", "icon", "theme"]
         case .folder: ["spaceID", "parentID", "name", "sortKey"]
         case .tab: ["spaceID", "folderID", "url", "title", "sortKey"]
         }

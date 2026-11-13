@@ -138,6 +138,16 @@ public final class TabStore: Sendable {
         }
     }
 
+    /// Sets a Space's theme for the window's background (#137); `nil` goes back to the system's
+    /// material.
+    public func setSpaceTheme(id: Space.ID, theme: SpaceTheme?) async throws {
+        try await database.writer.write { db in
+            guard var space = try Space.fetchOne(db, id: id) else { throw TabStoreError.spaceNotFound(id) }
+            space.theme = theme
+            try space.update(db)
+        }
+    }
+
     /// Moves a Space in the Space order, directly after `anchor` or first when it's `nil`. Only
     /// the moved Space's row changes.
     public func moveSpace(id: Space.ID, after anchor: Space.ID?) async throws {

@@ -66,6 +66,8 @@ public final class BrowserModel {
     public var spaceToRename: Space?
     /// A Space waiting for the person to confirm deleting it.
     public var spaceToDelete: Space?
+    /// The Space theme being edited (#137), whose draft the window shows while it's open.
+    public internal(set) var themeEditing: ThemeEditing?
     /// The live state of the selected tab's web view.
     public private(set) var selectedPage: WebTabState?
     /// Whether Peek or the command bar covers the window's pages. Their link status labels hide

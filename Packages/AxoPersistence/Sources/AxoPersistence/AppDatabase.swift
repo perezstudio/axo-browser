@@ -412,6 +412,27 @@ public final class AppDatabase: Sendable {
                 """)
         }
 
+        // A Space's theme for the window's background (#137): JSON (colors, mode, transparency,
+        // grain), or NULL for the system's material. It syncs, so the Space trigger is
+        // recreated to notice it.
+        migrator.registerMigration("v17-space-theme") { db in
+            try db.alter(table: "space") { t in
+                t.add(column: "theme", .text)
+            }
+            let now = "strftime('%Y-%m-%d %H:%M:%f', 'now')"
+            let changed = ["profileID", "name", "sortKey", "color", "icon", "theme"]
+                .map { "OLD.\($0) IS NOT NEW.\($0)" }.joined(separator: " OR ")
+            try db.execute(sql: """
+                DROP TRIGGER space_sync_update;
+                CREATE TRIGGER space_sync_update AFTER UPDATE ON space
+                WHEN NOT EXISTS (SELECT 1 FROM syncApplying) AND (\(changed))
+                BEGIN
+                INSERT INTO syncChange (recordType, recordID, isDeletion, changedAt) VALUES ('Space', NEW.id, 0, \(now))
+                ON CONFLICT (recordType, recordID) DO UPDATE SET isDeletion = excluded.isDeletion, changedAt = excluded.changedAt;
+                END;
+                """)
+        }
+
         return migrator
     }
 

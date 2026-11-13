@@ -297,6 +297,11 @@ public struct BrowserCommands: Commands {
                 .disabled(model == nil)
             Button("Rename Space…") { model?.beginRenameSpace() }
                 .disabled(model?.space == nil)
+            Button("Edit Space Theme…") {
+                guard let model, let space = model.space else { return }
+                model.beginEditingTheme(for: space.id, in: .sidebar)
+            }
+            .disabled(model?.space == nil)
             Button("Delete Space…") { model?.beginDeleteSpace() }
                 .disabled((model?.spaces.count ?? 0) < 2)
             Divider()

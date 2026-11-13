@@ -127,6 +127,27 @@ struct SpaceStoreTests {
         #expect(try await store.spaces().first?.color == nil)
     }
 
+    @Test func spacesSaveAndClearATheme() async throws {
+        let home = try await store.bootstrap()
+        #expect(home.theme == nil, "New Spaces use the system's material")
+        let theme = SpaceTheme(colors: [ThemeColor(hex: "#336699")!, ThemeColor(hex: "#ffcc00")!], mode: .dark, transparency: 0.4, grain: 0.25)
+        try await store.setSpaceTheme(id: home.id, theme: theme)
+        #expect(try await store.spaces().first?.theme == theme)
+        try await store.setSpaceTheme(id: home.id, theme: nil)
+        #expect(try await store.spaces().first?.theme == nil)
+    }
+
+    @Test func aThemeThatDoesntReadLeavesTheSpaceReadable() async throws {
+        let home = try await store.bootstrap()
+        for json in [##"{"colors":[]}"##, ##"{"colors":["not a color"]}"##, "not json", ##"{"mode":"dark"}"##] {
+            try await store.database.writer.write { db in
+                try db.execute(sql: "UPDATE space SET theme = ?", arguments: [json])
+            }
+            let space = try #require(try await store.spaces().first, "\(json)")
+            #expect(space.id == home.id && space.theme == nil, "\(json)")
+        }
+    }
+
     @Test func spacesReorderByMovingOneRow() async throws {
         let home = try await store.bootstrap()
         let work = try await store.createSpace(name: "Work", profileID: home.profileID)

@@ -259,7 +259,7 @@ public final class SyncStore: Sendable {
         let sql = switch id.type {
         case .profile: "SELECT name FROM profile WHERE id = ?"
         case .favorite: "SELECT profileID, url, title, sortKey FROM favorite WHERE id = ?"
-        case .space: "SELECT profileID, name, sortKey, color, icon FROM space WHERE id = ?"
+        case .space: "SELECT profileID, name, sortKey, color, icon, theme FROM space WHERE id = ?"
         case .folder: "SELECT spaceID, parentID, name, sortKey FROM folder WHERE id = ?"
         case .tab: "SELECT spaceID, folderID, COALESCE(homeURL, url) AS url, title, sortKey FROM tab WHERE id = ? AND isPinned"
         }
@@ -308,10 +308,11 @@ public final class SyncStore: Sendable {
             guard let name = record.fields["name"], let sortKey = record.fields["sortKey"],
                   try exists("profile", record.uuid("profileID")) else { return false }
             try db.execute(sql: """
-                INSERT INTO space (id, profileID, name, sortKey, color, icon) VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO space (id, profileID, name, sortKey, color, icon, theme) VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (id) DO UPDATE SET profileID = excluded.profileID, name = excluded.name,
-                    sortKey = excluded.sortKey, color = excluded.color, icon = excluded.icon
-                """, arguments: [id, record.uuid("profileID"), name, sortKey, record.fields["color"], record.fields["icon"]])
+                    sortKey = excluded.sortKey, color = excluded.color, icon = excluded.icon, theme = excluded.theme
+                """, arguments: [id, record.uuid("profileID"), name, sortKey, record.fields["color"], record.fields["icon"],
+                                 record.fields["theme"]])
         case .folder:
             guard let name = record.fields["name"], let sortKey = record.fields["sortKey"],
                   try exists("space", record.uuid("spaceID")),
