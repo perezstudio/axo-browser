@@ -178,7 +178,9 @@ private struct SpaceDot: View {
     /// The Space's color when it has one (faded when it isn't the current Space), otherwise
     /// the primary color.
     private var fill: AnyShapeStyle {
-        if let color = space.markerColor {
+        // Palette colors only: a theme's own color would vanish on its own background, where the
+        // shown Space's dot sits.
+        if let color = space.spaceColor?.color {
             return AnyShapeStyle(isSelected ? color : color.opacity(0.5))
         }
         return isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary)

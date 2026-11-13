@@ -19,13 +19,18 @@ struct SpaceThemeEditor: View {
             if let draft {
                 Divider()
                 colorControls(draft)
-                Picker("Appearance", selection: Binding(get: { draft.mode }, set: { mode in update { $0.mode = mode } })) {
-                    Text("Automatic").tag(SpaceTheme.Mode.automatic)
-                    Text("Light").tag(SpaceTheme.Mode.light)
-                    Text("Dark").tag(SpaceTheme.Mode.dark)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Appearance")
+                        .accessibilityHidden(true)
+                    Picker("Appearance", selection: Binding(get: { draft.mode }, set: { mode in update { $0.mode = mode } })) {
+                        Text("Automatic").tag(SpaceTheme.Mode.automatic)
+                        Text("Light").tag(SpaceTheme.Mode.light)
+                        Text("Dark").tag(SpaceTheme.Mode.dark)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .accessibilityIdentifier("themeModePicker")
                 }
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier("themeModePicker")
                 slider("Transparency", value: Binding(get: { draft.transparency }, set: { value in update { $0.transparency = value } }),
                        identifier: "themeTransparencySlider", low: "Solid", high: "See-through")
                 slider("Grain", value: Binding(get: { draft.grain }, set: { value in update { $0.grain = value } }),
@@ -65,9 +70,15 @@ struct SpaceThemeEditor: View {
 
     /// The colors, each with the system's color picker, and buttons to add and remove one.
     private func colorControls(_ theme: SpaceTheme) -> some View {
-        HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
             Text("Colors")
-            Spacer()
+                .accessibilityHidden(true)
+            colorRow(theme)
+        }
+    }
+
+    private func colorRow(_ theme: SpaceTheme) -> some View {
+        HStack(spacing: 8) {
             ForEach(Array(theme.colors.enumerated()), id: \.offset) { index, color in
                 ColorPicker("Theme color \(index + 1)", selection: Binding(
                     get: { Color(themeColor: color) },
@@ -84,6 +95,7 @@ struct SpaceThemeEditor: View {
                 .accessibilityValue(color.spokenName)
                 .accessibilityIdentifier("themeColor\(index + 1)")
             }
+            Spacer()
             Button {
                 update { theme in theme.setColors(theme.colors + [theme.colors.last ?? .white]) }
             } label: {

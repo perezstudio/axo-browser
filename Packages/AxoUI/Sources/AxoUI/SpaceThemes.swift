@@ -100,8 +100,9 @@ extension ThemeColor {
 }
 
 extension Space {
-    /// The color that marks the Space (its dot, its icon): its palette color, or its theme's
-    /// first color when it has a theme and no palette color.
+    /// The color that marks the Space in lists (Settings › Spaces): its palette color, or its
+    /// theme's first color when it has a theme and no palette color. The Space dots use the
+    /// palette color only, since they sit on the shown Space's theme.
     var markerColor: Color? {
         spaceColor?.color ?? theme.map { Color(themeColor: $0.colors[0]) }
     }
