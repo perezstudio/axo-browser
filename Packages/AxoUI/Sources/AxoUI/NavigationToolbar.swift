@@ -94,6 +94,9 @@ struct AddressBar: View {
             AddressField(model: model)
             SiteSettingsButton(model: model)
         }
+        // Inside the toolbar's capsule, so the address and the Site Settings button sit in from
+        // its rounded ends rather than against them.
+        .padding(.horizontal, 10)
     }
 }
 #endif

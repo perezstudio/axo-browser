@@ -21,6 +21,13 @@ final class LiveTab: EnginePageDelegate {
     var snapshotVersion: Int?
     /// The snapshot being taken, if any.
     var snapshotTask: Task<Void, Never>?
+    /// How many times the page has finished loading. Page colors are read once per load, and a
+    /// read for an earlier load is dropped.
+    private(set) var finishedLoads = 0
+    /// The load ``state``'s `pageColors` were fully read for, if any.
+    var colorsLoad: Int?
+    /// The page colors being read, if any.
+    var colorsTask: Task<Void, Never>?
     /// Set while the pool discards the page, so the page's own events meanwhile aren't taken for
     /// it loading again.
     var isBeingDiscarded = false
@@ -56,6 +63,7 @@ final class LiveTab: EnginePageDelegate {
     /// Stops the page and detaches it so it can be deallocated.
     func tearDown() {
         snapshotTask?.cancel()
+        colorsTask?.cancel()
         page.delegate = nil
         page.close()
     }
@@ -72,6 +80,8 @@ final class LiveTab: EnginePageDelegate {
         state.restoringSnapshot = nil
         pool?.keptPageMayHaveWoken(self)
         pool?.loadFavicon(for: tabID)
+        finishedLoads += 1
+        pool?.refreshPageColors(of: self)
     }
 
     func pageWantsToBeShown(_ page: any EnginePage) {
@@ -85,6 +95,7 @@ final class LiveTab: EnginePageDelegate {
     func pageDidFailLoad(_ page: any EnginePage) {
         contentVersion += 1
         state.restoringSnapshot = nil
+        // Page colors stay: a stopped or failed navigation leaves the page that was showing.
     }
 
     func pageDidTakeFocus(_ page: any EnginePage) {

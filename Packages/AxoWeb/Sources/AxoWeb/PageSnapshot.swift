@@ -25,7 +25,7 @@ enum PageSnapshot {
         }.value
     }
 
-    private static func cgImage(from image: PlatformImage) -> CGImage? {
+    static func cgImage(from image: PlatformImage) -> CGImage? {
         #if os(macOS)
         image.cgImage(forProposedRect: nil, context: nil, hints: nil)
         #else

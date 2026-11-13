@@ -606,6 +606,77 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Above"].waitForExistence(timeout: 10), "⌘L focuses the address field above the page")
     }
 
+    /// Above the page, the toolbar takes the page's `theme-color`, as in Safari (#107), and
+    /// turning "Tint the toolbar to match the page" off in Settings clears it. Checked on a pixel
+    /// of the toolbar between Reload and the address field, in window screenshots.
+    @MainActor
+    func testToolbarTakesThePagesThemeColor() throws {
+        let raspberry = (red: 155.0 / 255, green: 42.0 / 255, blue: 92.0 / 255)
+        let app = Self.makeApp()
+        // The tint setting is left to its default (on): an argument would override the switch.
+        app.launchArguments += ["-navigationBarPlacement", "page"]
+        app.launch()
+        Self.bringToFront(app)
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        AxoUITests.openPage("data:text/html,<meta name=theme-color content=rgb(155,42,92)><title>Tinted</title>", in: app)
+        XCTAssertTrue(sidebar.staticTexts["Tinted"].waitForExistence(timeout: 10))
+
+        let window = app.windows.firstMatch
+        let reload = app.buttons["reloadButton"].frame
+        let address = app.descendants(matching: .any)["pageAddressBar"].frame
+        let point = CGPoint(x: (reload.maxX + address.minX) / 2 - window.frame.minX, y: reload.midY - window.frame.minY)
+        func waitForToolbar(tinted: Bool, _ name: String) {
+            var color = Self.color(at: point, in: window)
+            let deadline = Date.now.addingTimeInterval(5)
+            while Self.isClose(color, to: raspberry) != tinted, Date.now < deadline {
+                RunLoop.current.run(until: .now.addingTimeInterval(0.25))
+                color = Self.color(at: point, in: window)
+            }
+            let shot = XCTAttachment(screenshot: window.screenshot())
+            shot.name = name
+            shot.lifetime = .keepAlways
+            add(shot)
+            XCTAssertEqual(Self.isClose(color, to: raspberry), tinted, "\(name): toolbar pixel \(color)")
+        }
+        waitForToolbar(tinted: true, "Toolbar tinted to the page")
+
+        app.typeKey(",", modifierFlags: .command)
+        let general = app.toolbars.buttons["General"]
+        XCTAssertTrue(general.waitForExistence(timeout: 5))
+        general.click()
+        let toggle = app.checkBoxes["tintsToolbarToggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        XCTAssertTrue(toggle.isEnabled, "Above the page, the setting can be changed")
+        toggle.click()
+        app.typeKey("w", modifierFlags: .command)
+        waitForToolbar(tinted: false, "Toolbar with tinting turned off")
+    }
+
+    /// The sRGB color of the pixel at `point` (in points from the window's top left) in a
+    /// screenshot of `window`.
+    @MainActor
+    private static func color(at point: CGPoint, in window: XCUIElement) -> (red: Double, green: Double, blue: Double) {
+        let image = window.screenshot().image
+        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return (0, 0, 0) }
+        let scale = Double(cgImage.width) / image.size.width
+        var pixel = [UInt8](repeating: 0, count: 4)
+        let sRGB = CGColorSpace(name: CGColorSpace.sRGB)!
+        pixel.withUnsafeMutableBytes { buffer in
+            guard let context = CGContext(data: buffer.baseAddress, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                                          space: sRGB, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+            // Draw the image so the wanted pixel lands on the context's only one (y counts up).
+            let x = -(point.x * scale).rounded(.down)
+            let y = -(Double(cgImage.height) - (point.y * scale).rounded(.down) - 1)
+            context.draw(cgImage, in: CGRect(x: x, y: y, width: Double(cgImage.width), height: Double(cgImage.height)))
+        }
+        return (Double(pixel[0]) / 255, Double(pixel[1]) / 255, Double(pixel[2]) / 255)
+    }
+
+    private static func isClose(_ color: (red: Double, green: Double, blue: Double), to other: (red: Double, green: Double, blue: Double)) -> Bool {
+        abs(color.red - other.red) < 0.08 && abs(color.green - other.green) < 0.08 && abs(color.blue - other.blue) < 0.08
+    }
+
     /// The sidebar's footer matches the window toolbar (#135): Settings, New Space, and the Space
     /// dots' capsule are as tall as the toolbar's buttons, the buttons are round, and the footer
     /// sits as far from the window's edges as the toolbar. Checked with the navigation bar in the
