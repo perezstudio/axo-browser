@@ -435,15 +435,16 @@ struct ChromiumExtensionBridgeTests {
         let profile = try #require(FakeProfile.made[profileID])
         let request = try #require(profile.onExtensionPopupRequest)
 
-        // Loaded first, then shown.
+        // Loaded, and shown. The popover is real, so on a Mac with a window to show it in (the
+        // CI runner) AppKit may report it showing before the test does; the order of loading
+        // and showing is checked on PopupFocus itself (popupFocusWaitsForBoth).
         let loadedFirst = FakeExtensionPopup(extensionIdentifier: "bitwarden")
         request(loadedFirst)
         let first = try #require(bridge.popups["bitwarden"])
         #expect(first.popover.delegate === first.closer, "The popover reports showing to the closer")
         loadedFirst.onLoad?()
-        #expect(loadedFirst.focusCount == 0, "Not before the popover shows")
         first.closer.popoverDidShow(Notification(name: NSPopover.didShowNotification))
-        #expect(loadedFirst.focusCount == 1)
+        #expect(loadedFirst.focusCount >= 1, "Focused once it's loaded and showing")
 
         // Shown first, then loaded.
         let shownFirst = FakeExtensionPopup(extensionIdentifier: "onepassword")
@@ -457,10 +458,17 @@ struct ChromiumExtensionBridgeTests {
 
     @Test func popupFocusWaitsForBoth() {
         var focused = 0
-        let focus = PopupFocus { focused += 1 }
-        focus.loaded()
-        #expect(focused == 0)
-        focus.shown()
+        let loadedFirst = PopupFocus { focused += 1 }
+        loadedFirst.loaded()
+        #expect(focused == 0, "Not before the popover shows")
+        loadedFirst.shown()
+        #expect(focused == 1)
+
+        focused = 0
+        let shownFirst = PopupFocus { focused += 1 }
+        shownFirst.shown()
+        #expect(focused == 0, "Not before the page loads")
+        shownFirst.loaded()
         #expect(focused == 1)
     }
 
