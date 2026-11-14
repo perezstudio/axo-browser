@@ -569,7 +569,10 @@ struct TabRow: View {
     /// too (#73).
     static func tooltip(for tab: AxoCore.Tab) -> String {
         guard tab.hasLeftHome, let home = tab.homeURL else { return displayTitle(for: tab) }
-        return "\(displayTitle(for: tab))\nPinned page: \(home.host() ?? home.absoluteString)"
+        // The site, or for a page without one (a data: page holds a whole file), the start of
+        // its address.
+        let page = home.host() ?? String(home.absoluteString.prefix(80))
+        return "\(displayTitle(for: tab))\nPinned page: \(page)"
     }
 
     /// The page title, or the host (or full URL) for pages without one.

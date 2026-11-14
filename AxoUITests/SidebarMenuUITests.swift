@@ -190,7 +190,8 @@ final class SidebarMenuUITests: XCTestCase {
         choose("Go to Pinned Page", on: sidebar.staticTexts["Away"], in: app)
         XCTAssertTrue(sidebar.staticTexts["Start"].waitForExistence(timeout: 10))
         expectSelected("Start", in: app)
-        let goHome = sidebar.buttons["goToPinnedPageButton"]
+        // By its label: the Pinned section's identifier replaces its rows' own (CLAUDE.md).
+        let goHome = sidebar.buttons["Go to Pinned Page"]
         XCTAssertFalse(goHome.exists, "On its pinned page, no control to go back (#73)")
 
         // Away again: the row's own control goes back (#73).

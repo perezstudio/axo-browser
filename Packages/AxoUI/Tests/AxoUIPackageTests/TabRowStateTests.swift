@@ -104,6 +104,13 @@ struct TabRowStateTests {
         #expect(TabRow.tooltip(for: tab) == "A Story\nPinned page: start.example")
         #expect(TabRow.stateDescription(isLoading: false, isDimmed: false, isAwayFromHome: tab.hasLeftHome) == "Away from pinned page")
 
+        let markup = String(repeating: "<p>pond</p>", count: 100)
+        var dataPage = tab
+        dataPage.homeURL = URL(string: "data:text/html,\(markup)")!
+        let shown = TabRow.tooltip(for: dataPage)
+        #expect(shown.count < 120, "A page without a site shows only the start of its address")
+        #expect(shown.hasPrefix("A Story\nPinned page: data:text/html,"))
+
         tab.url = URL(string: "https://start.example/")!
         #expect(TabRow.tooltip(for: tab) == "A Story", "On its pinned page")
         tab.isPinned = false
