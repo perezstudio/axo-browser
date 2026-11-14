@@ -32,9 +32,21 @@ public struct BrowserWindow: View {
                     .accessibilityIdentifier("fullscreenPage")
             } else {
                 splitView
+                    // Nothing behind first run's card takes clicks, keys, or focus.
+                    .disabled(model.firstRun != nil)
+                    .accessibilityHidden(model.firstRun != nil)
+            }
+            // First run (#175), over the whole window until it's done.
+            if let firstRun = model.firstRun {
+                FirstRunView(model: model, firstRun: firstRun)
+                    .transition(.opacity)
             }
         }
-        .focusedSceneValue(\.browserModel, model)
+        .animation(.easeInOut(duration: 0.4), value: model.firstRun == nil)
+        // While first run shows, the toolbar hides and the menus' commands (which need the
+        // window's model) are off, so nothing acts on the window behind the card.
+        .toolbar(model.firstRun != nil ? .hidden : .automatic, for: .windowToolbar)
+        .focusedSceneValue(\.browserModel, model.firstRun == nil ? model : nil)
         // ⌘L: with the navigation bar in the sidebar, the address is edited in the command bar,
         // as in Arc (also when the sidebar's address bar is hidden); above the page, its field
         // takes focus itself.
