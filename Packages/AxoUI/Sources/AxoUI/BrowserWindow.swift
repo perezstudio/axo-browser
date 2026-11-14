@@ -85,6 +85,8 @@ public struct BrowserWindow: View {
     private var splitView: some View {
         NavigationSplitView {
             SidebarView(model: model)
+                // The page's edge, a layer above the sidebar (#67), in the theme's appearance.
+                .pageEdgeShadow()
                 // The shown Space's theme behind the sidebar, its footer, and the toolbar above it.
                 .modifier(SpaceThemeModifier(model: model))
                 .navigationSplitViewColumnWidth(min: 180, ideal: 240, max: 400)
