@@ -98,7 +98,7 @@ struct FirstRunTests {
         model.continueFirstRun()
         let session = try #require(model.firstRun?.importSession)
         // Arc is read first.
-        for _ in 0..<100 where !session.canImport { await Task.yield() }
+        try await waitUntil { session.canImport }
         #expect(session.sourceID == "arc")
         #expect(session.canImport)
 
@@ -107,6 +107,48 @@ struct FirstRunTests {
         #expect(model.firstRun?.hasImported == true, "It waits on the import step for Continue")
 
         model.finishFirstRun()
+        #expect(model.firstRun == nil)
+        #expect(record.isComplete)
+    }
+
+    @Test func aBrowserWithOnlyHistorySkipsIt() async throws {
+        let store = try TabStore.makeInMemory()
+        let space = try await store.bootstrap()
+        try await store.history.recordVisit(to: URL(string: "https://example.com")!, title: "Example", profileID: space.profileID)
+        let model = BrowserModel(store: store, pool: WebViewPool(makeDataStore: { _ in .nonPersistent() }))
+        model.announce = { _ in }
+        model.firstRunRecord = record
+        await model.start()
+        #expect(model.firstRun == nil, "Someone who closed every tab still has history")
+        #expect(record.isComplete)
+    }
+
+    /// Spaces arriving from iCloud end first run, so it never renames or rethemes one of them.
+    @Test func spacesArrivingEndItWithoutChangingThem() async throws {
+        let store = try TabStore.makeInMemory()
+        let model = BrowserModel(store: store, pool: WebViewPool(makeDataStore: { _ in .nonPersistent() }))
+        model.announce = { _ in }
+        model.firstRunRecord = record
+        await model.start()
+        let firstRun = try #require(model.firstRun)
+        firstRun.spaceName = "Renamed"
+        let home = try #require(model.space)
+
+        let synced = try await store.createSpace(name: "Work", profileID: home.profileID)
+        try await waitUntil { model.firstRun == nil }
+        #expect(record.isComplete)
+
+        await model.createFirstSpace()
+        #expect(model.spaces.map(\.name).sorted() == ["Home", "Work"], "Nothing renamed")
+        #expect(model.spaces.contains { $0.id == synced.id })
+    }
+
+    /// A link from another app while first run shows ends it, so its tab isn't hidden.
+    @Test func aLinkFromAnotherAppEndsIt() async throws {
+        model.firstRunRecord = record
+        await model.start()
+        #expect(model.firstRun != nil)
+        await model.openExternalURL(URL(string: "https://example.com/link")!)
         #expect(model.firstRun == nil)
         #expect(record.isComplete)
     }

@@ -471,10 +471,11 @@ public final class BrowserModel {
             try await show(initial)
             let pending = pendingExternalURLs
             pendingExternalURLs = []
+            // Decided before any link opens a tab: a launch that opens links skips first run.
+            await beginFirstRunIfNeeded(opensLinks: !pending.isEmpty)
             for link in pending {
                 await openExternalURL(link.url, sourceApp: link.sourceApp)
             }
-            beginFirstRunIfNeeded()
             observeSpaces()
             observeProfiles()
             observeLinkRoutes()
@@ -645,6 +646,7 @@ public final class BrowserModel {
         let fresh = try await store.spaces()
         guard generation == spacesReadGeneration else { return false }
         spaces = fresh
+        endFirstRunIfSpacesChanged()
         try await followShownSpace()
         return true
     }
@@ -1308,6 +1310,9 @@ public final class BrowserModel {
             pendingExternalURLs.append((url, sourceApp))
             return
         }
+        // A link from another app means the person is browsing: first run gives way, rather
+        // than hiding the link's tab under its card.
+        finishFirstRun(announcing: nil)
         let routes = (try? await store.linkRoutes.routes()) ?? linkRoutes
         if let route = LinkRoute.route(for: url, from: sourceApp, in: routes),
            spaces.contains(where: { $0.id == route.spaceID }) {

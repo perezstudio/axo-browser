@@ -53,6 +53,9 @@ public final class FirstRun {
 
     /// The step shown.
     public internal(set) var step: Step = .welcome
+    /// The Space first run sets up: the one the browser started with. Spaces arriving through
+    /// iCloud end first run rather than letting it change one of them.
+    public let spaceID: Space.ID
     /// The import of the step before setting up, while there's a browser to import from.
     public internal(set) var importSession: ImportSession?
     /// The first Space's name.
@@ -68,7 +71,8 @@ public final class FirstRun {
     static let iconNames = ["house": "House", "briefcase": "Briefcase", "book": "Book", "sparkles": "Sparkles",
                             "leaf": "Leaf", "gamecontroller": "Game Controller"]
 
-    init(spaceName: String) {
+    init(spaceID: Space.ID, spaceName: String) {
+        self.spaceID = spaceID
         self.spaceName = spaceName
         spaceIcon = Self.icons[0]
     }
@@ -84,13 +88,30 @@ extension BrowserModel {
     /// Space, no tabs or favorites. A browser that already has data (someone updating Axo) is
     /// marked as done without showing it. Nothing happens without a ``firstRunRecord``, which
     /// the app sets outside test runs (and UI tests set only when they ask for first run).
-    func beginFirstRunIfNeeded() {
+    ///
+    /// "Nothing in it" also means no history, archived tabs, or other profiles, so someone who
+    /// has closed every tab never sees it after updating. A launch that opens links skips it.
+    func beginFirstRunIfNeeded(opensLinks: Bool = false) async {
         guard let firstRunRecord, !firstRunRecord.isComplete, firstRun == nil, let space else { return }
-        guard spaces.count == 1, tabs.isEmpty, favorites.isEmpty else {
+        guard !opensLinks else { return }
+        let hasHistory = !((try? await store.history.recent(profileID: space.profileID, limit: 1)) ?? []).isEmpty
+        let hasArchive = !((try? await store.archivedTabs(in: space.id)) ?? []).isEmpty
+        let profileCount = ((try? await store.profiles()) ?? []).count
+        guard spaces.count == 1, tabs.isEmpty, favorites.isEmpty, !hasHistory, !hasArchive, profileCount <= 1,
+              self.space?.id == space.id else {
             firstRunRecord.isComplete = true
             return
         }
-        firstRun = FirstRun(spaceName: space.name)
+        firstRun = FirstRun(spaceID: space.id, spaceName: space.name)
+    }
+
+    /// Ends first run when Spaces arrive from elsewhere (iCloud's first sync) or its Space goes:
+    /// those Spaces are the person's, and first run must not rename or retheme them.
+    func endFirstRunIfSpacesChanged() {
+        guard let firstRun else { return }
+        if spaces.count > 1 || !spaces.contains(where: { $0.id == firstRun.spaceID }) {
+            finishFirstRun(announcing: nil)
+        }
     }
 
     /// Leaves the welcome: to importing when another browser is on this Mac, otherwise straight
@@ -126,20 +147,28 @@ extension BrowserModel {
 
     /// Names the first Space and gives it the chosen icon and color, then finishes first run.
     public func createFirstSpace() async {
-        guard let firstRun, let space else { return }
+        // Only the Space first run started with, and only while it's still the only one.
+        guard let firstRun, spaces.count == 1, let space = spaces.first(where: { $0.id == firstRun.spaceID }) else {
+            finishFirstRun(announcing: nil)
+            return
+        }
         let name = firstRun.spaceName.trimmingCharacters(in: .whitespacesAndNewlines)
         if !name.isEmpty, name != space.name { await renameSpace(space.id, to: name) }
-        await setSpaceAppearance(space.id, color: nil, icon: firstRun.spaceIcon)
+        await setSpaceAppearance(space.id, color: space.color.flatMap(SpaceColor.init(rawValue:)), icon: firstRun.spaceIcon)
         if let preset = firstRun.preset { await setSpaceTheme(space.id, theme: preset.theme) }
-        finishFirstRun()
+        finishFirstRun(announcing: "Your Space is ready")
     }
 
     /// Ends first run for good: after setting up a Space, or after an import (whose Spaces need
     /// no setting up).
     public func finishFirstRun() {
+        finishFirstRun(announcing: "You're all set")
+    }
+
+    func finishFirstRun(announcing message: String?) {
         guard firstRun != nil else { return }
         firstRunRecord?.isComplete = true
         firstRun = nil
-        announce("Welcome to Axo")
+        if let message { announce(message) }
     }
 }
