@@ -119,7 +119,13 @@ struct CommandSearchCache {
     private var actions: [CommandAction] = []
     private(set) var matchingTabs: [AxoCore.Tab] = []
     private(set) var matchingActions: [CommandAction] = []
-    private var searchTexts: [AxoCore.Tab.ID: (title: String, url: URL, text: String)] = [:]
+    private var searchTexts: [AxoCore.Tab.ID: (title: String, url: URL, text: SearchText)] = [:]
+
+    /// A tab's searchable text, and whether it's plain ASCII, worked out once.
+    struct SearchText {
+        let string: String
+        let isASCII: Bool
+    }
 
     /// Whether `query`'s matches are among the last query's: it extends the last query, over the
     /// same tabs and actions.
@@ -128,9 +134,10 @@ struct CommandSearchCache {
     }
 
     /// The text a tab is searched by: its title and address, kept while they stay the same.
-    mutating func searchText(for tab: AxoCore.Tab) -> String {
+    mutating func searchText(for tab: AxoCore.Tab) -> SearchText {
         if let kept = searchTexts[tab.id], kept.title == tab.title, kept.url == tab.url { return kept.text }
-        let text = "\(tab.title) \(tab.url.absoluteString)"
+        let string = "\(tab.title) \(tab.url.absoluteString)"
+        let text = SearchText(string: string, isASCII: string.allSatisfy(\.isASCII))
         searchTexts[tab.id] = (tab.title, tab.url, text)
         return text
     }
@@ -177,9 +184,12 @@ enum CommandRanking {
     }
 
     /// Results that don't need the database, narrowing the previous query's matches when the
-    /// query only adds to it (#122): every word of the longer query appears in whatever the
-    /// shorter one matched, so only those need checking again. `cache` keeps the session's
-    /// matches and each tab's searchable text.
+    /// query only adds to it (#122). For plain ASCII text, whatever matches the longer query
+    /// matched the shorter one, so only those need checking again. Text with characters that fold
+    /// into more than one ("ß" matches "ss", "ﬁ" matches "fi") can match a longer query but not a
+    /// shorter one ("Straße" matches "strass" but not "stras"), so those tabs are always checked
+    /// again, and so are the actions, which are few. `cache` keeps the session's matches and each
+    /// tab's searchable text.
     static func immediateResults(
         for query: String,
         tabs: [AxoCore.Tab],
@@ -197,10 +207,18 @@ enum CommandRanking {
             results.append(.open(url, isSearch: isSearch, text: trimmed))
         }
         let narrows = cache.canNarrow(to: trimmed, tabs: tabs, actions: availableActions)
-        let candidateTabs = narrows ? cache.matchingTabs : tabs
-        let candidateActions = narrows ? cache.matchingActions : availableActions
-        let matchingTabs = candidateTabs.filter { matches(trimmed, in: cache.searchText(for: $0)) }
-        let matchingActions = candidateActions.filter { matches(trimmed, in: $0.title) }
+        let matchingTabs: [AxoCore.Tab]
+        if narrows {
+            // The previous matches, plus every tab whose text isn't plain ASCII, in sidebar order.
+            let previous = Set(cache.matchingTabs.map(\.id))
+            matchingTabs = tabs.filter { tab in
+                let text = cache.searchText(for: tab)
+                return (previous.contains(tab.id) || !text.isASCII) && matches(trimmed, in: text.string)
+            }
+        } else {
+            matchingTabs = tabs.filter { matches(trimmed, in: cache.searchText(for: $0).string) }
+        }
+        let matchingActions = availableActions.filter { matches(trimmed, in: $0.title) }
         cache.remember(query: trimmed, tabs: tabs, actions: availableActions, matchingTabs: matchingTabs, matchingActions: matchingActions)
         results += matchingTabs.prefix(maxTabs).map(CommandResult.tab)
         results += matchingActions.prefix(maxActions).map(CommandResult.action)
