@@ -118,6 +118,7 @@ final class SidebarMenuUITests: XCTestCase {
     }
 
     /// The unpinned tabs' titles, in sidebar order.
+    @MainActor
     private func tabRows(in sidebar: XCUIElement) -> [String] {
         sidebar.staticTexts.matching(identifier: "tabRow").allElementsBoundByIndex.map { row in
             // The row's label is its title; its value is its state ("Unloaded" for a tab not
@@ -128,6 +129,7 @@ final class SidebarMenuUITests: XCTestCase {
 
     /// A folder's row, by its name, as `testFoldersHoldPinnedTabs` finds it. (The Pinned
     /// section's identifier replaces the row's own, so folder names here differ from tab titles.)
+    @MainActor
     private func folderRow(_ name: String, in sidebar: XCUIElement) -> XCUIElement {
         sidebar.staticTexts[name]
     }
@@ -190,6 +192,24 @@ final class SidebarMenuUITests: XCTestCase {
         choose("Go to Pinned Page", on: sidebar.staticTexts["Away"], in: app)
         XCTAssertTrue(sidebar.staticTexts["Start"].waitForExistence(timeout: 10))
         expectSelected("Start", in: app)
+        // By its label: the Pinned section's identifier replaces its rows' own (CLAUDE.md).
+        let goHome = sidebar.buttons["Go to Pinned Page"]
+        XCTAssertFalse(goHome.exists, "On its pinned page, no control to go back (#73)")
+
+        // Away again: the row's own control goes back (#73).
+        browse(to: "Elsewhere", in: app)
+        XCTAssertTrue(sidebar.staticTexts["Elsewhere"].waitForExistence(timeout: 5))
+        XCTAssertTrue(goHome.waitForExistence(timeout: 5), "Away from its pinned page, the row shows a control to go back")
+        // Clicked where it is, with the pointer already on the row: XCUITest's own click first
+        // scrolls the list, and the row's hover controls appear as the pointer arrives.
+        sidebar.staticTexts["Elsewhere"].hover()
+        let window = app.windows.firstMatch
+        let frame = goHome.frame
+        window.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: frame.midX - window.frame.minX, dy: frame.midY - window.frame.minY))
+            .click()
+        XCTAssertTrue(sidebar.staticTexts["Start"].waitForExistence(timeout: 10))
+        XCTAssertTrue(goHome.waitForNonExistence(timeout: 5), "Back on its pinned page")
 
         browse(to: "Later", in: app)
         XCTAssertTrue(sidebar.staticTexts["Later"].waitForExistence(timeout: 5))
