@@ -245,22 +245,17 @@ struct NewSpaceSheet: View {
             LabeledContent("Theme") {
                 ThemePresetGrid(selection: theme) { theme = $0 }
             }
-            // A labeled row holding a plain pop-up: a menu picker drawn by the grouped form
-            // itself had no accessibility action, which the audit reports.
-            LabeledContent("Profile") {
-                Picker("Profile", selection: $profileChoice) {
-                    Text(currentProfileName.map { "\($0) (this Space's)" } ?? "This Space's").tag(ProfileChoice.current)
-                    ForEach(profiles.filter { $0.id != model.space?.profileID }) { profile in
-                        Text(profile.name).tag(ProfileChoice.existing(profile.id))
-                    }
-                    Divider()
-                    Text("New Profile…").tag(ProfileChoice.new)
+            // Radio buttons: a profile list is short, and a menu picker in this sheet reported
+            // no accessibility action, which the audit fails on.
+            Picker("Profile", selection: $profileChoice) {
+                Text(currentProfileName.map { "\($0) (this Space's)" } ?? "This Space's").tag(ProfileChoice.current)
+                ForEach(profiles.filter { $0.id != model.space?.profileID }) { profile in
+                    Text(profile.name).tag(ProfileChoice.existing(profile.id))
                 }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .fixedSize()
-                .accessibilityIdentifier("spaceProfilePicker")
+                Text("New Profile").tag(ProfileChoice.new)
             }
+            .pickerStyle(.radioGroup)
+            .accessibilityIdentifier("spaceProfilePicker")
             if profileChoice == .new {
                 TextField("Profile name", text: $profileName, prompt: Text(trimmedName.isEmpty ? "Work" : trimmedName))
                     .accessibilityIdentifier("newProfileNameField")

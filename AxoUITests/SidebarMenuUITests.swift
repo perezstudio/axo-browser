@@ -518,7 +518,9 @@ final class SidebarMenuUITests: XCTestCase {
         spaceName.typeText("Garden")
         app.buttons["spaceIcon-leaf"].click()
         app.buttons["themePresetSage"].click()
-        XCTAssertTrue(app.popUpButtons["spaceProfilePicker"].exists, "It offers a profile, this Space's by default")
+        XCTAssertTrue(app.descendants(matching: .any)["spaceProfilePicker"].exists, "It offers a profile")
+        let thisSpaces = app.radioButtons.matching(NSPredicate(format: "label CONTAINS %@", "this Space's")).firstMatch
+        XCTAssertEqual(thisSpaces.value as? Int, 1, "This Space's by default")
         app.buttons["createSpaceButton"].click()
         XCTAssertTrue(sidebar.staticTexts["Garden"].waitForExistence(timeout: 5), "The new Space is shown")
         XCTAssertEqual(dots.count, 2)
@@ -553,7 +555,7 @@ final class SidebarMenuUITests: XCTestCase {
     }
 
     /// A Space's menu in the switcher: Rename…, and Delete Space… (disabled for the only Space),
-    /// plus the New Space sheet's New Profile… choice.
+    /// plus the New Space sheet's New Profile choice.
     @MainActor
     func testSpaceMenu() throws {
         let (app, sidebar) = launchApp()
@@ -574,10 +576,9 @@ final class SidebarMenuUITests: XCTestCase {
         let spaceName = app.textFields["spaceNameField"]
         XCTAssertTrue(spaceName.waitForExistence(timeout: 5))
         spaceName.typeText("Work")
-        let profilePicker = app.popUpButtons["spaceProfilePicker"]
-        XCTAssertTrue(profilePicker.exists)
-        profilePicker.click()
-        profilePicker.menuItems["New Profile…"].click()
+        let newProfile = app.radioButtons["New Profile"]
+        XCTAssertTrue(newProfile.exists)
+        newProfile.click()
         // The profile's name field has only a placeholder (the Space's name).
         let profileName = app.textFields["newProfileNameField"]
         XCTAssertTrue(profileName.waitForExistence(timeout: 5), "It asks for the profile's name")
