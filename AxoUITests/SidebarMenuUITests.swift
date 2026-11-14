@@ -198,7 +198,14 @@ final class SidebarMenuUITests: XCTestCase {
         browse(to: "Elsewhere", in: app)
         XCTAssertTrue(sidebar.staticTexts["Elsewhere"].waitForExistence(timeout: 5))
         XCTAssertTrue(goHome.waitForExistence(timeout: 5), "Away from its pinned page, the row shows a control to go back")
-        goHome.click()
+        // Clicked where it is, with the pointer already on the row: XCUITest's own click first
+        // scrolls the list, and the row's hover controls appear as the pointer arrives.
+        sidebar.staticTexts["Elsewhere"].hover()
+        let window = app.windows.firstMatch
+        let frame = goHome.frame
+        window.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: frame.midX - window.frame.minX, dy: frame.midY - window.frame.minY))
+            .click()
         XCTAssertTrue(sidebar.staticTexts["Start"].waitForExistence(timeout: 10))
         XCTAssertTrue(goHome.waitForNonExistence(timeout: 5), "Back on its pinned page")
 

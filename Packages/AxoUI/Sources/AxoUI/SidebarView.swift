@@ -274,17 +274,6 @@ struct SidebarTabRow: View {
                     Button(closeTitle) { close() }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-            // A pinned tab away from its pinned page shows it at a glance, as in Arc, with a
-            // control that goes back (#73).
-            if isAwayFromHome {
-                Button { goHome() } label: {
-                    TabRowCloseSquare(systemImage: "arrow.uturn.backward")
-                }
-                .buttonStyle(.borderless)
-                .help("Go to Pinned Page")
-                .accessibilityLabel("Go to Pinned Page")
-                .accessibilityIdentifier("goToPinnedPageButton")
-            }
             if isHovering {
                 // A borderless button in a List row gets its click without selecting the row
                 // first; the square is drawn in its label.
@@ -297,6 +286,18 @@ struct SidebarTabRow: View {
                 // Shown only under the pointer; VoiceOver and the keyboard also get the row's
                 // action, which is always there.
                 .accessibilityIdentifier("tabRowCloseButton")
+            }
+            // A pinned tab away from its pinned page shows it at a glance, as in Arc, with a
+            // control that goes back (#73). Last in the row, so the close button appearing on
+            // hover never moves it under the pointer.
+            if isAwayFromHome {
+                Button { goHome() } label: {
+                    TabRowCloseSquare(systemImage: "arrow.uturn.backward")
+                }
+                .buttonStyle(.borderless)
+                .help("Go to Pinned Page")
+                .accessibilityLabel("Go to Pinned Page")
+                .accessibilityIdentifier("goToPinnedPageButton")
             }
         }
         // The whole row's width counts as over it, not just its icon and title, for every row
