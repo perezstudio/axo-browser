@@ -496,6 +496,27 @@ final class SidebarMenuUITests: XCTestCase {
 
     // MARK: Spaces
 
+    /// The Space's name row between the favorites and Pinned (#171): it names the shown Space,
+    /// is a heading, and its menu renames the Space.
+    @MainActor
+    func testSpaceNameRowRenamesTheSpace() throws {
+        let (app, sidebar) = launchApp()
+        let row = sidebar.staticTexts["spaceNameRow"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(row.label.contains("Home") || (row.value as? String)?.contains("Home") == true, "It names the shown Space")
+
+        choose("Rename…", on: row, in: app)
+        let nameField = app.textFields["nameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        XCTAssertEqual(nameField.value as? String, "Home")
+        nameField.typeKey("a", modifierFlags: .command)
+        nameField.typeText("Personal\n")
+        func names(_ name: String) -> Bool { row.label.contains(name) || (row.value as? String)?.contains(name) == true }
+        let deadline = Date.now.addingTimeInterval(5)
+        while !names("Personal"), Date.now < deadline { RunLoop.current.run(until: .now.addingTimeInterval(0.2)) }
+        XCTAssertTrue(names("Personal"), "The row follows the rename")
+    }
+
     /// A Space's menu in the switcher: Rename…, and Delete Space… (disabled for the only Space),
     /// plus the New Space sheet's "Use a separate profile".
     @MainActor
