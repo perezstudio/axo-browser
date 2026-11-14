@@ -6,7 +6,7 @@ Guidance for Claude Code when working in this repository.
 
 Axo is a native, lean, open source web browser for macOS (iPhone and iPad later), inspired by Arc's sidebar and Spaces model. It is built on WebKit and SwiftUI, runs Chrome extensions through `WKWebExtension`, ships built-in DevTools, and integrates deeply with Apple platforms.
 
-The full plan, architecture, and reasoning behind every decision are in `docs/PLAN.md`. Read it before starting any milestone or making an architectural change. Brand assets and guidelines are in `docs/brand/`.
+The full plan, architecture, and reasoning behind every decision are in `docs/PLAN.md`. Read it before starting any milestone or making an architectural change. The interface plan for 1.0, mapped to the design canvas's boards and to GitHub issues, is `docs/ui-plan.md`; read its "What the boards agree on" before any UI change. Brand assets and guidelines are in `docs/brand/`.
 
 ## Stack
 
@@ -39,7 +39,7 @@ The full plan, architecture, and reasoning behind every decision are in `docs/PL
 - A modal overlay (`.accessibilityAddTraits(.isModal)`) hides the rest of the window from the accessibility tree. In UI tests, check the sidebar after it closes. Pinned rows don't have the `tabRow` identifier, because the Pinned section's identifier replaces it.
 - App Intents live in AxoIntegration and reach the app through `IntentBridge.current`, not `@Dependency`, which doesn't resolve in unit tests. The app's `AxoAppIntents` (`AppIntentsPackage`) includes `AxoIntegrationIntents`, so the metadata processor extracts the package's intents into the app. Add new intent packages there. Siri and Spotlight phrases (`AxoShortcuts`, an `AppShortcutsProvider`) live in the app target. New window actions go through the `IntentWindow` protocol, which `BrowserIntentWindow` implements.
 - iCloud sync (AxoSync) needs the iCloud entitlement, which needs a provisioning profile. Only the Release configuration signs with it (`Axo/Axo-Release.entitlements`, container `iCloud.com.perezstudio.Axo`, plus push notifications); Debug builds and tests use `Axo/Axo.entitlements` and don't sync. Keep the two files' other keys the same. `ICloudSyncController` (app target) only creates a `CloudKitSync` when `CloudKitSync.isAvailable` says the entitlement is there, never in test runs. Sync tests use `FakeCloud`, never iCloud.
-- Synced rows (profiles, Spaces, folders, pinned tabs) are tracked by triggers from migration `v12-sync`. A new column that should sync needs a new migration that updates the triggers, plus `SyncRecord.fieldNames` and `SyncStore`'s mapping. Tables that reference a Space must be handled in `SyncStore.finishFirstSync()`, which moves an untouched Space's rows.
+- Synced rows (profiles, Spaces, folders, pinned tabs, favorites) are tracked by triggers from migration `v12-sync`. A new column that should sync needs a new migration that updates the triggers, plus `SyncRecord.fieldNames` and `SyncStore`'s mapping. Tables that reference a Space must be handled in `SyncStore.finishFirstSync()`, which moves an untouched Space's rows.
 - Screen Time usage recording (`WebViewPool.reportsScreenTimeUsage`) is off in tests and UI testing mode. Screen Time's view sits above each page and must never take clicks unless it's blocking; a `WebViewHostTests` hit test checks that. It also has a size of its own (480 by 272 points), so `WebViewHost` takes any size it's offered (`sizeThatFits`); otherwise that became the page's minimum and windows with a page couldn't shrink.
 - Spotlight indexing and Handoff are off in test runs (the app doesn't start `SpotlightIndexer` and sets `isHandoffEnabled = false`), so test data never reaches the system index or the person's devices. Unit tests use a fake `SpotlightIndex`.
 - Tell VoiceOver users about changes they can't see with `BrowserModel.announce`, which tests replace to record messages. For actions with no other visible result, use `postNotice` instead, which announces the same message and shows a brief notice (`NoticeView` at the page column's bottom, or in the sidebar's address bar for `.addressBar` notices while it's on screen), with Undo when given one. Only actions the person took post notices (`closeTab(_:byPerson:)`); the engine's and extensions' changes are only announced. Notices go after a few seconds (`noticeSleep`, longer in test runs), stay while hovered (a hold belongs to one notice, `heldNoticeID`), and are dropped when the Space changes; Undo checks the tab is still archived in its Space. The notice capsule is the one overlay over pages that takes the pointer (for Undo and the hold); it's small and brief.
@@ -129,6 +129,7 @@ Approved third-party dependencies (all MIT-licensed). Ask before adding anything
 | --- | --- | --- |
 | [GRDB.swift](https://github.com/groue/GRDB.swift) | 7.11.1+ | AxoPersistence (database, migrations), AxoCore (record types), AxoImport (reading Chromium history) |
 | [GRDBQuery](https://github.com/groue/GRDBQuery) | 0.11.0+ | AxoUI |
+| [Sparkle](https://github.com/sparkle-project/Sparkle) | 2.x (approved November 2026, not added yet) | The Mac app only, for updates; the iOS app never links it |
 
 The lockfile is `Axo.xcworkspace/xcshareddata/swiftpm/Package.resolved`. Per-package `Package.resolved` files are gitignored.
 
@@ -145,7 +146,7 @@ The app is split into local Swift packages in `Packages/`. Respect the dependenc
 | AxoInspector | All private WebKit API (Web Inspector, picture in picture) | AxoWeb |
 | AxoChromium | The Chromium engine for the Mac (`ChromiumEngine`, a `WebEngine`), loading the axo-chromium fork's framework at runtime through the `AxoEngineAPI` protocol header. Mac only | AxoCore, AxoWeb |
 | AxoPersistence | GRDB database, migrations, FTS5 search index | GRDB |
-| AxoSync | `CKSyncEngine` sync of profiles, Spaces, folders, and pinned tabs | AxoPersistence, GRDB |
+| AxoSync | `CKSyncEngine` sync of profiles, Spaces, folders, pinned tabs, and favorites | AxoPersistence, GRDB |
 | AxoImport | Importing from Arc (sidebar JSON, Chromium history) and Chrome (bookmarks, history) | AxoCore, GRDB |
 | AxoIntegration | Default browser, location, App Intents, Focus filters, Spotlight, on-device page summaries, passkeys | AxoCore |
 
@@ -188,6 +189,7 @@ These come from deliberate decisions in `docs/PLAN.md`. Do not change them witho
 Update docs in the same change as the code they describe. Docs that no longer match the code count as a bug.
 
 - `docs/PLAN.md`: when a milestone's status changes, or when the work departs from the plan or adds to it. Departures from the plan still need approval first (see "Hard rules").
+- `docs/ui-plan.md`: check off an interface item in the PR that finishes it, and record decisions from its "Decisions needed first" when they're made.
 - `CLAUDE.md`: when a convention, command, package, or dependency changes, or when you learn something future sessions need to know.
 - `docs/webkit-gaps.md`: when you hit a `WKWebExtension` or WebKit limitation (see "Working style").
 - Package READMEs: when a package's public API, setup, or purpose changes. This matters most for the packages meant to be open sourced.
