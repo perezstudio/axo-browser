@@ -108,6 +108,9 @@ jobs:
 
       # The iOS app, and AxoiOS.xctestplan's package tests without its UI tests.
       - name: Build and test
+        env:
+          # Lets tests relax what this slow virtual simulator can't meet (timing ceilings).
+          TEST_RUNNER_AXO_HOSTED_RUNNER: "1"
         run: |
           xcodebuild test \
             -workspace Axo.xcworkspace -scheme AxoiOS -destination "id=$SIMULATOR" \
