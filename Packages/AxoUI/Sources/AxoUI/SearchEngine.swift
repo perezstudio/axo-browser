@@ -29,6 +29,16 @@ nonisolated public enum SearchEngine: String, CaseIterable, Sendable {
         }
     }
 
+    /// Whether `url` is one of the engines' results pages for a query, such as a search the
+    /// command bar made from text it took for an address ("node.js tutorial").
+    public static func isResultsPage(_ url: URL) -> Bool {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              components.queryItems?.contains(where: { $0.name == "q" }) == true else { return false }
+        return allCases.contains { engine in
+            engine.resultsURL.host() == url.host() && engine.resultsURL.path() == url.path()
+        }
+    }
+
     /// The results page for `query`.
     public func searchURL(for query: String) -> URL {
         var components = URLComponents(url: resultsURL, resolvingAgainstBaseURL: false)!
