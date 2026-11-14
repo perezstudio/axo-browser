@@ -433,6 +433,24 @@ public final class AppDatabase: Sendable {
                 """)
         }
 
+        // The command bar's ranking (#121): how often each page was opened by typing its address,
+        // and which result each query led to, per profile. Neither syncs (history doesn't).
+        migrator.registerMigration("v18-command-bar-ranking") { db in
+            try db.alter(table: "historyItem") { t in
+                t.add(column: "typedCount", .integer).notNull().defaults(to: 0)
+            }
+            try db.create(table: "commandChoice") { t in
+                t.column("profileID", .blob).notNull()
+                    .references("profile", onDelete: .cascade)
+                t.column("query", .text).notNull()
+                t.column("url", .text).notNull()
+                t.column("count", .integer).notNull().defaults(to: 1)
+                t.column("lastChosenAt", .datetime).notNull()
+                t.primaryKey(["profileID", "query", "url"])
+            }
+            try db.create(index: "commandChoice_on_profileID_lastChosenAt", on: "commandChoice", columns: ["profileID", "lastChosenAt"])
+        }
+
         return migrator
     }
 

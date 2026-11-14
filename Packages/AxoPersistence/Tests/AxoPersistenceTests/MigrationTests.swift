@@ -360,6 +360,29 @@ struct MigrationTests {
         }
     }
 
+    @Test func v18HistoryCountsTypedVisitsAndChoicesBelongToAProfile() throws {
+        let queue = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(queue, upTo: "v17-space-theme")
+        let profileID = UUID()
+        try queue.write { db in
+            try db.execute(sql: "INSERT INTO profile (id, name) VALUES (?, 'Default')", arguments: [profileID])
+            try db.execute(sql: "INSERT INTO historyItem (profileID, url, title, visitCount, lastVisitedAt) VALUES (?, 'https://a.example', 'A', 3, '2026-01-01')",
+                           arguments: [profileID])
+            try db.execute(sql: "DELETE FROM syncChange")
+        }
+        try AppDatabase.migrator.migrate(queue)
+        try queue.write { db in
+            #expect(try Int.fetchOne(db, sql: "SELECT typedCount FROM historyItem") == 0, "Existing history starts untyped")
+            #expect(try Int.fetchOne(db, sql: "SELECT visitCount FROM historyItem") == 3)
+            try db.execute(sql: "INSERT INTO commandChoice (profileID, query, url, lastChosenAt) VALUES (?, 'gm', 'https://mail.example', '2026-01-02')",
+                           arguments: [profileID])
+            #expect(try Int.fetchOne(db, sql: "SELECT count FROM commandChoice") == 1)
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM syncChange") == 0, "Neither syncs")
+            try db.execute(sql: "DELETE FROM profile")
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM commandChoice") == 0, "A profile's choices go with it")
+        }
+    }
+
     @Test func v14FavoritesBelongToAProfileAndSync() throws {
         let database = try AppDatabase.makeInMemory()
         let profileID = UUID(), favoriteID = UUID()
