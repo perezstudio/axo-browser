@@ -490,7 +490,7 @@ final class SidebarMenuUITests: XCTestCase {
     @MainActor
     func testSpaceNameRowRenamesTheSpace() throws {
         let (app, sidebar) = launchApp()
-        let row = sidebar.descendants(matching: .any)["spaceNameRow"]
+        let row = sidebar.staticTexts["spaceNameRow"]
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         XCTAssertTrue(row.label.contains("Home") || (row.value as? String)?.contains("Home") == true, "It names the shown Space")
 

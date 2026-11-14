@@ -177,7 +177,7 @@ struct SidebarSections: View {
     var body: some View {
         // The Space's name, between the favorites and Pinned, styled like a tab row (#171).
         Section {
-            SpaceNameRow(model: model, space: data.space)
+            SpaceNameRow(model: model, space: data.space, canDelete: model.spaces.count > 1)
         }
         if !data.pinnedTree.isEmpty {
             Section("Pinned") {
@@ -218,23 +218,27 @@ struct SidebarSections: View {
 struct SpaceNameRow: View {
     let model: BrowserModel
     let space: Space
+    /// Whether the Space can be deleted (it isn't the only one), from the parent, so a change to
+    /// another Space doesn't redraw every page's row.
+    let canDelete: Bool
 
     var body: some View {
         Label {
+            // The name is the row's element for VoiceOver and UI tests: a heading, as text.
             Text(space.name)
                 .lineLimit(1)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("spaceNameRow")
         } icon: {
             Image(systemName: space.icon ?? "square.stack")
+                .accessibilityHidden(true)
         }
         .fontWeight(.medium)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isHeader)
-        .accessibilityIdentifier("spaceNameRow")
         .contextMenu {
             Button("Rename…") { model.spaceToRename = space }
             Button("Edit Theme…") { model.beginEditingTheme(for: space.id, in: .sidebar) }
             Button("Delete Space…", role: .destructive) { model.spaceToDelete = space }
-                .disabled(model.spaces.count < 2)
+                .disabled(!canDelete)
         }
     }
 }
