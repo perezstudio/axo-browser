@@ -110,6 +110,50 @@ public enum CommandResult: Identifiable, Hashable {
     }
 }
 
+/// What one command bar session has matched so far (#122): the last query, every open tab and
+/// action it matched (not just the ones shown), and each tab's searchable text. Reset when the
+/// bar opens, when the query is cleared, and whenever the tabs or actions change.
+struct CommandSearchCache {
+    private(set) var query = ""
+    private var tabs: [AxoCore.Tab] = []
+    private var actions: [CommandAction] = []
+    private(set) var matchingTabs: [AxoCore.Tab] = []
+    private(set) var matchingActions: [CommandAction] = []
+    private var searchTexts: [AxoCore.Tab.ID: (title: String, url: URL, text: String)] = [:]
+
+    /// Whether `query`'s matches are among the last query's: it extends the last query, over the
+    /// same tabs and actions.
+    func canNarrow(to query: String, tabs: [AxoCore.Tab], actions: [CommandAction]) -> Bool {
+        !self.query.isEmpty && query.hasPrefix(self.query) && actions == self.actions && tabs == self.tabs
+    }
+
+    /// The text a tab is searched by: its title and address, kept while they stay the same.
+    mutating func searchText(for tab: AxoCore.Tab) -> String {
+        if let kept = searchTexts[tab.id], kept.title == tab.title, kept.url == tab.url { return kept.text }
+        let text = "\(tab.title) \(tab.url.absoluteString)"
+        searchTexts[tab.id] = (tab.title, tab.url, text)
+        return text
+    }
+
+    mutating func remember(query: String, tabs: [AxoCore.Tab], actions: [CommandAction],
+                           matchingTabs: [AxoCore.Tab], matchingActions: [CommandAction]) {
+        self.query = query
+        self.tabs = tabs
+        self.actions = actions
+        self.matchingTabs = matchingTabs
+        self.matchingActions = matchingActions
+    }
+
+    /// Forgets the matches (the searchable text stays, since it depends only on each tab).
+    mutating func reset() {
+        query = ""
+        tabs = []
+        actions = []
+        matchingTabs = []
+        matchingActions = []
+    }
+}
+
 /// Builds the command bar's results. Pure, so ranking is easy to test.
 enum CommandRanking {
     static let maxTabs = 5
@@ -128,8 +172,23 @@ enum CommandRanking {
         tabs: [AxoCore.Tab],
         availableActions: [CommandAction]
     ) -> [CommandResult] {
+        var cache = CommandSearchCache()
+        return immediateResults(for: query, tabs: tabs, availableActions: availableActions, cache: &cache)
+    }
+
+    /// Results that don't need the database, narrowing the previous query's matches when the
+    /// query only adds to it (#122): every word of the longer query appears in whatever the
+    /// shorter one matched, so only those need checking again. `cache` keeps the session's
+    /// matches and each tab's searchable text.
+    static func immediateResults(
+        for query: String,
+        tabs: [AxoCore.Tab],
+        availableActions: [CommandAction],
+        cache: inout CommandSearchCache
+    ) -> [CommandResult] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
+            cache.reset()
             return tabs.prefix(maxTabs * 2).map(CommandResult.tab)
         }
         var results: [CommandResult] = []
@@ -137,14 +196,14 @@ enum CommandRanking {
             let isSearch = url.host() == AddressInput.searchURL.host() && !trimmed.contains(".")
             results.append(.open(url, isSearch: isSearch, text: trimmed))
         }
-        results += tabs
-            .filter { matches(trimmed, in: "\($0.title) \($0.url.absoluteString)") }
-            .prefix(maxTabs)
-            .map(CommandResult.tab)
-        results += availableActions
-            .filter { matches(trimmed, in: $0.title) }
-            .prefix(maxActions)
-            .map(CommandResult.action)
+        let narrows = cache.canNarrow(to: trimmed, tabs: tabs, actions: availableActions)
+        let candidateTabs = narrows ? cache.matchingTabs : tabs
+        let candidateActions = narrows ? cache.matchingActions : availableActions
+        let matchingTabs = candidateTabs.filter { matches(trimmed, in: cache.searchText(for: $0)) }
+        let matchingActions = candidateActions.filter { matches(trimmed, in: $0.title) }
+        cache.remember(query: trimmed, tabs: tabs, actions: availableActions, matchingTabs: matchingTabs, matchingActions: matchingActions)
+        results += matchingTabs.prefix(maxTabs).map(CommandResult.tab)
+        results += matchingActions.prefix(maxActions).map(CommandResult.action)
         return results
     }
 

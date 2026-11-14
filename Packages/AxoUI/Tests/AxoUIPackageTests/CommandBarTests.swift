@@ -126,6 +126,82 @@ struct CommandBarTests {
         #expect(model.commandSelection == 1)
     }
 
+    /// Many tabs with varied titles and addresses, for narrowing tests.
+    private static func manyTabs(_ count: Int) -> [AxoCore.Tab] {
+        let words = ["axolotl", "pond", "garden", "swift", "webkit", "recipes", "news", "maps", "café", "Résumé"]
+        let space = UUID()
+        return (0..<count).map { index in
+            let title = "\(words[index % words.count]) \(words[(index / 3) % words.count]) \(index)"
+            return AxoCore.Tab(id: UUID(), spaceID: space, url: URL(string: "https://site\(index % 17).example/\(words[(index / 7) % words.count])")!,
+                               title: title, sortKey: String(format: "%05d", index))
+        }
+    }
+
+    /// Typing letter by letter, words added, Backspace, and a fresh start all give exactly what a
+    /// fresh search gives (#122).
+    @Test func narrowingGivesTheSameResultsAsAFreshSearch() {
+        let tabs = Self.manyTabs(400)
+        let actions = CommandAction.allCases
+        var cache = CommandSearchCache()
+        let typed = ["a", "ax", "axo", "axol", "axol p", "axol po", "axol p", "axo", "s", "sw", "swift w", "café", "cafe", "re", "rés", "", "g", "ga"]
+        for query in typed {
+            let narrowed = CommandRanking.immediateResults(for: query, tabs: tabs, availableActions: actions, cache: &cache)
+            let fresh = CommandRanking.immediateResults(for: query, tabs: tabs, availableActions: actions)
+            #expect(narrowed.map(\.id) == fresh.map(\.id), "“\(query)”")
+        }
+    }
+
+    /// A tab that opens or changes while the bar is open is searched, not left out by the
+    /// narrowed matches.
+    @Test func changedTabsAreSearchedAgain() {
+        var tabs = Self.manyTabs(50)
+        var cache = CommandSearchCache()
+        _ = CommandRanking.immediateResults(for: "zebr", tabs: tabs, availableActions: [], cache: &cache)
+        #expect(cache.matchingTabs.isEmpty)
+        // "zebra" extends "zebr", whose matches were none; the renamed tab must still be found.
+        tabs[3].title = "Zebra Stripes"
+        let results = CommandRanking.immediateResults(for: "zebra", tabs: tabs, availableActions: [], cache: &cache)
+        #expect(results.contains { $0.id == "tab:\(tabs[3].id)" }, "The renamed tab is found")
+        // So is a tab opened meanwhile.
+        tabs.append(AxoCore.Tab(id: UUID(), spaceID: tabs[0].spaceID, url: URL(string: "https://zoo.example/zebras")!, title: "Zoo", sortKey: "zzz"))
+        let more = CommandRanking.immediateResults(for: "zebra s", tabs: tabs, availableActions: [], cache: &cache)
+        #expect(more.contains { $0.id == "tab:\(tabs[50].id)" }, "The new tab is found")
+    }
+
+    /// History for an older query never lands after a newer one's (#122): typing on cancels it.
+    @Test func olderHistoryResultsAreIgnored() async throws {
+        try await store.history.recordVisit(to: URL(string: "https://apple.example/")!, title: "Apple Orchard", profileID: profileID)
+        try await store.history.recordVisit(to: URL(string: "https://abacus.example/")!, title: "Abacus Lessons", profileID: profileID)
+        model.showCommandBar()
+        model.setCommandQuery("a")
+        model.setCommandQuery("ab")
+        try await waitUntil { model.commandResults.contains { if case .history = $0 { true } else { false } } }
+        for _ in 0..<20 { await Task.yield() }
+        let titles = model.commandResults.compactMap { result -> String? in
+            if case .history(let item) = result { item.title } else { nil }
+        }
+        #expect(titles == ["Abacus Lessons"], "Only “ab”'s history")
+    }
+
+    /// Prints how long a keystroke's immediate results take with many tabs, fresh and narrowed,
+    /// for the PR's numbers. It checks only that narrowing isn't slower.
+    @Test func narrowingIsntSlowerThanSearchingAgain() {
+        let tabs = Self.manyTabs(500)
+        let actions = CommandAction.allCases
+        let typed = ["g", "ga", "gar", "gard", "garde", "garden", "garden p", "garden po"]
+        let clock = ContinuousClock()
+        var cache = CommandSearchCache()
+        let narrowed = clock.measure {
+            for _ in 0..<20 { cache = CommandSearchCache(); for q in typed { _ = CommandRanking.immediateResults(for: q, tabs: tabs, availableActions: actions, cache: &cache) } }
+        }
+        let fresh = clock.measure {
+            for _ in 0..<20 { for q in typed { _ = CommandRanking.immediateResults(for: q, tabs: tabs, availableActions: actions) } }
+        }
+        let keystrokes = Double(20 * typed.count)
+        print("Command bar, 500 tabs: \(fresh / keystrokes) per keystroke searching again, \(narrowed / keystrokes) narrowing")
+        #expect(narrowed <= fresh * 1.5)
+    }
+
     @Test func historyAppearsAfterTheImmediateRowsAndOpensInANewTab() async throws {
         try await store.history.recordVisit(to: URL(string: "https://webkit.org/blog")!, title: "WebKit Blog", profileID: profileID)
         model.showCommandBar()
