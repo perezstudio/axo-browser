@@ -512,7 +512,7 @@ final class SidebarMenuUITests: XCTestCase {
     }
 
     /// A Space's menu in the switcher: Rename…, and Delete Space… (disabled for the only Space),
-    /// plus the New Space sheet's "Use a separate profile".
+    /// plus the New Space sheet's New Profile… choice.
     @MainActor
     func testSpaceMenu() throws {
         let (app, sidebar) = launchApp()

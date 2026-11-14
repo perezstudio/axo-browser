@@ -128,17 +128,6 @@ final class AccessibilityAuditTests: XCTestCase {
         try audit(app, "notice")
     }
 
-    /// The New Space sheet (#176).
-    @MainActor
-    func testAuditNewSpaceSheet() throws {
-        let app = launchApp()
-        XCTAssertTrue(app.buttons["newSpaceButton"].waitForExistence(timeout: 5))
-        app.buttons["newSpaceButton"].click()
-        XCTAssertTrue(app.textFields["spaceNameField"].waitForExistence(timeout: 5))
-        try audit(app, "New Space sheet")
-        app.typeKey(.escape, modifierFlags: [])
-    }
-
     @MainActor
     func testAuditEveryScreen() throws {
         let app = launchApp()

@@ -316,7 +316,7 @@ struct NewProfileSheet: View {
                 .accessibilityAddTraits(.isHeader)
             TextField("Name", text: $name, prompt: Text("Work"))
                 .focused($isNameFocused)
-                .accessibilityIdentifier("newProfileName")
+                .accessibilityIdentifier("settingsNewProfileName")
             TextField("First Space", text: $spaceName, prompt: Text(name.trimmed.isEmpty ? "Work" : name.trimmed))
                 .accessibilityIdentifier("profileFirstSpaceField")
             Text("A profile keeps its own cookies, logins, history, extensions, and favorites, so it starts signed out of every site.")

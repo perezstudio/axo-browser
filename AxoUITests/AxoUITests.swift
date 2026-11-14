@@ -841,7 +841,7 @@ final class AxoUITests: XCTestCase {
 
         // A new profile comes with its first Space (#176).
         app.buttons["addProfileButton"].click()
-        let nameField = app.textFields["newProfileName"]
+        let nameField = app.textFields["settingsNewProfileName"]
         XCTAssertTrue(nameField.waitForExistence(timeout: 5))
         nameField.typeText("Work")
         let firstSpace = app.textFields["profileFirstSpaceField"]
@@ -851,7 +851,9 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(list.staticTexts["Work"].waitForExistence(timeout: 5))
         expectation(for: NSPredicate(format: "value == 'Work'"), evaluatedWith: app.textFields["profileNameField"])
         waitForExpectations(timeout: 5)
-        XCTAssertTrue(app.staticTexts["Office"].waitForExistence(timeout: 5), "Its first Space uses it")
+        // The Settings window: the one holding the profile list, not the browser window's sidebar.
+        let settings = app.windows.containing(.any, identifier: "profileList").firstMatch
+        XCTAssertTrue(settings.staticTexts["Office"].waitForExistence(timeout: 5), "Its first Space uses it, in Settings")
 
         list.staticTexts["Default"].click()
         app.buttons["deleteProfileButton"].click()
