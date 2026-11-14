@@ -43,9 +43,12 @@ jobs:
             CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
             > "$RUNNER_TEMP/build.log" 2>&1 \
             || { grep -E 'error:' "$RUNNER_TEMP/build.log"; tail -50 "$RUNNER_TEMP/build.log"; exit 1; }
-          # New warnings in Axo's own code fail the build here, as they do in the local checks.
-          if grep -E '^/.*/(Axo|AxoiOS|Packages)/.*: warning:' "$RUNNER_TEMP/build.log" | sort -u | tee "$RUNNER_TEMP/warnings.txt" | grep -q .; then
-            echo "::error::The build has warnings in Axo's code (see above)."
+          # Warnings in any of Axo's own files (the app, its tests, and the packages; not
+          # dependencies, which build under DerivedData) fail the build, as in the local checks.
+          { grep -F "$GITHUB_WORKSPACE/" "$RUNNER_TEMP/build.log" | grep ': warning:' | sort -u; } > "$RUNNER_TEMP/warnings.txt" || true
+          if [[ -s "$RUNNER_TEMP/warnings.txt" ]]; then
+            sed 's/^/::warning::/' "$RUNNER_TEMP/warnings.txt"
+            echo "::error::The build has warnings in Axo's code."
             exit 1
           fi
 
@@ -87,12 +90,17 @@ jobs:
           sudo xcode-select -s "$XCODE"
           xcodebuild -version
 
-      # The newest iPhone simulator the runner has, so a renamed model doesn't break the job.
+      # An iPhone on the newest iOS runtime the runner has (simctl doesn't list runtimes in
+      # version order), so a renamed model or an older runtime doesn't break the job.
       - name: Choose a simulator
         run: |
           UDID="$(xcrun simctl list devices available -j | python3 -c '
           import json, sys
-          devices = [d for runtime, ds in json.load(sys.stdin)["devices"].items() if "iOS" in runtime for d in ds if d["name"].startswith("iPhone")]
+          import re
+          def version(runtime):
+              return [int(n) for n in re.findall(r"iOS-(\d+(?:-\d+)*)", runtime)[0].split("-")] if "iOS-" in runtime else []
+          runtimes = sorted((r for r in json.load(sys.stdin)["devices"].items() if "iOS-" in r[0]), key=lambda r: version(r[0]))
+          devices = [d for _, ds in runtimes[-1:] for d in ds if d["name"].startswith("iPhone")]
           print(devices[-1]["udid"] if devices else "")')"
           [[ -n "$UDID" ]] || { echo "::error::No iPhone simulator on this runner."; exit 1; }
           echo "SIMULATOR=$UDID" >> "$GITHUB_ENV"
@@ -110,6 +118,12 @@ jobs:
             > "$RUNNER_TEMP/ios.log" 2>&1 \
             || { grep -E 'error:|failed' "$RUNNER_TEMP/ios.log" | head -40; tail -40 "$RUNNER_TEMP/ios.log"; exit 1; }
           grep -E 'TEST SUCCEEDED|Executed' "$RUNNER_TEMP/ios.log" | tail -3
+          { grep -F "$GITHUB_WORKSPACE/" "$RUNNER_TEMP/ios.log" | grep ': warning:' | sort -u; } > "$RUNNER_TEMP/ios-warnings.txt" || true
+          if [[ -s "$RUNNER_TEMP/ios-warnings.txt" ]]; then
+            sed 's/^/::warning::/' "$RUNNER_TEMP/ios-warnings.txt"
+            echo "::error::The iOS build has warnings in Axo's code."
+            exit 1
+          fi
 
       - name: Upload the result bundle
         if: failure()
@@ -119,5 +133,6 @@ jobs:
           path: |
             ${{ runner.temp }}/iOSTests.xcresult
             ${{ runner.temp }}/ios.log
+            ${{ runner.temp }}/ios-warnings.txt
           if-no-files-found: ignore
           retention-days: 7
