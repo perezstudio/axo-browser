@@ -78,16 +78,17 @@ struct AddressDisplayTests {
     @Test func theSearchPageShowsWhatWasSearched() {
         let search = AddressInput.searchURL(for: "axolotl facts")
         #expect(AddressDisplay.text(for: search) == "axolotl facts")
-        #expect(text("https://duckduckgo.com/?q=") == "duckduckgo.com", "No terms: the site")
-        #expect(text("https://duckduckgo.com/settings?q=x") == "duckduckgo.com", "Not the results page")
+        #expect(text("https://www.google.com/search?q=") == "google.com", "No terms: the site")
+        #expect(text("https://www.google.com/preferences?q=x") == "google.com", "Not the results page")
+        #expect(text("https://duckduckgo.com/?q=axolotl") == "duckduckgo.com", "Another engine's results aren't the search page")
         #expect(AddressDisplay.shown(for: search)?.kind == .search, "Marked as a search")
     }
 
     @Test func searchTermsCantPassForASite() {
-        #expect(AddressDisplay.text(for: AddressInput.searchURL(for: "paypal.com")) == "duckduckgo.com", "Terms that look like an address")
-        #expect(AddressDisplay.text(for: AddressInput.searchURL(for: "https://bank.example")) == "duckduckgo.com")
+        #expect(AddressDisplay.text(for: AddressInput.searchURL(for: "paypal.com")) == "google.com", "Terms that look like an address")
+        #expect(AddressDisplay.text(for: AddressInput.searchURL(for: "https://bank.example")) == "google.com")
         #expect(AddressDisplay.text(for: AddressInput.searchURL(for: "good \u{202E}moc.knab")) == "good moc.knab", "Right-to-left overrides go")
-        #expect(AddressDisplay.text(for: URL(string: "http://duckduckgo.com/?q=axolotl")!) == "duckduckgo.com", "Only over https")
+        #expect(AddressDisplay.text(for: URL(string: "http://www.google.com/search?q=axolotl")!) == "google.com", "Only over https")
     }
 
     @Test func plainHTTPSitesAreMarkedNotSecure() {

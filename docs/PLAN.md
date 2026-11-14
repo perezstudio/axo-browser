@@ -485,4 +485,4 @@ Open questions:
 - [ ] Sponsorship setup and a possible supporter tier
 - [x] Mascot design and visual identity (settled, see Brand)
 - [ ] Trademark, domain, and App Store name checks for Axo
-- [x] Default search engine: decided in November 2026, Google by default, with Bing and DuckDuckGo as the alternatives offered in Settings › Search (#132). No search step at onboarding. Replacing the DuckDuckGo placeholder in `AddressInput` is in `docs/ui-plan.md`.
+- [x] Default search engine: decided in November 2026, Google by default, with Bing and DuckDuckGo as the alternatives offered in Settings › Search (#132). No search step at onboarding. Searches go to Google (`SearchEngine.default`, #172).

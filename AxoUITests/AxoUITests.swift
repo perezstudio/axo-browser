@@ -1237,8 +1237,9 @@ final class AxoUITests: XCTestCase {
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
         // The link points at a closed loopback port, so nothing leaves the machine.
-        AxoUITests.openPage("data:text/html,<title>Home</title><a href='http://127.0.0.1:9/far'>Far away</a>", in: app)
-        XCTAssertTrue(sidebar.staticTexts["Home"].waitForExistence(timeout: 10))
+        // Not titled after the Space ("Home"), whose name row would match instead.
+        AxoUITests.openPage("data:text/html,<title>Harbor</title><a href='http://127.0.0.1:9/far'>Far away</a>", in: app)
+        XCTAssertTrue(sidebar.staticTexts["Harbor"].waitForExistence(timeout: 10))
         app.typeKey("p", modifierFlags: [.command, .control])
         XCTAssertTrue(sidebar.staticTexts["Pinned"].waitForExistence(timeout: 5))
 
@@ -1251,7 +1252,7 @@ final class AxoUITests: XCTestCase {
         app.typeKey(.escape, modifierFlags: [])
         XCTAssertTrue(peek.waitForNonExistence(timeout: 5), "Esc closes Peek")
         // (While Peek is open it's modal, so the sidebar isn't in the accessibility tree.)
-        XCTAssertTrue(sidebar.staticTexts["Home"].waitForExistence(timeout: 5))
+        XCTAssertTrue(sidebar.staticTexts["Harbor"].waitForExistence(timeout: 5))
         XCTAssertFalse(sidebar.staticTexts["127.0.0.1"].exists, "Peek never joined the sidebar")
 
         link.click()
