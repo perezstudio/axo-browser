@@ -110,6 +110,57 @@ public enum CommandResult: Identifiable, Hashable {
     }
 }
 
+/// What one command bar session has matched so far (#122): the last query, every open tab and
+/// action it matched (not just the ones shown), and each tab's searchable text. Reset when the
+/// bar opens, when the query is cleared, and whenever the tabs or actions change.
+struct CommandSearchCache {
+    private(set) var query = ""
+    private var tabs: [AxoCore.Tab] = []
+    private var actions: [CommandAction] = []
+    private(set) var matchingTabs: [AxoCore.Tab] = []
+    private(set) var matchingActions: [CommandAction] = []
+    private var searchTexts: [AxoCore.Tab.ID: (title: String, url: URL, text: SearchText)] = [:]
+
+    /// A tab's searchable text, and whether it's plain ASCII, worked out once.
+    struct SearchText {
+        let string: String
+        let isASCII: Bool
+    }
+
+    /// Whether `query`'s matches are among the last query's: it extends the last query, over the
+    /// same tabs and actions.
+    func canNarrow(to query: String, tabs: [AxoCore.Tab], actions: [CommandAction]) -> Bool {
+        !self.query.isEmpty && query.hasPrefix(self.query) && actions == self.actions && tabs == self.tabs
+    }
+
+    /// The text a tab is searched by: its title and address, kept while they stay the same.
+    mutating func searchText(for tab: AxoCore.Tab) -> SearchText {
+        if let kept = searchTexts[tab.id], kept.title == tab.title, kept.url == tab.url { return kept.text }
+        let string = "\(tab.title) \(tab.url.absoluteString)"
+        let text = SearchText(string: string, isASCII: string.allSatisfy(\.isASCII))
+        searchTexts[tab.id] = (tab.title, tab.url, text)
+        return text
+    }
+
+    mutating func remember(query: String, tabs: [AxoCore.Tab], actions: [CommandAction],
+                           matchingTabs: [AxoCore.Tab], matchingActions: [CommandAction]) {
+        self.query = query
+        self.tabs = tabs
+        self.actions = actions
+        self.matchingTabs = matchingTabs
+        self.matchingActions = matchingActions
+    }
+
+    /// Forgets the matches (the searchable text stays, since it depends only on each tab).
+    mutating func reset() {
+        query = ""
+        tabs = []
+        actions = []
+        matchingTabs = []
+        matchingActions = []
+    }
+}
+
 /// Builds the command bar's results. Pure, so ranking is easy to test.
 enum CommandRanking {
     static let maxTabs = 5
@@ -128,8 +179,26 @@ enum CommandRanking {
         tabs: [AxoCore.Tab],
         availableActions: [CommandAction]
     ) -> [CommandResult] {
+        var cache = CommandSearchCache()
+        return immediateResults(for: query, tabs: tabs, availableActions: availableActions, cache: &cache)
+    }
+
+    /// Results that don't need the database, narrowing the previous query's matches when the
+    /// query only adds to it (#122). For plain ASCII text, whatever matches the longer query
+    /// matched the shorter one, so only those need checking again. Text with characters that fold
+    /// into more than one ("ß" matches "ss", "ﬁ" matches "fi") can match a longer query but not a
+    /// shorter one ("Straße" matches "strass" but not "stras"), so those tabs are always checked
+    /// again, and so are the actions, which are few. `cache` keeps the session's matches and each
+    /// tab's searchable text.
+    static func immediateResults(
+        for query: String,
+        tabs: [AxoCore.Tab],
+        availableActions: [CommandAction],
+        cache: inout CommandSearchCache
+    ) -> [CommandResult] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
+            cache.reset()
             return tabs.prefix(maxTabs * 2).map(CommandResult.tab)
         }
         var results: [CommandResult] = []
@@ -137,14 +206,22 @@ enum CommandRanking {
             let isSearch = url.host() == AddressInput.searchURL.host() && !trimmed.contains(".")
             results.append(.open(url, isSearch: isSearch, text: trimmed))
         }
-        results += tabs
-            .filter { matches(trimmed, in: "\($0.title) \($0.url.absoluteString)") }
-            .prefix(maxTabs)
-            .map(CommandResult.tab)
-        results += availableActions
-            .filter { matches(trimmed, in: $0.title) }
-            .prefix(maxActions)
-            .map(CommandResult.action)
+        let narrows = cache.canNarrow(to: trimmed, tabs: tabs, actions: availableActions)
+        let matchingTabs: [AxoCore.Tab]
+        if narrows {
+            // The previous matches, plus every tab whose text isn't plain ASCII, in sidebar order.
+            let previous = Set(cache.matchingTabs.map(\.id))
+            matchingTabs = tabs.filter { tab in
+                let text = cache.searchText(for: tab)
+                return (previous.contains(tab.id) || !text.isASCII) && matches(trimmed, in: text.string)
+            }
+        } else {
+            matchingTabs = tabs.filter { matches(trimmed, in: cache.searchText(for: $0).string) }
+        }
+        let matchingActions = availableActions.filter { matches(trimmed, in: $0.title) }
+        cache.remember(query: trimmed, tabs: tabs, actions: availableActions, matchingTabs: matchingTabs, matchingActions: matchingActions)
+        results += matchingTabs.prefix(maxTabs).map(CommandResult.tab)
+        results += matchingActions.prefix(maxActions).map(CommandResult.action)
         return results
     }
 
