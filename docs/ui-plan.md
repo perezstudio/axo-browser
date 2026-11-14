@@ -102,7 +102,7 @@ The boards: Page tools, Page context menu, Prompts and extensions toolbar, Split
 
 The boards: Settings, Extensions window, iCloud sync.
 
-- [ ] **Settings in a sidebar layout like System Settings (#85).** The board's panes, order, and sections: General, Profiles, Spaces, Search, Link Routing, Site Customizations, iCloud.
+- [x] **Settings in a sidebar layout like System Settings (#85).** The board's panes, order, and sections: General, Profiles, Spaces, Search, Link Routing, Site Customizations, iCloud. Built with the panes that exist; Search (#132) and Website Permissions (#133) join `SettingsPane` when they're built, and Link Routing and Site Customizations move to grouped forms with their board passes.
 - [ ] **Website Permissions pane (#133).** Each permission's default and the sites that asked, per profile.
 - [ ] **Search (#132).** Engines, keywords, and a default per profile: Google by default, with Bing and DuckDuckGo offered (decision 6).
 - [ ] **Extensions window per profile (#131).** The board's list and details: the state in a word, attention dots, Pin to toolbar, shortcuts with clashes struck through, site access (#54), user scripts, Developer mode, About, and Remove….

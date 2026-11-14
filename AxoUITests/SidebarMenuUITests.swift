@@ -560,14 +560,12 @@ final class SidebarMenuUITests: XCTestCase {
 
         // Settings › Profiles lists the new Space's own profile, named after it.
         app.typeKey(",", modifierFlags: .command)
-        let profiles = app.toolbars.buttons["Profiles"]
-        XCTAssertTrue(profiles.waitForExistence(timeout: 5))
-        profiles.click()
+        AxoUITests.selectSettingsPane("profiles", in: app)
         let list = app.outlines["profileList"].exists ? app.outlines["profileList"] : app.tables["profileList"]
         XCTAssertTrue(list.staticTexts["Work"].waitForExistence(timeout: 5), "The Space got its own profile")
         XCTAssertTrue(list.staticTexts["Default"].exists)
         app.typeKey("w", modifierFlags: .command)
-        XCTAssertTrue(profiles.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["settingsPane.profiles"].waitForNonExistence(timeout: 5))
 
         choose("Delete Space…", on: dots.element(boundBy: 1), in: app)
         let confirm = app.sheets.buttons["Delete Space"].firstMatch

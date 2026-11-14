@@ -80,6 +80,8 @@ struct AxoApp: App {
             SettingsView(model: model)
                 .defaultAppStorage(AppEnvironment.settings)
         }
+        // Resizable down to SettingsView's minimum, like System Settings (#85).
+        .windowResizability(.contentMinSize)
         .commands {
             if AppEnvironment.isUITesting {
                 // UI tests can't send links from another app: XCUIApplication.open hands them to a
