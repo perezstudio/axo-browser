@@ -250,7 +250,8 @@ struct NewSpaceSheet: View {
                 ForEach(profiles.filter { $0.id != model.space?.profileID }) { profile in
                     Text(profile.name).tag(ProfileChoice.existing(profile.id))
                 }
-                Divider()
+                // No divider: a divider in a picker's menu leaves its pop-up button with no
+                // accessibility action (the audit fails on it).
                 Text("New Profile…").tag(ProfileChoice.new)
             }
             .accessibilityIdentifier("spaceProfilePicker")
