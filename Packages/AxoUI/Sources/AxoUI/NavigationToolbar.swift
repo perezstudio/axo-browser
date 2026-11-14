@@ -15,6 +15,8 @@ struct NavigationToolbar: ToolbarContent {
             ToolbarItemGroup(placement: .navigation) {
                 BackForwardButtons(model: model)
             }
+            // Without a spacer, macOS draws neighboring items in one glass group.
+            ToolbarSpacer(.fixed, placement: .navigation)
             ToolbarItem(placement: .navigation) {
                 ReloadButton(model: model)
             }
@@ -53,6 +55,8 @@ struct SidebarNavigationToolbar: ToolbarContent {
         ToolbarItemGroup(placement: .navigation) {
             BackForwardButtons(model: model)
         }
+        // Without a spacer, macOS draws neighboring items in one glass group.
+        ToolbarSpacer(.fixed, placement: .navigation)
         ToolbarItem(placement: .navigation) {
             ReloadButton(model: model)
         }

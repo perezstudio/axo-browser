@@ -687,8 +687,10 @@ final class AxoUITests: XCTestCase {
             let back = app.buttons["backButton"].frame
             let forward = app.buttons["forwardButton"].frame
             let reload = app.buttons["reloadButton"].frame
-            XCTAssertGreaterThan(reload.minX - forward.maxX, forward.minX - back.maxX + 4,
-                                 "\(appearance): reload is its own circle, farther from forward than forward is from back")
+            // Toolbar items report their whole slots, which touch within a glass group; the
+            // spacer that gives reload its own glass puts a gap before its slot.
+            XCTAssertGreaterThan(reload.minX - forward.maxX, forward.minX - back.maxX + 2,
+                                 "\(appearance): reload is its own circle, apart from back and forward")
             app.terminate()
         }
     }
