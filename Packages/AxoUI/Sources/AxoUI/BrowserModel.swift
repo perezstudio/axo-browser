@@ -205,6 +205,8 @@ public final class BrowserModel {
     @ObservationIgnored let now: () -> Date
     @ObservationIgnored private var archiveTask: Task<Void, Never>?
     @ObservationIgnored private var commandSearchTask: Task<Void, Never>?
+    /// The command bar session's matches so far, which a longer query narrows (#122).
+    @ObservationIgnored var commandSearchCache = CommandSearchCache()
     /// Opens the Web Inspector. Set by the app.
     @ObservationIgnored public var developerTools: (any DeveloperToolsProviding)?
     /// Installs and manages extensions. Set by the app.
@@ -1363,6 +1365,7 @@ public final class BrowserModel {
         refreshDefaultBrowserStatus()
         isCommandBarVisible = true
         commandQuery = ""
+        commandSearchCache = CommandSearchCache()
         commandBarEditedTabID = nil
         isAddressEditedInSidebar = false
         refreshCommandResults()
@@ -1372,6 +1375,7 @@ public final class BrowserModel {
     /// has already gone where the person chose, such as the find field after ⌘F).
     public func hideCommandBar(focusingPage: Bool = true) {
         commandSearchTask?.cancel()
+        commandSearchCache = CommandSearchCache()
         let wasVisible = isCommandBarVisible
         isCommandBarVisible = false
         pendingSplitAnchor = nil
@@ -1396,7 +1400,8 @@ public final class BrowserModel {
         // Favorites switch like tabs, but can't join a split view.
         let favoriteTabs = pendingSplitAnchor == nil ? space.map { space in favorites.map { $0.tab(in: space.id) } } ?? [] : []
         let openTabs = favoriteTabs + tabs
-        commandResults = CommandRanking.immediateResults(for: query, tabs: openTabs, availableActions: availableActions)
+        commandResults = CommandRanking.immediateResults(for: query, tabs: openTabs, availableActions: availableActions,
+                                                         cache: &commandSearchCache)
         commandSelection = 0
         commandSearchTask?.cancel()
         // A very long query (a data: page's address being edited) isn't worth searching history for.
