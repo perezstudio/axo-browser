@@ -220,9 +220,18 @@ enum CommandRanking {
         }
         let matchingActions = availableActions.filter { matches(trimmed, in: $0.title) }
         cache.remember(query: trimmed, tabs: tabs, actions: availableActions, matchingTabs: matchingTabs, matchingActions: matchingActions)
-        results += matchingTabs.prefix(maxTabs).map(CommandResult.tab)
+        // Open tabs by when they were last used, most recent first (#121); the sort is stable,
+        // so ties keep sidebar order.
+        results += sortedByUse(matchingTabs).prefix(maxTabs).map(CommandResult.tab)
         results += matchingActions.prefix(maxActions).map(CommandResult.action)
         return results
+    }
+
+    /// Tabs by when they were last used, most recent first, keeping sidebar order for ties.
+    static func sortedByUse(_ tabs: [AxoCore.Tab]) -> [AxoCore.Tab] {
+        tabs.enumerated().sorted { a, b in
+            a.element.lastActiveAt != b.element.lastActiveAt ? a.element.lastActiveAt > b.element.lastActiveAt : a.offset < b.offset
+        }.map(\.element)
     }
 
     /// History results to add, skipping pages already open as tabs.

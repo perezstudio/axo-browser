@@ -282,6 +282,12 @@ public final class BrowserModel {
     /// Tabs whose current page was already counted as a visit since launch. A tab's first page
     /// change counts even if its saved URL is unchanged, since that's a fresh load.
     @ObservationIgnored private var hasRecordedVisit: Set<AxoCore.Tab.ID> = []
+    /// Addresses typed in the command bar whose pages haven't committed yet, by tab, with the
+    /// query that led to them (#121). The typed visit and the choice are counted for the URL the
+    /// page commits (`github.com` loads as `https://github.com/`), so a typo that never loads
+    /// leaves nothing behind: only a page on the typed site (`www.` aside) counts, and the tab's
+    /// next visit clears it either way.
+    @ObservationIgnored private var pendingTypedLearning: [AxoCore.Tab.ID: (query: String, host: String, profileID: Profile.ID)] = [:]
     @ObservationIgnored let prompts = PagePromptQueue()
     /// Finds and opens the apps pages' links to other apps go to. Names none and opens nothing
     /// until the app connects the system's, so tests never open an app.
@@ -949,6 +955,7 @@ public final class BrowserModel {
         let visibleOrder = tabs.map(\.id)
         let otherPanes = tab.splitID.map { splitID in tabs.filter { $0.splitID == splitID && $0.id != id }.map(\.id) } ?? []
         prompts.dismissAll(from: id)
+        pendingTypedLearning[id] = nil
         pool.discard(id)
         do {
             if tab.isPinned {
@@ -1434,14 +1441,17 @@ public final class BrowserModel {
         let splitAnchor = pendingSplitAnchor
         // Editing the address: a page loads in the tab whose address it was.
         let editedTabID = commandBarEditedTabID
+        let query = commandQuery
         hideCommandBar()
+        learnFromCommand(result, query: query)
         if let editedTabID, let url = result.pageURL {
-            await loadEditedAddress(url, in: editedTabID)
+            if await loadEditedAddress(url, in: editedTabID) { learnTypedAddress(result, query: query, in: editedTabID) }
             return
         }
         switch result {
         case .open(let url, _, _):
             await openTab(url: url)
+            if let selectedTabID { learnTypedAddress(result, query: query, in: selectedTabID) }
             await completePendingSplit(with: selectedTabID, anchor: splitAnchor)
         case .tab(let tab):
             if splitAnchor != nil {
@@ -1457,17 +1467,59 @@ public final class BrowserModel {
         }
     }
 
+    /// Teaches the ranking (#121): the query led to the page chosen (a history page or a tab).
+    /// What was typed is learned once its page commits (``learnTypedAddress(_:query:in:)``);
+    /// searches and actions teach nothing.
+    private func learnFromCommand(_ result: CommandResult, query: String) {
+        guard let profileID = space?.profileID else { return }
+        let chosen: URL? = switch result {
+        case .history(let item): item.url
+        case .tab(let tab): tab.url
+        case .open, .action: nil
+        }
+        guard let chosen else { return }
+        let history = store.history
+        Task { try? await history.recordChoice(query: query, url: chosen, profileID: profileID) }
+    }
+
+    /// Remembers an address typed in the command bar until its page commits in `tabID`, where
+    /// ``persistPageChange(tabID:url:title:)`` counts it as typed and as the query's choice.
+    /// A search, including one the bar took for an address, teaches nothing.
+    private func learnTypedAddress(_ result: CommandResult, query: String, in tabID: AxoCore.Tab.ID) {
+        guard case .open(let url, let isSearch, _) = result, !isSearch, !SearchEngine.isResultsPage(url),
+              let profileID = space?.profileID else { return }
+        pendingTypedLearning[tabID] = (query, Self.siteHost(of: url), profileID)
+    }
+
+    /// A URL's host without `www.`, to tell whether a committed page is on the site typed.
+    nonisolated static func siteHost(of url: URL) -> String {
+        let host = url.host()?.lowercased() ?? ""
+        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+    }
+
+    /// Counts the visit `tabID` just committed as typed, if its address was typed in the command bar.
+    private func learnTypedVisit(to url: URL, in tabID: AxoCore.Tab.ID) async throws {
+        guard let (query, host, profileID) = pendingTypedLearning.removeValue(forKey: tabID),
+              Self.siteHost(of: url) == host else { return }
+        try await store.history.recordTypedVisit(to: url, profileID: profileID)
+        try await store.history.recordChoice(query: query, url: url, profileID: profileID)
+    }
+
     /// Loads an address edited in the command bar in its tab, unless it's the address already
     /// shown (Return on an unchanged address just closes the bar) or the tab has gone.
-    private func loadEditedAddress(_ url: URL, in tabID: AxoCore.Tab.ID) async {
+    ///
+    /// - Returns: Whether the address loads in `tabID`.
+    @discardableResult
+    private func loadEditedAddress(_ url: URL, in tabID: AxoCore.Tab.ID) async -> Bool {
         guard shownTab?.id == tabID else {
             // The tab closed (or another Space showed) while the bar was open: what was typed
             // opens in a new tab rather than going nowhere.
             await openTab(url: url)
-            return
+            return false
         }
-        guard url != shownPageURL else { return }
+        guard url != shownPageURL else { return false }
         pool.load(url, in: tabID)
+        return true
     }
 
     /// Actions that make sense right now; for example, Pin Tab needs an unpinned selected tab.
@@ -1708,6 +1760,7 @@ public final class BrowserModel {
                     // history. A favorite keeps its home page.
                     if let profileID = space?.profileID {
                         try await store.history.recordVisit(to: url, title: title, profileID: profileID, at: now())
+                        try await learnTypedVisit(to: url, in: tabID)
                     }
                     return
                 }
@@ -1719,6 +1772,7 @@ public final class BrowserModel {
                 if previous.url != url || !hasRecordedVisit.contains(tabID) {
                     hasRecordedVisit.insert(tabID)
                     try await store.history.recordVisit(to: url, title: title, profileID: profileID, at: now())
+                    try await learnTypedVisit(to: url, in: tabID)
                 } else {
                     try await store.history.updateTitle(title, for: url, profileID: profileID)
                 }
