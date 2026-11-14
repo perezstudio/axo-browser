@@ -653,6 +653,41 @@ final class AxoUITests: XCTestCase {
         waitForToolbar(tinted: false, "Toolbar with tinting turned off")
     }
 
+    /// The page meets the sidebar along one straight edge with a soft shadow on the sidebar's
+    /// side (#67): the sidebar is darker right beside the edge than farther in. Back and forward
+    /// share one glass capsule and reload is its own circle, so reload sits apart from forward.
+    /// Checked in light and dark mode, with window screenshots.
+    @MainActor
+    func testThePageCastsAShadowOnTheSidebar() throws {
+        for appearance in ["Light", "Dark"] {
+            let app = Self.makeApp()
+            app.launchEnvironment["AXO_UI_TESTING_APPEARANCE"] = appearance
+            app.launch()
+            Self.bringToFront(app)
+            let sidebar = app.descendants(matching: .any)["sidebar"]
+            XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+            let window = app.windows.firstMatch
+            let edge = sidebar.frame.maxX - window.frame.minX
+            let y = sidebar.frame.midY - window.frame.minY
+            func luminance(_ color: (red: Double, green: Double, blue: Double)) -> Double {
+                0.2126 * color.red + 0.7152 * color.green + 0.0722 * color.blue
+            }
+            let nearEdge = luminance(Self.color(at: CGPoint(x: edge - 2, y: y), in: window))
+            let fartherIn = luminance(Self.color(at: CGPoint(x: edge - 40, y: y), in: window))
+            let shot = XCTAttachment(screenshot: window.screenshot())
+            shot.name = "Page edge, \(appearance)"
+            shot.lifetime = .keepAlways
+            add(shot)
+            XCTAssertLessThan(nearEdge, fartherIn - 0.015,
+                              "\(appearance): the sidebar beside the page's edge (\(nearEdge)) is darker than farther in (\(fartherIn))")
+
+            let forward = app.buttons["forwardButton"].frame
+            let reload = app.buttons["reloadButton"].frame
+            XCTAssertGreaterThan(reload.minX - forward.maxX, 4, "\(appearance): reload is its own circle, apart from back and forward")
+            app.terminate()
+        }
+    }
+
     /// The sRGB color of the pixel at `point` (in points from the window's top left) in a
     /// screenshot of `window`.
     @MainActor

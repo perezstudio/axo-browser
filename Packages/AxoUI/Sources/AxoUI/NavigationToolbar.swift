@@ -11,8 +11,11 @@ struct NavigationToolbar: ToolbarContent {
 
     var body: some ToolbarContent {
         if placement == .page {
+            // Back and forward share one glass capsule; reload is its own circle (#67).
             ToolbarItemGroup(placement: .navigation) {
                 BackForwardButtons(model: model)
+            }
+            ToolbarItem(placement: .navigation) {
                 ReloadButton(model: model)
             }
             ToolbarItem(placement: .principal) {
@@ -41,14 +44,16 @@ struct NavigationToolbar: ToolbarContent {
     }
 }
 
-/// The sidebar's toolbar when the navigation bar is in the sidebar: back, forward, and reload
-/// beside the sidebar toggle.
+/// The sidebar's toolbar when the navigation bar is in the sidebar: back and forward in one glass
+/// capsule and reload in its own circle (#67), beside the sidebar toggle.
 struct SidebarNavigationToolbar: ToolbarContent {
     let model: BrowserModel
 
     var body: some ToolbarContent {
         ToolbarItemGroup(placement: .navigation) {
             BackForwardButtons(model: model)
+        }
+        ToolbarItem(placement: .navigation) {
             ReloadButton(model: model)
         }
     }
