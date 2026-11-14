@@ -81,6 +81,16 @@ final class AxoUITests: XCTestCase {
         field.typeText(address + "\n")
     }
 
+    /// Selects a pane in the Settings window's sidebar (#85) by its raw value, such as `general`
+    /// or `linkRouting`, once Settings is open. Settings reopens on the last pane used, so tests
+    /// select the pane they need first.
+    @MainActor
+    static func selectSettingsPane(_ pane: String, in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        let row = app.descendants(matching: .any)["settingsPane.\(pane)"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "Settings shows the \(pane) pane's row", file: file, line: line)
+        row.click()
+    }
+
     /// Waits for Axo to be the frontmost app, activating it if another app took focus during
     /// launch. Keystrokes fail with "not foreground" otherwise.
     @MainActor
@@ -330,9 +340,7 @@ final class AxoUITests: XCTestCase {
 
         // Settings › General › Show full website address.
         app.typeKey(",", modifierFlags: .command)
-        let general = app.toolbars.buttons["General"]
-        XCTAssertTrue(general.waitForExistence(timeout: 5))
-        general.click()
+        AxoUITests.selectSettingsPane("general", in: app)
         let fullAddress = app.checkBoxes["showsFullAddressToggle"]
         XCTAssertTrue(fullAddress.waitForExistence(timeout: 5))
         XCTAssertEqual(fullAddress.value as? Int, 0, "Off by default")
@@ -434,9 +442,7 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["First"].waitForExistence(timeout: 10))
 
         app.typeKey(",", modifierFlags: .command)
-        let general = app.toolbars.buttons["General"]
-        XCTAssertTrue(general.waitForExistence(timeout: 5))
-        general.click()
+        AxoUITests.selectSettingsPane("general", in: app)
         let inSidebar = app.radioButtons["Sidebar"]
         XCTAssertTrue(inSidebar.waitForExistence(timeout: 5))
         inSidebar.click()
@@ -581,9 +587,7 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(app.buttons["backButton"].exists)
 
         app.typeKey(",", modifierFlags: .command)
-        let general = app.toolbars.buttons["General"]
-        XCTAssertTrue(general.waitForExistence(timeout: 5))
-        general.click()
+        AxoUITests.selectSettingsPane("general", in: app)
         let abovePage = app.radioButtons["Above the page"]
         XCTAssertTrue(abovePage.waitForExistence(timeout: 5))
         abovePage.click()
@@ -642,9 +646,7 @@ final class AxoUITests: XCTestCase {
         waitForToolbar(tinted: true, "Toolbar tinted to the page")
 
         app.typeKey(",", modifierFlags: .command)
-        let general = app.toolbars.buttons["General"]
-        XCTAssertTrue(general.waitForExistence(timeout: 5))
-        general.click()
+        AxoUITests.selectSettingsPane("general", in: app)
         let toggle = app.checkBoxes["tintsToolbarToggle"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 5))
         XCTAssertTrue(toggle.isEnabled, "Above the page, the setting can be changed")
@@ -693,9 +695,7 @@ final class AxoUITests: XCTestCase {
             checkFooterMatchesToolbar(in: app, appearance: appearance, placement: "sidebar")
 
             app.typeKey(",", modifierFlags: .command)
-            let general = app.toolbars.buttons["General"]
-            XCTAssertTrue(general.waitForExistence(timeout: 5))
-            general.click()
+            AxoUITests.selectSettingsPane("general", in: app)
             app.radioButtons["Above the page"].click()
             app.typeKey("w", modifierFlags: .command)
             XCTAssertTrue(app.descendants(matching: .any)["pageAddressBar"].waitForExistence(timeout: 5))
@@ -783,9 +783,7 @@ final class AxoUITests: XCTestCase {
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
         app.typeKey(",", modifierFlags: .command)
-        let general = app.toolbars.buttons["General"]
-        XCTAssertTrue(general.waitForExistence(timeout: 5))
-        general.click()
+        AxoUITests.selectSettingsPane("general", in: app)
         app.radioButtons["Above the page"].click()
         app.typeKey("w", modifierFlags: .command)
 
@@ -822,6 +820,64 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Second"].waitForExistence(timeout: 10))
     }
 
+    /// Settings lists its panes in a sidebar like System Settings (#85): search filters them by
+    /// their settings, Return opens the first match, the sidebar can't be hidden, the window
+    /// resizes but not below its minimum (on the hosted runner only), and it reopens on the
+    /// last pane used.
+    @MainActor
+    func testSettingsSidebarSearchesResizesAndRemembersThePane() throws {
+        let app = launchApp()
+        XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 5))
+        app.typeKey(",", modifierFlags: .command)
+        AxoUITests.selectSettingsPane("linkRouting", in: app)
+        XCTAssertTrue(app.buttons["addDomainRouteButton"].waitForExistence(timeout: 5))
+        let general = app.descendants(matching: .any)["settingsPane.general"]
+        let profiles = app.descendants(matching: .any)["settingsPane.profiles"]
+        XCTAssertTrue(profiles.exists, "Every pane is listed before searching")
+
+        // ⌘F searches; the panes whose settings match stay.
+        app.typeKey("f", modifierFlags: .command)
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.typeText("navigation bar")
+        XCTAssertTrue(profiles.waitForNonExistence(timeout: 5), "Profiles has no navigation bar setting")
+        XCTAssertTrue(general.exists, "General holds the navigation bar setting")
+        search.typeText("\n")
+        XCTAssertTrue(app.radioButtons["Above the page"].waitForExistence(timeout: 5), "Return opens the first match")
+
+        let window = app.windows.containing(.any, identifier: "settingsPaneList").firstMatch
+        XCTAssertTrue(window.exists)
+        XCTAssertGreaterThanOrEqual(window.frame.width, 719)
+        XCTAssertGreaterThanOrEqual(window.frame.height, 479)
+
+        // The sidebar can't be hidden: View › Toggle Sidebar leaves it.
+        app.typeKey("s", modifierFlags: [.command, .control])
+        XCTAssertTrue(app.descendants(matching: .any)["settingsPaneList"].waitForExistence(timeout: 2))
+        XCTAssertTrue(general.isHittable, "The panes stay on screen")
+
+        // The window resizes, down to its minimum (720 × 480). Only on the hosted runner: the
+        // Settings window's frame is saved in the user defaults UI tests share with the
+        // person's own Axo (CLAUDE.md), and dragging would change theirs.
+        if Self.isOnHostedRunner {
+            let before = window.frame
+            let corner = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 1)).withOffset(CGVector(dx: -3, dy: -3))
+            corner.press(forDuration: 0.2, thenDragTo: corner.withOffset(CGVector(dx: 120, dy: 60)))
+            XCTAssertGreaterThan(window.frame.width, before.width + 50, "The window grows")
+            let grown = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 1)).withOffset(CGVector(dx: -3, dy: -3))
+            grown.press(forDuration: 0.2, thenDragTo: grown.withOffset(CGVector(dx: -1000, dy: -1000)))
+            XCTAssertGreaterThanOrEqual(window.frame.width, 719, "It stops at its minimum width")
+            XCTAssertGreaterThanOrEqual(window.frame.height, 479, "It stops at its minimum height")
+            XCTAssertLessThan(window.frame.width, before.width + 50, "It shrinks")
+        }
+
+        // Closed and opened again, it shows the last pane used.
+        app.typeKey("w", modifierFlags: .command)
+        XCTAssertTrue(window.waitForNonExistence(timeout: 5))
+        app.typeKey(",", modifierFlags: .command)
+        XCTAssertTrue(app.radioButtons["Above the page"].waitForExistence(timeout: 5), "Settings reopens on General")
+        XCTAssertTrue(app.descendants(matching: .any)["settingsPane.profiles"].exists, "The search is cleared")
+    }
+
     /// Settings › Profiles adds a profile, then deletes the default one, moving the Home Space to
     /// the new profile.
     @MainActor
@@ -829,9 +885,7 @@ final class AxoUITests: XCTestCase {
         let app = launchApp()
         XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 5))
         app.typeKey(",", modifierFlags: .command)
-        let pane = app.toolbars.buttons["Profiles"]
-        XCTAssertTrue(pane.waitForExistence(timeout: 5))
-        pane.click()
+        AxoUITests.selectSettingsPane("profiles", in: app)
 
         let list = app.outlines["profileList"].exists ? app.outlines["profileList"] : app.tables["profileList"]
         XCTAssertTrue(app.textFields["profileNameField"].waitForExistence(timeout: 5), "The current profile is selected")
@@ -866,9 +920,7 @@ final class AxoUITests: XCTestCase {
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
         app.typeKey(",", modifierFlags: .command)
-        let pane = app.toolbars.buttons["Spaces"]
-        XCTAssertTrue(pane.waitForExistence(timeout: 5))
-        pane.click()
+        AxoUITests.selectSettingsPane("spaces", in: app)
 
         let name = app.textFields["spaceNameSettingsField"]
         XCTAssertTrue(name.waitForExistence(timeout: 5), "The current Space is selected")
@@ -967,8 +1019,7 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(dot.isSelected)
 
         settings.click()
-        let pane = app.toolbars.buttons["Link Routing"]
-        XCTAssertTrue(pane.waitForExistence(timeout: 5), "Settings opens")
+        XCTAssertTrue(app.descendants(matching: .any)["settingsPane.linkRouting"].waitForExistence(timeout: 5), "Settings opens")
     }
 
     /// Pin a tab from its context menu, close and reopen an unpinned tab, and see that closing
@@ -1081,9 +1132,7 @@ final class AxoUITests: XCTestCase {
         let app = launchApp()
         XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 5))
         app.typeKey(",", modifierFlags: .command)
-        let pane = app.toolbars.buttons["iCloud"]
-        XCTAssertTrue(pane.waitForExistence(timeout: 5))
-        pane.click()
+        AxoUITests.selectSettingsPane("iCloud", in: app)
 
         let toggle = app.descendants(matching: .any)["syncToggle"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 5))
@@ -1097,9 +1146,7 @@ final class AxoUITests: XCTestCase {
         let app = launchApp()
         XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 5))
         app.typeKey(",", modifierFlags: .command)
-        let pane = app.toolbars.buttons["Site Customizations"]
-        XCTAssertTrue(pane.waitForExistence(timeout: 5))
-        pane.click()
+        AxoUITests.selectSettingsPane("siteCustomizations", in: app)
 
         app.buttons["addSiteCustomizationButton"].click()
         let domain = app.textFields["customizationDomainField"]
@@ -1142,9 +1189,7 @@ final class AxoUITests: XCTestCase {
 
         app.typeKey(",", modifierFlags: .command)
         // Settings reopens on the last pane used, so choose one.
-        let linkRouting = app.toolbars.buttons["Link Routing"]
-        XCTAssertTrue(linkRouting.waitForExistence(timeout: 5))
-        linkRouting.click()
+        AxoUITests.selectSettingsPane("linkRouting", in: app)
         let addDomain = app.buttons["addDomainRouteButton"]
         XCTAssertTrue(addDomain.waitForExistence(timeout: 5))
         addDomain.click()

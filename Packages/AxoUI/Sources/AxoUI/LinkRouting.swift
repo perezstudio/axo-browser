@@ -66,36 +66,6 @@ extension BrowserModel {
 // Mac only for now; iPhone and iPad have their own chrome.
 #if os(macOS)
 
-/// Axo's Settings window (⌘,).
-public struct SettingsView: View {
-    let model: BrowserModel
-
-    /// Creates the Settings window's content.
-    public init(model: BrowserModel) {
-        self.model = model
-    }
-
-    public var body: some View {
-        TabView {
-            GeneralSettings()
-                .tabItem { Label("General", systemImage: "gearshape") }
-            ProfileSettings(model: model)
-                .tabItem { Label("Profiles", systemImage: "person.2") }
-            SpaceSettings(model: model)
-                .tabItem { Label("Spaces", systemImage: "square.stack") }
-            LinkRoutingSettings(model: model)
-                .tabItem { Label("Link Routing", systemImage: "arrow.triangle.branch") }
-            SiteCustomizationSettings(model: model)
-                .tabItem { Label("Site Customizations", systemImage: "paintbrush") }
-            if let sync = model.iCloudSync {
-                SyncSettings(sync: sync)
-                    .tabItem { Label("iCloud", systemImage: "icloud") }
-            }
-        }
-        .frame(width: 620, height: 460)
-    }
-}
-
 /// Rules that open links from other apps in a chosen Space.
 struct LinkRoutingSettings: View {
     let model: BrowserModel
