@@ -192,6 +192,24 @@ final class SidebarMenuUITests: XCTestCase {
         choose("Go to Pinned Page", on: sidebar.staticTexts["Away"], in: app)
         XCTAssertTrue(sidebar.staticTexts["Start"].waitForExistence(timeout: 10))
         expectSelected("Start", in: app)
+        // By its label: the Pinned section's identifier replaces its rows' own (CLAUDE.md).
+        let goHome = sidebar.buttons["Go to Pinned Page"]
+        XCTAssertFalse(goHome.exists, "On its pinned page, no control to go back (#73)")
+
+        // Away again: the row's own control goes back (#73).
+        browse(to: "Elsewhere", in: app)
+        XCTAssertTrue(sidebar.staticTexts["Elsewhere"].waitForExistence(timeout: 5))
+        XCTAssertTrue(goHome.waitForExistence(timeout: 5), "Away from its pinned page, the row shows a control to go back")
+        // Clicked where it is, with the pointer already on the row: XCUITest's own click first
+        // scrolls the list, and the row's hover controls appear as the pointer arrives.
+        sidebar.staticTexts["Elsewhere"].hover()
+        let window = app.windows.firstMatch
+        let frame = goHome.frame
+        window.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: frame.midX - window.frame.minX, dy: frame.midY - window.frame.minY))
+            .click()
+        XCTAssertTrue(sidebar.staticTexts["Start"].waitForExistence(timeout: 10))
+        XCTAssertTrue(goHome.waitForNonExistence(timeout: 5), "Back on its pinned page")
 
         browse(to: "Later", in: app)
         XCTAssertTrue(sidebar.staticTexts["Later"].waitForExistence(timeout: 5))
