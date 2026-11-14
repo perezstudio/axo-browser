@@ -65,7 +65,7 @@ The boards: Floating command bar, Proposed 1.0 window.
 - [ ] **Narrow results while typing (#122), ranking (#121), menu commands (#123).** In the order set earlier (#122, #121, #123).
 - [ ] **Command bar as a native floating panel (#87).** The board's floating bar, in browser and mini windows.
 - [ ] **History menus on Back and Forward (#112).**
-- [ ] **Google as the default search engine (#172).** Replace the DuckDuckGo placeholder in `AddressInput` with Google, keeping Bing and DuckDuckGo for the Search pane (#132) to offer (decision 6). Small; can go any time.
+- [x] **Google as the default search engine (#172).** Replace the DuckDuckGo placeholder in `AddressInput` with Google, keeping Bing and DuckDuckGo for the Search pane (#132) to offer (decision 6). Small; can go any time.
 
 ## Phase 4: page tools, menus, and prompts
 
