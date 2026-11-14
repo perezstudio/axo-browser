@@ -76,8 +76,9 @@ final class AccessibilityAuditTests: XCTestCase {
                     let children = snapshot.children
                     // HSplitView's and VSplitView's host for one pane of a split view.
                     if children.count == 1, children[0].identifier == "splitPane" { return true }
-                    // The split view's sidebar column, which holds the address bar.
-                    if children.contains(where: { ["sidebarAddressBar", "sidebarAddressField", "addressField"].contains($0.identifier) }) { return true }
+                    // The split view's sidebar column, which holds the address bar, or Settings'
+                    // list of panes.
+                    if children.contains(where: { ["sidebarAddressBar", "sidebarAddressField", "addressField", "settingsPaneList"].contains($0.identifier) }) { return true }
                     // A List section header row, which holds only its header text.
                     if children.count == 1, children[0].elementType == .staticText,
                        !children[0].label.isEmpty || !(children[0].value as? String ?? "").isEmpty {

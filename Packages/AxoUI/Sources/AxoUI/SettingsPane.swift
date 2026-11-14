@@ -59,7 +59,7 @@ nonisolated public enum SettingsPane: String, CaseIterable, Identifiable, Sendab
         case .siteCustomizations:
             ["css", "javascript", "styles", "scripts", "customize", "site", "domain"]
         case .iCloud:
-            ["sync", "icloud", "devices", "sync now", "status"]
+            ["sync", "icloud", "devices", "sync now", "status", "spaces", "folders", "pinned tabs", "favorites"]
         }
     }
 

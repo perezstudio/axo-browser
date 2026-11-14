@@ -821,8 +821,9 @@ final class AxoUITests: XCTestCase {
     }
 
     /// Settings lists its panes in a sidebar like System Settings (#85): search filters them by
-    /// their settings, Return opens the first match, the window resizes but not below its
-    /// minimum, and it reopens on the last pane used.
+    /// their settings, Return opens the first match, the sidebar can't be hidden, the window
+    /// resizes but not below its minimum (on the hosted runner only), and it reopens on the
+    /// last pane used.
     @MainActor
     func testSettingsSidebarSearchesResizesAndRemembersThePane() throws {
         let app = launchApp()
@@ -844,18 +845,30 @@ final class AxoUITests: XCTestCase {
         search.typeText("\n")
         XCTAssertTrue(app.radioButtons["Above the page"].waitForExistence(timeout: 5), "Return opens the first match")
 
-        // The window resizes, down to its minimum (720 × 480).
         let window = app.windows.containing(.any, identifier: "settingsPaneList").firstMatch
         XCTAssertTrue(window.exists)
-        let before = window.frame
-        let corner = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 1)).withOffset(CGVector(dx: -3, dy: -3))
-        corner.press(forDuration: 0.2, thenDragTo: corner.withOffset(CGVector(dx: 120, dy: 60)))
-        XCTAssertGreaterThan(window.frame.width, before.width + 50, "The window grows")
-        let grown = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 1)).withOffset(CGVector(dx: -3, dy: -3))
-        grown.press(forDuration: 0.2, thenDragTo: grown.withOffset(CGVector(dx: -1000, dy: -1000)))
-        XCTAssertGreaterThanOrEqual(window.frame.width, 719, "It stops at its minimum width")
-        XCTAssertGreaterThanOrEqual(window.frame.height, 479, "It stops at its minimum height")
-        XCTAssertLessThan(window.frame.width, before.width + 50, "It shrinks")
+        XCTAssertGreaterThanOrEqual(window.frame.width, 719)
+        XCTAssertGreaterThanOrEqual(window.frame.height, 479)
+
+        // The sidebar can't be hidden: View › Toggle Sidebar leaves it.
+        app.typeKey("s", modifierFlags: [.command, .control])
+        XCTAssertTrue(app.descendants(matching: .any)["settingsPaneList"].waitForExistence(timeout: 2))
+        XCTAssertTrue(general.isHittable, "The panes stay on screen")
+
+        // The window resizes, down to its minimum (720 × 480). Only on the hosted runner: the
+        // Settings window's frame is saved in the user defaults UI tests share with the
+        // person's own Axo (CLAUDE.md), and dragging would change theirs.
+        if Self.isOnHostedRunner {
+            let before = window.frame
+            let corner = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 1)).withOffset(CGVector(dx: -3, dy: -3))
+            corner.press(forDuration: 0.2, thenDragTo: corner.withOffset(CGVector(dx: 120, dy: 60)))
+            XCTAssertGreaterThan(window.frame.width, before.width + 50, "The window grows")
+            let grown = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 1)).withOffset(CGVector(dx: -3, dy: -3))
+            grown.press(forDuration: 0.2, thenDragTo: grown.withOffset(CGVector(dx: -1000, dy: -1000)))
+            XCTAssertGreaterThanOrEqual(window.frame.width, 719, "It stops at its minimum width")
+            XCTAssertGreaterThanOrEqual(window.frame.height, 479, "It stops at its minimum height")
+            XCTAssertLessThan(window.frame.width, before.width + 50, "It shrinks")
+        }
 
         // Closed and opened again, it shows the last pane used.
         app.typeKey("w", modifierFlags: .command)

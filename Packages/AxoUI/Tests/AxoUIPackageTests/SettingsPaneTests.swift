@@ -30,6 +30,7 @@ struct SettingsPaneTests {
         #expect(SettingsPane.filtered(SettingsPane.allCases, by: "cookies") == [.profiles])
         #expect(SettingsPane.filtered(SettingsPane.allCases, by: "CSS") == [.siteCustomizations])
         #expect(SettingsPane.filtered(SettingsPane.allCases, by: "sync") == [.iCloud])
+        #expect(SettingsPane.filtered(SettingsPane.allCases, by: "pinned tabs") == [.iCloud], "The iCloud switch's words")
     }
 
     @Test func searchMatchesTitlesIgnoringCaseAndAccents() {
