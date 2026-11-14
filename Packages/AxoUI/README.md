@@ -85,6 +85,7 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
 - **`MenuCommands`** (`MenuCommand`, `MenuCommandProviding`, and the Mac's `MainMenuCommands`): the command bar finds and runs any enabled item in Axo's menus by title and menu (#123), recently used first, leaving out items it already offers as actions, the Testing menu, and Services. The app sets `BrowserModel.menuCommands`.
 - **`AddressInput`**: turns typed text into a URL. Text with a scheme loads as is, `example.com` gets `https://`, local hosts (`localhost`, `127.0.0.1`, `*.localhost`, `*.test`) get `http://`, and anything else becomes a search. Searches go to `SearchEngine.default`.
 - **`SearchEngine`**: the engines Axo offers, Google (the default), Bing, and DuckDuckGo, each with its name, results page, and `searchURL(for:)`. Settings › Search (#132) will let each profile choose one.
+- **`FirstRun`** and **`FirstRunView`**: first run (#175), a welcome, importing from another browser or starting fresh, and setting up the first Space, in one glass card. `BrowserModel.firstRunRecord` remembers that it's done; without one it never shows.
 
 AxoUI uses `.defaultIsolation(MainActor.self)`. Mark pure logic such as `AddressInput` `nonisolated`.
 

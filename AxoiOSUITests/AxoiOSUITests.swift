@@ -8,11 +8,14 @@ final class AxoiOSUITests: XCTestCase {
         // A system alert (such as a freshly booted simulator's own location prompts) must never
         // be granted by a test. XCTest's default handler taps "Allow"; decline instead.
         addUIInterruptionMonitor(withDescription: "System alerts") { alert in
-            for title in ["Don’t Allow", "Don't Allow", "Not Now", "Cancel"] where alert.buttons[title].exists {
-                alert.buttons[title].tap()
-                return true
+            // XCTest calls interruption monitors on the main thread, while it drives the app.
+            MainActor.assumeIsolated {
+                for title in ["Don’t Allow", "Don't Allow", "Not Now", "Cancel"] where alert.buttons[title].exists {
+                    alert.buttons[title].tap()
+                    return true
+                }
+                return false
             }
-            return false
         }
     }
 
