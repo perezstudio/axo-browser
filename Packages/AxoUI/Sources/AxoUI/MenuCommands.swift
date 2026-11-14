@@ -12,17 +12,25 @@ public struct MenuCommand: Hashable, Sendable, Identifiable {
     public let path: [String]
     /// Its keyboard shortcut as menus show it ("⇧⌘T"), or empty.
     public let shortcut: String
+    /// Which of the menu's items with this title it is, from 0: titles can repeat, since some
+    /// come from the person's data (two Spaces or favorites with the same name).
+    public let occurrence: Int
 
-    public init(title: String, path: [String], shortcut: String = "") {
+    public init(title: String, path: [String], shortcut: String = "", occurrence: Int = 0) {
         self.title = title
         self.path = path
         self.shortcut = shortcut
+        self.occurrence = occurrence
     }
 
-    public var id: String { (path + [title]).joined(separator: " › ") }
+    public var id: String {
+        let id = (path + [title]).joined(separator: " › ")
+        return occurrence == 0 ? id : "\(id) #\(occurrence + 1)"
+    }
 
-    /// The menu it's in, as the command bar names it ("View menu").
-    public var menuName: String { path.first.map { "\($0) menu" } ?? "" }
+    /// Where it is, as the command bar names it ("View menu", or "Tabs › Move to Space menu"),
+    /// so items with the same title in different submenus can be told apart.
+    public var menuName: String { path.isEmpty ? "" : "\(path.joined(separator: " › ")) menu" }
 }
 
 /// Lists the menus' commands and runs one. The app sets the Mac's main menu
@@ -32,7 +40,10 @@ public protocol MenuCommandProviding: AnyObject {
     /// The enabled items, as they are now.
     func commands() -> [MenuCommand]
     /// Runs `command` as if it were chosen from its menu.
-    func run(_ command: MenuCommand)
+    ///
+    /// - Returns: Whether it ran: `false` if the item is gone or disabled now.
+    @discardableResult
+    func run(_ command: MenuCommand) -> Bool
 }
 
 #if os(macOS)
@@ -51,42 +62,62 @@ public final class MainMenuCommands: MenuCommandProviding {
         return MenuIndex.commands(in: menu)
     }
 
-    public func run(_ command: MenuCommand) {
-        guard let menu = menu() else { return }
-        MenuIndex.perform(command, in: menu)
+    @discardableResult
+    public func run(_ command: MenuCommand) -> Bool {
+        guard let menu = menu() else { return false }
+        return MenuIndex.perform(command, in: menu)
     }
 }
 
 /// Reads and runs menu items for the command bar.
 @MainActor
 enum MenuIndex {
-    /// Top-level menus never offered: the Testing menu of UI testing mode, and the system's
-    /// Services menu.
-    static let excludedMenus: Set<String> = ["Testing", "Services"]
+    /// Top-level menus never offered: the Testing menu of UI testing mode. The system's
+    /// Services menu is left out by identity (its title is localized; ``isServicesMenu(_:)``).
+    static let excludedMenus: Set<String> = ["Testing"]
+
+    /// Whether `menu` is the app's Services menu, whose items act on the selection in whatever
+    /// has focus.
+    static func isServicesMenu(_ menu: NSMenu) -> Bool {
+        if let services = NSApplication.shared.servicesMenu, services === menu { return true }
+        return false
+    }
+
+    /// Whether `item` is offered: not a separator, hidden, or an alternate.
+    private static func isListed(_ item: NSMenuItem) -> Bool {
+        !item.isSeparatorItem && !item.isHidden && !item.isAlternate
+    }
 
     /// The enabled, visible leaf items of `menu`, after it validates them, with their paths.
     /// Separators, hidden and alternate items, and items without a title are left out.
     static func commands(in menu: NSMenu, path: [String] = []) -> [MenuCommand] {
         menu.update()
         var commands: [MenuCommand] = []
-        for item in menu.items where !item.isSeparatorItem && !item.isHidden && !item.isAlternate {
+        var occurrences: [String: Int] = [:]
+        for item in menu.items where isListed(item) {
             if let submenu = item.submenu {
                 // The top level's items are the menu bar's titles; the app menu's title is the
                 // app's name.
                 let title = item.title.isEmpty ? submenu.title : item.title
-                guard !excludedMenus.contains(title) else { continue }
+                guard !excludedMenus.contains(title), !isServicesMenu(submenu) else { continue }
                 commands += Self.commands(in: submenu, path: path + [title])
-            } else if item.isEnabled, !item.title.isEmpty, !path.isEmpty {
-                commands.append(MenuCommand(title: item.title, path: path, shortcut: shortcut(of: item)))
+            } else if !item.title.isEmpty, !path.isEmpty {
+                // Counted before the enabled check, so `location` finds the same item by index.
+                let occurrence = occurrences[item.title, default: 0]
+                occurrences[item.title] = occurrence + 1
+                guard item.isEnabled else { continue }
+                commands.append(MenuCommand(title: item.title, path: path, shortcut: shortcut(of: item), occurrence: occurrence))
             }
         }
         return commands
     }
 
     /// Runs the item at `command`'s path, as choosing it from its menu would.
-    static func perform(_ command: MenuCommand, in menu: NSMenu) {
-        guard let (submenu, index) = location(of: command, in: menu) else { return }
+    @discardableResult
+    static func perform(_ command: MenuCommand, in menu: NSMenu) -> Bool {
+        guard let (submenu, index) = location(of: command, in: menu) else { return false }
         submenu.performActionForItem(at: index)
+        return true
     }
 
     /// The menu holding `command`'s item and the item's index, while the item is there and
@@ -99,8 +130,13 @@ enum MenuIndex {
             current = submenu
         }
         current.update()
-        guard let index = current.items.firstIndex(where: { $0.title == command.title && $0.submenu == nil }),
-              current.items[index].isEnabled else { return nil }
+        let matches = current.items.indices.filter { index in
+            let item = current.items[index]
+            return isListed(item) && item.submenu == nil && item.title == command.title
+        }
+        guard matches.indices.contains(command.occurrence) else { return nil }
+        let index = matches[command.occurrence]
+        guard current.items[index].isEnabled else { return nil }
         return (current, index)
     }
 
@@ -108,7 +144,8 @@ enum MenuIndex {
     static func shortcut(of item: NSMenuItem) -> String {
         guard !item.keyEquivalent.isEmpty else { return "" }
         let flags = item.keyEquivalentModifierMask
-        var text = ""
+        // The Globe (fn) key, as in Window › Full Screen's fn-F.
+        var text = flags.contains(.function) ? "fn " : ""
         if flags.contains(.control) { text += "⌃" }
         if flags.contains(.option) { text += "⌥" }
         // An uppercase key equivalent implies Shift.
@@ -119,7 +156,17 @@ enum MenuIndex {
                                        String(UnicodeScalar(NSLeftArrowFunctionKey)!): "←",
                                        String(UnicodeScalar(NSRightArrowFunctionKey)!): "→",
                                        String(UnicodeScalar(NSUpArrowFunctionKey)!): "↑",
-                                       String(UnicodeScalar(NSDownArrowFunctionKey)!): "↓"]
+                                       String(UnicodeScalar(NSDownArrowFunctionKey)!): "↓",
+                                       String(UnicodeScalar(NSDeleteFunctionKey)!): "⌦",
+                                       String(UnicodeScalar(NSHomeFunctionKey)!): "↖",
+                                       String(UnicodeScalar(NSEndFunctionKey)!): "↘",
+                                       String(UnicodeScalar(NSPageUpFunctionKey)!): "⇞",
+                                       String(UnicodeScalar(NSPageDownFunctionKey)!): "⇟"]
+        // F1 to F12.
+        if let scalar = key.unicodeScalars.first, key.unicodeScalars.count == 1,
+           (NSF1FunctionKey...NSF12FunctionKey).contains(Int(scalar.value)) {
+            return text + "F\(Int(scalar.value) - NSF1FunctionKey + 1)"
+        }
         return text + (names[key] ?? key.uppercased())
     }
 }

@@ -1,14 +1,14 @@
-#if os(macOS)
-import AppKit
 import AxoCore
 import AxoWeb
 import Foundation
 import Testing
 @testable import AxoUI
+#if os(macOS)
+import AppKit
 
 /// The command bar finds and runs Axo's menu items (#123).
 @MainActor
-struct MenuCommandTests {
+struct MenuIndexTests {
     /// Records the items it's asked to run.
     final class Recorder: NSObject {
         var ran: [String] = []
@@ -89,6 +89,62 @@ struct MenuCommandTests {
         #expect(MenuIndex.location(of: MenuCommand(title: "New Window", path: ["Nowhere"]), in: menu) == nil)
     }
 
+    @Test func repeatedTitlesAreToldApartAndRunTheRightItem() throws {
+        let recorder = Recorder()
+        let spaces = NSMenu(title: "Spaces")
+        spaces.autoenablesItems = false
+        for title in ["Work", "Work", "Home"] {
+            let item = NSMenuItem(title: title, action: #selector(Recorder.run(_:)), keyEquivalent: "")
+            item.target = recorder
+            spaces.addItem(item)
+        }
+        let bar = NSMenu(title: "Main")
+        let top = NSMenuItem(title: "Spaces", action: nil, keyEquivalent: "")
+        top.submenu = spaces
+        bar.addItem(top)
+        let commands = MenuIndex.commands(in: bar)
+        #expect(commands.map(\.id) == ["Spaces › Work", "Spaces › Work #2", "Spaces › Home"])
+        let (_, index) = try #require(MenuIndex.location(of: commands[1], in: bar))
+        #expect(index == 1, "The second Work, not the first")
+        #expect(commands[1].menuName == "Spaces menu")
+        #expect(MenuCommand(title: "Work", path: ["Tabs", "Move to Space"]).menuName == "Tabs › Move to Space menu",
+                "Submenus are named, so the same title in two submenus reads differently")
+    }
+
+    @Test func theServicesMenuIsLeftOutWhateverItsTitle() {
+        let recorder = Recorder()
+        let services = NSMenu(title: "Dienste")
+        services.autoenablesItems = false
+        let service = NSMenuItem(title: "Look Up", action: #selector(Recorder.run(_:)), keyEquivalent: "")
+        service.target = recorder
+        services.addItem(service)
+        let app = NSMenu(title: "Axo")
+        app.autoenablesItems = false
+        let servicesItem = NSMenuItem(title: "Dienste", action: nil, keyEquivalent: "")
+        servicesItem.submenu = services
+        app.addItem(servicesItem)
+        let bar = NSMenu(title: "Main")
+        let top = NSMenuItem(title: "Axo", action: nil, keyEquivalent: "")
+        top.submenu = app
+        bar.addItem(top)
+        let previous = NSApplication.shared.servicesMenu
+        NSApplication.shared.servicesMenu = services
+        defer { NSApplication.shared.servicesMenu = previous }
+        #expect(MenuIndex.commands(in: bar).isEmpty)
+    }
+
+    @Test func shortcutsNameFunctionKeys() {
+        let f5 = NSMenuItem(title: "F", action: nil, keyEquivalent: String(UnicodeScalar(NSF5FunctionKey)!))
+        f5.keyEquivalentModifierMask = .command
+        #expect(MenuIndex.shortcut(of: f5) == "⌘F5")
+        // The Globe (fn) modifier can't be set here: AppKit allows it only on its own items.
+    }
+}
+#endif
+
+/// The command bar's menu command results and running them (#123).
+@MainActor
+struct MenuCommandTests {
     @Test func resultsMatchTitleAndMenuRecentFirstWithoutActionsTwice() {
         let commands = [
             MenuCommand(title: "Translate Page", path: ["View"]),
@@ -104,12 +160,30 @@ struct MenuCommandTests {
         #expect(CommandRanking.menuCommandResults(for: "", commands: commands, recent: []).isEmpty)
     }
 
+    /// Menu items that do what an action does aren't offered twice, whatever their ellipsis or
+    /// wording.
+    @Test func menuItemsForActionsAreLeftOut() {
+        let commands = ["New Space…", "Find…", "Print…", "Stack Panes", "Show Panes Side by Side", "New Folder Inside",
+                        "Hide Downloads", "Rename Space…", "Import from Another Browser…"]
+            .map { MenuCommand(title: $0, path: ["File"]) } + [MenuCommand(title: "Find Next", path: ["Edit"])]
+        let titles = commands.flatMap { command in
+            CommandRanking.menuCommandResults(for: command.title, commands: commands, recent: []).map(\.title)
+        }
+        #expect(Set(titles) == ["Find Next"], "Only Find Next isn't an action")
+    }
+
     /// A fake menu for the model.
     final class FakeMenus: MenuCommandProviding {
         var ran: [MenuCommand] = []
+        var indexed = 0
+        var isAvailable = true
         let items = [MenuCommand(title: "Hide Address Bar in Sidebar", path: ["View"], shortcut: "⇧⌘A")]
-        func commands() -> [MenuCommand] { items }
-        func run(_ command: MenuCommand) { ran.append(command) }
+        func commands() -> [MenuCommand] { indexed += 1; return items }
+        func run(_ command: MenuCommand) -> Bool {
+            guard isAvailable else { return false }
+            ran.append(command)
+            return true
+        }
     }
 
     @Test func theCommandBarRunsAMenuCommandAndRemembersIt() async throws {
@@ -126,5 +200,38 @@ struct MenuCommandTests {
         #expect(model.recentMenuCommandIDs == ["View › Hide Address Bar in Sidebar"])
         #expect(!model.isCommandBarVisible)
     }
+
+    /// The menus are read on the first letter typed, not each time the bar opens.
+    @Test func theMenusAreIndexedOnlyOnceTypingStarts() async throws {
+        let model = BrowserModel(store: try TabStore.makeInMemory(), pool: WebViewPool(makeDataStore: { _ in .nonPersistent() }))
+        await model.start()
+        let menus = FakeMenus()
+        model.menuCommands = menus
+        model.showCommandBar()
+        #expect(menus.indexed == 0)
+        model.setCommandQuery("a")
+        model.setCommandQuery("ad")
+        #expect(menus.indexed == 1, "Once per opening")
+        model.hideCommandBar()
+        model.showCommandBar()
+        model.setCommandQuery("a")
+        #expect(menus.indexed == 2, "Read again for the next opening")
+    }
+
+    /// An item gone or disabled since the bar opened says so, rather than doing nothing silently.
+    @Test func aMenuCommandNoLongerAvailableSaysSo() async throws {
+        let model = BrowserModel(store: try TabStore.makeInMemory(), pool: WebViewPool(makeDataStore: { _ in .nonPersistent() }))
+        var announced: [String] = []
+        model.announce = { announced.append($0) }
+        await model.start()
+        let menus = FakeMenus()
+        model.menuCommands = menus
+        model.showCommandBar()
+        model.setCommandQuery("address bar")
+        let index = try #require(model.commandResults.firstIndex { if case .menuCommand = $0 { true } else { false } })
+        menus.isAvailable = false
+        await model.runCommand(at: index)
+        #expect(model.notice?.message == "“Hide Address Bar in Sidebar” isn't available now.")
+        #expect(announced.contains("“Hide Address Bar in Sidebar” isn't available now."))
+    }
 }
-#endif

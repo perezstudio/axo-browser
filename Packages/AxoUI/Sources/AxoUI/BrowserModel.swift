@@ -208,7 +208,7 @@ public final class BrowserModel {
     /// Axo's menus, which the command bar searches too (#123). Set by the app on the Mac.
     @ObservationIgnored public var menuCommands: (any MenuCommandProviding)?
     /// The menus' commands as they were when the command bar opened.
-    @ObservationIgnored var indexedMenuCommands: [MenuCommand] = []
+    @ObservationIgnored var indexedMenuCommands: [MenuCommand]?
     /// Menu commands run from the command bar, most recent first, which rank first.
     @ObservationIgnored var recentMenuCommandIDs: [String] = []
     /// The command bar session's matches so far, which a longer query narrows (#122).
@@ -1372,7 +1372,8 @@ public final class BrowserModel {
         refreshDefaultBrowserStatus()
         isCommandBarVisible = true
         commandQuery = ""
-        indexedMenuCommands = menuCommands?.commands() ?? []
+        // Indexed on the first letter typed, not on every ⌘T or ⌘L.
+        indexedMenuCommands = nil
         commandSearchCache = CommandSearchCache()
         commandBarEditedTabID = nil
         isAddressEditedInSidebar = false
@@ -1410,7 +1411,10 @@ public final class BrowserModel {
         let openTabs = favoriteTabs + tabs
         commandResults = CommandRanking.immediateResults(for: query, tabs: openTabs, availableActions: availableActions,
                                                          cache: &commandSearchCache)
-        commandResults += CommandRanking.menuCommandResults(for: query, commands: indexedMenuCommands, recent: recentMenuCommandIDs)
+        if let menuCommands, !query.trimmingCharacters(in: .whitespaces).isEmpty {
+            if indexedMenuCommands == nil { indexedMenuCommands = menuCommands.commands() }
+            commandResults += CommandRanking.menuCommandResults(for: query, commands: indexedMenuCommands ?? [], recent: recentMenuCommandIDs)
+        }
         commandSelection = 0
         commandSearchTask?.cancel()
         // A very long query (a data: page's address being edited) isn't worth searching history for.
@@ -1465,7 +1469,12 @@ public final class BrowserModel {
         case .menuCommand(let command):
             recentMenuCommandIDs.removeAll { $0 == command.id }
             recentMenuCommandIDs.insert(command.id, at: 0)
-            menuCommands?.run(command)
+            // The item acts on whatever has focus (Copy, Undo), so it runs once the page has
+            // it back from the closed bar's field.
+            await pageFocusTask?.value
+            if menuCommands?.run(command) == false {
+                postNotice("“\(command.title)” isn't available now.")
+            }
         }
     }
 

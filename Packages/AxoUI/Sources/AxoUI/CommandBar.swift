@@ -58,6 +58,19 @@ public enum CommandAction: String, CaseIterable, Hashable, Sendable {
         }
     }
 
+    /// The titles of the menu items that do what this action does, so the command bar offers
+    /// the action and not those items too (#123). Compared without a trailing ellipsis.
+    var menuTitles: [String] {
+        switch self {
+        case .findInPage: [title, "Find"]
+        case .printPage: [title, "Print"]
+        case .newFolder: [title, "New Folder Inside"]
+        case .showDownloads: [title, "Hide Downloads"]
+        case .rotateSplitView: [title, "Stack Panes", "Show Panes Side by Side"]
+        default: [title]
+        }
+    }
+
     /// The SF Symbol shown next to the title.
     public var systemImage: String {
         switch self {
@@ -234,10 +247,10 @@ enum CommandRanking {
     static func menuCommandResults(for query: String, commands: [MenuCommand], recent: [String]) -> [CommandResult] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
-        let actionTitles = Set(CommandAction.allCases.map { $0.title.lowercased() })
+        let actionTitles = Set(CommandAction.allCases.flatMap(\.menuTitles).map(menuTitleKey))
         var seen = Set<String>()
         let matching = commands.filter { command in
-            !actionTitles.contains(command.title.lowercased())
+            !actionTitles.contains(menuTitleKey(command.title))
                 && matches(trimmed, in: "\(command.title) \(command.path.joined(separator: " "))")
                 && seen.insert(command.id).inserted
         }
@@ -251,6 +264,13 @@ enum CommandRanking {
             }
         }
         return ordered.prefix(maxMenuCommands).map { CommandResult.menuCommand($0.element) }
+    }
+
+    /// A menu title as compared with actions': lowercased, without a trailing ellipsis.
+    static func menuTitleKey(_ title: String) -> String {
+        var title = title.lowercased()
+        if title.hasSuffix("…") { title.removeLast() } else if title.hasSuffix("...") { title.removeLast(3) }
+        return title
     }
 
     /// History results to add, skipping pages already open as tabs.
