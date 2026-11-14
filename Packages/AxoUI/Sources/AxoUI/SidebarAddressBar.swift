@@ -33,7 +33,7 @@ struct SidebarAddressBar: View {
         // Site Settings hangs from the bar, which stays when the pointer leaves (the hover
         // button doesn't), whether it opened from there or from View › Site Settings….
         .popover(isPresented: Binding(get: { model.isShowingSiteSettings }, set: { model.isShowingSiteSettings = $0 }), arrowEdge: .bottom) {
-            SiteSettingsView(model: model)
+            SiteSettingsView(model: model).windowAppearance()
         }
     }
 

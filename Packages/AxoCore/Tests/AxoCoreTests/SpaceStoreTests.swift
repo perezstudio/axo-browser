@@ -127,6 +127,56 @@ struct SpaceStoreTests {
         #expect(try await store.spaces().first?.color == nil)
     }
 
+    @Test func spacesSaveAndClearATheme() async throws {
+        let home = try await store.bootstrap()
+        #expect(home.theme == nil, "New Spaces use the system's material")
+        let theme = SpaceTheme(colors: [ThemeColor(hex: "#336699")!, ThemeColor(hex: "#ffcc00")!], mode: .dark, transparency: 0.4, grain: 0.25)
+        try await store.setSpaceTheme(id: home.id, theme: theme)
+        #expect(try await store.spaces().first?.theme == theme)
+        try await store.setSpaceTheme(id: home.id, theme: nil)
+        #expect(try await store.spaces().first?.theme == nil)
+    }
+
+    @Test func aThemeThatDoesntReadLeavesTheSpaceReadable() async throws {
+        let home = try await store.bootstrap()
+        for json in [##"{"colors":[]}"##, ##"{"colors":["not a color"]}"##, "not json", ##"{"mode":"dark"}"##] {
+            try await store.database.writer.write { db in
+                try db.execute(sql: "UPDATE space SET theme = ?", arguments: [json])
+            }
+            let space = try #require(try await store.spaces().first, "\(json)")
+            #expect(space.id == home.id && space.theme == nil, "\(json)")
+        }
+    }
+
+    @Test func otherSpaceChangesLeaveTheThemeAsStored() async throws {
+        // Themes from another device or a newer Axo: an extra field, and a shape this one can't
+        // read. Renaming, recoloring, reordering, or moving the Space must not rewrite them, or
+        // the loss would sync everywhere.
+        let home = try await store.bootstrap()
+        let work = try await store.createSpace(name: "Work", profileID: home.profileID)
+        for json in [##"{"angle":45,"colors":["#ABCDEF"],"mode":"dark"}"##, ##"{"colors":[{"hex":"#336699"}]}"##] {
+            try await store.database.writer.write { db in
+                try db.execute(sql: "UPDATE space SET theme = ? WHERE id = ?", arguments: [json, home.id])
+            }
+            let other = try await store.createProfile(name: "Other")
+            func stored() async throws -> String? {
+                try await store.database.writer.read { db in
+                    try String.fetchOne(db, sql: "SELECT theme FROM space WHERE id = ?", arguments: [home.id])
+                }
+            }
+            try await store.renameSpace(id: home.id, to: "Personal")
+            #expect(try await stored() == json, "Rename")
+            try await store.setSpaceAppearance(id: home.id, color: "blue", icon: "house")
+            #expect(try await stored() == json, "Color and icon")
+            try await store.moveSpace(id: home.id, after: work.id)
+            #expect(try await stored() == json, "Reorder")
+            try await store.moveSpace(id: home.id, toProfile: other.id)
+            #expect(try await stored() == json, "Another profile")
+            try await store.deleteProfile(id: other.id, movingSpacesTo: home.profileID)
+            #expect(try await stored() == json, "Its profile deleted")
+        }
+    }
+
     @Test func spacesReorderByMovingOneRow() async throws {
         let home = try await store.bootstrap()
         let work = try await store.createSpace(name: "Work", profileID: home.profileID)

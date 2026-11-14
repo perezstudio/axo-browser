@@ -656,7 +656,7 @@ final class AxoUITests: XCTestCase {
     /// The sRGB color of the pixel at `point` (in points from the window's top left) in a
     /// screenshot of `window`.
     @MainActor
-    private static func color(at point: CGPoint, in window: XCUIElement) -> (red: Double, green: Double, blue: Double) {
+    static func color(at point: CGPoint, in window: XCUIElement) -> (red: Double, green: Double, blue: Double) {
         let image = window.screenshot().image
         guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return (0, 0, 0) }
         let scale = Double(cgImage.width) / image.size.width
@@ -673,7 +673,7 @@ final class AxoUITests: XCTestCase {
         return (Double(pixel[0]) / 255, Double(pixel[1]) / 255, Double(pixel[2]) / 255)
     }
 
-    private static func isClose(_ color: (red: Double, green: Double, blue: Double), to other: (red: Double, green: Double, blue: Double)) -> Bool {
+    static func isClose(_ color: (red: Double, green: Double, blue: Double), to other: (red: Double, green: Double, blue: Double)) -> Bool {
         abs(color.red - other.red) < 0.08 && abs(color.green - other.green) < 0.08 && abs(color.blue - other.blue) < 0.08
     }
 

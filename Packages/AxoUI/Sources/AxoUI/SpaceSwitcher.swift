@@ -37,7 +37,7 @@ struct SpaceSwitcher: View {
         .accessibilityLabel("Spaces")
         .accessibilityIdentifier("spaceSwitcher")
         .sheet(isPresented: $model.isCreatingSpace) {
-            NewSpaceSheet(model: model)
+            NewSpaceSheet(model: model).windowAppearance()
         }
         .confirmationDialog(
             "Delete “\(model.spaceToDelete?.name ?? "")”?",
@@ -107,6 +107,18 @@ private struct SpaceDots: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Space list")
         .accessibilityIdentifier("spaceDots")
+        // The theme editor (#137) hangs from the Space dots, beside the sidebar it changes.
+        .popover(isPresented: Binding(
+            get: { model.themeEditing.map { $0.isOpen && $0.placement == .sidebar } ?? false },
+            // Clicking outside keeps what the window shows, as other Mac popovers do; Esc and
+            // Cancel restore the old theme first.
+            // Only this popover's own closing: another editor replacing it isn't a Done.
+            set: { if !$0, model.themeEditing?.placement == .sidebar { model.closeThemeEditor(save: true) } }
+        ), arrowEdge: .top) {
+            SpaceThemeEditor(model: model)
+                // The popover follows the window's appearance; the sidebar has the theme's.
+                .windowAppearance()
+        }
     }
 
     /// The footer's buttons' height (``FooterButtonStyle``), which the capsule matches.
@@ -120,6 +132,7 @@ private struct SpaceDots: View {
                 }
                 .contextMenu {
                     Button("Rename…") { model.spaceToRename = space }
+                    Button("Edit Theme…") { model.beginEditingTheme(for: space.id, in: .sidebar) }
                     Button("Delete Space…", role: .destructive) { model.spaceToDelete = space }
                         .disabled(model.spaces.count < 2)
                 }
@@ -164,6 +177,8 @@ private struct SpaceDot: View {
     /// The Space's color when it has one (faded when it isn't the current Space), otherwise
     /// the primary color.
     private var fill: AnyShapeStyle {
+        // Palette colors only: a theme's own color would vanish on its own background, where the
+        // shown Space's dot sits.
         if let color = space.spaceColor?.color {
             return AnyShapeStyle(isSelected ? color : color.opacity(0.5))
         }

@@ -92,10 +92,10 @@ private struct SpaceLabel: View {
         } icon: {
             if let icon = space.icon {
                 Image(systemName: icon)
-                    .foregroundStyle(space.spaceColor?.color ?? .accentColor)
+                    .foregroundStyle(space.markerColor ?? .accentColor)
             } else {
                 Circle()
-                    .fill(space.spaceColor?.color ?? .accentColor)
+                    .fill(space.markerColor ?? .accentColor)
                     .frame(width: 8, height: 8)
             }
         }
@@ -149,11 +149,34 @@ private struct SpaceDetail: View {
             } header: {
                 Text("Icon")
             }
+            Section {
+                LabeledContent("Background") {
+                    HStack {
+                        ThemeSwatch(theme: space.theme)
+                        Text(space.theme == nil ? "System" : "Custom")
+                            .foregroundStyle(.secondary)
+                        Button("Edit Theme…") { model.beginEditingTheme(for: space.id, in: .settings) }
+                            .accessibilityIdentifier("editThemeSettingsButton")
+                    }
+                }
+            } header: {
+                Text("Theme")
+            } footer: {
+                Text("The theme colors the window behind the sidebar while this Space is shown.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
             Text("Moving a Space to another profile reloads its pages with that profile's cookies and logins.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
         .formStyle(.grouped)
+        .sheet(isPresented: Binding(
+            get: { model.themeEditing.map { $0.isOpen && $0.placement == .settings && $0.spaceID == space.id } ?? false },
+            set: { if !$0, model.themeEditing?.placement == .settings { model.closeThemeEditor(save: false) } }
+        )) {
+            SpaceThemeEditor(model: model)
+        }
     }
 
     private func rename() {

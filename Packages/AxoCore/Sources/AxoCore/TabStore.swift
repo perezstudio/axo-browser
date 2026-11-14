@@ -124,7 +124,9 @@ public final class TabStore: Sendable {
         try await database.writer.write { db in
             guard var space = try Space.fetchOne(db, id: id) else { throw TabStoreError.spaceNotFound(id) }
             space.name = name
-            try space.update(db)
+            // Only the changed columns: writing the whole record would re-encode the theme,
+            // dropping what a newer Axo stored in it (see `Space.theme`).
+            try space.update(db, columns: [Space.Columns.name])
         }
     }
 
@@ -134,7 +136,17 @@ public final class TabStore: Sendable {
             guard var space = try Space.fetchOne(db, id: id) else { throw TabStoreError.spaceNotFound(id) }
             space.color = color
             space.icon = icon
-            try space.update(db)
+            try space.update(db, columns: [Space.Columns.color, Space.Columns.icon])
+        }
+    }
+
+    /// Sets a Space's theme for the window's background (#137); `nil` goes back to the system's
+    /// material.
+    public func setSpaceTheme(id: Space.ID, theme: SpaceTheme?) async throws {
+        try await database.writer.write { db in
+            guard var space = try Space.fetchOne(db, id: id) else { throw TabStoreError.spaceNotFound(id) }
+            space.theme = theme
+            try space.update(db, columns: [Space.Columns.theme])
         }
     }
 
@@ -154,7 +166,7 @@ public final class TabStore: Sendable {
             let before = index > 0 ? others[index - 1].sortKey : nil
             let after = index < others.count ? others[index].sortKey : nil
             space.sortKey = try SortKey.between(before, after)
-            try space.update(db)
+            try space.update(db, columns: [Space.Columns.sortKey])
         }
     }
 
@@ -222,7 +234,7 @@ public final class TabStore: Sendable {
             guard try Profile.exists(db, id: profileID) else { throw TabStoreError.profileNotFound(profileID) }
             guard space.profileID != profileID else { return [] }
             space.profileID = profileID
-            try space.update(db)
+            try space.update(db, columns: [Space.Columns.profileID])
             return try Tab.filter(Tab.Columns.spaceID == id).fetchAll(db).map(\.id)
         }
     }
@@ -245,7 +257,7 @@ public final class TabStore: Sendable {
                 guard try Profile.exists(db, id: replacement) else { throw TabStoreError.profileNotFound(replacement) }
                 for var space in spaces {
                     space.profileID = replacement
-                    try space.update(db)
+                    try space.update(db, columns: [Space.Columns.profileID])
                     movedTabs += try Tab.filter(Tab.Columns.spaceID == space.id).fetchAll(db).map(\.id)
                 }
             }

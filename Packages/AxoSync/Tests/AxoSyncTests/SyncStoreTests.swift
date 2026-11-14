@@ -268,6 +268,39 @@ struct SyncStoreTests {
         #expect(try await mac.tabs.spaces().first?.color == nil, "Clearing syncs too")
     }
 
+    @Test func spaceThemesSyncAndReset() async throws {
+        let space = try await mac.tabs.bootstrap()
+        try await mac.sync()
+        try await iPad.sync()
+        let theme = SpaceTheme(colors: [ThemeColor(hex: "#2a6f97")!, ThemeColor(hex: "#a9d6e5")!], mode: .light, transparency: 0.3, grain: 0.5)
+        try await mac.tabs.setSpaceTheme(id: space.id, theme: theme)
+        try await mac.sync()
+        try await iPad.sync()
+        #expect(try await iPad.tabs.spaces().first?.theme == theme)
+
+        try await iPad.tabs.setSpaceTheme(id: space.id, theme: nil)
+        try await iPad.sync()
+        try await mac.sync()
+        #expect(try await mac.tabs.spaces().first?.theme == nil, "Going back to the system's material syncs too")
+    }
+
+    @Test func aThemeThisVersionCantReadSurvivesSyncAndLocalChanges() async throws {
+        let space = try await mac.tabs.bootstrap()
+        let json = ##"{"angle":45,"colors":["#ABCDEF"],"mode":"dark"}"##
+        try await mac.tabs.database.writer.write { db in
+            try db.execute(sql: "UPDATE space SET theme = ?", arguments: [json])
+        }
+        try await mac.sync()
+        try await iPad.sync()
+        // The iPad renames it; the theme it got goes back untouched.
+        try await iPad.tabs.renameSpace(id: space.id, to: "Personal")
+        try await iPad.sync()
+        try await mac.sync()
+        let stored = try await mac.tabs.database.writer.read { db in try String.fetchOne(db, sql: "SELECT theme FROM space") }
+        #expect(stored == json)
+        #expect(try await mac.tabs.spaces().first?.name == "Personal")
+    }
+
     @Test func favoritesSyncWithTheirProfile() async throws {
         let home = try await mac.tabs.bootstrap()
         let tab = try await mac.tabs.openTab(url: URL(string: "https://example.com/mail")!, title: "Mail", in: home.id)

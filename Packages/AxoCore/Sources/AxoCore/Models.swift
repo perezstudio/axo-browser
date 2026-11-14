@@ -36,15 +36,39 @@ public struct Space: Codable, Hashable, Identifiable, Sendable, FetchableRecord,
     public var color: String?
     /// The Space's icon: an SF Symbol name, or `nil` for none.
     public var icon: String?
+    /// The theme for the window's background while the Space is shown (#137), or `nil` for the
+    /// system's sidebar material. Stored as JSON. Write it only on purpose (`setSpaceTheme`):
+    /// other writes must name their columns, since re-encoding a theme from another device or a
+    /// newer Axo would drop what this one can't read, and sync that loss everywhere.
+    public var theme: SpaceTheme?
 
     /// Creates a Space.
-    public init(id: UUID = UUID(), profileID: UUID, name: String, sortKey: String, color: String? = nil, icon: String? = nil) {
+    public init(id: UUID = UUID(), profileID: UUID, name: String, sortKey: String, color: String? = nil, icon: String? = nil,
+                theme: SpaceTheme? = nil) {
         self.id = id
         self.profileID = profileID
         self.name = name
         self.sortKey = sortKey
         self.color = color
         self.icon = icon
+        self.theme = theme
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, profileID, name, sortKey, color, icon, theme
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        profileID = try container.decode(UUID.self, forKey: .profileID)
+        name = try container.decode(String.self, forKey: .name)
+        sortKey = try container.decode(String.self, forKey: .sortKey)
+        color = try container.decodeIfPresent(String.self, forKey: .color)
+        icon = try container.decodeIfPresent(String.self, forKey: .icon)
+        // A theme that doesn't read (from another device or a newer Axo) is no theme, never a
+        // Space that can't be read.
+        theme = (try? container.decodeIfPresent(SpaceTheme.self, forKey: .theme)) ?? nil
     }
 }
 
@@ -136,6 +160,10 @@ extension Space {
         public static let id = Column(CodingKeys.id)
         public static let profileID = Column(CodingKeys.profileID)
         public static let sortKey = Column(CodingKeys.sortKey)
+        public static let name = Column(CodingKeys.name)
+        public static let color = Column(CodingKeys.color)
+        public static let icon = Column(CodingKeys.icon)
+        public static let theme = Column(CodingKeys.theme)
     }
 }
 

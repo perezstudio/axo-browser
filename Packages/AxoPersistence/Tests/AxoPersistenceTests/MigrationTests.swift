@@ -317,6 +317,49 @@ struct MigrationTests {
         }
     }
 
+    @Test func v17SpacesHaveAnOptionalThemeThatSyncs() throws {
+        let database = try AppDatabase.makeInMemory()
+        let profileID = UUID(), spaceID = UUID()
+        try database.writer.write { db in
+            try db.execute(sql: "INSERT INTO profile (id, name) VALUES (?, 'Default')", arguments: [profileID])
+            try db.execute(sql: "INSERT INTO space (id, profileID, name, sortKey) VALUES (?, ?, 'Home', 'a0')", arguments: [spaceID, profileID])
+            #expect(try String.fetchOne(db, sql: "SELECT theme FROM space") == nil, "Spaces start with the system's material")
+
+            try db.execute(sql: "DELETE FROM syncChange")
+            try db.execute(sql: ##"UPDATE space SET theme = '{"colors":["#336699"]}'"##)
+            #expect(try String.fetchAll(db, sql: "SELECT recordType FROM syncChange") == ["Space"])
+            try db.execute(sql: "DELETE FROM syncChange")
+            try db.execute(sql: ##"UPDATE space SET theme = '{"colors":["#336699"]}'"##)
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM syncChange") == 0, "Unchanged writes aren't changes")
+            try db.execute(sql: "UPDATE space SET theme = NULL")
+            #expect(try String.fetchAll(db, sql: "SELECT recordType FROM syncChange") == ["Space"], "Clearing it is a change")
+            try db.execute(sql: "DELETE FROM syncChange")
+            try db.execute(sql: "UPDATE space SET color = 'blue'")
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM syncChange") == 1, "The older columns still count")
+        }
+    }
+
+    @Test func v17KeepsExistingSpacesAsTheyWere() throws {
+        let queue = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(queue, upTo: "v16-home-favicon-cleanup")
+        let profileID = UUID(), spaceID = UUID()
+        try queue.write { db in
+            try db.execute(sql: "INSERT INTO profile (id, name) VALUES (?, 'Default')", arguments: [profileID])
+            try db.execute(sql: "INSERT INTO space (id, profileID, name, sortKey, color, icon) VALUES (?, ?, 'Home', 'a0', 'teal', 'leaf')",
+                           arguments: [spaceID, profileID])
+            try db.execute(sql: "DELETE FROM syncChange")
+        }
+        try AppDatabase.migrator.migrate(queue)
+        try queue.write { db in
+            let row = try #require(try Row.fetchOne(db, sql: "SELECT name, color, icon, theme FROM space"))
+            #expect(row["name"] as String == "Home" && row["color"] as String == "teal" && row["icon"] as String == "leaf")
+            #expect(row["theme"] as String? == nil, "Existing Spaces keep the system's material")
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM syncChange") == 0, "Adding the column changes nothing to sync")
+            try db.execute(sql: "UPDATE space SET theme = '{}'")
+            #expect(try String.fetchAll(db, sql: "SELECT recordType FROM syncChange") == ["Space"], "The recreated trigger sees the theme")
+        }
+    }
+
     @Test func v14FavoritesBelongToAProfileAndSync() throws {
         let database = try AppDatabase.makeInMemory()
         let profileID = UUID(), favoriteID = UUID()

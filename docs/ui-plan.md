@@ -40,7 +40,7 @@ Decided on November 14, 2026. The phases below follow them.
 
 The boards: Axo today, Proposed 1.0 window, Tab row states, Space themes (in Axo today).
 
-- [ ] **Space themes (#137).** PR #169, held. Finish and merge it first: every later window change draws over the theme.
+- [x] **Space themes (#137).** PR #169: a color or gradient, translucency, and grain behind the sidebar, edited from the Space's Theme… popover and Settings › Spaces.
 - [ ] **Layered page (#67).** The page as a layer beside the sidebar along one straight edge with a shadow, the back and forward capsule, and the reload circle. Done: the window matches the board in light and dark, with the sidebar shown and hidden, and the page's own loading bar and hovered-link label still sit on the page.
 - [ ] **Navigation bar above the page, inside the page's area (#170).** Today the toolbar spans the window and its tint covers the strip above the sidebar (#107). Change it so the control bar sits inside the page's area and the sidebar keeps its theme to the top (the Mac board's "Address bar above the page"). Done: `testNavigationBarPlacement` and `testToolbarTakesThePagesThemeColor` updated, and the tint reaches only the control bar.
 - [ ] **Top tab bar (#136).** The "Tabs on top" layout: favorites with the Space's name, Pinned, folders, today's tabs, New Tab, with the control bar inside the page under it; hiding the tab bar keeps the control bar. Needs the item above.
