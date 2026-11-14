@@ -128,6 +128,24 @@ final class AccessibilityAuditTests: XCTestCase {
         try audit(app, "notice")
     }
 
+    /// First run's steps (#175): the welcome and setting up the first Space (nothing to import
+    /// in UI testing mode's empty folder).
+    @MainActor
+    func testAuditFirstRun() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["AXO_UI_TESTING"] = "1"
+        app.launchEnvironment["AXO_UI_TESTING_FIRST_RUN"] = "1"
+        app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
+        app.launch()
+        AxoUITests.bringToFront(app)
+        let getStarted = app.buttons["firstRunGetStarted"]
+        XCTAssertTrue(getStarted.waitForExistence(timeout: 10))
+        try audit(app, "first run's welcome")
+        getStarted.click()
+        XCTAssertTrue(app.buttons["firstRunCreateSpace"].waitForExistence(timeout: 5))
+        try audit(app, "first run's Space setup")
+    }
+
     @MainActor
     func testAuditEveryScreen() throws {
         let app = launchApp()

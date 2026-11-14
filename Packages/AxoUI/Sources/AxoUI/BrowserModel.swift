@@ -237,6 +237,11 @@ public final class BrowserModel {
     @ObservationIgnored public var browserImporter: (any BrowserImporting)?
     /// The open Import sheet's state, if it's open.
     public var importSession: ImportSession?
+    /// Whether first run has been through, set by the app outside test runs (and by UI tests that
+    /// ask for first run). Without one, first run never shows.
+    @ObservationIgnored public var firstRunRecord: (any FirstRunRecord)?
+    /// First run while it shows (#175).
+    public internal(set) var firstRun: FirstRun?
     /// Checks and changes the default browser. Set by the app.
     @ObservationIgnored public var defaultBrowser: (any DefaultBrowserSetting)? {
         didSet { refreshDefaultBrowserStatus() }
@@ -469,6 +474,7 @@ public final class BrowserModel {
             for link in pending {
                 await openExternalURL(link.url, sourceApp: link.sourceApp)
             }
+            beginFirstRunIfNeeded()
             observeSpaces()
             observeProfiles()
             observeLinkRoutes()

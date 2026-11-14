@@ -33,7 +33,13 @@ public struct BrowserWindow: View {
             } else {
                 splitView
             }
+            // First run (#175), over the whole window until it's done.
+            if let firstRun = model.firstRun {
+                FirstRunView(model: model, firstRun: firstRun)
+                    .transition(.opacity)
+            }
         }
+        .animation(.easeInOut(duration: 0.4), value: model.firstRun == nil)
         .focusedSceneValue(\.browserModel, model)
         // ⌘L: with the navigation bar in the sidebar, the address is edited in the command bar,
         // as in Arc (also when the sidebar's address bar is hidden); above the page, its field

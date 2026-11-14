@@ -93,7 +93,7 @@ The boards: Settings, Extensions window, iCloud sync.
 The boards: Downloads and empty states, History and mini windows, First run, New Space and profile, Import from another browser, Error pages and warnings, Page full screen, File panels, Screen Time limits, Picture in Picture.
 
 - [ ] **Downloads and empty states, History and mini windows.** Check the built lists and mini windows against their boards; build the empty states with the Axo character in the Space's color. One PR per board.
-- [ ] **First run (#175).** New: the welcome on Blush, Import (Arc found or nothing to import), Set up a Space, and one persistent glass card whose tint takes the Space's color, with the board's animations. No profile step; people start in Default.
+- [x] **First run (#175).** New: the welcome on Blush, Import (Arc found or nothing to import), Set up a Space, and one persistent glass card whose tint takes the Space's color, with the board's animations. No profile step; people start in Default.
 - [ ] **New Space and New Profile (#176).** The + by the Space dots, File › New Space…, and Settings › Profiles, with the theme picker and the New Profile slide-in.
 - [ ] **Import later (#177).** From Settings › General or File › Import from Browser…, as a sheet over the open window, with add as new Spaces or merge into a folder. Safari import isn't built (only Arc and Chrome); either build it or drop it from the board.
 - [ ] **Error pages (#178).** Can't Connect, Not Secure, certificate warnings, dangerous sites, and Page Stopped (#75, #96). Chromium shows its own error pages today; Axo's replace them through the engine. #75 and #96 cover the rest.
