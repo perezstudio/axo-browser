@@ -8,6 +8,14 @@ extension BrowserModel {
         spaces.filter { $0.profileID == profileID }
     }
 
+    /// Creates a profile with its first Space (#176) and shows that Space.
+    @discardableResult
+    public func addProfile(named name: String, firstSpaceName: String) async -> Profile? {
+        guard let profile = await addProfile(named: name) else { return nil }
+        await createSpace(name: firstSpaceName, profileID: profile.id)
+        return profile
+    }
+
     /// Creates a profile with its own cookies and website data.
     @discardableResult
     public func addProfile(named name: String) async -> Profile? {
