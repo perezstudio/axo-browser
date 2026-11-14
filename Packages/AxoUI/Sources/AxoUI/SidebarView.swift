@@ -175,6 +175,10 @@ struct SidebarSections: View {
     let data: SpaceSidebarPreview
 
     var body: some View {
+        // The Space's name, between the favorites and Pinned, styled like a tab row (#171).
+        Section {
+            SpaceNameRow(model: model, space: data.space)
+        }
         if !data.pinnedTree.isEmpty {
             Section("Pinned") {
                 PinnedLevel(model: model, nodes: data.pinnedTree, parent: nil, splitPanes: data.splitPanes,
@@ -194,12 +198,6 @@ struct SidebarSections: View {
             .onMove { source, destination in
                 Task { await model.moveTabs(fromOffsets: source, toOffset: destination, pinned: false) }
             }
-        } header: {
-            if let icon = data.space.icon {
-                Label(data.space.name, systemImage: icon)
-            } else {
-                Text(data.space.name)
-            }
         }
     }
 
@@ -213,6 +211,33 @@ struct SidebarSections: View {
 }
 #endif
 
+
+/// The Space's name, between the favorites and Pinned, styled like a tab row: its icon and name
+/// (#171). It's a heading for VoiceOver, and its menu offers the Space's actions, as its dot's
+/// does. It isn't selectable.
+struct SpaceNameRow: View {
+    let model: BrowserModel
+    let space: Space
+
+    var body: some View {
+        Label {
+            Text(space.name)
+                .lineLimit(1)
+        } icon: {
+            Image(systemName: space.icon ?? "square.stack")
+        }
+        .fontWeight(.medium)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityIdentifier("spaceNameRow")
+        .contextMenu {
+            Button("Rename…") { model.spaceToRename = space }
+            Button("Edit Theme…") { model.beginEditingTheme(for: space.id, in: .sidebar) }
+            Button("Delete Space…", role: .destructive) { model.spaceToDelete = space }
+                .disabled(model.spaces.count < 2)
+        }
+    }
+}
 
 /// A sidebar row for a tab, or for a split view when the tab's split stands behind it (`panes`,
 /// in pane order, from the Space's rows), with a
