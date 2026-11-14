@@ -1423,7 +1423,9 @@ public final class BrowserModel {
         let splitAnchor = pendingSplitAnchor
         // Editing the address: a page loads in the tab whose address it was.
         let editedTabID = commandBarEditedTabID
+        let query = commandQuery
         hideCommandBar()
+        learnFromCommand(result, query: query)
         if let editedTabID, let url = result.pageURL {
             await loadEditedAddress(url, in: editedTabID)
             return
@@ -1443,6 +1445,25 @@ public final class BrowserModel {
             await completePendingSplit(with: selectedTabID, anchor: splitAnchor)
         case .action(let action):
             await perform(action)
+        }
+    }
+
+    /// Teaches the ranking (#121): the query led to the page chosen (a history page, a tab, or
+    /// what was typed), and a typed address counts as typed. Searches and actions teach nothing.
+    private func learnFromCommand(_ result: CommandResult, query: String) {
+        guard let profileID = space?.profileID else { return }
+        let history = store.history
+        let chosen: URL? = switch result {
+        case .open(let url, let isSearch, _): isSearch ? nil : url
+        case .history(let item): item.url
+        case .tab(let tab): tab.url
+        case .action: nil
+        }
+        guard let chosen else { return }
+        let typed: Bool = if case .open = result { true } else { false }
+        Task {
+            if typed { try? await history.recordTypedVisit(to: chosen, profileID: profileID) }
+            try? await history.recordChoice(query: query, url: chosen, profileID: profileID)
         }
     }
 

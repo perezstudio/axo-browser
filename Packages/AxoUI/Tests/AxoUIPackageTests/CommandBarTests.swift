@@ -206,6 +206,46 @@ struct CommandBarTests {
         print("Command bar, 500 tabs: \(fresh / keystrokes) per keystroke searching again, \(narrowed / keystrokes) narrowing")
     }
 
+    /// Matching tabs come by when they were last used, most recent first (#121).
+    @Test func openTabsComeByWhenTheyWereLastUsed() {
+        let space = UUID()
+        let now = Date()
+        let old = AxoCore.Tab(id: UUID(), spaceID: space, url: URL(string: "https://a.example/pond")!, title: "Pond A", sortKey: "a",
+                              lastActiveAt: now.addingTimeInterval(-3_600))
+        let recent = AxoCore.Tab(id: UUID(), spaceID: space, url: URL(string: "https://b.example/pond")!, title: "Pond B", sortKey: "b",
+                                 lastActiveAt: now)
+        let results = CommandRanking.immediateResults(for: "pond", tabs: [old, recent], availableActions: [])
+        let tabIDs = results.compactMap { result -> AxoCore.Tab.ID? in if case .tab(let tab) = result { tab.id } else { nil } }
+        #expect(tabIDs == [recent.id, old.id])
+    }
+
+    /// Choosing a result teaches the query which page it led to, and a typed address counts as
+    /// typed (#121); clearing history forgets both.
+    @Test func choosingAResultIsLearned() async throws {
+        let mail = URL(string: "https://mail.example/")!
+        try await store.history.recordVisit(to: mail, title: "Mail", profileID: profileID)
+        model.showCommandBar()
+        model.setCommandQuery("mai")
+        try await waitUntil { model.commandResults.contains { if case .history = $0 { true } else { false } } }
+        let index = try #require(model.commandResults.firstIndex { if case .history = $0 { true } else { false } })
+        await model.runCommand(at: index)
+        let choices = { try await self.store.database.writer.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM commandChoice WHERE query = 'mai' AND url = ?", arguments: [mail.absoluteString]) ?? 0
+        } }
+        try await waitUntilAsync { try await choices() == 1 }
+
+        model.showCommandBar()
+        model.setCommandQuery("typed.example")
+        guard case .open = model.commandResults.first else { Issue.record("The typed address comes first"); return }
+        await model.runCommand(at: 0)
+        try await waitUntilAsync {
+            try await self.store.history.recent(profileID: self.profileID, limit: 20).contains { $0.url.host() == "typed.example" && $0.typedCount == 1 }
+        }
+
+        try await store.history.clear(profileID: profileID)
+        #expect(try await choices() == 0)
+    }
+
     @Test func historyAppearsAfterTheImmediateRowsAndOpensInANewTab() async throws {
         try await store.history.recordVisit(to: URL(string: "https://webkit.org/blog")!, title: "WebKit Blog", profileID: profileID)
         model.showCommandBar()

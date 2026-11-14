@@ -127,6 +127,88 @@ struct HistoryStoreTests {
         #expect(try await history.recent(profileID: profileID).isEmpty)
     }
 
+    // MARK: Ranking (#121)
+
+    @Test func typedPagesRankAbovePagesOnlyReachedByLinks() async throws {
+        let now = Date()
+        let linked = url("https://docs.example/swift-guide")
+        let typed = url("https://swift-notes.example/")
+        // The linked page is visited more often; the typed one was typed twice.
+        for _ in 0..<3 { try await history.recordVisit(to: linked, title: "Swift Guide", profileID: profileID, at: now) }
+        try await history.recordVisit(to: typed, title: "Swift Notes", profileID: profileID, at: now)
+        try await history.recordTypedVisit(to: typed, profileID: profileID)
+        try await history.recordTypedVisit(to: typed, profileID: profileID)
+        let results = try await history.search("swift", profileID: profileID, now: now)
+        #expect(results.first?.url == typed)
+        #expect(results.first?.typedCount == 2)
+    }
+
+    @Test func aPageTypedBeforeItLoadsIsAddedWithNoVisits() async throws {
+        let page = url("https://new.example/")
+        try await history.recordTypedVisit(to: page, profileID: profileID)
+        let item = try #require(try await history.recent(profileID: profileID).first)
+        #expect(item.url == page && item.typedCount == 1 && item.visitCount == 0)
+        try await history.recordVisit(to: page, title: "New", profileID: profileID)
+        let visited = try #require(try await history.recent(profileID: profileID).first)
+        #expect(visited.visitCount == 1 && visited.typedCount == 1)
+    }
+
+    @Test func theStartOfTheSiteOrTitleRanksAboveTheMiddleOfATitle() {
+        let now = Date()
+        func item(_ address: String, _ title: String) -> HistoryItem {
+            HistoryItem(profileID: profileID, url: url(address), title: title, visitCount: 1, lastVisitedAt: now)
+        }
+        let site = item("https://github.com/", "Home")
+        let titleStart = item("https://learn.example/a", "Git basics")
+        let middle = item("https://learn.example/b", "Learning git")
+        #expect(HistoryStore.matchQuality(of: item("https://www.github.com/", "x"), for: "github.com") == 4, "The whole site")
+        #expect(HistoryStore.matchQuality(of: site, for: "git") == 2)
+        #expect(HistoryStore.matchQuality(of: titleStart, for: "git") == 1)
+        #expect(HistoryStore.matchQuality(of: middle, for: "git") == 0)
+        let scores = [site, titleStart, middle].map { HistoryStore.score($0, relevance: -1, now: now, query: "git") }
+        #expect(scores == scores.sorted(by: >), "Same relevance, visits, and age: the better match wins")
+    }
+
+    @Test func aQueryLearnsWhichPageItLedTo() async throws {
+        let now = Date()
+        let mail = url("https://mail.example/")
+        let maps = url("https://maps.example/")
+        try await history.recordVisit(to: mail, title: "Mail", profileID: profileID, at: now)
+        for _ in 0..<5 { try await history.recordVisit(to: maps, title: "Maps", profileID: profileID, at: now) }
+        #expect(try await history.search("ma", profileID: profileID, now: now).first?.url == maps, "Visited more")
+
+        try await history.recordChoice(query: "  MAI  ", url: mail, profileID: profileID)
+        try await history.recordChoice(query: "mai", url: mail, profileID: profileID)
+        #expect(try await history.search("mai", profileID: profileID, now: now).first?.url == mail, "The same query")
+        #expect(try await history.search("ma", profileID: profileID, now: now).first?.url == mail, "A shorter query it starts with")
+
+        let otherProfile = try await store.createProfile(name: "Work").id
+        try await history.recordVisit(to: maps, title: "Maps", profileID: otherProfile, at: now)
+        try await history.recordVisit(to: mail, title: "Mail", profileID: otherProfile, at: now)
+        for _ in 0..<5 { try await history.recordVisit(to: maps, title: "Maps", profileID: otherProfile, at: now) }
+        #expect(try await history.search("ma", profileID: otherProfile, now: now).first?.url == maps, "Choices stay in their profile")
+
+        try await history.clear(profileID: profileID)
+        let left = try await store.database.writer.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM commandChoice WHERE profileID = ?", arguments: [profileID])
+        }
+        #expect(left == 0, "Clearing history clears what was learned from it")
+    }
+
+    @Test func choicesAreCappedLeastRecentFirst() async throws {
+        let start = Date(timeIntervalSince1970: 1_000_000)
+        for i in 0..<(HistoryStore.maxChoices + 5) {
+            try await history.recordChoice(query: "q\(i)", url: url("https://p\(i).example/"), profileID: profileID,
+                                           at: start.addingTimeInterval(Double(i)))
+        }
+        let (count, oldest) = try await store.database.writer.read { db in
+            (try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM commandChoice") ?? 0,
+             try String.fetchOne(db, sql: "SELECT query FROM commandChoice ORDER BY lastChosenAt LIMIT 1"))
+        }
+        #expect(count == HistoryStore.maxChoices)
+        #expect(oldest == "q5", "The five least recently used went")
+    }
+
     @Test func searchingFiftyThousandPagesStaysFast() async throws {
         // Seed 50,000 pages in one transaction, then time searches the way the command bar runs
         // them: one per keystroke.
