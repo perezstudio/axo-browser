@@ -238,6 +238,8 @@ enum AppEnvironment {
 
     static func makeBrowserModel() -> BrowserModel {
         let model = makeModel()
+        // The command bar searches the main menu's items too (#123).
+        model.menuCommands = MainMenuCommands()
         if !isTestRun {
             model.onSpaceChange = { UserDefaults.standard.set($0.uuidString, forKey: lastSpaceKey) }
             // Not in test runs, so nothing in a test run can offer to change the default browser.

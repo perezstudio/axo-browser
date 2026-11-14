@@ -414,7 +414,7 @@ Features beyond the milestones above, each a GitHub issue with its approach and 
 - Command bar:
   - [x] [#121](https://github.com/perezstudio/axo-browser/issues/121) Rank by typed pages, match quality, recent tabs, and past choices.
   - [x] [#122](https://github.com/perezstudio/axo-browser/issues/122) Narrow results while typing instead of starting over.
-  - [ ] [#123](https://github.com/perezstudio/axo-browser/issues/123) Search and run any menu command.
+  - [x] [#123](https://github.com/perezstudio/axo-browser/issues/123) Search and run any menu command.
 - Ecosystem integration:
   - [ ] [#105](https://github.com/perezstudio/axo-browser/issues/105) AppleScript support for windows, Spaces, and tabs.
   - [ ] [#106](https://github.com/perezstudio/axo-browser/issues/106) A global shortcut that opens a new mini window from any app.
