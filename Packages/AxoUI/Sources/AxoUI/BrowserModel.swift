@@ -239,6 +239,11 @@ public final class BrowserModel {
     @ObservationIgnored public var browserImporter: (any BrowserImporting)?
     /// The open Import sheet's state, if it's open.
     public var importSession: ImportSession?
+    /// Whether first run has been through, set by the app outside test runs (and by UI tests that
+    /// ask for first run). Without one, first run never shows.
+    @ObservationIgnored public var firstRunRecord: (any FirstRunRecord)?
+    /// First run while it shows (#175).
+    public internal(set) var firstRun: FirstRun?
     /// Checks and changes the default browser. Set by the app.
     @ObservationIgnored public var defaultBrowser: (any DefaultBrowserSetting)? {
         didSet { refreshDefaultBrowserStatus() }
@@ -468,6 +473,8 @@ public final class BrowserModel {
             try await show(initial)
             let pending = pendingExternalURLs
             pendingExternalURLs = []
+            // Decided before any link opens a tab: a launch that opens links skips first run.
+            await beginFirstRunIfNeeded(opensLinks: !pending.isEmpty)
             for link in pending {
                 await openExternalURL(link.url, sourceApp: link.sourceApp)
             }
@@ -641,6 +648,7 @@ public final class BrowserModel {
         let fresh = try await store.spaces()
         guard generation == spacesReadGeneration else { return false }
         spaces = fresh
+        endFirstRunIfSpacesChanged()
         try await followShownSpace()
         return true
     }
@@ -1304,6 +1312,9 @@ public final class BrowserModel {
             pendingExternalURLs.append((url, sourceApp))
             return
         }
+        // A link from another app means the person is browsing: first run gives way, rather
+        // than hiding the link's tab under its card.
+        finishFirstRun(announcing: nil)
         let routes = (try? await store.linkRoutes.routes()) ?? linkRoutes
         if let route = LinkRoute.route(for: url, from: sourceApp, in: routes),
            spaces.contains(where: { $0.id == route.spaceID }) {

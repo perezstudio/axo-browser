@@ -246,6 +246,8 @@ enum AppEnvironment {
             model.locationAuthorization = SystemLocationAuthorization()
             model.pageSummarizer = SystemPageSummarizer()
             model.externalApps = SystemExternalApps()
+            // First run shows once, for a browser with nothing in it yet (#175).
+            model.firstRunRecord = DefaultsFirstRunRecord(defaults: .standard)
         } else {
             // Test runs never offer their pages to the person's other devices, and their pages
             // never count as the person's Screen Time usage.
@@ -264,6 +266,10 @@ enum AppEnvironment {
                 let pasteboard = NSPasteboard(name: TestPasteboard.name)
                 pasteboard.clearContents()
                 pasteboard.setString(url.absoluteString, forType: .string)
+            }
+            // First run never shows in test runs, unless a UI test asks for it.
+            if isUITesting, ProcessInfo.processInfo.environment["AXO_UI_TESTING_FIRST_RUN"] == "1" {
+                model.firstRunRecord = InMemoryFirstRunRecord()
             }
             // Notices stay longer, so a slow UI query still finds them.
             model.noticeSleep = { duration in try? await Task.sleep(for: duration * 6) }

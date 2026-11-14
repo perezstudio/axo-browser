@@ -36,6 +36,27 @@ Decided on November 14, 2026. The phases below follow them.
 5. **The boards' proposals are accepted**: the update-ready notice and Restart to Update Axo menu item; picture in picture's View menu item, page menu item, and tab-row mark; the iPhone's Address bar setting (bottom or top); Downloads at the end of the top tab bar; and Include beta versions in Settings. Reader, which only appears as an item in the iPhone menu, gets its own design before it's built.
 6. **Google is the default search engine**, with Bing and DuckDuckGo as the alternatives. It replaces the DuckDuckGo placeholder in `AddressInput`, and the Search pane (#132) offers the three.
 
+## Order for v1.0 user testing
+
+Set on November 14, 2026. The goal is a Mac build people can test day to day: the 1.0 window, a first run, the flows they'll hit in their first week, and Settings, all with passing tests in CI. Work goes top to bottom, one PR per line; take the first one not merged.
+
+1. #64: build and unit tests (the app's and every package's) in CI on every PR, so "passes in CI" covers more than the UI tests.
+2. #172: Google as the default search engine.
+3. #67: the layered page.
+4. #170: the navigation bar above the page inside the page's area. Check #167 (pages under the toolbar) along the way, since it moves the page's top edge.
+5. #171: the Space's name row.
+6. #136: the top tab bar.
+7. #71, #74, #73: tab rows for audio and mute, devices in use, and a pinned tab away from its page.
+8. #178 with #75 and the rest of #96: Axo's own error pages, crashed pages, and certificate warnings.
+9. #175: first run.
+10. #176: New Space and New Profile.
+11. #77, then #78: dragging in the sidebar and to another Space; then what's left of #81.
+12. #122, #121, #123: the command bar; then #112, history menus on Back and Forward.
+13. #85, then #133, #132, #131, #130, #174, #110, #173: Settings in a sidebar layout and the panes and panels that go in it.
+14. #61 and #180: a signed, notarized DMG with the engine, and Sparkle updates. Signing and notarizing need the owner's Developer ID and credentials, which never go in the repo; the work here is the scripts and the updater, and the owner runs the signing.
+
+After user testing starts: Phase 9 (iPhone and iPad), #177, #179, #83 and #46, #87, and the remaining Phase 2 and Chromium items.
+
 ## Phase 1: the window
 
 The boards: Axo today, Proposed 1.0 window, Tab row states, Space themes (in Axo today).
@@ -45,7 +66,7 @@ The boards: Axo today, Proposed 1.0 window, Tab row states, Space themes (in Axo
 - [ ] **Navigation bar above the page, inside the page's area (#170).** Today the toolbar spans the window and its tint covers the strip above the sidebar (#107). Change it so the control bar sits inside the page's area and the sidebar keeps its theme to the top (the Mac board's "Address bar above the page"). Done: `testNavigationBarPlacement` and `testToolbarTakesThePagesThemeColor` updated, and the tint reaches only the control bar.
 - [ ] **Top tab bar (#136).** The "Tabs on top" layout: favorites with the Space's name, Pinned, folders, today's tabs, New Tab, with the control bar inside the page under it; hiding the tab bar keeps the control bar. Needs the item above.
 - [x] **Space name row (#171).** The Space's name between the favorites and Pinned, styled like a tab row, as on the window board.
-- [ ] **Tab rows.** One PR per issue, each matching the Tab row states board (close on hover, the loading spinner, and dimmed tabs are built, from PR #158): audio and mute (#71), a pinned tab away from its page (#73), camera, microphone, screen, and location in use (#74), crashed and unresponsive pages (#75, shared with Phase 6), hover preview card (#76), and the rest of #82.
+- [ ] **Tab rows.** One PR per issue, each matching the Tab row states board (close on hover, the loading spinner, and dimmed tabs are built, from PR #158, and a pinned tab away from its page, #73): audio and mute (#71), camera, microphone, screen, and location in use (#74), crashed and unresponsive pages (#75, shared with Phase 6), hover preview card (#76), and the rest of #82.
 - [ ] **Notices.** Check `NoticeView` against the boards (capsule at the page column's bottom, Undo, held while hovered); adjust spacing and motion to match. Small; no issue needed unless it changes behavior.
 
 ## Phase 2: sidebar interactions
@@ -93,7 +114,7 @@ The boards: Settings, Extensions window, iCloud sync.
 The boards: Downloads and empty states, History and mini windows, First run, New Space and profile, Import from another browser, Error pages and warnings, Page full screen, File panels, Screen Time limits, Picture in Picture.
 
 - [ ] **Downloads and empty states, History and mini windows.** Check the built lists and mini windows against their boards; build the empty states with the Axo character in the Space's color. One PR per board.
-- [ ] **First run (#175).** New: the welcome on Blush, Import (Arc found or nothing to import), Set up a Space, and one persistent glass card whose tint takes the Space's color, with the board's animations. No profile step; people start in Default.
+- [x] **First run (#175).** New: the welcome on Blush, Import (Arc found or nothing to import), Set up a Space, and one persistent glass card whose tint takes the Space's color, with the board's animations. No profile step; people start in Default.
 - [ ] **New Space and New Profile (#176).** The + by the Space dots, File › New Space…, and Settings › Profiles, with the theme picker and the New Profile slide-in.
 - [ ] **Import later (#177).** From Settings › General or File › Import from Browser…, as a sheet over the open window, with add as new Spaces or merge into a folder. Safari import isn't built (only Arc and Chrome); either build it or drop it from the board.
 - [ ] **Error pages (#178).** Can't Connect, Not Secure, certificate warnings, dangerous sites, and Page Stopped (#75, #96). Chromium shows its own error pages today; Axo's replace them through the engine. #75 and #96 cover the rest.
