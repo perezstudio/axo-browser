@@ -48,11 +48,7 @@ struct ProfileSettings: View {
         }
         .onAppear { if selection == nil { selection = model.space?.profileID } }
         .sheet(isPresented: $isAdding) {
-            NameSheet(title: "New Profile", initialName: "", confirmTitle: "Create") { name in
-                Task {
-                    if let profile = await model.addProfile(named: name) { selection = profile.id }
-                }
-            }
+            NewProfileSheet(model: model) { selection = $0.id }
         }
         .sheet(item: $profileToDelete) { profile in
             DeleteProfileSheet(model: model, profile: profile) {

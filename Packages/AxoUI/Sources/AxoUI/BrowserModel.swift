@@ -521,17 +521,27 @@ public final class BrowserModel {
     ///   - name: The Space's name.
     ///   - newProfileName: A name for a new profile with its own cookies and website data, or
     ///     `nil` to share the current Space's profile.
-    public func createSpace(name: String, newProfileName: String? = nil) async {
+    public func createSpace(
+        name: String,
+        newProfileName: String? = nil,
+        profileID chosenProfileID: Profile.ID? = nil,
+        icon: String? = nil,
+        theme: SpaceTheme? = nil
+    ) async {
         guard let current = space else { return }
         do {
+            // A new profile, a chosen one, or the shown Space's.
             let profileID = if let newProfileName {
                 try await store.createProfile(name: newProfileName).id
             } else {
-                current.profileID
+                chosenProfileID ?? current.profileID
             }
             let created = try await store.createSpace(name: name, profileID: profileID)
+            if let icon { try await store.setSpaceAppearance(id: created.id, color: nil, icon: icon) }
+            if let theme { try await store.setSpaceTheme(id: created.id, theme: theme) }
             spaces = try await store.spaces()
-            try await show(created)
+            // Shown with its icon and theme, whose records are now in `spaces`.
+            try await show(spaces.first { $0.id == created.id } ?? created)
         } catch {
             report(error, "Axo couldn't create the Space.")
         }

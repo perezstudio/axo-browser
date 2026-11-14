@@ -839,14 +839,19 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Home"].exists, "It lists the Spaces that use it")
         XCTAssertFalse(app.buttons["deleteProfileButton"].isEnabled, "The only profile can't be deleted")
 
+        // A new profile comes with its first Space (#176).
         app.buttons["addProfileButton"].click()
-        let nameField = app.textFields["nameField"]
+        let nameField = app.textFields["newProfileName"]
         XCTAssertTrue(nameField.waitForExistence(timeout: 5))
-        nameField.typeText("Work\n")
+        nameField.typeText("Work")
+        let firstSpace = app.textFields["profileFirstSpaceField"]
+        firstSpace.click()
+        firstSpace.typeText("Office")
+        app.buttons["createProfileButton"].click()
         XCTAssertTrue(list.staticTexts["Work"].waitForExistence(timeout: 5))
         expectation(for: NSPredicate(format: "value == 'Work'"), evaluatedWith: app.textFields["profileNameField"])
         waitForExpectations(timeout: 5)
-        XCTAssertTrue(app.staticTexts["No Spaces use this profile."].exists)
+        XCTAssertTrue(app.staticTexts["Office"].waitForExistence(timeout: 5), "Its first Space uses it")
 
         list.staticTexts["Default"].click()
         app.buttons["deleteProfileButton"].click()
