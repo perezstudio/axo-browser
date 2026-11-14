@@ -6,7 +6,7 @@ Guidance for Claude Code when working in this repository.
 
 Axo is a native, lean, open source web browser for macOS (iPhone and iPad later), inspired by Arc's sidebar and Spaces model. It is built on WebKit and SwiftUI, runs Chrome extensions through `WKWebExtension`, ships built-in DevTools, and integrates deeply with Apple platforms.
 
-The full plan, architecture, and reasoning behind every decision are in `docs/PLAN.md`. Read it before starting any milestone or making an architectural change. Brand assets and guidelines are in `docs/brand/`.
+The full plan, architecture, and reasoning behind every decision are in `docs/PLAN.md`. Read it before starting any milestone or making an architectural change. The interface plan for 1.0, mapped to the design canvas's boards and to GitHub issues, is `docs/ui-plan.md`; read its "What the boards agree on" before any UI change. Brand assets and guidelines are in `docs/brand/`.
 
 ## Stack
 
@@ -129,6 +129,7 @@ Approved third-party dependencies (all MIT-licensed). Ask before adding anything
 | --- | --- | --- |
 | [GRDB.swift](https://github.com/groue/GRDB.swift) | 7.11.1+ | AxoPersistence (database, migrations), AxoCore (record types), AxoImport (reading Chromium history) |
 | [GRDBQuery](https://github.com/groue/GRDBQuery) | 0.11.0+ | AxoUI |
+| [Sparkle](https://github.com/sparkle-project/Sparkle) | 2.x (approved November 2026, not added yet) | The Mac app only, for updates; the iOS app never links it |
 
 The lockfile is `Axo.xcworkspace/xcshareddata/swiftpm/Package.resolved`. Per-package `Package.resolved` files are gitignored.
 
@@ -188,6 +189,7 @@ These come from deliberate decisions in `docs/PLAN.md`. Do not change them witho
 Update docs in the same change as the code they describe. Docs that no longer match the code count as a bug.
 
 - `docs/PLAN.md`: when a milestone's status changes, or when the work departs from the plan or adds to it. Departures from the plan still need approval first (see "Hard rules").
+- `docs/ui-plan.md`: check off an interface item in the PR that finishes it, and record decisions from its "Decisions needed first" when they're made.
 - `CLAUDE.md`: when a convention, command, package, or dependency changes, or when you learn something future sessions need to know.
 - `docs/webkit-gaps.md`: when you hit a `WKWebExtension` or WebKit limitation (see "Working style").
 - Package READMEs: when a package's public API, setup, or purpose changes. This matters most for the packages meant to be open sourced.
