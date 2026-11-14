@@ -131,16 +131,37 @@ struct HistoryStoreTests {
 
     @Test func typedPagesRankAbovePagesOnlyReachedByLinks() async throws {
         let now = Date()
-        let linked = url("https://docs.example/swift-guide")
-        let typed = url("https://swift-notes.example/")
-        // The linked page is visited more often; the typed one was typed twice.
+        // Both match only at the start of their titles, so typing is all that tells them apart.
+        let linked = url("https://docs.example/guide")
+        let typed = url("https://notes.example/today")
         for _ in 0..<3 { try await history.recordVisit(to: linked, title: "Swift Guide", profileID: profileID, at: now) }
         try await history.recordVisit(to: typed, title: "Swift Notes", profileID: profileID, at: now)
+        #expect(try await history.search("swift", profileID: profileID, now: now).first?.url == linked, "Visited more")
         try await history.recordTypedVisit(to: typed, profileID: profileID)
         try await history.recordTypedVisit(to: typed, profileID: profileID)
         let results = try await history.search("swift", profileID: profileID, now: now)
-        #expect(results.first?.url == typed)
+        #expect(results.first?.url == typed, "Typed twice")
         #expect(results.first?.typedCount == 2)
+    }
+
+    @Test func deletingAPageDeletesWhatWasLearnedFromIt() async throws {
+        let now = Date()
+        let mail = url("https://mail.example/")
+        let maps = url("https://maps.example/")
+        try await history.recordVisit(to: mail, title: "Mail", profileID: profileID, at: now)
+        try await history.recordVisit(to: maps, title: "Maps", profileID: profileID, at: now)
+        try await history.recordChoice(query: "ma", url: mail, profileID: profileID)
+        try await history.recordChoice(query: "ma", url: maps, profileID: profileID)
+        // A range that misses the visit deletes nothing, choices included.
+        try await history.delete([mail], lastVisitedIn: now.addingTimeInterval(-7200)...now.addingTimeInterval(-3600), profileID: profileID)
+        func choices() async throws -> [String] {
+            try await store.database.writer.read { db in
+                try String.fetchAll(db, sql: "SELECT url FROM commandChoice WHERE profileID = ? ORDER BY url", arguments: [profileID])
+            }
+        }
+        #expect(try await choices() == [mail.absoluteString, maps.absoluteString])
+        try await history.delete([mail], profileID: profileID)
+        #expect(try await choices() == [maps.absoluteString], "Only the deleted page's choices go")
     }
 
     @Test func aPageTypedBeforeItLoadsIsAddedWithNoVisits() async throws {

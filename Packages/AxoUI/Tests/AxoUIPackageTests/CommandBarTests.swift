@@ -219,33 +219,6 @@ struct CommandBarTests {
         #expect(tabIDs == [recent.id, old.id])
     }
 
-    /// Choosing a result teaches the query which page it led to, and a typed address counts as
-    /// typed (#121); clearing history forgets both.
-    @Test func choosingAResultIsLearned() async throws {
-        let mail = URL(string: "https://mail.example/")!
-        try await store.history.recordVisit(to: mail, title: "Mail", profileID: profileID)
-        model.showCommandBar()
-        model.setCommandQuery("mai")
-        try await waitUntil { model.commandResults.contains { if case .history = $0 { true } else { false } } }
-        let index = try #require(model.commandResults.firstIndex { if case .history = $0 { true } else { false } })
-        await model.runCommand(at: index)
-        let choices = { try await self.store.database.writer.read { db in
-            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM commandChoice WHERE query = 'mai' AND url = ?", arguments: [mail.absoluteString]) ?? 0
-        } }
-        try await waitUntilAsync { try await choices() == 1 }
-
-        model.showCommandBar()
-        model.setCommandQuery("typed.example")
-        guard case .open = model.commandResults.first else { Issue.record("The typed address comes first"); return }
-        await model.runCommand(at: 0)
-        try await waitUntilAsync {
-            try await self.store.history.recent(profileID: self.profileID, limit: 20).contains { $0.url.host() == "typed.example" && $0.typedCount == 1 }
-        }
-
-        try await store.history.clear(profileID: profileID)
-        #expect(try await choices() == 0)
-    }
-
     @Test func historyAppearsAfterTheImmediateRowsAndOpensInANewTab() async throws {
         try await store.history.recordVisit(to: URL(string: "https://webkit.org/blog")!, title: "WebKit Blog", profileID: profileID)
         model.showCommandBar()

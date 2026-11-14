@@ -83,7 +83,7 @@ The board: Sidebar interactions. Each demo is a behavior to build, with the boar
 
 The boards: Floating command bar, Proposed 1.0 window.
 
-- [ ] **Narrow results while typing (#122), ranking (#121), menu commands (#123).** In the order set earlier (#122, #121, #123).
+- [ ] **Narrow results while typing (#122), ranking (#121), menu commands (#123).** In the order set earlier (#122, #121, #123). #122 and #121 are done; a typed address is learned for the page it commits.
 - [ ] **Command bar as a native floating panel (#87).** The board's floating bar, in browser and mini windows.
 - [ ] **History menus on Back and Forward (#112).**
 - [x] **Google as the default search engine (#172).** Replace the DuckDuckGo placeholder in `AddressInput` with Google, keeping Bing and DuckDuckGo for the Search pane (#132) to offer (decision 6). Small; can go any time.

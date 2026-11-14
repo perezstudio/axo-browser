@@ -219,7 +219,7 @@ public final class HistoryStore: Sendable {
     }
 
     /// How well a normalized query matches a page: its whole address or site (4), the start of
-    /// its site's domain (2), or the start of its title (1), above a match in the middle of a
+    /// its host, after any www. (2), or the start of its title (1), above a match in the middle of a
     /// title (0).
     static func matchQuality(of item: HistoryItem, for query: String) -> Double {
         guard let word = query.split(separator: " ").first.map(String.init) else { return 0 }
@@ -260,7 +260,15 @@ public final class HistoryStore: Sendable {
                 if let range {
                     request = request.filter(range.contains(HistoryItem.Columns.lastVisitedAt))
                 }
+                // The command bar's choices for the pages deleted go with them, so a deleted page
+                // visited again doesn't come back with what it had learned.
+                let deleted = try String.fetchAll(db, request.select(HistoryItem.Columns.url))
                 try request.deleteAll(db)
+                if !deleted.isEmpty {
+                    let marks = Array(repeating: "?", count: deleted.count).joined(separator: ", ")
+                    try db.execute(sql: "DELETE FROM commandChoice WHERE profileID = ? AND url IN (\(marks))",
+                                   arguments: StatementArguments([profileID.databaseValue] + deleted.map(\.databaseValue)))
+                }
             }
         }
     }

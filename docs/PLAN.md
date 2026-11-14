@@ -412,8 +412,8 @@ Features beyond the milestones above, each a GitHub issue with its approach and 
   - [ ] [#113](https://github.com/perezstudio/axo-browser/issues/113) Capture a page: a region, the visible area, or the whole page.
   - [ ] [#120](https://github.com/perezstudio/axo-browser/issues/120) Esc in Peek goes to the page first when it's using it; a second press closes Peek.
 - Command bar:
-  - [ ] [#121](https://github.com/perezstudio/axo-browser/issues/121) Rank by typed pages, match quality, recent tabs, and past choices.
-  - [ ] [#122](https://github.com/perezstudio/axo-browser/issues/122) Narrow results while typing instead of starting over.
+  - [x] [#121](https://github.com/perezstudio/axo-browser/issues/121) Rank by typed pages, match quality, recent tabs, and past choices.
+  - [x] [#122](https://github.com/perezstudio/axo-browser/issues/122) Narrow results while typing instead of starting over.
   - [ ] [#123](https://github.com/perezstudio/axo-browser/issues/123) Search and run any menu command.
 - Ecosystem integration:
   - [ ] [#105](https://github.com/perezstudio/axo-browser/issues/105) AppleScript support for windows, Spaces, and tabs.
