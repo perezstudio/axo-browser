@@ -313,6 +313,14 @@ Each milestone should be usable as a daily driver before the next one starts.
 - [x] Settings: General (navigation bar in the sidebar or above the page), Profiles, and Spaces (name, profile, color, icon, order).
 - [x] Favorites: a profile-wide grid above the pinned tabs (decided in October 2026: favorites are new and separate; pinned tabs and folders stay per Space as bookmarks).
 
+**Interface 1.0 (planned November 2026; plan in `docs/ui-plan.md`)**
+
+The design canvas made in November 2026 has a board for every area of the Mac, iPhone, and iPad interface. `docs/ui-plan.md` turns it into phases of one-PR items mapped to GitHub issues, with the decisions made for it on November 14, 2026 (favorites sync, no notice for synced Spaces, iOS extensions installed the Safari way, Sparkle on the Mac only, the boards' proposals accepted, and Google as the default search engine). It continues the UI issue order set in November 2026 (#135, #107, #137, #136, #112, the command bar, #110, #133) and adds the rest of the boards.
+
+- [x] Sidebar footer buttons sized like the toolbar's (#135) and the toolbar tint from the page's color (#107).
+- [ ] Phases 1 to 7 on the Mac: the window, sidebar interactions, command bar, page tools and prompts, Settings and the Extensions window, lists and flows, and system integration.
+- [ ] Phase 9 on iPhone and iPad, with Milestone 7.
+
 **Chromium engine on the Mac (decided October 2026; design in `docs/chromium-engine.md`)**
 
 The remaining work is tracked as GitHub issues under [#65](https://github.com/perezstudio/axo-browser/issues/65) (label `chromium`), each with its approach and when it's done.
@@ -364,7 +372,7 @@ The remaining work is tracked as GitHub issues under [#65](https://github.com/pe
 
 **Milestone 7: Sync and iOS**
 
-- [ ] CloudKit sync of spaces, folders, and pinned tabs. Built in AxoSync (profiles, Spaces, folders, and pinned tabs; last change wins per record; an untouched Home Space merges into the synced ones on a device's first sync) with an iCloud pane in Settings, on by default. Waiting on the iCloud container `iCloud.com.perezstudio.Axo` and a signed Release build to check with real devices.
+- [ ] CloudKit sync of spaces, folders, pinned tabs, and favorites. Built in AxoSync (profiles, Spaces, folders, and pinned tabs; last change wins per record; an untouched Home Space merges into the synced ones on a device's first sync) with an iCloud pane in Settings, on by default. Waiting on the iCloud container `iCloud.com.perezstudio.Axo` and a signed Release build to check with real devices.
 - [ ] iPhone and iPad app sharing AxoCore, AxoPersistence, and AxoSync. Decided in October 2026: AxoWeb and AxoUI's model are shared too, with the Mac chrome behind `#if os(macOS)` and separate iPhone and iPad chrome. The iOS app is its own target ("Axo iOS", bundle ID `com.perezstudio.Axo.iOS`) in the same project, shipped through the App Store, so it never uses private WebKit API.
   - [x] Shared packages build and pass their tests on iOS (AxoPersistence, AxoCore, AxoSync, AxoWeb, and AxoUI's model).
   - [x] First iOS slice (the `AxoiOS` target, AxoUI's `MobileBrowserView`): Spaces, folders, and pinned tabs (synced once iCloud works), open tabs, an address and search bar, back and forward, and hibernation. iPad gets a sidebar like the Mac; iPhone a Space and tab list with a bottom address bar. No extensions, downloads, or developer tools yet.
@@ -477,4 +485,4 @@ Open questions:
 - [ ] Sponsorship setup and a possible supporter tier
 - [x] Mascot design and visual identity (settled, see Brand)
 - [ ] Trademark, domain, and App Store name checks for Axo
-- [ ] Default search engine (DuckDuckGo is a placeholder in `AddressInput`) and whether to offer a choice at onboarding
+- [x] Default search engine: decided in November 2026, Google by default, with Bing and DuckDuckGo as the alternatives offered in Settings › Search (#132). No search step at onboarding. Replacing the DuckDuckGo placeholder in `AddressInput` is in `docs/ui-plan.md`.
