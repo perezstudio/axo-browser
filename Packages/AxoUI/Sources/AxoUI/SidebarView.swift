@@ -239,9 +239,23 @@ struct SidebarTabRow: View {
             content
                 // On the row's own element, which VoiceOver focuses, and always there.
                 .accessibilityActions {
+                    if isAwayFromHome {
+                        Button("Go to Pinned Page") { goHome() }
+                    }
                     Button(closeTitle) { close() }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+            // A pinned tab away from its pinned page shows it at a glance, as in Arc, with a
+            // control that goes back (#73).
+            if isAwayFromHome {
+                Button { goHome() } label: {
+                    TabRowCloseSquare(systemImage: "arrow.uturn.backward")
+                }
+                .buttonStyle(.borderless)
+                .help("Go to Pinned Page")
+                .accessibilityLabel("Go to Pinned Page")
+                .accessibilityIdentifier("goToPinnedPageButton")
+            }
             if isHovering {
                 // A borderless button in a List row gets its click without selecting the row
                 // first; the square is drawn in its label.
@@ -273,6 +287,15 @@ struct SidebarTabRow: View {
             TabRow(tab: tab, favicon: model.favicon(for: tab),
                    isLoading: model.isTabLoading(tab.id), isDimmed: model.isTabDimmed(tab.id, isSelected: isSelected))
         }
+    }
+
+    /// Whether the row is a pinned tab away from its pinned page. A split row shows its panes
+    /// instead.
+    private var isAwayFromHome: Bool { panes == nil && tab.hasLeftHome }
+
+    /// Goes back to the pinned page, as the context menu's Go to Pinned Page does.
+    private func goHome() {
+        Task { await model.goToPinnedHome(tab.id) }
     }
 
     /// Closes the tab, or unloads a pinned one, as its context menu does (for a split, the
@@ -526,7 +549,7 @@ struct TabRow: View {
             .accessibilityHidden(true)
         }
         .lineLimit(1)
-        .help(Self.displayTitle(for: tab))
+        .help(Self.tooltip(for: tab))
         // The title is the label, so a value can add state without replacing it.
         .accessibilityLabel(Self.displayTitle(for: tab))
         .accessibilityValue(Self.stateDescription(
@@ -540,6 +563,13 @@ struct TabRow: View {
         [isLoading ? "Loading" : nil, isDimmed ? "Unloaded" : nil, isAwayFromHome ? "Away from pinned page" : nil]
             .compactMap(\.self)
             .joined(separator: ", ")
+    }
+
+    /// The row's tooltip: its title, and for a pinned tab away from its pinned page, that page
+    /// too (#73).
+    static func tooltip(for tab: AxoCore.Tab) -> String {
+        guard tab.hasLeftHome, let home = tab.homeURL else { return displayTitle(for: tab) }
+        return "\(displayTitle(for: tab))\nPinned page: \(home.host() ?? home.absoluteString)"
     }
 
     /// The page title, or the host (or full URL) for pages without one.

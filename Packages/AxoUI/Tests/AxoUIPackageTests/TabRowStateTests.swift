@@ -93,4 +93,21 @@ struct TabRowStateTests {
         model.select(second)
         #expect(model.rowHoldsSelection(row), "The split's row stands for both panes")
     }
+
+    /// A pinned tab away from its pinned page names both pages in its tooltip (#73); on its
+    /// pinned page, or unpinned, only its title.
+    @Test func awayFromItsPinnedPageTheTooltipNamesBothPages() {
+        var tab = AxoCore.Tab(id: UUID(), spaceID: UUID(), url: URL(string: "https://news.example/story")!,
+                              title: "A Story", sortKey: "a", isPinned: true,
+                              homeURL: URL(string: "https://start.example/")!)
+        #expect(tab.hasLeftHome)
+        #expect(TabRow.tooltip(for: tab) == "A Story\nPinned page: start.example")
+        #expect(TabRow.stateDescription(isLoading: false, isDimmed: false, isAwayFromHome: tab.hasLeftHome) == "Away from pinned page")
+
+        tab.url = URL(string: "https://start.example/")!
+        #expect(TabRow.tooltip(for: tab) == "A Story", "On its pinned page")
+        tab.isPinned = false
+        tab.url = URL(string: "https://news.example/story")!
+        #expect(TabRow.tooltip(for: tab) == "A Story", "Not pinned")
+    }
 }
