@@ -15,11 +15,13 @@ struct NavigationToolbar: ToolbarContent {
             ToolbarItemGroup(placement: .navigation) {
                 BackForwardButtons(model: model)
             }
-            // Without a spacer, macOS draws neighboring items in one glass group.
             ToolbarSpacer(.fixed, placement: .navigation)
             ToolbarItem(placement: .navigation) {
-                ReloadButton(model: model)
+                ReloadButton(model: model).ownGlassCircle()
             }
+            // macOS draws neighboring navigation items in one glass group, a spacer or not; reload
+            // leaves it and draws its own circle.
+            .sharedBackgroundVisibility(.hidden)
             ToolbarItem(placement: .principal) {
                 AddressBar(model: model)
                     .frame(minWidth: 240, idealWidth: 520, maxWidth: 680)
@@ -55,11 +57,20 @@ struct SidebarNavigationToolbar: ToolbarContent {
         ToolbarItemGroup(placement: .navigation) {
             BackForwardButtons(model: model)
         }
-        // Without a spacer, macOS draws neighboring items in one glass group.
         ToolbarSpacer(.fixed, placement: .navigation)
         ToolbarItem(placement: .navigation) {
-            ReloadButton(model: model)
+            ReloadButton(model: model).ownGlassCircle()
         }
+        // macOS draws neighboring navigation items in one glass group, a spacer or not; reload
+        // leaves it and draws its own circle.
+        .sharedBackgroundVisibility(.hidden)
+    }
+}
+
+extension View {
+    /// A toolbar button in a glass circle of its own, the size of the toolbar's glass.
+    func ownGlassCircle() -> some View {
+        buttonStyle(.glass).buttonBorderShape(.circle).controlSize(.large)
     }
 }
 
