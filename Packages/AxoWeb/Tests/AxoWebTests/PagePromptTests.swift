@@ -232,10 +232,10 @@ struct PagePromptTests {
     }
 }
 
-/// Polls an async value until it's non-nil and non-empty, or fails after 10 seconds.
+/// Polls an async value until it's non-nil and non-empty, or fails after ``waitLimit``.
 @MainActor
 func waitForValue(_ value: () async throws -> String?) async throws -> String {
-    let deadline = ContinuousClock.now + .seconds(10)
+    let deadline = ContinuousClock.now + waitLimit
     while true {
         if let result = try await value(), !result.isEmpty { return result }
         guard ContinuousClock.now < deadline else { throw TimeoutError(description: "Timed out waiting for value") }

@@ -65,11 +65,16 @@ struct TimeoutError: Error, CustomStringConvertible {
     let description: String
 }
 
+/// How long a wait lasts before it fails. It only guards against hangs: these tests share the
+/// main thread with each other and with WebKit, so on a busy machine (CI's hosted Mac) a page
+/// load can take far longer than usual. Never tighten it into a time budget.
+let waitLimit: Duration = .seconds(60)
+
 /// Polls `condition` on the main actor until it's true, or throws after `timeout`.
 @MainActor
 func waitUntil(
     _ what: String,
-    timeout: Duration = .seconds(10),
+    timeout: Duration = waitLimit,
     _ condition: () -> Bool
 ) async throws {
     let deadline = ContinuousClock.now + timeout

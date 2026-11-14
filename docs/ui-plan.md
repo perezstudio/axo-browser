@@ -36,6 +36,27 @@ Decided on November 14, 2026. The phases below follow them.
 5. **The boards' proposals are accepted**: the update-ready notice and Restart to Update Axo menu item; picture in picture's View menu item, page menu item, and tab-row mark; the iPhone's Address bar setting (bottom or top); Downloads at the end of the top tab bar; and Include beta versions in Settings. Reader, which only appears as an item in the iPhone menu, gets its own design before it's built.
 6. **Google is the default search engine**, with Bing and DuckDuckGo as the alternatives. It replaces the DuckDuckGo placeholder in `AddressInput`, and the Search pane (#132) offers the three.
 
+## Order for v1.0 user testing
+
+Set on November 14, 2026. The goal is a Mac build people can test day to day: the 1.0 window, a first run, the flows they'll hit in their first week, and Settings, all with passing tests in CI. Work goes top to bottom, one PR per line; take the first one not merged.
+
+1. #64: build and unit tests (the app's and every package's) in CI on every PR, so "passes in CI" covers more than the UI tests.
+2. #172: Google as the default search engine.
+3. #67: the layered page.
+4. #170: the navigation bar above the page inside the page's area. Check #167 (pages under the toolbar) along the way, since it moves the page's top edge.
+5. #171: the Space's name row.
+6. #136: the top tab bar.
+7. #71, #74, #73: tab rows for audio and mute, devices in use, and a pinned tab away from its page.
+8. #178 with #75 and the rest of #96: Axo's own error pages, crashed pages, and certificate warnings.
+9. #175: first run.
+10. #176: New Space and New Profile.
+11. #77, then #78: dragging in the sidebar and to another Space; then what's left of #81.
+12. #122, #121, #123: the command bar; then #112, history menus on Back and Forward.
+13. #85, then #133, #132, #131, #130, #174, #110, #173: Settings in a sidebar layout and the panes and panels that go in it.
+14. #61 and #180: a signed, notarized DMG with the engine, and Sparkle updates. Signing and notarizing need the owner's Developer ID and credentials, which never go in the repo; the work here is the scripts and the updater, and the owner runs the signing.
+
+After user testing starts: Phase 9 (iPhone and iPad), #177, #179, #83 and #46, #87, and the remaining Phase 2 and Chromium items.
+
 ## Phase 1: the window
 
 The boards: Axo today, Proposed 1.0 window, Tab row states, Space themes (in Axo today).

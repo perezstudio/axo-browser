@@ -118,6 +118,7 @@ final class SidebarMenuUITests: XCTestCase {
     }
 
     /// The unpinned tabs' titles, in sidebar order.
+    @MainActor
     private func tabRows(in sidebar: XCUIElement) -> [String] {
         sidebar.staticTexts.matching(identifier: "tabRow").allElementsBoundByIndex.map { row in
             // The row's label is its title; its value is its state ("Unloaded" for a tab not
@@ -128,6 +129,7 @@ final class SidebarMenuUITests: XCTestCase {
 
     /// A folder's row, by its name, as `testFoldersHoldPinnedTabs` finds it. (The Pinned
     /// section's identifier replaces the row's own, so folder names here differ from tab titles.)
+    @MainActor
     private func folderRow(_ name: String, in sidebar: XCUIElement) -> XCUIElement {
         sidebar.staticTexts[name]
     }
