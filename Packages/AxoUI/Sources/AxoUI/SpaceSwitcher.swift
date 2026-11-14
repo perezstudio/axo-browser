@@ -187,14 +187,34 @@ private struct SpaceDot: View {
 }
 #endif
 
-/// Names a new Space and chooses whether it gets its own profile.
+// The New Space and New Profile sheets belong to the Mac's chrome (Settings and the footer).
+#if os(macOS)
+/// A new Space (#176): its name, icon, and theme, and the profile it uses: the shown Space's by
+/// default, another one, or a new one, which has its own cookies, logins, and website data.
 struct NewSpaceSheet: View {
     let model: BrowserModel
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
-    @State private var usesNewProfile = false
+    @State private var icon: String?
+    @State private var theme: SpaceTheme?
+    @State private var profiles: [Profile] = []
+    @State private var profileChoice: ProfileChoice = .current
     @State private var profileName = ""
     @FocusState private var isNameFocused: Bool
+
+    /// The profile the Space will use.
+    enum ProfileChoice: Hashable {
+        /// The shown Space's.
+        case current
+        case existing(Profile.ID)
+        case new
+    }
+
+    /// The icons offered for a new Space.
+    static let icons = ["house", "briefcase", "book", "sparkles", "leaf", "gamecontroller", "cart", "graduationcap"]
+    /// Each icon's name, for VoiceOver and tooltips.
+    static let iconNames = ["house": "House", "briefcase": "Briefcase", "book": "Book", "sparkles": "Sparkles", "leaf": "Leaf",
+                            "gamecontroller": "Game Controller", "cart": "Cart", "graduationcap": "Graduation Cap"]
 
     var body: some View {
         Form {
@@ -205,19 +225,109 @@ struct NewSpaceSheet: View {
             TextField("Name", text: $name, prompt: Text("Work"))
                 .focused($isNameFocused)
                 .accessibilityIdentifier("spaceNameField")
-            Toggle("Use a separate profile", isOn: $usesNewProfile)
-                .accessibilityIdentifier("separateProfileToggle")
-            if usesNewProfile {
-                TextField("Profile name", text: $profileName, prompt: Text(trimmedName.isEmpty ? "Work" : trimmedName))
+            LabeledContent("Icon") {
+                HStack(spacing: 6) {
+                    ForEach(Self.icons, id: \.self) { symbol in
+                        Button { icon = icon == symbol ? nil : symbol } label: {
+                            Image(systemName: symbol)
+                                .frame(width: 26, height: 26)
+                                .background(icon == symbol ? AnyShapeStyle(.tint.opacity(0.25)) : AnyShapeStyle(.clear), in: .rect(cornerRadius: 6))
+                                .contentShape(.rect(cornerRadius: 6))
+                        }
+                        .buttonStyle(.plain)
+                        .help(Self.iconNames[symbol] ?? symbol)
+                        .accessibilityLabel(Self.iconNames[symbol] ?? symbol)
+                        .accessibilityAddTraits(icon == symbol ? .isSelected : [])
+                        .accessibilityIdentifier("spaceIcon-\(symbol)")
+                    }
+                }
             }
-            Text(usesNewProfile
-                ? "A separate profile has its own cookies, logins, and website data."
-                : "This Space shares cookies, logins, and website data with “\(model.space?.name ?? "the current Space")”.")
+            LabeledContent("Theme") {
+                ThemePresetGrid(selection: theme) { theme = $0 }
+            }
+            // Radio buttons: a profile list is short, and a menu picker in this sheet reported
+            // no accessibility action, which the audit fails on.
+            Picker("Profile", selection: $profileChoice) {
+                Text(currentProfileName.map { "\($0) (this Space's)" } ?? "This Space's").tag(ProfileChoice.current)
+                ForEach(profiles.filter { $0.id != model.space?.profileID }) { profile in
+                    Text(profile.name).tag(ProfileChoice.existing(profile.id))
+                }
+                Text("New Profile").tag(ProfileChoice.new)
+            }
+            .pickerStyle(.radioGroup)
+            .accessibilityIdentifier("spaceProfilePicker")
+            if profileChoice == .new {
+                TextField("Profile name", text: $profileName, prompt: Text(trimmedName.isEmpty ? "Work" : trimmedName))
+                    .accessibilityIdentifier("newProfileNameField")
+            }
+            Text(profileChoice == .new
+                ? "A new profile has its own cookies, logins, history, extensions, and favorites, so it starts signed out of every site."
+                : "Spaces on the same profile share logins, history, extensions, and favorites.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .formStyle(.grouped)
-        .frame(width: 380)
+        .frame(width: 440)
+        .defaultFocus($isNameFocused, true)
+        .task { profiles = await model.profiles() }
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { dismiss() }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Create") { create() }
+                    .disabled(trimmedName.isEmpty)
+                    .accessibilityIdentifier("createSpaceButton")
+            }
+        }
+        .navigationTitle("New Space")
+    }
+
+    private var currentProfileName: String? {
+        profiles.first { $0.id == model.space?.profileID }?.name
+    }
+
+    private var trimmedName: String { name.trimmed }
+
+    private func create() {
+        let spaceName = trimmedName
+        let newProfile = profileChoice == .new ? (profileName.trimmed.isEmpty ? spaceName : profileName.trimmed) : nil
+        let chosen: Profile.ID? = if case .existing(let id) = profileChoice { id } else { nil }
+        let icon = icon, theme = theme
+        dismiss()
+        Task { await model.createSpace(name: spaceName, newProfileName: newProfile, profileID: chosen, icon: icon, theme: theme) }
+    }
+}
+
+/// A new profile and its first Space (#176), from Settings › Profiles. A profile keeps its own
+/// cookies, logins, history, extensions, and favorites.
+struct NewProfileSheet: View {
+    let model: BrowserModel
+    /// Called with the new profile.
+    let onCreate: (Profile) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var spaceName = ""
+    @FocusState private var isNameFocused: Bool
+
+    var body: some View {
+        Form {
+            Text("New Profile")
+                .font(.headline)
+                .accessibilityAddTraits(.isHeader)
+            TextField("Name", text: $name, prompt: Text("Work"))
+                .focused($isNameFocused)
+                .accessibilityIdentifier("settingsNewProfileName")
+            TextField("First Space", text: $spaceName, prompt: Text(name.trimmed.isEmpty ? "Work" : name.trimmed))
+                .accessibilityIdentifier("profileFirstSpaceField")
+            Text("A profile keeps its own cookies, logins, history, extensions, and favorites, so it starts signed out of every site.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .formStyle(.grouped)
+        .frame(width: 400)
         .defaultFocus($isNameFocused, true)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -225,20 +335,22 @@ struct NewSpaceSheet: View {
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Create") {
-                    let profile = usesNewProfile ? (profileName.trimmed.isEmpty ? trimmedName : profileName.trimmed) : nil
-                    let spaceName = trimmedName
+                    let profileName = name.trimmed
+                    let firstSpace = spaceName.trimmed.isEmpty ? profileName : spaceName.trimmed
                     dismiss()
-                    Task { await model.createSpace(name: spaceName, newProfileName: profile) }
+                    Task {
+                        if let profile = await model.addProfile(named: profileName, firstSpaceName: firstSpace) { onCreate(profile) }
+                    }
                 }
-                .disabled(trimmedName.isEmpty)
-                .accessibilityIdentifier("createSpaceButton")
+                .disabled(name.trimmed.isEmpty)
+                .accessibilityIdentifier("createProfileButton")
             }
         }
-        .navigationTitle("New Space")
+        .navigationTitle("New Profile")
     }
-
-    private var trimmedName: String { name.trimmed }
 }
+
+#endif
 
 private extension String {
     var trimmed: String { trimmingCharacters(in: .whitespacesAndNewlines) }

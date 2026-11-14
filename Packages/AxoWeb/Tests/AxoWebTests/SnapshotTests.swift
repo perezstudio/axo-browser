@@ -52,7 +52,8 @@ struct SnapshotTests {
         #expect(pool.snapshot(for: tab.id) == nil, "The snapshot moves to the live tab when it wakes")
 
         try await waitUntil("restored page") { state.restoringSnapshot == nil }
-        #expect(state.title == "Restore")
+        // WebKit reports the title on its own, sometimes just after the load finishes.
+        try await waitUntil("restored title") { state.title == "Restore" }
     }
 
     @Test func newTabsHaveNoRestoringSnapshot() throws {

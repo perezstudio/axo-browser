@@ -147,6 +147,8 @@ struct CommandRow: View {
             Image(systemName: action.systemImage)
         case .history:
             Image(systemName: "clock")
+        case .menuCommand:
+            Image(systemName: "filemenu.and.selection")
         }
     }
 
@@ -156,6 +158,7 @@ struct CommandRow: View {
         case .tab(let tab): tab.url.host() ?? tab.url.absoluteString
         case .action: nil
         case .history(let item): item.url.absoluteString
+        case .menuCommand(let command): [command.menuName, command.shortcut].filter { !$0.isEmpty }.joined(separator: ", ")
         }
     }
 }

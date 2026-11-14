@@ -505,6 +505,34 @@ final class SidebarMenuUITests: XCTestCase {
 
     // MARK: Spaces
 
+    /// The New Space sheet (#176), from the footer's + and from Spaces › New Space…: a Space with
+    /// an icon and a theme, shown once made.
+    @MainActor
+    func testNewSpaceTakesAnIconAndATheme() throws {
+        let (app, sidebar) = launchApp()
+        let dots = app.buttons.matching(identifier: "spaceButton")
+
+        app.buttons["newSpaceButton"].click()
+        let spaceName = app.textFields["spaceNameField"]
+        XCTAssertTrue(spaceName.waitForExistence(timeout: 5))
+        spaceName.typeText("Garden")
+        app.buttons["spaceIcon-leaf"].click()
+        app.buttons["themePresetSage"].click()
+        XCTAssertTrue(app.descendants(matching: .any)["spaceProfilePicker"].exists, "It offers a profile")
+        let thisSpaces = app.radioButtons.matching(NSPredicate(format: "label CONTAINS %@", "this Space's")).firstMatch
+        XCTAssertEqual(thisSpaces.value as? Int, 1, "This Space's by default")
+        app.buttons["createSpaceButton"].click()
+        XCTAssertTrue(sidebar.staticTexts["Garden"].waitForExistence(timeout: 5), "The new Space is shown")
+        XCTAssertEqual(dots.count, 2)
+
+        app.menuBars.menuBarItems["Spaces"].click()
+        app.menuBars.menuItems["New Space…"].click()
+        XCTAssertTrue(spaceName.waitForExistence(timeout: 5), "Spaces › New Space… opens the same sheet")
+        spaceName.typeText("Errands\n")
+        XCTAssertTrue(sidebar.staticTexts["Errands"].waitForExistence(timeout: 5))
+        XCTAssertEqual(dots.count, 3)
+    }
+
     /// The Space's name row between the favorites and Pinned (#171): it names the shown Space,
     /// is a heading, and its menu renames the Space.
     @MainActor
@@ -527,7 +555,7 @@ final class SidebarMenuUITests: XCTestCase {
     }
 
     /// A Space's menu in the switcher: Rename…, and Delete Space… (disabled for the only Space),
-    /// plus the New Space sheet's "Use a separate profile".
+    /// plus the New Space sheet's New Profile choice.
     @MainActor
     func testSpaceMenu() throws {
         let (app, sidebar) = launchApp()
@@ -548,12 +576,13 @@ final class SidebarMenuUITests: XCTestCase {
         let spaceName = app.textFields["spaceNameField"]
         XCTAssertTrue(spaceName.waitForExistence(timeout: 5))
         spaceName.typeText("Work")
-        let separate = app.descendants(matching: .any)["separateProfileToggle"]
-        XCTAssertTrue(separate.exists)
-        separate.click()
+        let newProfile = app.radioButtons["New Profile"]
+        XCTAssertTrue(newProfile.exists)
+        newProfile.click()
         // The profile's name field has only a placeholder (the Space's name).
-        let profileName = app.textFields.matching(NSPredicate(format: "placeholderValue == 'Work' AND identifier != 'spaceNameField'"))
-        XCTAssertTrue(profileName.firstMatch.waitForExistence(timeout: 5), "It asks for the profile's name")
+        let profileName = app.textFields["newProfileNameField"]
+        XCTAssertTrue(profileName.waitForExistence(timeout: 5), "It asks for the profile's name")
+        XCTAssertEqual(profileName.placeholderValue, "Work")
         app.buttons["createSpaceButton"].click()
         XCTAssertTrue(sidebar.staticTexts["Work"].waitForExistence(timeout: 5))
         XCTAssertEqual(dots.count, 2)

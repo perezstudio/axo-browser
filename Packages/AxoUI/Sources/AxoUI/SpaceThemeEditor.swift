@@ -138,7 +138,7 @@ struct SpaceThemeEditor: View {
 
 /// System and the presets as round swatches; the chosen one has a ring. Choosing a preset
 /// keeps the draft's transparency and grain.
-private struct ThemePresetGrid: View {
+struct ThemePresetGrid: View {
     let selection: SpaceTheme?
     let choose: (SpaceTheme?) -> Void
 

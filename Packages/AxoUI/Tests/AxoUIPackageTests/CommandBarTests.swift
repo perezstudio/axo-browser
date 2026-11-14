@@ -206,6 +206,19 @@ struct CommandBarTests {
         print("Command bar, 500 tabs: \(fresh / keystrokes) per keystroke searching again, \(narrowed / keystrokes) narrowing")
     }
 
+    /// Matching tabs come by when they were last used, most recent first (#121).
+    @Test func openTabsComeByWhenTheyWereLastUsed() {
+        let space = UUID()
+        let now = Date()
+        let old = AxoCore.Tab(id: UUID(), spaceID: space, url: URL(string: "https://a.example/pond")!, title: "Pond A", sortKey: "a",
+                              lastActiveAt: now.addingTimeInterval(-3_600))
+        let recent = AxoCore.Tab(id: UUID(), spaceID: space, url: URL(string: "https://b.example/pond")!, title: "Pond B", sortKey: "b",
+                                 lastActiveAt: now)
+        let results = CommandRanking.immediateResults(for: "pond", tabs: [old, recent], availableActions: [])
+        let tabIDs = results.compactMap { result -> AxoCore.Tab.ID? in if case .tab(let tab) = result { tab.id } else { nil } }
+        #expect(tabIDs == [recent.id, old.id])
+    }
+
     @Test func historyAppearsAfterTheImmediateRowsAndOpensInANewTab() async throws {
         try await store.history.recordVisit(to: URL(string: "https://webkit.org/blog")!, title: "WebKit Blog", profileID: profileID)
         model.showCommandBar()

@@ -37,6 +37,29 @@ struct SpaceSwitchingTests {
         #expect(model.tabs.isEmpty)
     }
 
+    /// The New Space sheet's choices (#176): an icon, a theme, and another existing profile.
+    @Test func aNewSpaceTakesItsIconThemeAndChosenProfile() async throws {
+        let home = try #require(model.space)
+        let other = try #require(await model.addProfile(named: "Side"))
+        let theme = ThemePreset.ocean.theme
+        await model.createSpace(name: "Project", profileID: other.id, icon: "leaf", theme: theme)
+
+        let created = try #require(model.space)
+        #expect(created.name == "Project", "Shown once made")
+        #expect(created.profileID == other.id)
+        #expect(created.profileID != home.profileID)
+        #expect(created.icon == "leaf")
+        #expect(created.theme == theme)
+    }
+
+    /// A profile made in Settings comes with its first Space, which is shown (#176).
+    @Test func aNewProfileComesWithItsFirstSpace() async throws {
+        let profile = try #require(await model.addProfile(named: "School", firstSpaceName: "Classes"))
+        #expect(model.space?.name == "Classes")
+        #expect(model.space?.profileID == profile.id)
+        #expect(model.spaces.filter { $0.profileID == profile.id }.map(\.name) == ["Classes"])
+    }
+
     @Test func aSeparateProfileGetsItsOwnWebsiteData() async throws {
         let home = try #require(model.space)
         await model.createSpace(name: "Banking", newProfileName: "Banking")

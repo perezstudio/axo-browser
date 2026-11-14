@@ -83,7 +83,7 @@ The board: Sidebar interactions. Each demo is a behavior to build, with the boar
 
 The boards: Floating command bar, Proposed 1.0 window.
 
-- [ ] **Narrow results while typing (#122), ranking (#121), menu commands (#123).** In the order set earlier (#122, #121, #123).
+- [x] **Narrow results while typing (#122), ranking (#121), menu commands (#123).** In the order set earlier (#122, #121, #123). A typed address is learned for the page it commits, and menu items run once the page has focus back.
 - [ ] **Command bar as a native floating panel (#87).** The board's floating bar, in browser and mini windows.
 - [ ] **History menus on Back and Forward (#112).**
 - [x] **Google as the default search engine (#172).** Replace the DuckDuckGo placeholder in `AddressInput` with Google, keeping Bing and DuckDuckGo for the Search pane (#132) to offer (decision 6). Small; can go any time.
@@ -115,7 +115,7 @@ The boards: Downloads and empty states, History and mini windows, First run, New
 
 - [ ] **Downloads and empty states, History and mini windows.** Check the built lists and mini windows against their boards; build the empty states with the Axo character in the Space's color. One PR per board.
 - [x] **First run (#175).** New: the welcome on Blush, Import (Arc found or nothing to import), Set up a Space, and one persistent glass card whose tint takes the Space's color, with the board's animations. No profile step; people start in Default.
-- [ ] **New Space and New Profile (#176).** The + by the Space dots, File › New Space…, and Settings › Profiles, with the theme picker and the New Profile slide-in.
+- [x] **New Space and New Profile (#176).** The + by the Space dots, File › New Space…, and Settings › Profiles, with the theme picker and the New Profile slide-in.
 - [ ] **Import later (#177).** From Settings › General or File › Import from Browser…, as a sheet over the open window, with add as new Spaces or merge into a folder. Safari import isn't built (only Arc and Chrome); either build it or drop it from the board.
 - [ ] **Error pages (#178).** Can't Connect, Not Secure, certificate warnings, dangerous sites, and Page Stopped (#75, #96). Chromium shows its own error pages today; Axo's replace them through the engine. #75 and #96 cover the rest.
 - [ ] **Page full screen.** Built; match the hint and the exit behavior on the board.

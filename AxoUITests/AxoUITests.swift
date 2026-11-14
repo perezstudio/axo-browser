@@ -612,7 +612,7 @@ final class AxoUITests: XCTestCase {
 
     /// Above the page, the toolbar takes the page's `theme-color`, as in Safari (#107), and
     /// turning "Tint the toolbar to match the page" off in Settings clears it. Checked on a pixel
-    /// of the toolbar between Reload and the address field, in window screenshots.
+    /// of the toolbar between the address field and the page's tools, in window screenshots.
     @MainActor
     func testToolbarTakesThePagesThemeColor() throws {
         let raspberry = (red: 155.0 / 255, green: 42.0 / 255, blue: 92.0 / 255)
@@ -627,9 +627,11 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Tinted"].waitForExistence(timeout: 10))
 
         let window = app.windows.firstMatch
-        let reload = app.buttons["reloadButton"].frame
+        // The open toolbar between the address field and the page's tools: Reload's own glass
+        // circle sits close to the field, so the gap before it is too narrow to sample.
         let address = app.descendants(matching: .any)["pageAddressBar"].frame
-        let point = CGPoint(x: (reload.maxX + address.minX) / 2 - window.frame.minX, y: reload.midY - window.frame.minY)
+        let tools = app.buttons["summarizeButton"].frame
+        let point = CGPoint(x: (address.maxX + tools.minX) / 2 - window.frame.minX, y: address.midY - window.frame.minY)
         func waitForToolbar(tinted: Bool, _ name: String) {
             var color = Self.color(at: point, in: window)
             let deadline = Date.now.addingTimeInterval(5)
@@ -653,6 +655,44 @@ final class AxoUITests: XCTestCase {
         toggle.click()
         app.typeKey("w", modifierFlags: .command)
         waitForToolbar(tinted: false, "Toolbar with tinting turned off")
+    }
+
+    /// The page meets the sidebar along one straight edge with a soft shadow on the sidebar's
+    /// side (#67): the sidebar is darker right beside the edge than farther in. Back and forward
+    /// share one glass capsule and reload is its own circle (checked in the screenshot).
+    /// Checked in light and dark mode, with window screenshots.
+    @MainActor
+    func testThePageCastsAShadowOnTheSidebar() throws {
+        for appearance in ["Light", "Dark"] {
+            let app = Self.makeApp()
+            app.launchEnvironment["AXO_UI_TESTING_APPEARANCE"] = appearance
+            app.launch()
+            Self.bringToFront(app)
+            let sidebar = app.descendants(matching: .any)["sidebar"]
+            XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+            let window = app.windows.firstMatch
+            let edge = sidebar.frame.maxX - window.frame.minX
+            // An empty part of the sidebar, below its rows and above the footer, so neither point
+            // lands on a row or its highlight.
+            let footerTop = app.descendants(matching: .any)["spaceSwitcher"].frame.minY
+            let y = footerTop - window.frame.minY - 40
+            func luminance(_ color: (red: Double, green: Double, blue: Double)) -> Double {
+                0.2126 * color.red + 0.7152 * color.green + 0.0722 * color.blue
+            }
+            let nearEdge = luminance(Self.color(at: CGPoint(x: edge - 2, y: y), in: window))
+            let fartherIn = luminance(Self.color(at: CGPoint(x: edge - 40, y: y), in: window))
+            let shot = XCTAttachment(screenshot: window.screenshot())
+            shot.name = "Page edge, \(appearance): \(nearEdge) beside the edge, \(fartherIn) farther in"
+            shot.lifetime = .keepAlways
+            add(shot)
+            XCTAssertLessThan(nearEdge, fartherIn - 0.015,
+                              "\(appearance): the sidebar beside the page's edge (\(nearEdge)) is darker than farther in (\(fartherIn))")
+
+            // Reload's own glass circle, apart from back and forward's capsule, shows only in the
+            // screenshot above: toolbar items report their whole slots, which touch either way.
+            XCTAssertTrue(app.buttons["reloadButton"].exists && app.buttons["backButton"].exists)
+            app.terminate()
+        }
     }
 
     /// The sRGB color of the pixel at `point` (in points from the window's top left) in a
@@ -896,14 +936,21 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Home"].exists, "It lists the Spaces that use it")
         XCTAssertFalse(app.buttons["deleteProfileButton"].isEnabled, "The only profile can't be deleted")
 
+        // A new profile comes with its first Space (#176).
         app.buttons["addProfileButton"].click()
-        let nameField = app.textFields["nameField"]
+        let nameField = app.textFields["settingsNewProfileName"]
         XCTAssertTrue(nameField.waitForExistence(timeout: 5))
-        nameField.typeText("Work\n")
+        nameField.typeText("Work")
+        let firstSpace = app.textFields["profileFirstSpaceField"]
+        firstSpace.click()
+        firstSpace.typeText("Office")
+        app.buttons["createProfileButton"].click()
         XCTAssertTrue(list.staticTexts["Work"].waitForExistence(timeout: 5))
         expectation(for: NSPredicate(format: "value == 'Work'"), evaluatedWith: app.textFields["profileNameField"])
         waitForExpectations(timeout: 5)
-        XCTAssertTrue(app.staticTexts["No Spaces use this profile."].exists)
+        // The Settings window: the one holding the profile list, not the browser window's sidebar.
+        let settings = app.windows.containing(.any, identifier: "profileList").firstMatch
+        XCTAssertTrue(settings.staticTexts["Office"].waitForExistence(timeout: 5), "Its first Space uses it, in Settings")
 
         list.staticTexts["Default"].click()
         app.buttons["deleteProfileButton"].click()
@@ -1477,6 +1524,25 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(app.menuBars.menuItems["Translate Page"].isEnabled)
         XCTAssertTrue(app.menuBars.menuItems["Summarize Page"].isEnabled)
         app.typeKey(.escape, modifierFlags: [])
+    }
+
+    /// The command bar finds and runs items from Axo's menus (#123): View › Hide Address Bar
+    /// in Sidebar, found by typing part of it.
+    @MainActor
+    func testCommandBarRunsAMenuCommand() throws {
+        let app = launchApp()
+        let addressBar = app.descendants(matching: .any)["sidebarAddressBar"]
+        XCTAssertTrue(addressBar.waitForExistence(timeout: 5))
+        app.typeKey("t", modifierFlags: .command)
+        let commandField = app.textFields["commandField"]
+        XCTAssertTrue(commandField.waitForExistence(timeout: 5))
+        commandField.typeText("hide address bar")
+        let result = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == 'commandResult' AND label CONTAINS 'Hide Address Bar in Sidebar'")).firstMatch
+        XCTAssertTrue(result.waitForExistence(timeout: 5), "The menu item is a result")
+        XCTAssertTrue(result.label.contains("View menu"), "It names its menu: \(result.label)")
+        result.click()
+        XCTAssertTrue(addressBar.waitForNonExistence(timeout: 5), "Running it hid the address bar")
     }
 
     /// Import from Another Browser reads Arc's Spaces and Chrome's bookmarks from fixture files
