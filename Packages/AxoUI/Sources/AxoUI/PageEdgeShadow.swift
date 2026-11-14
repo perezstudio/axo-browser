@@ -23,7 +23,9 @@ struct PageEdgeShadow: View {
         )
         .frame(width: Self.width)
         .frame(maxHeight: .infinity)
-        .ignoresSafeArea()
+        // Down to the window's bottom, but not up into the toolbar, which runs across the
+        // window on macOS 27 (a stripe there would also darken the toolbar's tint).
+        .ignoresSafeArea(edges: .bottom)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }

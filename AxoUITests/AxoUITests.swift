@@ -668,22 +668,27 @@ final class AxoUITests: XCTestCase {
             XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
             let window = app.windows.firstMatch
             let edge = sidebar.frame.maxX - window.frame.minX
-            let y = sidebar.frame.midY - window.frame.minY
+            // An empty part of the sidebar, below its rows and above the footer, so neither point
+            // lands on a row or its highlight.
+            let footerTop = app.descendants(matching: .any)["spaceSwitcher"].frame.minY
+            let y = footerTop - window.frame.minY - 40
             func luminance(_ color: (red: Double, green: Double, blue: Double)) -> Double {
                 0.2126 * color.red + 0.7152 * color.green + 0.0722 * color.blue
             }
             let nearEdge = luminance(Self.color(at: CGPoint(x: edge - 2, y: y), in: window))
             let fartherIn = luminance(Self.color(at: CGPoint(x: edge - 40, y: y), in: window))
             let shot = XCTAttachment(screenshot: window.screenshot())
-            shot.name = "Page edge, \(appearance)"
+            shot.name = "Page edge, \(appearance): \(nearEdge) beside the edge, \(fartherIn) farther in"
             shot.lifetime = .keepAlways
             add(shot)
             XCTAssertLessThan(nearEdge, fartherIn - 0.015,
                               "\(appearance): the sidebar beside the page's edge (\(nearEdge)) is darker than farther in (\(fartherIn))")
 
+            let back = app.buttons["backButton"].frame
             let forward = app.buttons["forwardButton"].frame
             let reload = app.buttons["reloadButton"].frame
-            XCTAssertGreaterThan(reload.minX - forward.maxX, 4, "\(appearance): reload is its own circle, apart from back and forward")
+            XCTAssertGreaterThan(reload.minX - forward.maxX, forward.minX - back.maxX + 4,
+                                 "\(appearance): reload is its own circle, farther from forward than forward is from back")
             app.terminate()
         }
     }
