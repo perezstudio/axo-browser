@@ -608,7 +608,7 @@ final class AxoUITests: XCTestCase {
 
     /// Above the page, the toolbar takes the page's `theme-color`, as in Safari (#107), and
     /// turning "Tint the toolbar to match the page" off in Settings clears it. Checked on a pixel
-    /// of the toolbar between Reload and the address field, in window screenshots.
+    /// of the toolbar between the address field and the page's tools, in window screenshots.
     @MainActor
     func testToolbarTakesThePagesThemeColor() throws {
         let raspberry = (red: 155.0 / 255, green: 42.0 / 255, blue: 92.0 / 255)
@@ -623,9 +623,11 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Tinted"].waitForExistence(timeout: 10))
 
         let window = app.windows.firstMatch
-        let reload = app.buttons["reloadButton"].frame
+        // The open toolbar between the address field and the page's tools: Reload's own glass
+        // circle sits close to the field, so the gap before it is too narrow to sample.
         let address = app.descendants(matching: .any)["pageAddressBar"].frame
-        let point = CGPoint(x: (reload.maxX + address.minX) / 2 - window.frame.minX, y: reload.midY - window.frame.minY)
+        let tools = app.buttons["summarizeButton"].frame
+        let point = CGPoint(x: (address.maxX + tools.minX) / 2 - window.frame.minX, y: address.midY - window.frame.minY)
         func waitForToolbar(tinted: Bool, _ name: String) {
             var color = Self.color(at: point, in: window)
             let deadline = Date.now.addingTimeInterval(5)
