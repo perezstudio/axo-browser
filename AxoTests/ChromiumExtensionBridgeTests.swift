@@ -443,8 +443,13 @@ struct ChromiumExtensionBridgeTests {
         let first = try #require(bridge.popups["bitwarden"])
         #expect(first.popover.delegate === first.closer, "The popover reports showing to the closer")
         loadedFirst.onLoad?()
-        first.closer.popoverDidShow(Notification(name: NSPopover.didShowNotification))
-        #expect(loadedFirst.focusCount >= 1, "Focused once it's loaded and showing")
+        // Focused on loading only if the popover has already shown, and exactly once.
+        let shownAlready = first.popover.isShown
+        #expect(loadedFirst.focusCount == (shownAlready ? 1 : 0), "Not before the popover shows")
+        if !shownAlready {
+            first.closer.popoverDidShow(Notification(name: NSPopover.didShowNotification))
+            #expect(loadedFirst.focusCount == 1)
+        }
 
         // Shown first, then loaded.
         let shownFirst = FakeExtensionPopup(extensionIdentifier: "onepassword")

@@ -99,9 +99,10 @@ jobs:
           import re
           def version(runtime):
               return [int(n) for n in re.findall(r"iOS-(\d+(?:-\d+)*)", runtime)[0].split("-")] if "iOS-" in runtime else []
-          runtimes = sorted((r for r in json.load(sys.stdin)["devices"].items() if "iOS-" in r[0]), key=lambda r: version(r[0]))
-          devices = [d for _, ds in runtimes[-1:] for d in ds if d["name"].startswith("iPhone")]
-          print(devices[-1]["udid"] if devices else "")')"
+          # Only runtimes with an iPhone, so a newly added runtime with none doesn't win.
+          runtimes = sorted(((r, [d for d in ds if d["name"].startswith("iPhone")]) for r, ds in json.load(sys.stdin)["devices"].items() if "iOS-" in r), key=lambda r: version(r[0]))
+          runtimes = [r for r in runtimes if r[1]]
+          print(runtimes[-1][1][-1]["udid"] if runtimes else "")')"
           [[ -n "$UDID" ]] || { echo "::error::No iPhone simulator on this runner."; exit 1; }
           echo "SIMULATOR=$UDID" >> "$GITHUB_ENV"
 
