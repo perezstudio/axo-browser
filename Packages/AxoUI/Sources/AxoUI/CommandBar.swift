@@ -99,6 +99,8 @@ public enum CommandResult: Identifiable, Hashable {
     case action(CommandAction)
     /// Open a page from history in a new tab.
     case history(HistoryItem)
+    /// Run an item from Axo's menus (#123).
+    case menuCommand(MenuCommand)
 
     public var id: String {
         switch self {
@@ -106,6 +108,7 @@ public enum CommandResult: Identifiable, Hashable {
         case .tab(let tab): "tab:\(tab.id)"
         case .action(let action): "action:\(action.rawValue)"
         case .history(let item): "history:\(item.url.absoluteString)"
+        case .menuCommand(let command): "menu:\(command.id)"
         }
     }
 }
@@ -166,6 +169,7 @@ enum CommandRanking {
     static let maxTabs = 5
     static let maxActions = 3
     static let maxHistory = 8
+    static let maxMenuCommands = 4
 
     /// Whether every word of `query` appears in `text`, ignoring case and accents.
     static func matches(_ query: String, in text: String) -> Bool {
@@ -225,6 +229,30 @@ enum CommandRanking {
         return results
     }
 
+    /// Menu items matching `query` by title and menu (#123), recently used first, leaving out
+    /// items the command bar already offers as an action.
+    static func menuCommandResults(for query: String, commands: [MenuCommand], recent: [String]) -> [CommandResult] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        let actionTitles = Set(CommandAction.allCases.map { $0.title.lowercased() })
+        var seen = Set<String>()
+        let matching = commands.filter { command in
+            !actionTitles.contains(command.title.lowercased())
+                && matches(trimmed, in: "\(command.title) \(command.path.joined(separator: " "))")
+                && seen.insert(command.id).inserted
+        }
+        let rank = Dictionary(recent.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        let ordered = matching.enumerated().sorted { a, b in
+            switch (rank[a.element.id], rank[b.element.id]) {
+            case let (x?, y?): x < y
+            case (_?, nil): true
+            case (nil, _?): false
+            case (nil, nil): a.offset < b.offset
+            }
+        }
+        return ordered.prefix(maxMenuCommands).map { CommandResult.menuCommand($0.element) }
+    }
+
     /// History results to add, skipping pages already open as tabs.
     static func historyResults(_ items: [HistoryItem], excludingOpen tabs: [AxoCore.Tab]) -> [CommandResult] {
         let open = Set(tabs.map(\.url))
@@ -240,6 +268,7 @@ extension CommandResult {
         case .tab(let tab): TabRow.displayTitle(for: tab)
         case .action(let action): action.title
         case .history(let item): item.title.isEmpty ? (item.url.host() ?? item.url.absoluteString) : item.title
+        case .menuCommand(let command): command.title
         }
     }
 
@@ -248,7 +277,7 @@ extension CommandResult {
         switch self {
         case .open(let url, _, _): url
         case .history(let item): item.url
-        case .tab, .action: nil
+        case .tab, .action, .menuCommand: nil
         }
     }
 
@@ -257,7 +286,7 @@ extension CommandResult {
         switch self {
         case .open(_, let isSearch, _): isSearch ? "Search" : "Open"
         case .tab: "Switch to Tab"
-        case .action: "Run"
+        case .action, .menuCommand: "Run"
         case .history: "Open"
         }
     }

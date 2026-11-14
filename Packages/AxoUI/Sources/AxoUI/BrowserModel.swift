@@ -205,6 +205,12 @@ public final class BrowserModel {
     @ObservationIgnored let now: () -> Date
     @ObservationIgnored private var archiveTask: Task<Void, Never>?
     @ObservationIgnored private var commandSearchTask: Task<Void, Never>?
+    /// Axo's menus, which the command bar searches too (#123). Set by the app on the Mac.
+    @ObservationIgnored public var menuCommands: (any MenuCommandProviding)?
+    /// The menus' commands as they were when the command bar opened.
+    @ObservationIgnored var indexedMenuCommands: [MenuCommand] = []
+    /// Menu commands run from the command bar, most recent first, which rank first.
+    @ObservationIgnored var recentMenuCommandIDs: [String] = []
     /// The command bar session's matches so far, which a longer query narrows (#122).
     @ObservationIgnored var commandSearchCache = CommandSearchCache()
     /// Opens the Web Inspector. Set by the app.
@@ -1355,6 +1361,7 @@ public final class BrowserModel {
         refreshDefaultBrowserStatus()
         isCommandBarVisible = true
         commandQuery = ""
+        indexedMenuCommands = menuCommands?.commands() ?? []
         commandSearchCache = CommandSearchCache()
         commandBarEditedTabID = nil
         isAddressEditedInSidebar = false
@@ -1392,6 +1399,7 @@ public final class BrowserModel {
         let openTabs = favoriteTabs + tabs
         commandResults = CommandRanking.immediateResults(for: query, tabs: openTabs, availableActions: availableActions,
                                                          cache: &commandSearchCache)
+        commandResults += CommandRanking.menuCommandResults(for: query, commands: indexedMenuCommands, recent: recentMenuCommandIDs)
         commandSelection = 0
         commandSearchTask?.cancel()
         // A very long query (a data: page's address being edited) isn't worth searching history for.
@@ -1443,6 +1451,10 @@ public final class BrowserModel {
             await completePendingSplit(with: selectedTabID, anchor: splitAnchor)
         case .action(let action):
             await perform(action)
+        case .menuCommand(let command):
+            recentMenuCommandIDs.removeAll { $0 == command.id }
+            recentMenuCommandIDs.insert(command.id, at: 0)
+            menuCommands?.run(command)
         }
     }
 

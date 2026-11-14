@@ -1431,6 +1431,25 @@ final class AxoUITests: XCTestCase {
         app.typeKey(.escape, modifierFlags: [])
     }
 
+    /// The command bar finds and runs items from Axo's menus (#123): View › Hide Address Bar
+    /// in Sidebar, found by typing part of it.
+    @MainActor
+    func testCommandBarRunsAMenuCommand() throws {
+        let app = launchApp()
+        let addressBar = app.descendants(matching: .any)["sidebarAddressBar"]
+        XCTAssertTrue(addressBar.waitForExistence(timeout: 5))
+        app.typeKey("t", modifierFlags: .command)
+        let commandField = app.textFields["commandField"]
+        XCTAssertTrue(commandField.waitForExistence(timeout: 5))
+        commandField.typeText("hide address bar")
+        let result = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == 'commandResult' AND label CONTAINS 'Hide Address Bar in Sidebar'")).firstMatch
+        XCTAssertTrue(result.waitForExistence(timeout: 5), "The menu item is a result")
+        XCTAssertTrue(result.label.contains("View menu"), "It names its menu: \(result.label)")
+        result.click()
+        XCTAssertTrue(addressBar.waitForNonExistence(timeout: 5), "Running it hid the address bar")
+    }
+
     /// Import from Another Browser reads Arc's Spaces and Chrome's bookmarks from fixture files
     /// (never the real ones) and adds them to the sidebar.
     @MainActor
