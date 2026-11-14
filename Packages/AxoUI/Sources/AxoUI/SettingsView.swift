@@ -45,6 +45,9 @@ public struct SettingsView: View {
         }
         .frame(minWidth: Self.minimumSize.width, idealWidth: Self.defaultSize.width,
                minHeight: Self.minimumSize.height, idealHeight: Self.defaultSize.height)
+        // The Settings scene opened taller than the screen on the hosted Mac (2168 pt) despite
+        // its default size, so the window is fitted to its screen once it's shown.
+        .background(WindowScreenFit(size: Self.defaultSize))
         // ⌘F searches the panes, as in System Settings. Browser windows' Find… is disabled here.
         .background {
             Button("Search Settings") { isSearchFocused = true }
@@ -102,6 +105,57 @@ public struct SettingsView: View {
             if let sync = model.iCloudSync {
                 SyncSettings(sync: sync)
             }
+        }
+    }
+}
+
+/// Fits its window on its screen once the window is shown: a window larger than the screen's
+/// visible area is resized to `size` (or the visible area, if smaller) and centered there.
+struct WindowScreenFit: NSViewRepresentable {
+    let size: CGSize
+
+    func makeNSView(context: Context) -> NSView { FittingView(size: size) }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    /// The frame `window` should take to fit `visible`, or `nil` when it already fits.
+    nonisolated static func fittedFrame(for window: CGRect, contentFrame: (CGSize) -> CGRect, size: CGSize, in visible: CGRect) -> CGRect? {
+        guard window.height > visible.height || window.width > visible.width
+                || !visible.contains(window) else { return nil }
+        var frame = window
+        if window.height > visible.height || window.width > visible.width {
+            frame.size = contentFrame(size).size
+        }
+        frame.size.width = min(frame.width, visible.width)
+        frame.size.height = min(frame.height, visible.height)
+        frame.origin.x = min(max(frame.minX, visible.minX), visible.maxX - frame.width)
+        frame.origin.y = min(max(frame.minY, visible.minY), visible.maxY - frame.height)
+        if window.height > visible.height || window.width > visible.width {
+            frame.origin = CGPoint(x: visible.midX - frame.width / 2, y: visible.midY - frame.height / 2)
+        }
+        return frame
+    }
+
+    final class FittingView: NSView {
+        let size: CGSize
+        init(size: CGSize) {
+            self.size = size
+            super.init(frame: .zero)
+        }
+        required init?(coder: NSCoder) { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard window != nil else { return }
+            // After SwiftUI's own sizing for this showing.
+            DispatchQueue.main.async { [weak self] in self?.fit() }
+        }
+
+        private func fit() {
+            guard let window, let visible = (window.screen ?? NSScreen.main)?.visibleFrame,
+                  let frame = WindowScreenFit.fittedFrame(for: window.frame, contentFrame: { size in
+                      window.frameRect(forContentRect: CGRect(origin: .zero, size: size))
+                  }, size: size, in: visible) else { return }
+            window.setFrame(frame, display: true)
         }
     }
 }

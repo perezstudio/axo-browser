@@ -50,3 +50,43 @@ struct SettingsPaneTests {
         #expect(SettingsPane.filtered(withoutICloud, by: "profile") == [.profiles, .spaces])
     }
 }
+
+#if os(macOS)
+import CoreGraphics
+
+/// The Settings window is fitted on its screen when shown (#85): it opened 2168 pt tall on the
+/// hosted Mac's 768 pt screen.
+struct WindowScreenFitTests {
+    let visible = CGRect(x: 0, y: 0, width: 1024, height: 740)
+    let size = CGSize(width: 780, height: 560)
+    // A title bar's worth taller than the content, as AppKit's frameRect(forContentRect:) adds.
+    func contentFrame(_ size: CGSize) -> CGRect { CGRect(origin: .zero, size: CGSize(width: size.width, height: size.height + 28)) }
+
+    @Test func aWindowThatFitsIsLeftAlone() {
+        let window = CGRect(x: 100, y: 100, width: 780, height: 588)
+        #expect(WindowScreenFit.fittedFrame(for: window, contentFrame: contentFrame, size: size, in: visible) == nil)
+    }
+
+    @Test func aWindowTallerThanTheScreenTakesTheDefaultSizeCentered() throws {
+        let window = CGRect(x: 122, y: -698, width: 780, height: 2168)
+        let frame = try #require(WindowScreenFit.fittedFrame(for: window, contentFrame: contentFrame, size: size, in: visible))
+        #expect(frame.size == CGSize(width: 780, height: 588))
+        #expect(visible.contains(frame))
+        #expect(frame.midX == visible.midX && frame.midY == visible.midY)
+    }
+
+    @Test func aWindowPartlyOffScreenMovesOnKeepingItsSize() throws {
+        let window = CGRect(x: 600, y: 300, width: 780, height: 588)
+        let frame = try #require(WindowScreenFit.fittedFrame(for: window, contentFrame: contentFrame, size: size, in: visible))
+        #expect(frame.size == window.size)
+        #expect(visible.contains(frame))
+    }
+
+    @Test func aScreenSmallerThanTheDefaultSizeGetsAllOfIt() throws {
+        let small = CGRect(x: 0, y: 0, width: 700, height: 500)
+        let window = CGRect(x: 0, y: -100, width: 900, height: 900)
+        let frame = try #require(WindowScreenFit.fittedFrame(for: window, contentFrame: contentFrame, size: size, in: small))
+        #expect(frame == small)
+    }
+}
+#endif
