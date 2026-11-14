@@ -1,0 +1,123 @@
+# Builds Axo and runs its unit tests and every package's tests on GitHub-hosted Macs, on every
+# pull request (#64). The UI tests run separately, in ui-tests.yml.
+#
+# The runner has no axo-chromium build, so the "Embed Chromium Engine" phase only warns; test runs
+# use WebKit anyway (see CLAUDE.md). The iOS job builds the iOS app and runs the shared packages'
+# tests on an iPhone simulator, as AxoiOS.xctestplan does without its UI tests.
+name: Tests
+
+on:
+  workflow_dispatch:
+  pull_request:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  mac:
+    name: Mac unit and package tests
+    # macOS 27 with Xcode 27, Apple silicon.
+    runs-on: xcode-27
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select the newest Xcode 27
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_27*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      # The project signs with the person's team, which the runner doesn't have, so sign to run
+      # locally (ad hoc). Debug uses Axo.entitlements, which needs no provisioning profile.
+      - name: Build for testing
+        run: |
+          xcodebuild build-for-testing \
+            -workspace Axo.xcworkspace -scheme Axo -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -disableAutomaticPackageResolution \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
+            > "$RUNNER_TEMP/build.log" 2>&1 \
+            || { grep -E 'error:' "$RUNNER_TEMP/build.log"; tail -50 "$RUNNER_TEMP/build.log"; exit 1; }
+          # New warnings in Axo's own code fail the build here, as they do in the local checks.
+          if grep -E '^/.*/(Axo|AxoiOS|Packages)/.*: warning:' "$RUNNER_TEMP/build.log" | sort -u | tee "$RUNNER_TEMP/warnings.txt" | grep -q .; then
+            echo "::error::The build has warnings in Axo's code (see above)."
+            exit 1
+          fi
+
+      # Everything in Axo.xctestplan except the UI tests: the app's unit tests (hosted in Axo,
+      # which test runs keep isolated) and every package's tests.
+      - name: Test
+        env:
+          TEST_RUNNER_AXO_HOSTED_RUNNER: "1"
+        run: |
+          xcodebuild test-without-building \
+            -workspace Axo.xcworkspace -scheme Axo -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -resultBundlePath "$RUNNER_TEMP/Tests.xcresult" \
+            -skip-testing:AxoUITests \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=
+
+      - name: Upload the result bundle
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tests-results
+          path: |
+            ${{ runner.temp }}/Tests.xcresult
+            ${{ runner.temp }}/build.log
+            ${{ runner.temp }}/warnings.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
+  ios:
+    name: iOS build and package tests
+    runs-on: xcode-27
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select the newest Xcode 27
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_27*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      # The newest iPhone simulator the runner has, so a renamed model doesn't break the job.
+      - name: Choose a simulator
+        run: |
+          UDID="$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = [d for runtime, ds in json.load(sys.stdin)["devices"].items() if "iOS" in runtime for d in ds if d["name"].startswith("iPhone")]
+          print(devices[-1]["udid"] if devices else "")')"
+          [[ -n "$UDID" ]] || { echo "::error::No iPhone simulator on this runner."; exit 1; }
+          echo "SIMULATOR=$UDID" >> "$GITHUB_ENV"
+
+      # The iOS app, and AxoiOS.xctestplan's package tests without its UI tests.
+      - name: Build and test
+        run: |
+          xcodebuild test \
+            -workspace Axo.xcworkspace -scheme AxoiOS -destination "id=$SIMULATOR" \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -resultBundlePath "$RUNNER_TEMP/iOSTests.xcresult" \
+            -disableAutomaticPackageResolution \
+            -skip-testing:AxoiOSUITests \
+            CODE_SIGNING_ALLOWED=NO \
+            > "$RUNNER_TEMP/ios.log" 2>&1 \
+            || { grep -E 'error:|failed' "$RUNNER_TEMP/ios.log" | head -40; tail -40 "$RUNNER_TEMP/ios.log"; exit 1; }
+          grep -E 'TEST SUCCEEDED|Executed' "$RUNNER_TEMP/ios.log" | tail -3
+
+      - name: Upload the result bundle
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iOSTests-results
+          path: |
+            ${{ runner.temp }}/iOSTests.xcresult
+            ${{ runner.temp }}/ios.log
+          if-no-files-found: ignore
+          retention-days: 7

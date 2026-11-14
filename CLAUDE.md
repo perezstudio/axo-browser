@@ -227,7 +227,7 @@ If any of these fail, the change is not done. Report what failed and include the
 
 ### Every PR gets a red-team review
 
-Once a PR's CI passes (CI runs only the UI tests so far, in `.github/workflows/ui-tests.yml`; the checks above cover the rest), and before it's called ready to merge, run a red-team review of the whole PR: the diff against `main`, plus the axo-chromium fork's commits when the PR depends on them. The reviewer is independent (a subagent given the code, not the author's conclusions) and tries to break the change. It looks for:
+Once a PR's CI passes (`.github/workflows/tests.yml` builds Axo, failing on warnings in Axo's code, and runs the unit tests and every package's tests on the Mac and on an iPhone simulator; `.github/workflows/ui-tests.yml` runs the UI tests; neither has the Chromium engine), and before it's called ready to merge, run a red-team review of the whole PR: the diff against `main`, plus the axo-chromium fork's commits when the PR depends on them. The reviewer is independent (a subagent given the code, not the author's conclusions) and tries to break the change. It looks for:
 
 - **Issues and bugs:** logic errors, edge cases, races and actor isolation, lifetime and memory problems, crashes, and behavior that doesn't match the docs.
 - **Security problems:** untrusted input from pages and extensions, data leaking between profiles, the person's real data or settings touched by tests, entitlements and permissions, private API outside AxoInspector, and secrets in the repo.
