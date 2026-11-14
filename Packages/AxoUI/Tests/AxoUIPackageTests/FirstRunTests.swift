@@ -152,4 +152,39 @@ struct FirstRunTests {
         #expect(model.firstRun == nil)
         #expect(record.isComplete)
     }
+
+    /// An import that adds Spaces (Arc's) keeps first run on its import step: only Spaces
+    /// arriving from elsewhere end it.
+    @Test func itsOwnImportAddingSpacesDoesntEndIt() async throws {
+        let store = try TabStore.makeInMemory()
+        let model = BrowserModel(store: store, pool: WebViewPool(makeDataStore: { _ in .nonPersistent() }))
+        model.announce = { _ in }
+        let importer = SpaceAddingImporter(store: store)
+        model.browserImporter = importer
+        model.firstRunRecord = record
+        await model.start()
+        model.continueFirstRun()
+        let session = try #require(model.firstRun?.importSession)
+        try await waitUntil { session.canImport }
+
+        await model.importInFirstRun()
+        try await waitUntil { model.spaces.count == 2 }
+        for _ in 0..<20 { await Task.yield() }
+        #expect(model.firstRun?.hasImported == true, "Still showing the import's result")
+        model.finishFirstRun()
+        #expect(model.firstRun == nil)
+    }
+}
+
+/// An importer whose import adds a Space, as Arc's does.
+@MainActor
+final class SpaceAddingImporter: BrowserImporting {
+    let store: TabStore
+    init(store: TabStore) { self.store = store }
+    func availableSources() -> [ImportSourceOption] { [ImportSourceOption(id: "arc", name: "Arc")] }
+    func preview(_ sourceID: String) async throws -> ImportCounts { ImportCounts(spaces: 1, pinnedTabs: 1) }
+    func importData(from sourceID: String, parts: Set<ImportPart>, currentSpace: Space) async throws -> ImportCounts {
+        _ = try await store.createSpace(name: "Reading", profileID: currentSpace.profileID)
+        return ImportCounts(spaces: 1, pinnedTabs: 1)
+    }
 }

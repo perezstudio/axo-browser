@@ -109,6 +109,11 @@ extension BrowserModel {
     /// those Spaces are the person's, and first run must not rename or retheme them.
     func endFirstRunIfSpacesChanged() {
         guard let firstRun else { return }
+        // First run's own import adds Spaces; those are expected.
+        switch firstRun.importSession?.phase {
+        case .importing, .finished: return
+        default: break
+        }
         if spaces.count > 1 || !spaces.contains(where: { $0.id == firstRun.spaceID }) {
             finishFirstRun(announcing: nil)
         }
