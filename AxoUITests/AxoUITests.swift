@@ -831,6 +831,7 @@ final class AxoUITests: XCTestCase {
         app.typeKey(",", modifierFlags: .command)
         AxoUITests.selectSettingsPane("linkRouting", in: app)
         XCTAssertTrue(app.buttons["addDomainRouteButton"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["addDomainRouteButton"].isHittable, "The window opens on screen, not taller than it")
         let general = app.descendants(matching: .any)["settingsPane.general"]
         let profiles = app.descendants(matching: .any)["settingsPane.profiles"]
         XCTAssertTrue(profiles.exists, "Every pane is listed before searching")
@@ -842,8 +843,10 @@ final class AxoUITests: XCTestCase {
         search.typeText("navigation bar")
         XCTAssertTrue(profiles.waitForNonExistence(timeout: 5), "Profiles has no navigation bar setting")
         XCTAssertTrue(general.exists, "General holds the navigation bar setting")
+        XCTAssertTrue(app.radioButtons["Above the page"].waitForExistence(timeout: 5),
+                      "The first match shows once the pane showing no longer matches")
         search.typeText("\n")
-        XCTAssertTrue(app.radioButtons["Above the page"].waitForExistence(timeout: 5), "Return opens the first match")
+        XCTAssertTrue(app.radioButtons["Above the page"].exists, "Return keeps the first match")
 
         let window = app.windows.containing(.any, identifier: "settingsPaneList").firstMatch
         XCTAssertTrue(window.exists)

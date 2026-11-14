@@ -13,6 +13,8 @@ public struct SettingsView: View {
     public static let paneStorageKey = "settingsPane"
     /// The smallest the window gets: room for the sidebar and a pane's form.
     public static let minimumSize = CGSize(width: 720, height: 480)
+    /// The size the window opens at the first time.
+    public static let defaultSize = CGSize(width: 780, height: 560)
 
     @AppStorage(SettingsView.paneStorageKey) private var selection: SettingsPane = .general
     @State private var query = ""
@@ -41,8 +43,8 @@ public struct SettingsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .navigationTitle(shownPane.title)
         }
-        .frame(minWidth: Self.minimumSize.width, idealWidth: 780,
-               minHeight: Self.minimumSize.height, idealHeight: 560)
+        .frame(minWidth: Self.minimumSize.width, idealWidth: Self.defaultSize.width,
+               minHeight: Self.minimumSize.height, idealHeight: Self.defaultSize.height)
         // ⌘F searches the panes, as in System Settings. Browser windows' Find… is disabled here.
         .background {
             Button("Search Settings") { isSearchFocused = true }
@@ -75,7 +77,11 @@ public struct SettingsView: View {
         .onDisappear { query = "" }
         .searchable(text: $query, placement: .sidebar, prompt: "Search")
         .searchFocused($isSearchFocused)
-        // Return goes to the first match, as in System Settings.
+        // The first match shows as soon as the pane showing no longer matches, and Return
+        // goes to the first match, as in System Settings.
+        .onChange(of: query) {
+            if let first = matches.first, !matches.contains(shownPane) { selection = first }
+        }
         .onSubmit(of: .search) {
             if let first = matches.first { selection = first }
         }
