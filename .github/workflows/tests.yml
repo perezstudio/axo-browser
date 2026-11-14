@@ -106,7 +106,10 @@ jobs:
           [[ -n "$UDID" ]] || { echo "::error::No iPhone simulator on this runner."; exit 1; }
           echo "SIMULATOR=$UDID" >> "$GITHUB_ENV"
 
-      # The iOS app, and AxoiOS.xctestplan's package tests without its UI tests.
+      # The iOS app, and the shared packages' tests that don't load web pages. Real WebKit pages
+      # on this virtual simulator hang or never draw (loads past a minute, empty snapshots), so
+      # AxoWeb's and AxoUI's iOS runs stay a local check (CLAUDE.md), as the Mac's own tests
+      # cover them here.
       - name: Build and test
         env:
           # Lets tests relax what this slow virtual simulator can't meet (timing ceilings).
@@ -117,7 +120,7 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             -resultBundlePath "$RUNNER_TEMP/iOSTests.xcresult" \
             -disableAutomaticPackageResolution \
-            -skip-testing:AxoiOSUITests \
+            -only-testing:AxoPersistenceTests -only-testing:AxoCoreTests -only-testing:AxoSyncTests \
             CODE_SIGNING_ALLOWED=NO \
             > "$RUNNER_TEMP/ios.log" 2>&1 \
             || { grep -E 'error:|failed' "$RUNNER_TEMP/ios.log" | head -40; tail -40 "$RUNNER_TEMP/ios.log"; exit 1; }
