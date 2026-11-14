@@ -33,6 +33,26 @@ struct SpacePreviewTests {
         }
     }
 
+    /// The Space's name row (#171) reads the shown Space's rows, so it follows renames and
+    /// switches, and a neighboring Space's page names that Space.
+    @Test func theNameRowFollowsRenamesAndSwitches() async throws {
+        let home = try #require(model.space)
+        #expect(model.shownSpaceRows?.space.name == home.name)
+
+        await model.renameSpace(home.id, to: "Personal")
+        #expect(model.shownSpaceRows?.space.name == "Personal")
+
+        await model.createSpace(name: "Work")
+        let work = try #require(model.space)
+        #expect(work.id != home.id)
+        #expect(model.shownSpaceRows?.space.name == "Work")
+        await previewsSettle()
+        #expect(model.spacePreviews[home.id]?.space.name == "Personal", "The neighboring page names its own Space")
+
+        await model.selectSpace(home.id)
+        #expect(model.shownSpaceRows?.space.name == "Personal")
+    }
+
     @Test func aPreviewShowsRowsAsTheSidebarDoes() throws {
         let space = Space(id: UUID(), profileID: UUID(), name: "Work", sortKey: "a")
         let splitID = UUID()

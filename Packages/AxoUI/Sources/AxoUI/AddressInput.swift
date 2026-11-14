@@ -5,9 +5,8 @@ import Foundation
 /// Text with a scheme loads as is, text that looks like a host gets `https://` (or `http://` for
 /// local hosts), and anything else becomes a search.
 nonisolated public enum AddressInput {
-    /// The search page for queries. DuckDuckGo is a placeholder default until search engine
-    /// settings exist.
-    public static let searchURL = URL(string: "https://duckduckgo.com/")!
+    /// The results page searches go to: the default search engine's (Google).
+    public static var searchURL: URL { SearchEngine.default.resultsURL }
 
     private static let schemesWithoutSlashes: Set<String> = ["about", "data", "mailto", "javascript"]
     private static let localHosts: Set<String> = ["localhost", "127.0.0.1", "[::1]"]
@@ -34,9 +33,7 @@ nonisolated public enum AddressInput {
 
     /// Returns the search URL for `query`.
     public static func searchURL(for query: String) -> URL {
-        var components = URLComponents(url: searchURL, resolvingAgainstBaseURL: false)!
-        components.queryItems = [URLQueryItem(name: "q", value: query)]
-        return components.url!
+        SearchEngine.default.searchURL(for: query)
     }
 
     /// `example.com/path` becomes `https://example.com/path`; `localhost:3000` becomes `http://…`.

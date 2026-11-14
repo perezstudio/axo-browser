@@ -65,7 +65,7 @@ The boards: Axo today, Proposed 1.0 window, Tab row states, Space themes (in Axo
 - [ ] **Layered page (#67).** The page as a layer beside the sidebar along one straight edge with a shadow, the back and forward capsule, and the reload circle. Done: the window matches the board in light and dark, with the sidebar shown and hidden, and the page's own loading bar and hovered-link label still sit on the page.
 - [ ] **Navigation bar above the page, inside the page's area (#170).** Today the toolbar spans the window and its tint covers the strip above the sidebar (#107). Change it so the control bar sits inside the page's area and the sidebar keeps its theme to the top (the Mac board's "Address bar above the page"). Done: `testNavigationBarPlacement` and `testToolbarTakesThePagesThemeColor` updated, and the tint reaches only the control bar.
 - [ ] **Top tab bar (#136).** The "Tabs on top" layout: favorites with the Space's name, Pinned, folders, today's tabs, New Tab, with the control bar inside the page under it; hiding the tab bar keeps the control bar. Needs the item above.
-- [ ] **Space name row (#171).** The Space's name between the favorites and Pinned, styled like a tab row, as on the window board.
+- [x] **Space name row (#171).** The Space's name between the favorites and Pinned, styled like a tab row, as on the window board.
 - [ ] **Tab rows.** One PR per issue, each matching the Tab row states board (close on hover, the loading spinner, and dimmed tabs are built, from PR #158): audio and mute (#71), a pinned tab away from its page (#73), camera, microphone, screen, and location in use (#74), crashed and unresponsive pages (#75, shared with Phase 6), hover preview card (#76), and the rest of #82.
 - [ ] **Notices.** Check `NoticeView` against the boards (capsule at the page column's bottom, Undo, held while hovered); adjust spacing and motion to match. Small; no issue needed unless it changes behavior.
 
@@ -86,7 +86,7 @@ The boards: Floating command bar, Proposed 1.0 window.
 - [ ] **Narrow results while typing (#122), ranking (#121), menu commands (#123).** In the order set earlier (#122, #121, #123).
 - [ ] **Command bar as a native floating panel (#87).** The board's floating bar, in browser and mini windows.
 - [ ] **History menus on Back and Forward (#112).**
-- [ ] **Google as the default search engine (#172).** Replace the DuckDuckGo placeholder in `AddressInput` with Google, keeping Bing and DuckDuckGo for the Search pane (#132) to offer (decision 6). Small; can go any time.
+- [x] **Google as the default search engine (#172).** Replace the DuckDuckGo placeholder in `AddressInput` with Google, keeping Bing and DuckDuckGo for the Search pane (#132) to offer (decision 6). Small; can go any time.
 
 ## Phase 4: page tools, menus, and prompts
 
