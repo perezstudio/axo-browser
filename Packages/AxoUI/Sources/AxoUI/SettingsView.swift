@@ -117,6 +117,7 @@ public struct SettingsView: View {
 
 /// Fits its window on its screen once the window is shown: a window larger than the screen's
 /// visible area is resized to `size` (or the visible area, if smaller) and centered there.
+/// It also makes the window resizable, which the Settings scene's window isn't on its own.
 struct WindowScreenFit: NSViewRepresentable {
     let size: CGSize
 
@@ -157,6 +158,9 @@ struct WindowScreenFit: NSViewRepresentable {
         }
 
         private func fit() {
+            // SwiftUI's Settings scene makes its window fixed-size, even with
+            // `.windowResizability(.contentMinSize)`; the content's minimum still applies.
+            window?.styleMask.insert(.resizable)
             guard let window, let visible = (window.screen ?? NSScreen.main)?.visibleFrame,
                   let frame = WindowScreenFit.fittedFrame(for: window.frame, contentFrame: { size in
                       window.frameRect(forContentRect: CGRect(origin: .zero, size: size))
