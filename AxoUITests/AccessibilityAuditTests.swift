@@ -68,8 +68,13 @@ final class AccessibilityAuditTests: XCTestCase {
             if snapshot.identifier.isEmpty, snapshot.label.isEmpty {
                 // NSPopover itself, and hosting groups that fill a window, sheet, or popover.
                 if snapshot.elementType == .popover { return true }
+                // The frames are read again if needed: a window can resize after the audit starts
+                // (Settings fits its window to a pane's content).
+                func fillsContainer(_ frames: [CGRect]) -> Bool {
+                    frames.contains(where: { $0.insetBy(dx: -1, dy: -1).contains(snapshot.frame) && $0.width - snapshot.frame.width < 2 })
+                }
                 if snapshot.elementType == .group,
-                   containerFrames.contains(where: { $0.insetBy(dx: -1, dy: -1).contains(snapshot.frame) && $0.width - snapshot.frame.width < 2 }) {
+                   fillsContainer(containerFrames) || fillsContainer(app.windows.allElementsBoundByIndex.map(\.frame)) {
                     return true
                 }
                 if snapshot.elementType == .group {
@@ -83,6 +88,13 @@ final class AccessibilityAuditTests: XCTestCase {
                     if children.count == 1, children[0].elementType == .scrollView,
                        children[0].children.contains(where: { $0.identifier == "settingsPaneList" }) { return true }
                     if children.count == 1, children[0].elementType == .searchField { return true }
+                    // A Settings pane that lists items beside a form (Spaces, Profiles), which
+                    // fills the detail column. VoiceOver reads its list, buttons, and form.
+                    let paneLists: Set<String> = ["spaceList", "profileList"]
+                    if children.contains(where: { child in
+                        paneLists.contains(child.identifier)
+                            || child.children.contains(where: { paneLists.contains($0.identifier) })
+                    }) { return true }
                     // A List section header row, which holds only its header text.
                     if children.count == 1, children[0].elementType == .staticText,
                        !children[0].label.isEmpty || !(children[0].value as? String ?? "").isEmpty {
@@ -95,7 +107,7 @@ final class AccessibilityAuditTests: XCTestCase {
                 guard depth < 3, !s.children.isEmpty else { return own }
                 return own + "[" + s.children.map { describe($0, depth: depth + 1) }.joined(separator: ", ") + "]"
             }
-            print("AUDIT [\(screen)] \(issue.compactDescription): \(describe(snapshot, depth: 0)) frame=\(snapshot.frame)")
+            print("AUDIT [\(screen)] \(issue.compactDescription): \(describe(snapshot, depth: 0)) frame=\(snapshot.frame) windows=\(app.windows.allElementsBoundByIndex.map(\.frame))")
             return false
         }
     }

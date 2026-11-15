@@ -18,6 +18,9 @@ public struct SettingsView: View {
 
     @AppStorage(SettingsView.paneStorageKey) private var selection: SettingsPane = .general
     @State private var query = ""
+    /// The split view's columns. View › Toggle Sidebar still reaches the split view with its
+    /// toolbar button removed (a constant binding doesn't stop it), so a change is undone.
+    @State private var columns = NavigationSplitViewVisibility.all
     @FocusState private var isSearchFocused: Bool
 
     /// Creates the Settings window's content.
@@ -36,12 +39,15 @@ public struct SettingsView: View {
     }
 
     public var body: some View {
-        NavigationSplitView(columnVisibility: .constant(.all)) {
+        NavigationSplitView(columnVisibility: $columns) {
             sidebar
         } detail: {
             pane(shownPane)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .navigationTitle(shownPane.title)
+        }
+        .onChange(of: columns) {
+            if columns != .all { columns = .all }
         }
         .frame(minWidth: Self.minimumSize.width, idealWidth: Self.defaultSize.width,
                minHeight: Self.minimumSize.height, idealHeight: Self.defaultSize.height)
