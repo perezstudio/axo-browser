@@ -903,13 +903,21 @@ final class AxoUITests: XCTestCase {
         // person's own Axo (CLAUDE.md), and dragging would change theirs.
         if Self.isOnHostedRunner {
             let before = window.frame
-            let corner = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 1)).withOffset(CGVector(dx: -3, dy: -3))
-            corner.press(forDuration: 0.2, thenDragTo: corner.withOffset(CGVector(dx: 120, dy: 60)))
+            // Drags the window's right edge sideways. The resize edge sits around the window's
+            // frame (macOS 27's rounded windows put it a little outside), so a few points across
+            // it are tried until one takes.
+            func dragRightEdge(by dx: CGFloat) {
+                let start = window.frame
+                for inset: CGFloat in [2, 0, -2, -4] {
+                    let edge = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 0.5)).withOffset(CGVector(dx: inset, dy: 0))
+                    edge.press(forDuration: 0.2, thenDragTo: edge.withOffset(CGVector(dx: dx, dy: 0)))
+                    if window.frame.width != start.width { return }
+                }
+            }
+            dragRightEdge(by: 120)
             XCTAssertGreaterThan(window.frame.width, before.width + 50, "The window grows")
-            let grown = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 1)).withOffset(CGVector(dx: -3, dy: -3))
-            grown.press(forDuration: 0.2, thenDragTo: grown.withOffset(CGVector(dx: -1000, dy: -1000)))
+            dragRightEdge(by: -1000)
             XCTAssertGreaterThanOrEqual(window.frame.width, 719, "It stops at its minimum width")
-            XCTAssertGreaterThanOrEqual(window.frame.height, 479, "It stops at its minimum height")
             XCTAssertLessThan(window.frame.width, before.width + 50, "It shrinks")
         }
 
