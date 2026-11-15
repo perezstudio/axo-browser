@@ -68,13 +68,8 @@ final class AccessibilityAuditTests: XCTestCase {
             if snapshot.identifier.isEmpty, snapshot.label.isEmpty {
                 // NSPopover itself, and hosting groups that fill a window, sheet, or popover.
                 if snapshot.elementType == .popover { return true }
-                // The frames are read again if needed: a window can resize after the audit starts
-                // (Settings fits its window to a pane's content).
-                func fillsContainer(_ frames: [CGRect]) -> Bool {
-                    frames.contains(where: { $0.insetBy(dx: -1, dy: -1).contains(snapshot.frame) && $0.width - snapshot.frame.width < 2 })
-                }
                 if snapshot.elementType == .group,
-                   fillsContainer(containerFrames) || fillsContainer(app.windows.allElementsBoundByIndex.map(\.frame)) {
+                   containerFrames.contains(where: { $0.insetBy(dx: -1, dy: -1).contains(snapshot.frame) && $0.width - snapshot.frame.width < 2 }) {
                     return true
                 }
                 if snapshot.elementType == .group {
@@ -107,7 +102,7 @@ final class AccessibilityAuditTests: XCTestCase {
                 guard depth < 3, !s.children.isEmpty else { return own }
                 return own + "[" + s.children.map { describe($0, depth: depth + 1) }.joined(separator: ", ") + "]"
             }
-            print("AUDIT [\(screen)] \(issue.compactDescription): \(describe(snapshot, depth: 0)) frame=\(snapshot.frame) windows=\(app.windows.allElementsBoundByIndex.map(\.frame))")
+            print("AUDIT [\(screen)] \(issue.compactDescription): \(describe(snapshot, depth: 0)) frame=\(snapshot.frame)")
             return false
         }
     }
