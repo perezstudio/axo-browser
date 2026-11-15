@@ -176,7 +176,10 @@ struct SiteCustomizationSettings: View {
                                 get: { customization.isEnabled },
                                 set: { on in Task { await model.setCustomizationEnabled(on, id: customization.id) } }
                             ))
+                            #if os(macOS)
+                            // A checkbox, as the list had (a grouped form would make it a switch).
                             .toggleStyle(.checkbox)
+                            #endif
                             .accessibilityIdentifier("customizationToggle")
                             Text(summary(of: customization)).font(.caption).foregroundStyle(.secondary)
                             Spacer()
