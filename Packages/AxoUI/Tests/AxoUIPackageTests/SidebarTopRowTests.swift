@@ -1,4 +1,5 @@
 #if os(macOS)
+import AppKit
 import CoreGraphics
 import Testing
 @testable import AxoUI
@@ -6,10 +7,26 @@ import Testing
 /// The sidebar's top row, footer, and address bar with the navigation bar in the sidebar (#67).
 @MainActor
 struct SidebarTopRowTests {
-    @Test func theWindowsControlsSitWhereMacOSPutsThem() {
-        // Close at 19 pt, zoom ending at 79 pt, as in a window with a toolbar on macOS 27.
-        #expect(WindowControls.leading == 19)
-        #expect(SidebarTopRow.windowControlsWidth == 79)
+    @Test func theWindowsControlsSitWhereMacOSPutsThem() throws {
+        // A window with a toolbar, as the browser window has while its sidebar is hidden: where
+        // macOS puts its own controls is where the top row puts its copies.
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 800, height: 600),
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        window.toolbar = NSToolbar(identifier: "SidebarTopRowTests")
+        window.toolbarStyle = .unified
+        window.layoutIfNeeded()
+        let close = try #require(window.standardWindowButton(.closeButton))
+        let minimize = try #require(window.standardWindowButton(.miniaturizeButton))
+        let zoom = try #require(window.standardWindowButton(.zoomButton))
+        func frame(_ button: NSButton) -> CGRect { button.convert(button.bounds, to: nil) }
+        #expect(frame(close).minX == WindowControls.leading)
+        #expect(frame(minimize).minX - frame(close).minX == WindowControls.pitch)
+        #expect(frame(zoom).maxX == SidebarTopRow.windowControlsWidth)
+        #expect(frame(close).height == WindowControls.size.height)
+        // Centered 26 pt down, as the row's buttons are.
+        #expect(abs(window.frame.height - frame(close).midY - SidebarTopRow.height / 2) <= 1)
     }
 
     @Test func theNarrowestSidebarFitsTheTopRow() {

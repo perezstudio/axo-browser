@@ -20,8 +20,11 @@ struct PageLayerTests {
         let sidebar = try #require(split.splitViewItems.first { $0.behavior == .sidebar })
         if sidebar.isCollapsed { split.toggleSidebar(nil) }
 
+        let before = model.selectedTabID
         await model.openTab(url: URL(string: "data:text/html,<title>Layer</title>")!)
-        let tabID = model.selectedTabID
+        // Closed at the end only if it's the one opened here, never a tab that was already there.
+        let tabID = model.selectedTabID != before ? model.selectedTabID : nil
+        #expect(tabID != nil, "A tab opened")
         let top = window.frame.height
         // In window coordinates, which count up from the bottom: the page's top is its maxY.
         try await Self.waitUntil("the page reaches the window's top") {
@@ -38,6 +41,28 @@ struct PageLayerTests {
             !sidebar.isCollapsed && Self.pageFrame(in: window).map { abs($0.maxY - top) < 1 } ?? false
         }
         if let tabID { await model.closeTab(tabID) }
+    }
+
+    /// The sidebar's top row draws the window's own controls (its title bar is hidden); each is
+    /// aimed at its window, so a click on a window in the background never closes, minimizes,
+    /// or zooms the key one.
+    @Test func theTopRowsWindowControlsActOnTheirOwnWindow() throws {
+        let window = try #require(NSApp.windows.first { $0.identifier?.rawValue.contains("browser") == true })
+        // The row's copies are the window's only close, minimize, and zoom buttons inside its
+        // content; the real ones live in the (hidden) title bar, outside it.
+        let kinds: Set<NSWindow.ButtonType> = [.closeButton, .miniaturizeButton, .zoomButton]
+        let real = kinds.compactMap { window.standardWindowButton($0) }
+        func controls(in view: NSView) -> [NSButton] {
+            let own = view.subviews.compactMap { $0 as? NSButton }.filter { button in
+                real.contains { type(of: $0) == type(of: button) } && !real.contains { $0 === button }
+            }
+            return own + view.subviews.flatMap(controls)
+        }
+        let buttons = controls(in: try #require(window.contentView))
+        #expect(buttons.count == 3, "Close, minimize, and zoom")
+        for button in buttons {
+            #expect(button.target === window, "\(String(describing: button.action)) acts on its own window")
+        }
     }
 
     /// The shown page's frame in window coordinates.

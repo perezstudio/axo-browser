@@ -16,13 +16,18 @@ public struct BrowserWindow: View {
     /// Sidebar, the divider, a narrow window, or a collapsed sidebar AppKit restored), read from
     /// the split view itself (`SidebarCollapseObserver`), since the binding starts `.automatic`.
     @State private var isSidebarCollapsed = false
+    /// Whether the window is in full screen, where the toolbar comes back: the title bar's area
+    /// isn't there to hold the sidebar's top row.
+    @State private var isWindowFullScreen = false
+    /// The split view's controller, which Hide Sidebar collapses as View › Toggle Sidebar does.
+    @State private var splitController: WeakSplitController = WeakSplitController()
 
     /// Whether the sidebar's top row stands in for the window toolbar (#67): with the navigation
     /// bar in the sidebar and its address bar shown, while the sidebar shows. The page then
     /// reaches the window's top edge and the page's tools are in the sidebar. With the sidebar
     /// or its address bar hidden, the toolbar comes back for now, with the page's tools.
     private var sidebarReplacesToolbar: Bool {
-        navigationBarPlacement == .sidebar && showsSidebarAddressBar && !isSidebarCollapsed
+        navigationBarPlacement == .sidebar && showsSidebarAddressBar && !isSidebarCollapsed && !isWindowFullScreen
     }
 
     /// Creates a window showing `model`.
@@ -109,8 +114,13 @@ public struct BrowserWindow: View {
                     if sidebarReplacesToolbar {
                         VStack(spacing: 0) {
                             SidebarTopRow(model: model) {
-                                withAnimation { columns = .detailOnly }
-                                isSidebarCollapsed = true
+                                // As View › Toggle Sidebar does, so the split view's own state
+                                // decides; the binding may be stale after AppKit showed it.
+                                if let controller = splitController.controller {
+                                    controller.toggleSidebar(nil)
+                                } else {
+                                    withAnimation { columns = .detailOnly }
+                                }
                             }
                             Spacer(minLength: 0)
                         }
@@ -147,7 +157,11 @@ public struct BrowserWindow: View {
                 // the translation bar's inset, so the page sits below the bar rather than under it.
                 .ignoresSafeArea(.container, edges: sidebarReplacesToolbar ? .top : [])
                 .background {
-                    SidebarCollapseObserver { isSidebarCollapsed = $0 }
+                    SidebarCollapseObserver(
+                        onChange: { isSidebarCollapsed = $0 },
+                        onFullScreenChange: { isWindowFullScreen = $0 },
+                        onController: { splitController.controller = $0 }
+                    )
                         .accessibilityHidden(true)
                 }
                 // In the page column: an overlay on the split view itself couldn't take focus.
@@ -319,5 +333,10 @@ private struct LoadingBar: View {
         store: try! TabStore.makeInMemory(),
         pool: WebViewPool(makeDataStore: { _ in .nonPersistent() })
     ))
+}
+
+/// A weak reference to the window's split view controller, kept in state without redrawing.
+final class WeakSplitController {
+    weak var controller: NSSplitViewController?
 }
 #endif
