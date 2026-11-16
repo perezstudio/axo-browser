@@ -10,6 +10,25 @@ public struct BrowserWindow: View {
     @AppStorage(NavigationBarPlacement.storageKey) private var navigationBarPlacement = NavigationBarPlacement.sidebar
     @AppStorage(AddressBarSettings.showsSidebarAddressBarKey) private var showsSidebarAddressBar = true
     @AppStorage(AddressEditingPlacement.storageKey) private var addressEditingPlacement = AddressEditingPlacement.commandBar
+    /// The split view's columns; the top row's Hide Sidebar sets them.
+    @State private var columns = NavigationSplitViewVisibility.automatic
+    /// Whether the sidebar is collapsed, however it got there (Hide Sidebar, View › Toggle
+    /// Sidebar, the divider, a narrow window, or a collapsed sidebar AppKit restored), read from
+    /// the split view itself (`SidebarCollapseObserver`), since the binding starts `.automatic`.
+    @State private var isSidebarCollapsed = false
+    /// Whether the window is in full screen, where the toolbar comes back: the title bar's area
+    /// isn't there to hold the sidebar's top row.
+    @State private var isWindowFullScreen = false
+    /// The split view's controller, which Hide Sidebar collapses as View › Toggle Sidebar does.
+    @State private var splitController: WeakSplitController = WeakSplitController()
+
+    /// Whether the sidebar's top row stands in for the window toolbar (#67): with the navigation
+    /// bar in the sidebar and its address bar shown, while the sidebar shows. The page then
+    /// reaches the window's top edge and the page's tools are in the sidebar. With the sidebar
+    /// or its address bar hidden, the toolbar comes back for now, with the page's tools.
+    private var sidebarReplacesToolbar: Bool {
+        navigationBarPlacement == .sidebar && showsSidebarAddressBar && !isSidebarCollapsed && !isWindowFullScreen
+    }
 
     /// Creates a window showing `model`.
     public init(model: BrowserModel) {
@@ -45,7 +64,7 @@ public struct BrowserWindow: View {
         .animation(.easeInOut(duration: 0.4), value: model.firstRun == nil)
         // While first run shows, the toolbar hides and the menus' commands (which need the
         // window's model) are off, so nothing acts on the window behind the card.
-        .toolbar(model.firstRun != nil ? .hidden : .automatic, for: .windowToolbar)
+        .toolbar(model.firstRun != nil || sidebarReplacesToolbar ? .hidden : .automatic, for: .windowToolbar)
         .focusedSceneValue(\.browserModel, model.firstRun == nil ? model : nil)
         // ⌘L: with the navigation bar in the sidebar, the address is edited in the command bar,
         // as in Arc (also when the sidebar's address bar is hidden); above the page, its field
@@ -55,6 +74,9 @@ public struct BrowserWindow: View {
         }
         // View › Show or Hide Address Bar in Sidebar, kept in the window's settings store.
         .onChange(of: model.sidebarAddressBarRequest.count) { showsSidebarAddressBar = model.sidebarAddressBarRequest.shown }
+        // A change of the binding (Hide Sidebar, or SwiftUI's own) counts too, in case the split
+        // view's item reports later.
+        .onChange(of: columns) { if columns == .detailOnly { isSidebarCollapsed = true } }
         .onChange(of: showsSidebarAddressBar, initial: true) { model.isSidebarAddressBarShown = showsSidebarAddressBar }
         .onChange(of: addressEditingPlacement, initial: true) { model.editsAddressInSidebar = addressEditingPlacement == .sidebar }
         // The Space theme editor from the Spaces menu (#137), outside the sidebar so it has the
@@ -83,13 +105,41 @@ public struct BrowserWindow: View {
     }
 
     private var splitView: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columns) {
             SidebarView(model: model)
-                // The page's edge, a layer above the sidebar (#67), in the theme's appearance.
-                .pageEdgeShadow()
+                // The top row sits in the title bar's area above the sidebar's content, which
+                // keeps the safe area (SwiftUI's hover tracking went wrong in a sidebar that
+                // ignored it). Its empty space below takes no hits.
+                .overlay(alignment: .top) {
+                    if sidebarReplacesToolbar {
+                        VStack(spacing: 0) {
+                            SidebarTopRow(model: model) {
+                                // As View › Toggle Sidebar does, so the split view's own state
+                                // decides; the binding may be stale after AppKit showed it.
+                                if let controller = splitController.controller {
+                                    controller.toggleSidebar(nil)
+                                } else {
+                                    withAnimation { columns = .detailOnly }
+                                }
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .ignoresSafeArea(.container, edges: .top)
+                    }
+                }
+                // The footer's Downloads and the address bar's extensions and summary are the
+                // page's tools only while the toolbar is gone.
+                .environment(\.pageToolsInSidebar, sidebarReplacesToolbar)
+                // The page's edge, a layer above the sidebar (#67), in the theme's appearance,
+                // from the window's top while no toolbar runs across it.
+                .pageEdgeShadow(reachesTop: sidebarReplacesToolbar)
                 // The shown Space's theme behind the sidebar, its footer, and the toolbar above it.
                 .modifier(SpaceThemeModifier(model: model))
-                .navigationSplitViewColumnWidth(min: 180, ideal: 240, max: 400)
+                .navigationSplitViewColumnWidth(
+                    min: navigationBarPlacement == .sidebar ? SidebarTopRow.minimumSidebarWidth : 180,
+                    ideal: navigationBarPlacement == .sidebar ? SidebarTopRow.minimumSidebarWidth : 240,
+                    max: 400
+                )
         } detail: {
             HStack(spacing: 0) {
                 content
@@ -98,6 +148,22 @@ public struct BrowserWindow: View {
                     ExtensionSidePanelView(model: model, panel: panel)
                 }
             }
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    if let translation = model.selectedTranslation {
+                        TranslationBar(model: model, translation: translation)
+                    }
+                }
+                // With no toolbar above it, the page reaches the window's top edge (#67). After
+                // the translation bar's inset, so the page sits below the bar rather than under it.
+                .ignoresSafeArea(.container, edges: sidebarReplacesToolbar ? .top : [])
+                .background {
+                    SidebarCollapseObserver(
+                        onChange: { isSidebarCollapsed = $0 },
+                        onFullScreenChange: { isWindowFullScreen = $0 },
+                        onController: { splitController.controller = $0 }
+                    )
+                        .accessibilityHidden(true)
+                }
                 // In the page column: an overlay on the split view itself couldn't take focus.
                 .overlay {
                     if let peek = model.peek, let space = model.space {
@@ -112,11 +178,6 @@ public struct BrowserWindow: View {
                 }
                 // Notices for actions with no other visible result, at the page's bottom.
                 .overlay(alignment: .bottom) { NoticeView(model: model) }
-                .safeAreaInset(edge: .top, spacing: 0) {
-                    if let translation = model.selectedTranslation {
-                        TranslationBar(model: model, translation: translation)
-                    }
-                }
                 .modifier(PageTranslationTask(model: model))
                 // Site Settings hangs from the sidebar's address bar; when that isn't on screen
                 // (hidden, or the sidebar collapsed), from the top of the page instead.
@@ -131,7 +192,23 @@ public struct BrowserWindow: View {
                             SiteSettingsView(model: model)
                         }
                 }
-                .toolbar { NavigationToolbar(model: model, placement: navigationBarPlacement) }
+                // So does a page's summary, which has no button while the sidebar shows (#67):
+                // View › Summarize Page and the command bar ask for it.
+                .overlay(alignment: .top) {
+                    Color.clear
+                        .frame(width: 1, height: 1)
+                        .accessibilityHidden(true)
+                        .popover(isPresented: Binding(
+                            get: { sidebarReplacesToolbar && !model.isSidebarAddressBarOnScreen && model.isShowingSummary },
+                            set: { model.isShowingSummary = $0 }
+                        ), arrowEdge: .top) {
+                            PageSummaryView(state: model.pageSummary ?? .loading)
+                        }
+                }
+                .toolbar {
+                    NavigationToolbar(model: model, placement: navigationBarPlacement,
+                                      showsPageTools: !sidebarReplacesToolbar)
+                }
                 // The address field already shows where you are.
                 .toolbar(removing: .title)
                 // Above the page, the toolbar takes the page's color, as in Safari.
@@ -256,5 +333,10 @@ private struct LoadingBar: View {
         store: try! TabStore.makeInMemory(),
         pool: WebViewPool(makeDataStore: { _ in .nonPersistent() })
     ))
+}
+
+/// A weak reference to the window's split view controller, kept in state without redrawing.
+final class WeakSplitController {
+    weak var controller: NSSplitViewController?
 }
 #endif

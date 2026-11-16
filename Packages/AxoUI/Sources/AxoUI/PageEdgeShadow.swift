@@ -7,6 +7,8 @@ import SwiftUI
 /// never takes hits (Chromium ignores mouse moves over a page whose window's hit test lands on
 /// another view).
 struct PageEdgeShadow: View {
+    /// Whether it runs up to the window's top edge (no toolbar across the window, #67).
+    var reachesTop = false
     /// The sidebar's appearance: the Space theme's, since this is drawn inside it.
     @Environment(\.colorScheme) private var colorScheme
 
@@ -23,9 +25,10 @@ struct PageEdgeShadow: View {
         )
         .frame(width: Self.width)
         .frame(maxHeight: .infinity)
-        // Down to the window's bottom, but not up into the toolbar, which runs across the
-        // window on macOS 27 (a stripe there would also darken the toolbar's tint).
-        .ignoresSafeArea(edges: .bottom)
+        // Down to the window's bottom. Up to the top only where nothing is above the sidebar
+        // (with its top row, #67, the view it's on reaches the top); not into a toolbar, which
+        // runs across the window on macOS 27 (a stripe there would also darken its tint).
+        .ignoresSafeArea(edges: reachesTop ? [.top, .bottom] : .bottom)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
@@ -33,8 +36,8 @@ struct PageEdgeShadow: View {
 
 extension View {
     /// Draws ``PageEdgeShadow`` along the view's trailing edge.
-    func pageEdgeShadow() -> some View {
-        overlay(alignment: .trailing) { PageEdgeShadow() }
+    func pageEdgeShadow(reachesTop: Bool = false) -> some View {
+        overlay(alignment: .trailing) { PageEdgeShadow(reachesTop: reachesTop) }
     }
 }
 #endif

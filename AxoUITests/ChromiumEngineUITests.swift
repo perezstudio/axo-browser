@@ -219,7 +219,10 @@ final class ChromiumEngineUITests: XCTestCase {
     @MainActor
     private func assertDownloadListed(_ filename: String, in app: XCUIApplication) {
         let downloadsButton = app.buttons["downloadsButton"]
-        XCTAssertTrue(downloadsButton.waitForExistence(timeout: 15), "The download reached Axo's list")
+        XCTAssertTrue(downloadsButton.waitForExistence(timeout: 15))
+        // The footer's Downloads is always there (#67); "None" changes once the download arrives.
+        expectation(for: NSPredicate(format: "value != 'None'"), evaluatedWith: downloadsButton)
+        waitForExpectations(timeout: 15)
         downloadsButton.click()
         let rows = app.descendants(matching: .any)
             .matching(NSPredicate(format: "identifier == 'downloadRow' AND label CONTAINS %@", filename))
@@ -510,7 +513,9 @@ final class ChromiumEngineUITests: XCTestCase {
         let app = launchChromiumApp()
         _ = openPage("<title>Story</title><p>Axolotls regrow limbs.</p>", titled: "Story", in: app)
 
-        app.buttons["summarizeButton"].click()
+        // No button while the sidebar shows (#67): View › Summarize Page.
+        app.menuBars.menuBarItems["View"].click()
+        app.menuBars.menuItems["Summarize Page"].click()
         let summary = app.staticTexts["summaryText"]
         XCTAssertTrue(summary.waitForExistence(timeout: 10))
         XCTAssertEqual(summary.value as? String, "• Story: Axolotls regrow limbs.")

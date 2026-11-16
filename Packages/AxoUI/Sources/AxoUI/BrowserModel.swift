@@ -1373,7 +1373,9 @@ public final class BrowserModel {
     /// Shows an extension's popup under its toolbar button (or the window's top edge if the
     /// button isn't on screen).
     public func presentExtensionPopup(_ popover: NSPopover, extensionID: String) {
-        if let anchor = extensionAnchors[extensionID], anchor.window != nil {
+        if let anchor = extensionAnchors[extensionID], let window = anchor.window {
+            // The window's appearance, not the Space theme's the sidebar may have (#67).
+            popover.appearance = window.effectiveAppearance
             popover.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .minY)
         } else if let content = NSApp.keyWindow?.contentView {
             let top = NSRect(x: content.bounds.maxX - 60, y: content.bounds.maxY - 1, width: 1, height: 1)

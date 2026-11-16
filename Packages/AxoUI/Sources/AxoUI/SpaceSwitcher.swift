@@ -3,27 +3,34 @@ import SwiftUI
 
 // The Mac sidebar's footer; iPhone and iPad switch Spaces from a menu.
 #if os(macOS)
-/// The sidebar's footer: Settings on the left, a dot for each Space in a glass capsule in the
-/// middle, and New Space on the right.
+/// The sidebar's footer: Downloads on the left (Settings, with the navigation bar above the
+/// page, until #170 moves it there too), a dot for each Space in a glass capsule in the middle,
+/// and New Space on the right.
 struct SpaceSwitcher: View {
     @Bindable var model: BrowserModel
+    @AppStorage(NavigationBarPlacement.storageKey) private var navigationBarPlacement = NavigationBarPlacement.sidebar
 
     var body: some View {
         GlassEffectContainer {
             HStack(spacing: 8) {
-                SettingsLink {
-                    Label("Settings", systemImage: "gearshape")
+                if navigationBarPlacement == .sidebar {
+                    // In Settings' place, which stays in the Axo menu (⌘,), as on the board (#67).
+                    FooterDownloadsButton(model: model)
+                } else {
+                    SettingsLink {
+                        Label("Settings", systemImage: "gearshape")
+                    }
+                    .modifier(SidebarGlassButtonStyle())
+                    .help("Settings")
+                    .accessibilityIdentifier("settingsButton")
                 }
-                .modifier(FooterButtonStyle())
-                .help("Settings")
-                .accessibilityIdentifier("settingsButton")
 
                 Spacer(minLength: 0)
                 SpaceDots(model: model)
                 Spacer(minLength: 0)
 
                 Button("New Space", systemImage: "plus") { model.isCreatingSpace = true }
-                    .modifier(FooterButtonStyle())
+                    .modifier(SidebarGlassButtonStyle())
                     .help("New Space")
                     .accessibilityIdentifier("newSpaceButton")
             }
@@ -59,10 +66,13 @@ struct SpaceSwitcher: View {
 /// `testSidebarFooterMatchesTheToolbar` checks the footer is 36 pt and the slot still 52 pt.
 /// It can't see the toolbar's glass itself, so check the screenshots it attaches when macOS
 /// changes the toolbar.
-private struct FooterButtonStyle: ViewModifier {
+struct SidebarGlassButtonStyle: ViewModifier {
+    /// The glass circle's side.
+    static let side: CGFloat = 36
+
     func body(content: Content) -> some View {
         content
-            .labelStyle(FooterIconLabelStyle())
+            .labelStyle(SidebarGlassLabelStyle())
             .buttonStyle(.glass)
             .buttonBorderShape(.circle)
             .controlSize(.extraLarge)
@@ -72,7 +82,7 @@ private struct FooterButtonStyle: ViewModifier {
 /// Only the icon, in a square of one size for every symbol: the glass circle sizes itself from
 /// its content, and a plus is smaller than a gear, which left New Space a few points smaller
 /// than Settings. The title stays, as `.iconOnly` keeps it, so VoiceOver still names the button.
-private struct FooterIconLabelStyle: LabelStyle {
+struct SidebarGlassLabelStyle: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
         Label {
             configuration.title
@@ -121,7 +131,7 @@ private struct SpaceDots: View {
         }
     }
 
-    /// The footer's buttons' height (``FooterButtonStyle``), which the capsule matches.
+    /// The footer's buttons' height (``SidebarGlassButtonStyle``), which the capsule matches.
     static let buttonHeight: CGFloat = 36
 
     private var dots: some View {

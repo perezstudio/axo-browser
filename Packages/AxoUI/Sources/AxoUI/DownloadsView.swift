@@ -26,6 +26,43 @@ struct DownloadsButton: View {
     }
 }
 
+/// Downloads at the left of the sidebar's footer, with the navigation bar in the sidebar (#67):
+/// a glass circle like the footer's others, an empty tray with no downloads and a full one
+/// with some, an arrow while any run. It opens the list above it.
+struct FooterDownloadsButton: View {
+    @Bindable var model: BrowserModel
+    @Environment(\.pageToolsInSidebar) private var pageToolsInSidebar
+
+    var body: some View {
+        let downloads = model.pool.downloads
+        let symbol = downloads.activeCount > 0 ? "arrow.down.circle" : downloads.items.isEmpty ? "tray" : "tray.full"
+        Button {
+            model.isShowingDownloads.toggle()
+        } label: {
+            Label("Downloads", systemImage: symbol)
+        }
+        .modifier(SidebarGlassButtonStyle())
+        .help(downloads.activeCount > 0 ? "Downloads (\(downloads.activeCount) in progress)" : "Downloads")
+        .accessibilityLabel("Downloads")
+        .accessibilityValue(Self.value(activeCount: downloads.activeCount, count: downloads.items.count))
+        .accessibilityIdentifier("downloadsButton")
+        // Only while the toolbar's Downloads is gone, so one list opens, from the one on screen.
+        .popover(isPresented: Binding(
+            get: { pageToolsInSidebar && model.isShowingDownloads },
+            set: { model.isShowingDownloads = $0 }
+        ), arrowEdge: .top) {
+            // The footer has the Space theme's appearance; the list has the window's.
+            DownloadsList(downloads: downloads).windowAppearance()
+        }
+    }
+
+    /// What VoiceOver reads after "Downloads": how many run, or that there are none.
+    static func value(activeCount: Int, count: Int) -> String {
+        if activeCount > 0 { return "\(activeCount) in progress" }
+        return count == 0 ? "None" : ""
+    }
+}
+
 /// The list of downloads, newest first.
 struct DownloadsList: View {
     let downloads: DownloadManager
