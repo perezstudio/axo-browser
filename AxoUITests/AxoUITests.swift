@@ -726,7 +726,9 @@ final class AxoUITests: XCTestCase {
                       "The window can go full screen")
 
         // A link along the page's very top: the title bar's area above the page takes no clicks.
-        AxoUITests.openPage("data:text/html,<title>Top</title><body style='margin:0'><a href='data:text/html,<title>Reached</title>' style='display:block;height:20px'>Top link</a>", in: app)
+        // The link renames the page rather than opening another: WebKit refuses a link's top-level
+        // navigation to a data: address, which would hide whether the click arrived.
+        AxoUITests.openPage("data:text/html,<title>Top</title><body style='margin:0'><a href='about:blank' onclick=\"document.title='Reached';return false\" style='display:block;height:20px'>Top link</a>", in: app)
         let link = app.links["Top link"]
         XCTAssertTrue(link.waitForExistence(timeout: 10))
         // The page's own web view (its container's identifier doesn't reach the accessibility tree).
