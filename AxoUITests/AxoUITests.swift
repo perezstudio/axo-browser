@@ -702,7 +702,8 @@ final class AxoUITests: XCTestCase {
     /// With the navigation bar in the sidebar, the sidebar's top row stands in for the window
     /// toolbar (#67): back, forward, reload, and Hide Sidebar sit beside the window's controls,
     /// the window has no toolbar, and the page reaches the window's top edge, where clicks reach
-    /// it. With the sidebar hidden the toolbar comes back, and the page sits below it.
+    /// it. With the sidebar hidden the toolbar comes back (and the page sits below it, checked in
+    /// PageLayerTests).
     @MainActor
     func testTheSidebarReplacesTheToolbar() throws {
         let app = launchApp()
@@ -753,8 +754,8 @@ final class AxoUITests: XCTestCase {
         row.buttons["hideSidebarButton"].click()
         XCTAssertTrue(window.toolbars.firstMatch.waitForExistence(timeout: 5), "The toolbar comes back with the sidebar hidden")
         XCTAssertTrue(sidebar.waitForNonExistence(timeout: 5))
-        expectation(for: NSPredicate(format: "frame.origin.y > %f", window.frame.minY + 40), evaluatedWith: page)
-        waitForExpectations(timeout: 5)
+        // That the page then sits below the toolbar is checked in AxoTests' PageLayerTests: the
+        // hosted runner's accessibility doesn't follow a web view's frame.
 
         // Shown again (View › Show Sidebar), the top row takes over again.
         app.typeKey("s", modifierFlags: [.command, .control])

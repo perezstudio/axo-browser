@@ -1,0 +1,72 @@
+import AppKit
+import AxoUI
+import Testing
+import WebKit
+@testable import Axo
+
+/// Where the page sits in the real browser window (#67), which these tests host in: with the
+/// navigation bar in the sidebar and the sidebar shown, the window has no toolbar and the page
+/// reaches the window's top edge; with the sidebar hidden, the toolbar comes back and the page
+/// sits below it, never under it (a visible toolbar takes every click in its 52 pt). Checked here
+/// rather than in a UI test because the hosted runner's accessibility reports a web view's frame
+/// without following the layout.
+@MainActor
+@Suite(.serialized)
+struct PageLayerTests {
+    @Test func thePageReachesTheWindowsTopOnlyWhileTheSidebarShows() async throws {
+        let model = try #require(AppEnvironment.browserModel)
+        let window = try #require(NSApp.windows.first { $0.identifier?.rawValue.contains("browser") == true })
+        let split = try #require(Self.splitController(in: window.contentView))
+        let sidebar = try #require(split.splitViewItems.first { $0.behavior == .sidebar })
+        if sidebar.isCollapsed { split.toggleSidebar(nil) }
+
+        await model.openTab(url: URL(string: "data:text/html,<title>Layer</title>")!)
+        let tabID = model.selectedTabID
+        let top = window.frame.height
+        // In window coordinates, which count up from the bottom: the page's top is its maxY.
+        try await Self.waitUntil("the page reaches the window's top") {
+            Self.pageFrame(in: window).map { abs($0.maxY - top) < 1 } ?? false
+        }
+
+        split.toggleSidebar(nil)
+        try await Self.waitUntil("the page moves below the toolbar") {
+            Self.pageFrame(in: window).map { $0.maxY <= top - 40 } ?? false
+        }
+
+        split.toggleSidebar(nil)
+        try await Self.waitUntil("the page reaches the top again") {
+            !sidebar.isCollapsed && Self.pageFrame(in: window).map { abs($0.maxY - top) < 1 } ?? false
+        }
+        if let tabID { await model.closeTab(tabID) }
+    }
+
+    /// The shown page's frame in window coordinates.
+    private static func pageFrame(in window: NSWindow) -> CGRect? {
+        func find(_ view: NSView) -> NSView? {
+            if view is WKWebView, view.window != nil, !view.isHiddenOrHasHiddenAncestor { return view }
+            for subview in view.subviews { if let found = find(subview) { return found } }
+            return nil
+        }
+        return window.contentView.flatMap(find).map { $0.convert($0.bounds, to: nil) }
+    }
+
+    /// The browser window's split view controller.
+    private static func splitController(in view: NSView?) -> NSSplitViewController? {
+        guard let view else { return nil }
+        if let split = view as? NSSplitView, let controller = split.delegate as? NSSplitViewController { return controller }
+        for subview in view.subviews { if let found = splitController(in: subview) { return found } }
+        return nil
+    }
+
+    /// Waits for `condition`, failing after a limit that only guards against hangs.
+    private static func waitUntil(_ what: String, _ condition: () -> Bool) async throws {
+        let deadline = ContinuousClock.now + .seconds(20)
+        while !condition() {
+            guard ContinuousClock.now < deadline else {
+                Issue.record("Timed out waiting until \(what)")
+                return
+            }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+    }
+}
