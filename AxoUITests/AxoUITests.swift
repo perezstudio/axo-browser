@@ -720,7 +720,10 @@ final class AxoUITests: XCTestCase {
         let close = window.buttons[XCUIIdentifierCloseWindow]
         XCTAssertTrue(close.exists, "The window can still be closed")
         XCTAssertEqual(close.frame.midY, row.buttons["reloadButton"].frame.midY, accuracy: 1.5, "In line with the row")
-        XCTAssertTrue(window.buttons[XCUIIdentifierMinimizeWindow].exists && window.buttons[XCUIIdentifierZoomWindow].exists)
+        XCTAssertTrue(window.buttons[XCUIIdentifierMinimizeWindow].exists, "The window can be minimized")
+        // The green button reports itself as full screen or zoom, as macOS chooses.
+        XCTAssertTrue(window.buttons[XCUIIdentifierFullScreenWindow].exists || window.buttons[XCUIIdentifierZoomWindow].exists,
+                      "The window can go full screen")
 
         // A link along the page's very top: the title bar's area above the page takes no clicks.
         AxoUITests.openPage("data:text/html,<title>Top</title><body style='margin:0'><a href='data:text/html,<title>Reached</title>' style='display:block;height:20px'>Top link</a>", in: app)
