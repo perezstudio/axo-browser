@@ -8,6 +8,9 @@ import SwiftUI
 struct NavigationToolbar: ToolbarContent {
     let model: BrowserModel
     let placement: NavigationBarPlacement
+    /// Whether the page's tools (extensions, downloads, summary) are here. With the navigation
+    /// bar in the sidebar they're in the sidebar while it shows (#67), and here while it's hidden.
+    let showsPageTools: Bool
 
     var body: some ToolbarContent {
         if placement == .page {
@@ -29,20 +32,22 @@ struct NavigationToolbar: ToolbarContent {
                     .accessibilityIdentifier("pageAddressBar")
             }
         }
-        // The spacer pushes the page's tools (extensions, downloads, summary) to the trailing
-        // edge; without it, they sit at the leading edge when there's no address field in the middle.
-        ToolbarSpacer(.flexible)
-        ToolbarItemGroup {
-            ExtensionToolbarButtons(model: model)
-        }
-        if !model.pool.downloads.items.isEmpty || model.isShowingDownloads {
-            ToolbarItem {
-                DownloadsButton(model: model)
+        if showsPageTools {
+            // The spacer pushes the page's tools (extensions, downloads, summary) to the trailing
+            // edge; without it, they sit at the leading edge when there's no address field in the middle.
+            ToolbarSpacer(.flexible)
+            ToolbarItemGroup {
+                ExtensionToolbarButtons(model: model)
             }
-        }
-        if model.pageSummarizer != nil {
-            ToolbarItem {
-                SummaryButton(model: model)
+            if !model.pool.downloads.items.isEmpty || model.isShowingDownloads {
+                ToolbarItem {
+                    DownloadsButton(model: model)
+                }
+            }
+            if model.pageSummarizer != nil {
+                ToolbarItem {
+                    SummaryButton(model: model)
+                }
             }
         }
     }

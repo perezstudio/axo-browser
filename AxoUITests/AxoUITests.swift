@@ -200,18 +200,19 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(app.windows.firstMatch.waitForNonExistence(timeout: 5))
     }
 
-    /// The New Tab button and a second tab: the sidebar lists both, and selecting one shows it.
+    /// New Tab (⌘T; the sidebar's top row has no button for it, as on the board, #67) and a
+    /// second tab: the sidebar lists both, and selecting one shows it.
     @MainActor
-    func testNewTabButtonAddsTabsToTheSidebar() throws {
+    func testNewTabAddsTabsToTheSidebar() throws {
         let app = launchApp()
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
 
-        app.buttons["newTabButton"].click()
+        app.typeKey("t", modifierFlags: .command)
         app.typeText(page("Alpha") + "\n")
         XCTAssertTrue(sidebar.staticTexts["Alpha"].waitForExistence(timeout: 10))
 
-        app.buttons["newTabButton"].click()
+        app.typeKey("t", modifierFlags: .command)
         app.typeText(page("Beta") + "\n")
         XCTAssertTrue(sidebar.staticTexts["Beta"].waitForExistence(timeout: 10))
         XCTAssertTrue(sidebar.staticTexts["Alpha"].exists, "A new tab must not replace the previous one")
@@ -223,13 +224,16 @@ final class AxoUITests: XCTestCase {
         waitForExpectations(timeout: 5)
     }
 
-    /// A link with a `download` attribute saves the file, and the Downloads button and list
-    /// appear. Downloads go to a temporary folder in UI testing mode.
+    /// A link with a `download` attribute saves the file, and it shows in the list that opens from
+    /// Downloads at the left of the sidebar's footer (#67). Downloads go to a temporary folder in
+    /// UI testing mode.
     @MainActor
     func testDownloadingAFileShowsItInTheDownloadsList() throws {
         let app = launchApp()
         XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["downloadsButton"].exists, "No Downloads button before any download")
+        let footer = app.descendants(matching: .any)["spaceSwitcher"]
+        XCTAssertTrue(footer.buttons["downloadsButton"].waitForExistence(timeout: 5), "Downloads is in the footer from the start")
+        XCTAssertEqual(footer.buttons["downloadsButton"].value as? String, "None")
 
         AxoUITests.openPage("data:text/html,<title>Files</title><a href='data:text/plain,hello' download='hello.txt'>Get hello</a>", in: app)
         let link = app.links["Get hello"]
@@ -695,6 +699,52 @@ final class AxoUITests: XCTestCase {
         }
     }
 
+    /// With the navigation bar in the sidebar, the sidebar's top row stands in for the window
+    /// toolbar (#67): back, forward, reload, and Hide Sidebar sit beside the window's controls,
+    /// the window has no toolbar, and the page reaches the window's top edge, where clicks reach
+    /// it. With the sidebar hidden the toolbar comes back, and the page sits below it.
+    @MainActor
+    func testTheSidebarReplacesTheToolbar() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        let window = app.windows.firstMatch
+        let row = app.descendants(matching: .any)["sidebarTopRow"]
+        XCTAssertTrue(row.exists)
+        for id in ["backButton", "forwardButton", "reloadButton", "hideSidebarButton"] {
+            XCTAssertTrue(row.buttons[id].exists, "\(id) is in the sidebar's top row")
+            XCTAssertLessThan(row.buttons[id].frame.maxX, sidebar.frame.maxX + 1, "\(id) sits over the sidebar")
+        }
+        XCTAssertFalse(window.toolbars.firstMatch.exists, "No window toolbar")
+
+        // A link along the page's very top: the title bar's area above the page takes no clicks.
+        AxoUITests.openPage("data:text/html,<title>Top</title><body style='margin:0'><a href='data:text/html,<title>Reached</title>' style='display:block;height:20px'>Top link</a>", in: app)
+        let link = app.links["Top link"]
+        XCTAssertTrue(link.waitForExistence(timeout: 10))
+        let page = app.descendants(matching: .any)["webContent"]
+        XCTAssertEqual(page.frame.minY, window.frame.minY, accuracy: 1, "The page reaches the window's top edge")
+        XCTAssertEqual(link.frame.minY, window.frame.minY, accuracy: 1)
+        let shot = XCTAttachment(screenshot: window.screenshot())
+        shot.name = "Sidebar top row, page to the top"
+        shot.lifetime = .keepAlways
+        add(shot)
+        link.click()
+        XCTAssertTrue(sidebar.staticTexts["Reached"].waitForExistence(timeout: 10), "The click at the window's top reached the page")
+
+        // Hidden, the sidebar gives way to the toolbar, with the page below it.
+        row.buttons["hideSidebarButton"].click()
+        XCTAssertTrue(window.toolbars.firstMatch.waitForExistence(timeout: 5), "The toolbar comes back with the sidebar hidden")
+        XCTAssertTrue(sidebar.waitForNonExistence(timeout: 5))
+        expectation(for: NSPredicate(format: "frame.origin.y > %f", window.frame.minY + 40), evaluatedWith: page)
+        waitForExpectations(timeout: 5)
+
+        // Shown again (View › Show Sidebar), the top row takes over again.
+        app.typeKey("s", modifierFlags: [.command, .control])
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(window.toolbars.firstMatch.waitForNonExistence(timeout: 5), "No toolbar with the sidebar shown")
+    }
+
     /// The sRGB color of the pixel at `point` (in points from the window's top left) in a
     /// screenshot of `window`.
     @MainActor
@@ -719,10 +769,11 @@ final class AxoUITests: XCTestCase {
         abs(color.red - other.red) < 0.08 && abs(color.green - other.green) < 0.08 && abs(color.blue - other.blue) < 0.08
     }
 
-    /// The sidebar's footer matches the window toolbar (#135): Settings, New Space, and the Space
-    /// dots' capsule are as tall as the toolbar's buttons, the buttons are round, and the footer
-    /// sits as far from the window's edges as the toolbar. Checked with the navigation bar in the
-    /// sidebar and above the page, with window screenshots in light and dark mode.
+    /// The sidebar's footer matches the top of the window (#135): its buttons and the Space dots'
+    /// capsule are as tall as the buttons at the top, round, and as far from the window's edges.
+    /// With the navigation bar in the sidebar, the top is the sidebar's top row (#67), lined up
+    /// with the window's controls; above the page, the window toolbar. Checked in light and
+    /// dark mode, with window screenshots.
     @MainActor
     func testSidebarFooterMatchesTheToolbar() throws {
         for appearance in ["Light", "Dark"] {
@@ -731,7 +782,7 @@ final class AxoUITests: XCTestCase {
             app.launch()
             Self.bringToFront(app)
             let window = app.windows.firstMatch
-            XCTAssertTrue(app.buttons["settingsButton"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.buttons["downloadsButton"].waitForExistence(timeout: 5))
             checkFooterMatchesToolbar(in: app, appearance: appearance, placement: "sidebar")
 
             app.typeKey(",", modifierFlags: .command)
@@ -770,43 +821,56 @@ final class AxoUITests: XCTestCase {
         shot.name = "Footer with eleven Spaces"
         shot.lifetime = .keepAlways
         add(shot)
-        let settings = app.buttons["settingsButton"].frame
+        let downloads = app.buttons["downloadsButton"].frame
         let newSpace = app.buttons["newSpaceButton"].frame
         let dots = app.descendants(matching: .any)["spaceDots"].frame
         XCTAssertLessThanOrEqual(dots.height, 36 + 1, "The dots fit in a capsule the buttons' height")
-        XCTAssertEqual(dots.midY, settings.midY, accuracy: 1)
-        XCTAssertGreaterThanOrEqual(dots.minX, settings.maxX, "The dots don't run under Settings")
+        XCTAssertEqual(dots.midY, downloads.midY, accuracy: 1)
+        XCTAssertGreaterThanOrEqual(dots.minX, downloads.maxX, "The dots don't run under Downloads")
         XCTAssertLessThanOrEqual(dots.maxX, newSpace.minX, "Or under New Space")
-        XCTAssertEqual(settings.height, 36, accuracy: 1)
+        XCTAssertEqual(downloads.height, 36, accuracy: 1)
         XCTAssertEqual(newSpace.height, 36, accuracy: 1)
     }
 
     @MainActor
     private func checkFooterMatchesToolbar(in app: XCUIApplication, appearance: String, placement: String) {
         let window = app.windows.firstMatch.frame
-        let back = app.buttons["backButton"].frame
-        let trailing = app.buttons["summarizeButton"].frame
-        let settings = app.buttons["settingsButton"].frame
+        let inSidebar = placement == "sidebar"
+        // The buttons at the top: the sidebar's top row (reload, hide sidebar), or the toolbar's
+        // (back, the page's tools at its trailing end).
+        let top = app.buttons[inSidebar ? "reloadButton" : "backButton"].frame
+        let trailing = app.buttons[inSidebar ? "hideSidebarButton" : "summarizeButton"].frame
+        let leading = app.buttons[inSidebar ? "downloadsButton" : "settingsButton"].frame
         let newSpace = app.buttons["newSpaceButton"].frame
         let dots = app.descendants(matching: .any)["spaceDots"].frame
         let context = "\(appearance), navigation bar \(placement)"
-        // A toolbar item's frame is its whole 52 pt slot, the 36 pt glass button centered in it
-        // (measured from window screenshots on macOS 27). If the slot changes, measure the
-        // glass again and update FooterButtonStyle and SpaceDots.
-        XCTAssertEqual(back.height, 52, accuracy: 1, "The toolbar's slot, \(context)")
-        for (name, frame) in [("Settings", settings), ("New Space", newSpace)] {
+        if inSidebar {
+            // The top row's buttons are the footer's glass circles.
+            XCTAssertEqual(top.height, 36, accuracy: 1, "The top row's glass, \(context)")
+            XCTAssertEqual(trailing.height, 36, accuracy: 1, "The top row's glass, \(context)")
+            // In line with the window's controls, as the toolbar's buttons were.
+            let close = app.windows.firstMatch.buttons[XCUIIdentifierCloseWindow].frame
+            XCTAssertEqual(close.midY, top.midY, accuracy: 1.5, "The top row lines up with the window's controls, \(context)")
+        } else {
+            // A toolbar item's frame is its whole 52 pt slot, the 36 pt glass button centered in
+            // it (measured from window screenshots on macOS 27). If the slot changes, measure the
+            // glass again and update SidebarGlassButtonStyle and SpaceDots.
+            XCTAssertEqual(top.height, 52, accuracy: 1, "The toolbar's slot, \(context)")
+        }
+        for (name, frame) in [("The footer's leading button", leading), ("New Space", newSpace)] {
             XCTAssertEqual(frame.height, 36, accuracy: 1, "\(name) is the toolbar's glass size, \(context)")
             XCTAssertEqual(frame.width, frame.height, accuracy: 1, "\(name) is round, \(context)")
-            XCTAssertEqual(frame.midY, settings.midY, accuracy: 1, "\(name) lines up, \(context)")
+            XCTAssertEqual(frame.midY, leading.midY, accuracy: 1, "\(name) lines up, \(context)")
         }
         XCTAssertEqual(dots.height, 36, accuracy: 1, "The dots' capsule, \(context)")
-        XCTAssertEqual(dots.midY, settings.midY, accuracy: 1, "The dots line up, \(context)")
+        XCTAssertEqual(dots.midY, leading.midY, accuracy: 1, "The dots line up, \(context)")
         // The footer's buttons sit as far from the window's bottom and leading edges as the
-        // toolbar's from its top, center to edge.
-        let toolbarInset = back.midY - window.minY
-        XCTAssertEqual(trailing.midY - window.minY, toolbarInset, accuracy: 1, "The toolbar's buttons line up, \(context)")
-        XCTAssertEqual(window.maxY - settings.midY, toolbarInset, accuracy: 1, "Bottom inset, \(context)")
-        XCTAssertEqual(settings.midX - window.minX, toolbarInset, accuracy: 1, "Leading inset, \(context)")
+        // top's buttons from its top, center to edge.
+        let toolbarInset = top.midY - window.minY
+        XCTAssertEqual(toolbarInset, 26, accuracy: 1, "The top's buttons are centered 26 pt down, \(context)")
+        XCTAssertEqual(trailing.midY - window.minY, toolbarInset, accuracy: 1, "The top's buttons line up, \(context)")
+        XCTAssertEqual(window.maxY - leading.midY, toolbarInset, accuracy: 1, "Bottom inset, \(context)")
+        XCTAssertEqual(leading.midX - window.minX, toolbarInset, accuracy: 1, "Leading inset, \(context)")
 
         let shot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
         shot.name = "Toolbar and footer, \(context)"
@@ -1038,23 +1102,25 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(app.buttons["favoriteTile"].waitForNonExistence(timeout: 5))
     }
 
-    /// The sidebar's footer: Settings on the left, a dot per Space (the current one selected) in
-    /// the middle, and New Space on the right.
+    /// The sidebar's footer: Downloads on the left (#67), a dot per Space (the current one
+    /// selected) in the middle, and New Space on the right.
     @MainActor
     func testSidebarFooter() throws {
         let app = launchApp()
         let footer = app.descendants(matching: .any)["spaceSwitcher"]
         XCTAssertTrue(footer.waitForExistence(timeout: 5))
-        let settings = footer.buttons["settingsButton"], newSpace = footer.buttons["newSpaceButton"]
+        let downloads = footer.buttons["downloadsButton"], newSpace = footer.buttons["newSpaceButton"]
         let dot = footer.buttons["spaceButton"]
-        XCTAssertTrue(settings.exists && newSpace.exists && dot.exists)
-        XCTAssertLessThan(settings.frame.midX, dot.frame.midX)
+        XCTAssertTrue(downloads.exists && newSpace.exists && dot.exists)
+        XCTAssertFalse(footer.buttons["settingsButton"].exists, "Settings is in the Axo menu (⌘,)")
+        XCTAssertLessThan(downloads.frame.midX, dot.frame.midX)
         XCTAssertLessThan(dot.frame.midX, newSpace.frame.midX)
         XCTAssertEqual(dot.label, "Home")
         XCTAssertTrue(dot.isSelected)
 
-        settings.click()
-        XCTAssertTrue(app.descendants(matching: .any)["settingsPane.linkRouting"].waitForExistence(timeout: 5), "Settings opens")
+        downloads.click()
+        XCTAssertTrue(app.buttons["clearDownloadsButton"].waitForExistence(timeout: 5), "The list opens")
+        XCTAssertLessThan(app.buttons["clearDownloadsButton"].frame.maxY, downloads.frame.minY, "Above the footer")
     }
 
     /// Pin a tab from its context menu, close and reopen an unpinned tab, and see that closing
@@ -1491,18 +1557,24 @@ final class AxoUITests: XCTestCase {
         let app = launchApp()
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["summarizeButton"].isEnabled, "Nothing to summarize without a tab")
-        let window = app.windows.firstMatch
-        XCTAssertGreaterThan(app.buttons["summarizeButton"].frame.minX, window.frame.midX,
-                             "The page's tools sit at the toolbar's trailing edge")
+        // With the navigation bar in the sidebar it has no button (#67): View › Summarize Page
+        // asks for it, and it hangs from the address bar.
+        XCTAssertFalse(app.buttons["summarizeButton"].exists, "No button while the sidebar shows")
+        app.menuBars.menuBarItems["View"].click()
+        XCTAssertFalse(app.menuBars.menuItems["Summarize Page"].isEnabled, "Nothing to summarize without a tab")
+        app.typeKey(.escape, modifierFlags: [])
 
         AxoUITests.openPage("data:text/html,<title>Story</title><p>Axolotls regrow limbs.</p>", in: app)
         XCTAssertTrue(sidebar.staticTexts["Story"].waitForExistence(timeout: 10))
 
-        app.buttons["summarizeButton"].click()
+        app.menuBars.menuBarItems["View"].click()
+        app.menuBars.menuItems["Summarize Page"].click()
         let summary = app.staticTexts["summaryText"]
         XCTAssertTrue(summary.waitForExistence(timeout: 10))
         XCTAssertEqual(summary.value as? String, "• Story: Axolotls regrow limbs.")
+        let address = app.descendants(matching: .any)["sidebarAddressBar"].frame
+        XCTAssertGreaterThan(summary.frame.minY, address.maxY, "It hangs below the address bar")
+        XCTAssertLessThan(summary.frame.minX, address.maxX, "beside the sidebar, not across the window")
 
         // Checked after the button: a click right after Esc closes the menu was sometimes lost.
         app.menuBars.menuBarItems["View"].click()
@@ -1628,6 +1700,11 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(button.waitForExistence(timeout: 10))
         expectation(for: NSPredicate(format: "label CONTAINS '3'"), evaluatedWith: button)
         waitForExpectations(timeout: 10)
+        // Pinned at the right end of the sidebar's address bar (#67).
+        let address = app.descendants(matching: .any)["sidebarAddressBar"].frame
+        XCTAssertTrue(address.insetBy(dx: -1, dy: -1).contains(CGPoint(x: button.frame.midX, y: button.frame.midY)),
+                      "In the address bar: \(button.frame) in \(address)")
+        XCTAssertGreaterThan(button.frame.midX, address.midX, "At its right end")
 
         button.click()
         XCTAssertTrue(app.popovers.firstMatch.waitForExistence(timeout: 10))

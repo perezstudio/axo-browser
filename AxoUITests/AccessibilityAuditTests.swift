@@ -170,7 +170,9 @@ final class AccessibilityAuditTests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Pond"].waitForExistence(timeout: 10))
         try audit(app, "page")
 
-        app.buttons["summarizeButton"].click()
+        // No button while the sidebar shows (#67): View › Summarize Page.
+        app.menuBars.menuBarItems["View"].click()
+        app.menuBars.menuItems["Summarize Page"].click()
         XCTAssertTrue(app.staticTexts["summaryText"].waitForExistence(timeout: 10))
         try audit(app, "page summary")
         app.typeKey(.escape, modifierFlags: [])

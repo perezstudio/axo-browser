@@ -510,7 +510,9 @@ final class ChromiumEngineUITests: XCTestCase {
         let app = launchChromiumApp()
         _ = openPage("<title>Story</title><p>Axolotls regrow limbs.</p>", titled: "Story", in: app)
 
-        app.buttons["summarizeButton"].click()
+        // No button while the sidebar shows (#67): View › Summarize Page.
+        app.menuBars.menuBarItems["View"].click()
+        app.menuBars.menuItems["Summarize Page"].click()
         let summary = app.staticTexts["summaryText"]
         XCTAssertTrue(summary.waitForExistence(timeout: 10))
         XCTAssertEqual(summary.value as? String, "• Story: Axolotls regrow limbs.")

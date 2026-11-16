@@ -35,6 +35,43 @@ struct SidebarAddressBar: View {
         .popover(isPresented: Binding(get: { model.isShowingSiteSettings }, set: { model.isShowingSiteSettings = $0 }), arrowEdge: .bottom) {
             SiteSettingsView(model: model).windowAppearance()
         }
+        // A page's summary hangs from the bar too (#67), from its own anchor so the two
+        // popovers don't share one view.
+        .background {
+            Color.clear
+                .accessibilityHidden(true)
+                .popover(isPresented: Binding(get: { model.isShowingSummary }, set: { model.isShowingSummary = $0 }), arrowEdge: .bottom) {
+                    PageSummaryView(state: model.pageSummary ?? .loading).windowAppearance()
+                }
+        }
+        // Pinned extensions at the bar's right end, as on the board (#67); each is its own
+        // button for VoiceOver and the keyboard, outside the pill's single element.
+        .overlay(alignment: .trailing) {
+            if !model.isAddressEditedInSidebar, pinnedExtensionCount > 0 {
+                HStack(spacing: 2) {
+                    ExtensionToolbarButtons(model: model)
+                        .buttonStyle(.borderless)
+                        .frame(width: Self.extensionButtonWidth, height: FavoritesLayout.tileHeight)
+                        .contentShape(.rect)
+                }
+                .padding(.trailing, 6)
+            }
+        }
+    }
+
+    /// The pinned extensions' buttons at the bar's right end.
+    private var pinnedExtensionCount: Int {
+        guard let provider = model.extensionToolbar, let profileID = model.space?.profileID else { return 0 }
+        return provider.toolbarItems(profileID: profileID, tabID: model.selectedTabID).count
+    }
+
+    /// One pinned extension's button.
+    static let extensionButtonWidth: CGFloat = 24
+
+    /// The width the pinned extensions take at the bar's right end, which the address leaves free.
+    private var extensionsWidth: CGFloat {
+        let count = pinnedExtensionCount
+        return count == 0 ? 0 : CGFloat(count) * (Self.extensionButtonWidth + 2) + 6
     }
 
     /// The pill, as one VoiceOver button with the address as its value.
@@ -157,7 +194,7 @@ struct SidebarAddressBar: View {
         .padding(.leading, 12)
         // While the pointer is over the bar, the text makes room for the buttons rather than
         // passing under them.
-        .padding(.trailing, isHovering && model.shownPageURL != nil ? 74 : 12)
+        .padding(.trailing, (isHovering && model.shownPageURL != nil ? 74 : 12) + extensionsWidth)
         // As tall as a favorite's tile.
         .frame(height: FavoritesLayout.tileHeight)
         .contentShape(.rect(cornerRadius: FavoritesLayout.tileCornerRadius))
@@ -174,7 +211,7 @@ struct SidebarAddressBar: View {
             }
             .disabled(model.siteSettingsOrigin == nil)
         }
-        .padding(.trailing, 6)
+        .padding(.trailing, 6 + extensionsWidth)
         // Reachable from the keyboard (⇧⌘C, View › Site Settings…) and as VoiceOver actions on
         // the pill, so these copies stay out of the accessibility tree.
         .accessibilityHidden(true)
