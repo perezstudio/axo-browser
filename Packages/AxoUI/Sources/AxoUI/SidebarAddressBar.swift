@@ -15,6 +15,7 @@ struct SidebarAddressBar: View {
     @AppStorage(AddressBarSettings.showsFullAddressKey) private var showsFullAddress = false
     @State private var isHovering = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.pageToolsInSidebar) private var pageToolsInSidebar
 
     var body: some View {
         // One container, not a Group (which would hand each modifier to the branch showing), so
@@ -40,16 +41,18 @@ struct SidebarAddressBar: View {
         .background {
             Color.clear
                 .accessibilityHidden(true)
-                .popover(isPresented: Binding(get: { model.isShowingSummary }, set: { model.isShowingSummary = $0 }), arrowEdge: .bottom) {
+                .popover(isPresented: Binding(get: { pageToolsInSidebar && model.isShowingSummary }, set: { model.isShowingSummary = $0 }), arrowEdge: .bottom) {
                     PageSummaryView(state: model.pageSummary ?? .loading).windowAppearance()
                 }
         }
-        // Pinned extensions at the bar's right end, as on the board (#67); each is its own
-        // button for VoiceOver and the keyboard, outside the pill's single element.
+        // Extensions' buttons at the bar's right end, as on the board (#67): the first few, and
+        // a menu with the rest. Each is its own button for VoiceOver and the keyboard, outside
+        // the pill's single element. Only while the toolbar is gone, so each extension's
+        // popup has one anchor.
         .overlay(alignment: .trailing) {
-            if !model.isAddressEditedInSidebar, pinnedExtensionCount > 0 {
+            if showsExtensions {
                 HStack(spacing: 2) {
-                    ExtensionToolbarButtons(model: model)
+                    ExtensionToolbarButtons(model: model, limit: ExtensionToolbarButtons.addressBarLimit)
                         .buttonStyle(.borderless)
                         .frame(width: Self.extensionButtonWidth, height: FavoritesLayout.tileHeight)
                         .contentShape(.rect)
@@ -59,19 +62,25 @@ struct SidebarAddressBar: View {
         }
     }
 
-    /// The pinned extensions' buttons at the bar's right end.
-    private var pinnedExtensionCount: Int {
+    /// Whether the extensions' buttons show at the bar's right end.
+    private var showsExtensions: Bool {
+        pageToolsInSidebar && !model.isAddressEditedInSidebar && extensionCount > 0
+    }
+
+    /// How many extensions have buttons.
+    private var extensionCount: Int {
         guard let provider = model.extensionToolbar, let profileID = model.space?.profileID else { return 0 }
         return provider.toolbarItems(profileID: profileID, tabID: model.selectedTabID).count
     }
 
-    /// One pinned extension's button.
+    /// One extension's button.
     static let extensionButtonWidth: CGFloat = 24
 
-    /// The width the pinned extensions take at the bar's right end, which the address leaves free.
+    /// The width the extensions' buttons take at the bar's right end, which the address leaves free.
     private var extensionsWidth: CGFloat {
-        let count = pinnedExtensionCount
-        return count == 0 ? 0 : CGFloat(count) * (Self.extensionButtonWidth + 2) + 6
+        guard showsExtensions else { return 0 }
+        let shown = ExtensionToolbarButtons.shownCount(of: extensionCount, limit: ExtensionToolbarButtons.addressBarLimit)
+        return CGFloat(shown) * (Self.extensionButtonWidth + 2) + 6
     }
 
     /// The pill, as one VoiceOver button with the address as its value.

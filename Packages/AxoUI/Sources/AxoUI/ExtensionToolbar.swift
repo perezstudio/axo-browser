@@ -135,13 +135,34 @@ extension ExtensionToolbarProviding {
 // Mac only for now; iPhone and iPad have their own chrome.
 #if os(macOS)
 
-/// The extension buttons in the toolbar.
+/// The extension buttons in the toolbar, or at the right end of the sidebar's address bar,
+/// where only the first few fit and a menu holds the rest (`limit`).
 struct ExtensionToolbarButtons: View {
     let model: BrowserModel
+    /// The most buttons shown, the last of them a menu with the rest; `nil` shows every one
+    /// (the toolbar has its own overflow menu).
+    var limit: Int?
+
+    /// The buttons the sidebar's address bar has room for, the menu included.
+    static let addressBarLimit = 3
+
+    /// How many buttons show for `count` extensions, a menu with the rest counted as one.
+    static func shownCount(of count: Int, limit: Int?) -> Int {
+        guard let limit else { return count }
+        return min(count, limit)
+    }
+
+    /// The extensions with buttons of their own and those in the menu, for `limit`.
+    static func split<Item>(_ items: [Item], limit: Int?) -> (buttons: [Item], menu: [Item]) {
+        guard let limit, items.count > limit else { return (items, []) }
+        let buttons = max(limit - 1, 0)
+        return (Array(items.prefix(buttons)), Array(items.dropFirst(buttons)))
+    }
 
     var body: some View {
         if let provider = model.extensionToolbar, let profileID = model.space?.profileID {
-            let items = provider.toolbarItems(profileID: profileID, tabID: model.selectedTabID)
+            let all = provider.toolbarItems(profileID: profileID, tabID: model.selectedTabID)
+            let (items, overflow) = Self.split(all, limit: limit)
             ForEach(items) { item in
                 Button {
                     provider.performAction(extensionID: item.id, profileID: profileID, tabID: model.selectedTabID)
@@ -167,6 +188,26 @@ struct ExtensionToolbarButtons: View {
                         }
                     }
                 }
+            }
+            if !overflow.isEmpty {
+                Menu {
+                    ForEach(overflow) { item in
+                        Button(item.badge.isEmpty ? item.label : "\(item.label) (\(item.badge))") {
+                            provider.performAction(extensionID: item.id, profileID: profileID, tabID: model.selectedTabID)
+                        }
+                        .disabled(!item.isEnabled)
+                    }
+                } label: {
+                    Label("More Extensions", systemImage: "puzzlepiece.extension")
+                        .labelStyle(.iconOnly)
+                }
+                .menuIndicator(.hidden)
+                .help("More Extensions")
+                .accessibilityIdentifier("moreExtensionsButton")
+                // Their popups open from the menu's button.
+                .background(PopoverAnchor { view in
+                    for item in overflow { model.extensionAnchors[item.id] = view }
+                })
             }
         }
     }

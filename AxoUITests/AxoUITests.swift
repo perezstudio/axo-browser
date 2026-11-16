@@ -731,7 +731,14 @@ final class AxoUITests: XCTestCase {
         link.click()
         XCTAssertTrue(sidebar.staticTexts["Reached"].waitForExistence(timeout: 10), "The click at the window's top reached the page")
 
-        // Hidden, the sidebar gives way to the toolbar, with the page below it.
+        // The find bar sits at the page's top, with the page below it, not under it.
+        app.typeKey("f", modifierFlags: .command)
+        let findField = app.descendants(matching: .any)["findField"]
+        XCTAssertTrue(findField.waitForExistence(timeout: 5))
+        XCTAssertGreaterThanOrEqual(page.frame.minY, findField.frame.maxY - 1, "The page sits below the find bar")
+        app.typeKey(.escape, modifierFlags: [])
+
+        // Hidden from the button, the sidebar gives way to the toolbar, with the page below it.
         row.buttons["hideSidebarButton"].click()
         XCTAssertTrue(window.toolbars.firstMatch.waitForExistence(timeout: 5), "The toolbar comes back with the sidebar hidden")
         XCTAssertTrue(sidebar.waitForNonExistence(timeout: 5))
@@ -743,6 +750,20 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         XCTAssertTrue(window.toolbars.firstMatch.waitForNonExistence(timeout: 5), "No toolbar with the sidebar shown")
+
+        // Hidden from the menu (AppKit's own Toggle Sidebar, not the row's button), the toolbar
+        // comes back too.
+        app.typeKey("s", modifierFlags: [.command, .control])
+        XCTAssertTrue(sidebar.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(window.toolbars.firstMatch.waitForExistence(timeout: 5), "The toolbar comes back however the sidebar hides")
+        app.typeKey("s", modifierFlags: [.command, .control])
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+
+        // With the sidebar's address bar hidden (View menu), the toolbar holds the page's tools.
+        app.menuBars.menuBarItems["View"].click()
+        app.menuBars.menuItems["Hide Address Bar in Sidebar"].click()
+        XCTAssertTrue(window.toolbars.firstMatch.waitForExistence(timeout: 5), "The toolbar comes back without the address bar")
+        XCTAssertFalse(row.exists)
     }
 
     /// The sRGB color of the pixel at `point` (in points from the window's top left) in a

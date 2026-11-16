@@ -31,6 +31,7 @@ struct DownloadsButton: View {
 /// with some, an arrow while any run. It opens the list above it.
 struct FooterDownloadsButton: View {
     @Bindable var model: BrowserModel
+    @Environment(\.pageToolsInSidebar) private var pageToolsInSidebar
 
     var body: some View {
         let downloads = model.pool.downloads
@@ -42,9 +43,14 @@ struct FooterDownloadsButton: View {
         }
         .modifier(SidebarGlassButtonStyle())
         .help(downloads.activeCount > 0 ? "Downloads (\(downloads.activeCount) in progress)" : "Downloads")
+        .accessibilityLabel("Downloads")
         .accessibilityValue(Self.value(activeCount: downloads.activeCount, count: downloads.items.count))
         .accessibilityIdentifier("downloadsButton")
-        .popover(isPresented: $model.isShowingDownloads, arrowEdge: .top) {
+        // Only while the toolbar's Downloads is gone, so one list opens, from the one on screen.
+        .popover(isPresented: Binding(
+            get: { pageToolsInSidebar && model.isShowingDownloads },
+            set: { model.isShowingDownloads = $0 }
+        ), arrowEdge: .top) {
             // The footer has the Space theme's appearance; the list has the window's.
             DownloadsList(downloads: downloads).windowAppearance()
         }

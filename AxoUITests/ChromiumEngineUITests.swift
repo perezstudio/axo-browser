@@ -219,7 +219,10 @@ final class ChromiumEngineUITests: XCTestCase {
     @MainActor
     private func assertDownloadListed(_ filename: String, in app: XCUIApplication) {
         let downloadsButton = app.buttons["downloadsButton"]
-        XCTAssertTrue(downloadsButton.waitForExistence(timeout: 15), "The download reached Axo's list")
+        XCTAssertTrue(downloadsButton.waitForExistence(timeout: 15))
+        // The footer's Downloads is always there (#67); "None" changes once the download arrives.
+        expectation(for: NSPredicate(format: "value != 'None'"), evaluatedWith: downloadsButton)
+        waitForExpectations(timeout: 15)
         downloadsButton.click()
         let rows = app.descendants(matching: .any)
             .matching(NSPredicate(format: "identifier == 'downloadRow' AND label CONTAINS %@", filename))

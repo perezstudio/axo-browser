@@ -3,26 +3,34 @@ import CoreGraphics
 import Testing
 @testable import AxoUI
 
-/// The sidebar's top row and footer with the navigation bar in the sidebar (#67).
+/// The sidebar's top row, footer, and address bar with the navigation bar in the sidebar (#67).
 struct SidebarTopRowTests {
     @Test func theNarrowestSidebarFitsTheTopRow() {
-        // The window's controls, back and forward's capsule (two 30 pt buttons in 3 pt of
-        // padding), reload and Hide Sidebar's circles, three 6 pt gaps, and the trailing 8 pt.
-        let capsule: CGFloat = 30 * 2 + 3 * 2
-        let needed = SidebarTopRow.windowControlsWidth + capsule + SidebarGlassButtonStyle.side * 2 + 6 * 3 + 8
-        #expect(SidebarTopRow.minimumSidebarWidth >= needed)
-    }
-
-    @Test func theRowIsCenteredWithTheWindowsControls() {
-        // macOS 27 centers the window's controls 26 pt down in a window with a toolbar's title
-        // bar area; the row's 36 pt buttons are centered in it too.
-        #expect(SidebarTopRow.height / 2 == 26)
+        #expect(SidebarTopRow.minimumSidebarWidth >= SidebarTopRow.requiredWidth)
+        // The row is laid out from the same numbers, and holds three controls after the
+        // window's: changing one changes what it needs.
+        #expect(SidebarTopRow.requiredWidth > SidebarTopRow.windowControlsWidth + SidebarGlassButtonStyle.side * 3)
     }
 
     @Test func downloadsSaysWhatItHolds() {
         #expect(FooterDownloadsButton.value(activeCount: 0, count: 0) == "None")
         #expect(FooterDownloadsButton.value(activeCount: 2, count: 3) == "2 in progress")
         #expect(FooterDownloadsButton.value(activeCount: 0, count: 3) == "")
+    }
+
+    @Test func theAddressBarShowsAFewExtensionsAndAMenuForTheRest() {
+        let limit = ExtensionToolbarButtons.addressBarLimit
+        #expect(ExtensionToolbarButtons.split([1, 2], limit: limit) == ([1, 2], []))
+        #expect(ExtensionToolbarButtons.split([1, 2, 3], limit: limit) == ([1, 2, 3], []))
+        // One more than fits: the last button's place goes to the menu, which holds the rest.
+        #expect(ExtensionToolbarButtons.split([1, 2, 3, 4], limit: limit) == ([1, 2], [3, 4]))
+        #expect(ExtensionToolbarButtons.split(Array(1...12), limit: limit).menu.count == 10)
+        #expect(ExtensionToolbarButtons.shownCount(of: 12, limit: limit) == limit)
+    }
+
+    @Test func theToolbarShowsEveryExtension() {
+        #expect(ExtensionToolbarButtons.split(Array(1...12), limit: nil) == (Array(1...12), []))
+        #expect(ExtensionToolbarButtons.shownCount(of: 12, limit: nil) == 12)
     }
 }
 #endif

@@ -10,14 +10,19 @@ public struct BrowserWindow: View {
     @AppStorage(NavigationBarPlacement.storageKey) private var navigationBarPlacement = NavigationBarPlacement.sidebar
     @AppStorage(AddressBarSettings.showsSidebarAddressBarKey) private var showsSidebarAddressBar = true
     @AppStorage(AddressEditingPlacement.storageKey) private var addressEditingPlacement = AddressEditingPlacement.commandBar
-    /// The split view's columns, followed to know whether the sidebar shows.
+    /// The split view's columns; the top row's Hide Sidebar sets them.
     @State private var columns = NavigationSplitViewVisibility.automatic
+    /// Whether the sidebar is collapsed, however it got there (Hide Sidebar, View › Toggle
+    /// Sidebar, the divider, a narrow window, or a collapsed sidebar AppKit restored), read from
+    /// the split view itself (`SidebarCollapseObserver`), since the binding starts `.automatic`.
+    @State private var isSidebarCollapsed = false
 
     /// Whether the sidebar's top row stands in for the window toolbar (#67): with the navigation
-    /// bar in the sidebar, while the sidebar shows. The page then reaches the window's top edge.
-    /// With the sidebar hidden, the toolbar comes back for now, with the sidebar button.
+    /// bar in the sidebar and its address bar shown, while the sidebar shows. The page then
+    /// reaches the window's top edge and the page's tools are in the sidebar. With the sidebar
+    /// or its address bar hidden, the toolbar comes back for now, with the page's tools.
     private var sidebarReplacesToolbar: Bool {
-        navigationBarPlacement == .sidebar && columns != .detailOnly
+        navigationBarPlacement == .sidebar && showsSidebarAddressBar && !isSidebarCollapsed
     }
 
     /// Creates a window showing `model`.
@@ -64,6 +69,9 @@ public struct BrowserWindow: View {
         }
         // View › Show or Hide Address Bar in Sidebar, kept in the window's settings store.
         .onChange(of: model.sidebarAddressBarRequest.count) { showsSidebarAddressBar = model.sidebarAddressBarRequest.shown }
+        // A change of the binding (Hide Sidebar, or SwiftUI's own) counts too, in case the split
+        // view's item reports later.
+        .onChange(of: columns) { if columns == .detailOnly { isSidebarCollapsed = true } }
         .onChange(of: showsSidebarAddressBar, initial: true) { model.isSidebarAddressBarShown = showsSidebarAddressBar }
         .onChange(of: addressEditingPlacement, initial: true) { model.editsAddressInSidebar = addressEditingPlacement == .sidebar }
         // The Space theme editor from the Spaces menu (#137), outside the sidebar so it has the
@@ -95,10 +103,16 @@ public struct BrowserWindow: View {
         NavigationSplitView(columnVisibility: $columns) {
             VStack(spacing: 0) {
                 if sidebarReplacesToolbar {
-                    SidebarTopRow(model: model) { withAnimation { columns = .detailOnly } }
+                    SidebarTopRow(model: model) {
+                        withAnimation { columns = .detailOnly }
+                        isSidebarCollapsed = true
+                    }
                 }
                 SidebarView(model: model)
             }
+                // The footer's Downloads and the address bar's extensions and summary are the
+                // page's tools only while the toolbar is gone.
+                .environment(\.pageToolsInSidebar, sidebarReplacesToolbar)
                 // The top row sits in the title bar's area, beside the window's controls.
                 .ignoresSafeArea(.container, edges: sidebarReplacesToolbar ? .top : [])
                 // The page's edge, a layer above the sidebar (#67), in the theme's appearance.
@@ -118,8 +132,18 @@ public struct BrowserWindow: View {
                     ExtensionSidePanelView(model: model, panel: panel)
                 }
             }
-                // With no toolbar above it, the page reaches the window's top edge (#67).
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    if let translation = model.selectedTranslation {
+                        TranslationBar(model: model, translation: translation)
+                    }
+                }
+                // With no toolbar above it, the page reaches the window's top edge (#67). After
+                // the translation bar's inset, so the page sits below the bar rather than under it.
                 .ignoresSafeArea(.container, edges: sidebarReplacesToolbar ? .top : [])
+                .background {
+                    SidebarCollapseObserver { isSidebarCollapsed = $0 }
+                        .accessibilityHidden(true)
+                }
                 // In the page column: an overlay on the split view itself couldn't take focus.
                 .overlay {
                     if let peek = model.peek, let space = model.space {
@@ -134,11 +158,6 @@ public struct BrowserWindow: View {
                 }
                 // Notices for actions with no other visible result, at the page's bottom.
                 .overlay(alignment: .bottom) { NoticeView(model: model) }
-                .safeAreaInset(edge: .top, spacing: 0) {
-                    if let translation = model.selectedTranslation {
-                        TranslationBar(model: model, translation: translation)
-                    }
-                }
                 .modifier(PageTranslationTask(model: model))
                 // Site Settings hangs from the sidebar's address bar; when that isn't on screen
                 // (hidden, or the sidebar collapsed), from the top of the page instead.
@@ -168,7 +187,7 @@ public struct BrowserWindow: View {
                 }
                 .toolbar {
                     NavigationToolbar(model: model, placement: navigationBarPlacement,
-                                      showsPageTools: navigationBarPlacement == .page || columns == .detailOnly)
+                                      showsPageTools: !sidebarReplacesToolbar)
                 }
                 // The address field already shows where you are.
                 .toolbar(removing: .title)
