@@ -163,39 +163,51 @@ struct SiteCustomizationSettings: View {
     @State private var editing: SiteCustomization?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Add your own CSS and JavaScript to sites. Each customization applies to a domain and its subdomains; the most specific one wins.")
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            if model.siteCustomizations.isEmpty {
-                ContentUnavailableView("No Customizations", systemImage: "paintbrush", description: Text("Use Customize This Site… on a page, or add a site here."))
-                    .frame(maxHeight: .infinity)
-            } else {
-                List(model.siteCustomizations) { customization in
-                    HStack(spacing: 10) {
-                        Toggle(customization.domain, isOn: Binding(
-                            get: { customization.isEnabled },
-                            set: { on in Task { await model.setCustomizationEnabled(on, id: customization.id) } }
-                        ))
-                        .accessibilityIdentifier("customizationToggle")
-                        Text(summary(of: customization)).font(.caption).foregroundStyle(.secondary)
-                        Spacer()
-                        Button("Edit…") { editing = customization }
-                            .accessibilityLabel("Edit \(customization.domain)")
-                        Button("Delete", systemImage: "trash") { Task { await model.deleteCustomization(customization.id) } }
-                            .labelStyle(.iconOnly)
-                            .buttonStyle(.borderless)
-                            .help("Delete")
-                            .accessibilityLabel("Delete \(customization.domain)")
+        // A grouped form, like the other panes (#85); see LinkRoutingSettings on `fixedSize`.
+        Form {
+            Section {
+                if model.siteCustomizations.isEmpty {
+                    Text("No customizations yet. Use Customize This Site… on a page, or add a site here.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(model.siteCustomizations) { customization in
+                        HStack(spacing: 10) {
+                            Toggle(customization.domain, isOn: Binding(
+                                get: { customization.isEnabled },
+                                set: { on in Task { await model.setCustomizationEnabled(on, id: customization.id) } }
+                            ))
+                            #if os(macOS)
+                            // A checkbox, as the list had (a grouped form would make it a switch).
+                            .toggleStyle(.checkbox)
+                            #endif
+                            .accessibilityIdentifier("customizationToggle")
+                            Text(summary(of: customization)).font(.caption).foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Edit…") { editing = customization }
+                                .accessibilityLabel("Edit \(customization.domain)")
+                            Button("Delete", systemImage: "trash") { Task { await model.deleteCustomization(customization.id) } }
+                                .labelStyle(.iconOnly)
+                                .buttonStyle(.borderless)
+                                .help("Delete")
+                                .accessibilityLabel("Delete \(customization.domain)")
+                        }
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("siteCustomization")
                     }
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("siteCustomization")
                 }
+                HStack {
+                    Button("Add Site…") { editing = SiteCustomization(domain: "") }
+                        .accessibilityIdentifier("addSiteCustomizationButton")
+                    Spacer()
+                }
+            } header: {
+                Text("Sites")
+            } footer: {
+                Text("Add your own CSS and JavaScript to sites. Each customization applies to a domain and its subdomains; the most specific one wins.")
+                    .foregroundStyle(.secondary)
             }
-            Button("Add Site…") { editing = SiteCustomization(domain: "") }
-                .accessibilityIdentifier("addSiteCustomizationButton")
         }
-        .padding(20)
+        .formStyle(.grouped)
         .sheet(item: $editing) { customization in
             CustomizeSiteSheet(model: model, customization: customization)
         }

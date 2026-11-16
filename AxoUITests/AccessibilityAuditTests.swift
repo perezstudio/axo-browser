@@ -78,6 +78,18 @@ final class AccessibilityAuditTests: XCTestCase {
                     if children.count == 1, children[0].identifier == "splitPane" { return true }
                     // The split view's sidebar column, which holds the address bar.
                     if children.contains(where: { ["sidebarAddressBar", "sidebarAddressField", "addressField"].contains($0.identifier) }) { return true }
+                    // Settings' sidebar column, which holds the list of panes in a scroll view,
+                    // and the host of its search field. VoiceOver reads the list and the field.
+                    if children.count == 1, children[0].elementType == .scrollView,
+                       children[0].children.contains(where: { $0.identifier == "settingsPaneList" }) { return true }
+                    if children.count == 1, children[0].elementType == .searchField { return true }
+                    // A Settings pane that lists items beside a form (Spaces, Profiles), which
+                    // fills the detail column. VoiceOver reads its list, buttons, and form.
+                    let paneLists: Set<String> = ["spaceList", "profileList"]
+                    if children.contains(where: { child in
+                        paneLists.contains(child.identifier)
+                            || child.children.contains(where: { paneLists.contains($0.identifier) })
+                    }) { return true }
                     // A List section header row, which holds only its header text.
                     if children.count == 1, children[0].elementType == .staticText,
                        !children[0].label.isEmpty || !(children[0].value as? String ?? "").isEmpty {
@@ -106,9 +118,7 @@ final class AccessibilityAuditTests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Pond"].waitForExistence(timeout: 10))
 
         app.typeKey(",", modifierFlags: .command)
-        let general = app.toolbars.buttons["General"]
-        XCTAssertTrue(general.waitForExistence(timeout: 5))
-        general.click()
+        AxoUITests.selectSettingsPane("general", in: app)
         let inSidebar = app.radioButtons["Sidebar"]
         XCTAssertTrue(inSidebar.waitForExistence(timeout: 5))
         inSidebar.click()
@@ -244,21 +254,19 @@ final class AccessibilityAuditTests: XCTestCase {
 
         app.menuBars.menuItems["Settings…"].click()
         // Settings reopens on the last pane used, so choose one.
-        let linkRouting = app.toolbars.buttons["Link Routing"]
-        XCTAssertTrue(linkRouting.waitForExistence(timeout: 5))
-        linkRouting.click()
+        AxoUITests.selectSettingsPane("linkRouting", in: app)
         XCTAssertTrue(app.buttons["addDomainRouteButton"].waitForExistence(timeout: 5))
         try audit(app, "settings")
 
-        app.toolbars.buttons["General"].click()
+        AxoUITests.selectSettingsPane("general", in: app)
         XCTAssertTrue(app.radioButtons["Above the page"].waitForExistence(timeout: 5))
         try audit(app, "general settings")
 
-        app.toolbars.buttons["Profiles"].click()
+        AxoUITests.selectSettingsPane("profiles", in: app)
         XCTAssertTrue(app.textFields["profileNameField"].waitForExistence(timeout: 5))
         try audit(app, "profiles")
 
-        app.toolbars.buttons["Spaces"].click()
+        AxoUITests.selectSettingsPane("spaces", in: app)
         XCTAssertTrue(app.textFields["spaceNameSettingsField"].waitForExistence(timeout: 5))
         try audit(app, "spaces")
 
@@ -272,14 +280,14 @@ final class AccessibilityAuditTests: XCTestCase {
         themeEditor.buttons["themeCancelButton"].click()
         XCTAssertTrue(themeEditor.waitForNonExistence(timeout: 5))
 
-        app.toolbars.buttons["Site Customizations"].click()
+        AxoUITests.selectSettingsPane("siteCustomizations", in: app)
         XCTAssertTrue(app.buttons["addSiteCustomizationButton"].waitForExistence(timeout: 5))
         try audit(app, "site customizations")
 
-        app.toolbars.buttons["iCloud"].click()
+        AxoUITests.selectSettingsPane("iCloud", in: app)
         XCTAssertTrue(app.descendants(matching: .any)["syncToggle"].waitForExistence(timeout: 5))
         try audit(app, "iCloud")
-        app.toolbars.buttons["Site Customizations"].click()
+        AxoUITests.selectSettingsPane("siteCustomizations", in: app)
         XCTAssertTrue(app.buttons["addSiteCustomizationButton"].waitForExistence(timeout: 5))
         app.buttons["addSiteCustomizationButton"].click()
         XCTAssertTrue(app.textFields["customizationDomainField"].waitForExistence(timeout: 5))

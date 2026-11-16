@@ -66,36 +66,6 @@ extension BrowserModel {
 // Mac only for now; iPhone and iPad have their own chrome.
 #if os(macOS)
 
-/// Axo's Settings window (⌘,).
-public struct SettingsView: View {
-    let model: BrowserModel
-
-    /// Creates the Settings window's content.
-    public init(model: BrowserModel) {
-        self.model = model
-    }
-
-    public var body: some View {
-        TabView {
-            GeneralSettings()
-                .tabItem { Label("General", systemImage: "gearshape") }
-            ProfileSettings(model: model)
-                .tabItem { Label("Profiles", systemImage: "person.2") }
-            SpaceSettings(model: model)
-                .tabItem { Label("Spaces", systemImage: "square.stack") }
-            LinkRoutingSettings(model: model)
-                .tabItem { Label("Link Routing", systemImage: "arrow.triangle.branch") }
-            SiteCustomizationSettings(model: model)
-                .tabItem { Label("Site Customizations", systemImage: "paintbrush") }
-            if let sync = model.iCloudSync {
-                SyncSettings(sync: sync)
-                    .tabItem { Label("iCloud", systemImage: "icloud") }
-            }
-        }
-        .frame(width: 620, height: 460)
-    }
-}
-
 /// Rules that open links from other apps in a chosen Space.
 struct LinkRoutingSettings: View {
     let model: BrowserModel
@@ -103,42 +73,46 @@ struct LinkRoutingSettings: View {
     @State private var message: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Links from other apps open in a mini window. A rule opens them as tabs in a Space instead, by the link's domain or the app it came from. Domain rules come first.")
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+        // A grouped form, like the other panes (#85). Its text wraps without `fixedSize`, which
+        // made the split view lay the pane out thousands of points tall on the hosted Mac.
+        Form {
             if model.isDefaultBrowser == false {
+                Section {
+                    HStack {
+                        Label("Axo isn't your default browser, so links from other apps open somewhere else.", systemImage: "exclamationmark.circle")
+                        Spacer()
+                        Button("Make Default…") { Task { await model.makeDefaultBrowser() } }
+                    }
+                }
+            }
+            Section {
+                if model.linkRoutes.isEmpty {
+                    Text("No rules yet. Add a domain or an app to send its links to a Space.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(model.linkRoutes) { route in
+                        LinkRouteRow(model: model, route: route)
+                    }
+                }
                 HStack {
-                    Label("Axo isn't your default browser, so links from other apps open somewhere else.", systemImage: "exclamationmark.circle")
+                    Button("Add Domain…") { isAddingDomain = true }
+                        .accessibilityIdentifier("addDomainRouteButton")
+                    Button("Add App…") { Task { await chooseApp() } }
+                        .accessibilityIdentifier("addAppRouteButton")
                     Spacer()
-                    Button("Make Default…") { Task { await model.makeDefaultBrowser() } }
                 }
-                .font(.callout)
-            }
-
-            if model.linkRoutes.isEmpty {
-                ContentUnavailableView("No Rules", systemImage: "arrow.triangle.branch", description: Text("Add a domain or an app to send its links to a Space."))
-                    .frame(maxHeight: .infinity)
-            } else {
-                List(model.linkRoutes) { route in
-                    LinkRouteRow(model: model, route: route)
+                if let message {
+                    Text(message).font(.callout).foregroundStyle(.red)
+                        .accessibilityIdentifier("linkRouteMessage")
                 }
-                .accessibilityIdentifier("linkRoutes")
-            }
-
-            HStack {
-                Button("Add Domain…") { isAddingDomain = true }
-                    .accessibilityIdentifier("addDomainRouteButton")
-                Button("Add App…") { Task { await chooseApp() } }
-                    .accessibilityIdentifier("addAppRouteButton")
-                Spacer()
-            }
-            if let message {
-                Text(message).font(.callout).foregroundStyle(.red)
-                    .accessibilityIdentifier("linkRouteMessage")
+            } header: {
+                Text("Rules")
+            } footer: {
+                Text("Links from other apps open in a mini window. A rule opens them as tabs in a Space instead, by the link's domain or the app it came from. Domain rules come first.")
+                    .foregroundStyle(.secondary)
             }
         }
-        .padding(20)
+        .formStyle(.grouped)
         .sheet(isPresented: $isAddingDomain) {
             AddDomainRouteSheet(model: model)
         }

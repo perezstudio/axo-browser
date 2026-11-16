@@ -80,6 +80,10 @@ struct AxoApp: App {
             SettingsView(model: model)
                 .defaultAppStorage(AppEnvironment.settings)
         }
+        // Resizable down to SettingsView's minimum, like System Settings (#85). Without a
+        // default size it opened as tall as the panes' lists could grow, past the screen's edge.
+        .windowResizability(.contentMinSize)
+        .defaultSize(SettingsView.defaultSize)
         .commands {
             if AppEnvironment.isUITesting {
                 // UI tests can't send links from another app: XCUIApplication.open hands them to a

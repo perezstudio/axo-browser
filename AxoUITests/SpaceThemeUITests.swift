@@ -117,9 +117,7 @@ final class SpaceThemeUITests: XCTestCase {
 
         // Settings › Spaces edits it too, and System goes back to the material.
         app.typeKey(",", modifierFlags: .command)
-        let spaces = app.toolbars.buttons["Spaces"]
-        XCTAssertTrue(spaces.waitForExistence(timeout: 5))
-        spaces.click()
+        AxoUITests.selectSettingsPane("spaces", in: app)
         let edit = app.buttons["editThemeSettingsButton"]
         XCTAssertTrue(edit.waitForExistence(timeout: 5))
         edit.click()
@@ -130,7 +128,7 @@ final class SpaceThemeUITests: XCTestCase {
         editor.buttons["themeDoneButton"].click()
         XCTAssertTrue(editor.waitForNonExistence(timeout: 5))
         app.typeKey("w", modifierFlags: .command)
-        XCTAssertTrue(spaces.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["settingsPane.spaces"].waitForNonExistence(timeout: 5))
         waitForSidebar("System again") { AxoUITests.isClose($0, to: plain) }
     }
 }
