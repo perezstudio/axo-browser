@@ -101,22 +101,28 @@ public struct BrowserWindow: View {
 
     private var splitView: some View {
         NavigationSplitView(columnVisibility: $columns) {
-            VStack(spacing: 0) {
-                if sidebarReplacesToolbar {
-                    SidebarTopRow(model: model) {
-                        withAnimation { columns = .detailOnly }
-                        isSidebarCollapsed = true
+            SidebarView(model: model)
+                // The top row sits in the title bar's area above the sidebar's content, which
+                // keeps the safe area (SwiftUI's hover tracking went wrong in a sidebar that
+                // ignored it). Its empty space below takes no hits.
+                .overlay(alignment: .top) {
+                    if sidebarReplacesToolbar {
+                        VStack(spacing: 0) {
+                            SidebarTopRow(model: model) {
+                                withAnimation { columns = .detailOnly }
+                                isSidebarCollapsed = true
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .ignoresSafeArea(.container, edges: .top)
                     }
                 }
-                SidebarView(model: model)
-            }
                 // The footer's Downloads and the address bar's extensions and summary are the
                 // page's tools only while the toolbar is gone.
                 .environment(\.pageToolsInSidebar, sidebarReplacesToolbar)
-                // The top row sits in the title bar's area, beside the window's controls.
-                .ignoresSafeArea(.container, edges: sidebarReplacesToolbar ? .top : [])
-                // The page's edge, a layer above the sidebar (#67), in the theme's appearance.
-                .pageEdgeShadow()
+                // The page's edge, a layer above the sidebar (#67), in the theme's appearance,
+                // from the window's top while no toolbar runs across it.
+                .pageEdgeShadow(reachesTop: sidebarReplacesToolbar)
                 // The shown Space's theme behind the sidebar, its footer, and the toolbar above it.
                 .modifier(SpaceThemeModifier(model: model))
                 .navigationSplitViewColumnWidth(

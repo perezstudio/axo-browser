@@ -716,12 +716,18 @@ final class AxoUITests: XCTestCase {
             XCTAssertLessThan(row.buttons[id].frame.maxX, sidebar.frame.maxX + 1, "\(id) sits over the sidebar")
         }
         XCTAssertFalse(window.toolbars.firstMatch.exists, "No window toolbar")
+        // The window's controls, made for the row since they hide with the title bar.
+        let close = window.buttons[XCUIIdentifierCloseWindow]
+        XCTAssertTrue(close.exists, "The window can still be closed")
+        XCTAssertEqual(close.frame.midY, row.buttons["reloadButton"].frame.midY, accuracy: 1.5, "In line with the row")
+        XCTAssertTrue(window.buttons[XCUIIdentifierMinimizeWindow].exists && window.buttons[XCUIIdentifierZoomWindow].exists)
 
         // A link along the page's very top: the title bar's area above the page takes no clicks.
         AxoUITests.openPage("data:text/html,<title>Top</title><body style='margin:0'><a href='data:text/html,<title>Reached</title>' style='display:block;height:20px'>Top link</a>", in: app)
         let link = app.links["Top link"]
         XCTAssertTrue(link.waitForExistence(timeout: 10))
-        let page = app.descendants(matching: .any)["webContent"]
+        // The page's own web view (its container's identifier doesn't reach the accessibility tree).
+        let page = window.webViews.firstMatch
         XCTAssertEqual(page.frame.minY, window.frame.minY, accuracy: 1, "The page reaches the window's top edge")
         XCTAssertEqual(link.frame.minY, window.frame.minY, accuracy: 1)
         let shot = XCTAttachment(screenshot: window.screenshot())

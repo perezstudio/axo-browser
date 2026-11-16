@@ -4,7 +4,14 @@ import Testing
 @testable import AxoUI
 
 /// The sidebar's top row, footer, and address bar with the navigation bar in the sidebar (#67).
+@MainActor
 struct SidebarTopRowTests {
+    @Test func theWindowsControlsSitWhereMacOSPutsThem() {
+        // Close at 19 pt, zoom ending at 79 pt, as in a window with a toolbar on macOS 27.
+        #expect(WindowControls.leading == 19)
+        #expect(SidebarTopRow.windowControlsWidth == 79)
+    }
+
     @Test func theNarrowestSidebarFitsTheTopRow() {
         #expect(SidebarTopRow.minimumSidebarWidth >= SidebarTopRow.requiredWidth)
         // The row is laid out from the same numbers, and holds three controls after the
