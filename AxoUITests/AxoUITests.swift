@@ -861,11 +861,11 @@ final class AxoUITests: XCTestCase {
     }
 
     /// Settings lists its panes in a sidebar like System Settings (#85): search filters them by
-    /// their settings, Return opens the first match, the sidebar can't be hidden, the window
-    /// resizes but not below its minimum (on the hosted runner only), and it reopens on the
-    /// last pane used.
+    /// their settings, Return opens the first match, the sidebar can't be hidden, the window is
+    /// at least its minimum size, and it reopens on the last pane used. (That the window can be
+    /// resized is a unit test: XCUITest's drags don't resize windows on the hosted runner.)
     @MainActor
-    func testSettingsSidebarSearchesResizesAndRemembersThePane() throws {
+    func testSettingsSidebarSearchesAndRemembersThePane() throws {
         let app = launchApp()
         XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 5))
         app.typeKey(",", modifierFlags: .command)
@@ -897,29 +897,6 @@ final class AxoUITests: XCTestCase {
         app.typeKey("s", modifierFlags: [.command, .control])
         XCTAssertTrue(app.descendants(matching: .any)["settingsPaneList"].waitForExistence(timeout: 2))
         XCTAssertTrue(general.isHittable, "The panes stay on screen")
-
-        // The window resizes, down to its minimum (720 × 480). Only on the hosted runner: the
-        // Settings window's frame is saved in the user defaults UI tests share with the
-        // person's own Axo (CLAUDE.md), and dragging would change theirs.
-        if Self.isOnHostedRunner {
-            let before = window.frame
-            // Drags the window's right edge sideways. The resize edge sits around the window's
-            // frame (macOS 27's rounded windows put it a little outside), so a few points across
-            // it are tried until one takes.
-            func dragRightEdge(by dx: CGFloat) {
-                let start = window.frame
-                for inset: CGFloat in [2, 0, -2, -4] {
-                    let edge = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 0.5)).withOffset(CGVector(dx: inset, dy: 0))
-                    edge.press(forDuration: 0.2, thenDragTo: edge.withOffset(CGVector(dx: dx, dy: 0)))
-                    if window.frame.width != start.width { return }
-                }
-            }
-            dragRightEdge(by: 120)
-            XCTAssertGreaterThan(window.frame.width, before.width + 50, "The window grows")
-            dragRightEdge(by: -1000)
-            XCTAssertGreaterThanOrEqual(window.frame.width, 719, "It stops at its minimum width")
-            XCTAssertLessThan(window.frame.width, before.width + 50, "It shrinks")
-        }
 
         // Closed and opened again, it shows the last pane used.
         app.typeKey("w", modifierFlags: .command)

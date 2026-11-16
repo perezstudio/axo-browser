@@ -1,4 +1,7 @@
 import Testing
+#if os(macOS)
+import AppKit
+#endif
 @testable import AxoUI
 
 /// The Settings window's panes and the sidebar's search (#85).
@@ -87,6 +90,23 @@ struct WindowScreenFitTests {
         let window = CGRect(x: 0, y: -100, width: 900, height: 900)
         let frame = try #require(WindowScreenFit.fittedFrame(for: window, contentFrame: contentFrame, size: size, in: small))
         #expect(frame == small)
+    }
+
+    /// SwiftUI's Settings scene makes a fixed-size window, so the fitting view makes it
+    /// resizable once it's in the window. (XCUITest's drags don't resize windows on the hosted
+    /// runner, so this is checked here rather than by dragging.)
+    @MainActor
+    @Test func theWindowBecomesResizable() async throws {
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 780, height: 560),
+                              styleMask: [.titled, .closable], backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        #expect(!window.styleMask.contains(.resizable))
+        window.contentView = WindowScreenFit.FittingView(size: size)
+        for _ in 0..<100 where !window.styleMask.contains(.resizable) {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(window.styleMask.contains(.resizable))
     }
 }
 #endif
