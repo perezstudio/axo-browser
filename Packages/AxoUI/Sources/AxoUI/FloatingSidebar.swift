@@ -122,11 +122,9 @@ struct WindowDragBar: View {
             .allowsWindowActivationEvents(true)
             .onHover(perform: onHover)
             .help("Drag to move the window")
-            // The window moves with the pointer; VoiceOver users move it with its own commands.
-            .accessibilityElement()
-            .accessibilityLabel("Window")
-            .accessibilityHint("Drag to move the window")
-            .accessibilityIdentifier("windowDragBar")
+            // Only for the pointer, as a title bar's empty space is: VoiceOver and the keyboard
+            // move the window with the Window menu and macOS's own commands.
+            .accessibilityHidden(true)
     }
 }
 
