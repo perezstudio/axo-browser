@@ -182,7 +182,7 @@ public struct BrowserCommands: Commands {
             // The page showing, a favorite's too; for a split, the selected pane.
             Button(model?.shownTabMedia.muteTitle ?? "Mute Tab") {
                 guard let model, let id = model.shownTab?.id else { return }
-                model.toggleMuted([id])
+                model.toggleMuted(model.muteTargets(for: id))
             }
             .disabled(model?.shownTabMedia.hasSound != true)
             Button("Duplicate Tab") {

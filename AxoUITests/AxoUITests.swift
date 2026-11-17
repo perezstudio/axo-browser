@@ -577,8 +577,8 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Got ArrowDown"].waitForExistence(timeout: 5), "Arrow keys go to the page too")
     }
 
-    /// A tab playing sound shows a speaker at its row's end, which mutes it and unmutes it
-    /// (#71), and its row's value tells VoiceOver. The page plays a faint tone once clicked
+    /// A tab playing sound shows a speaker at its row's end, which mutes it, as the Tabs menu
+    /// unmutes it (#71), and its row's value tells VoiceOver. The page plays a faint tone once clicked
     /// (pages need a click to play sound).
     @MainActor
     func testMutingATabFromItsSpeaker() throws {
@@ -602,7 +602,9 @@ final class AxoUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: muted, evaluatedWith: speaker)], timeout: 5), .completed)
         XCTAssertTrue((row.value as? String)?.contains("Muted") == true)
 
-        speaker.click()
+        // The Tabs menu unmutes the shown tab too.
+        app.menuBars.menuBarItems["Tabs"].click()
+        app.menuBars.menuItems["Unmute Tab"].click()
         let unmuted = NSPredicate(format: "label == 'Mute Tab'")
         XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: unmuted, evaluatedWith: speaker)], timeout: 5), .completed)
     }

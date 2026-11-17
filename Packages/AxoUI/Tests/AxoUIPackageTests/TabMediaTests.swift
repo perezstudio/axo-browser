@@ -64,6 +64,22 @@ struct TabMediaTests {
         #expect(model.tabMedia([quiet, loud]).isMuted)
     }
 
+    @Test func theTabsMenuMutesTheShownSplitAsItsRowDoes() async throws {
+        let (quiet, _) = try await openPage(URL(string: "https://example.com/")!)
+        let (loud, loudPage) = try await openPage(URL(string: "https://example.org/")!)
+        #expect(model.muteTargets(for: loud) == [loud])
+        model.select(quiet)
+        await model.addToSplit(loud)
+        try #require(model.split(of: quiet) != nil)
+        #expect(Set(model.muteTargets(for: quiet)) == [quiet, loud])
+
+        loudPage.simulateMedia(isPlayingAudio: true)
+        model.select(quiet)
+        #expect(model.shownTabMedia.hasSound, "The quiet pane's split plays sound")
+        model.toggleMuted(model.muteTargets(for: quiet))
+        #expect(loudPage.muteRequests == [true])
+    }
+
     @Test func combinedMediaIsMutedOnlyWhenNothingPlaysUnmuted() {
         let playing = PageMedia(isPlayingAudio: true)
         let muted = PageMedia(isPlayingAudio: true, isMuted: true)

@@ -11,9 +11,16 @@ extension BrowserModel {
         pool.liveness(for: id).state?.media ?? PageMedia()
     }
 
-    /// The sound and devices of the page showing (a favorite's too): the Tabs menu's Mute Tab.
+    /// The tabs a tab's Mute Tab acts on: its split's panes, as its row's speaker does, or the
+    /// tab (a favorite too).
+    public func muteTargets(for id: AxoCore.Tab.ID) -> [AxoCore.Tab.ID] {
+        split(of: id).map { panes(of: $0.id).map(\.id) } ?? [id]
+    }
+
+    /// The sound and devices of the page showing (a favorite's too) and its split's other
+    /// panes: the Tabs menu's Mute Tab, which acts as the shown row's speaker does.
     public var shownTabMedia: PageMedia {
-        shownTab.map { tabMedia($0.id) } ?? PageMedia()
+        shownTab.map { tabMedia(muteTargets(for: $0.id)) } ?? PageMedia()
     }
 
     /// The sound and devices of several tabs (a split's panes) as one: playing if any plays,

@@ -595,7 +595,7 @@ public final class WebViewPool {
 
     private func hibernateHiddenTabs(idleSince cutoff: Date) async -> Set<Tab.ID> {
         let idle = live.values
-            .filter { !isVisible($0.tabID) && $0.lastUsed <= cutoff && !$0.page.hasDevTools }
+            .filter { !isVisible($0.tabID) && $0.lastUsed <= cutoff && !$0.page.hasDevTools && !$0.isInUse }
             .map(\.tabID)
         var hibernatedIDs: Set<Tab.ID> = []
         for tabID in idle where await hibernate(tabID) {
@@ -633,6 +633,12 @@ public final class WebViewPool {
     /// The tabs muted (#71). Muting lasts while the tab is open, through hibernation and its
     /// page being replaced, but not across launches, as in Arc.
     public private(set) var mutedTabs: Set<Tab.ID> = []
+
+    /// Records muting the engine or an extension did on its own (`chrome.tabs.update`), so a
+    /// later page for the tab follows it.
+    func pageChangedMuting(_ muted: Bool, tabID: Tab.ID) {
+        if muted { mutedTabs.insert(tabID) } else { mutedTabs.remove(tabID) }
+    }
 
     /// Mutes a tab's sound, or unmutes it, now and for any page it gets later.
     public func setMuted(_ muted: Bool, tabID: Tab.ID) {

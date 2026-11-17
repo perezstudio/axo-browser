@@ -89,7 +89,16 @@ final class LiveTab: EnginePageDelegate {
 
     func pageMediaDidChange(_ page: any EnginePage) {
         let media = page.media
-        if state.media != media { state.media = media }
+        guard state.media != media else { return }
+        // Muting changed by the engine itself (an extension, say) lasts like the person's.
+        if media.isMuted != state.media.isMuted { pool?.pageChangedMuting(media.isMuted, tabID: tabID) }
+        state.media = media
+    }
+
+    /// Whether the page plays sound (unmuted) or uses a device, so hibernating it would end a
+    /// song or a call, as Chrome never discards such tabs on its own.
+    var isInUse: Bool {
+        (state.media.isPlayingAudio && !state.media.isMuted) || !state.media.capture.isEmpty
     }
 
     func pageWantsToBeShown(_ page: any EnginePage) {

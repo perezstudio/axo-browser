@@ -443,11 +443,7 @@ private struct TopTab: View {
         .accessibilityIdentifier("topTab")
         .overlay(alignment: .trailing) {
             HStack(spacing: 2) {
-                // As in a sidebar row: the speaker stays under the pointer, the dot gives way to
-                // the close button.
-                if media.hasSound {
-                    TabMuteButton(media: media) { toggleMute() }
-                }
+                // As in a sidebar row: the dot gives way to the close button.
                 if !media.capture.isEmpty, !isHovering {
                     TabCaptureDot(media: media)
                 }
@@ -459,6 +455,10 @@ private struct TopTab: View {
                     .help(closeTitle)
                     .accessibilityLabel(closeTitle)
                     .accessibilityIdentifier("tabBarCloseButton")
+                }
+                // Last, so it never moves under the pointer when the close button appears.
+                if media.hasSound {
+                    TabMuteButton(media: media) { toggleMute() }
                 }
             }
             .padding(.trailing, 5)

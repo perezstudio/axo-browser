@@ -89,4 +89,37 @@ struct PageMediaTests {
         pool.page(for: tab, profileID: profileID)
         #expect(try #require(engine.pages.last).muteRequests.isEmpty)
     }
+
+    @Test func mutingTheEngineDidOnItsOwnLastsToo() throws {
+        pool.page(for: tab, profileID: profileID)
+        let page = try #require(engine.pages.last)
+        // An extension mutes the tab (chrome.tabs.update), then the page is replaced.
+        page.setAudioMuted(true)
+        page.simulateMedia()
+        #expect(pool.mutedTabs == [tab.id])
+        page.setAudioMuted(false)
+        page.simulateMedia()
+        #expect(pool.mutedTabs.isEmpty)
+    }
+
+    @Test func tabsPlayingSoundOrUsingDevicesDontHibernate() async throws {
+        let quiet = Tab.testTab(url: URL(string: "https://example.com/quiet")!)
+        let call = Tab.testTab(url: URL(string: "https://example.com/call")!)
+        let muted = Tab.testTab(url: URL(string: "https://example.com/muted")!)
+        let playing = tab
+        var pages: [Tab.ID: FakePage] = [:]
+        for tab in [quiet, call, muted, playing] {
+            pool.page(for: tab, profileID: profileID)
+            let page = try #require(engine.pages.last)
+            page.finishLoad()
+            pages[tab.id] = page
+        }
+        pages[playing.id]?.simulateMedia(isPlayingAudio: true)
+        pages[call.id]?.simulateMedia(capture: [.camera])
+        pages[muted.id]?.simulateMedia(isPlayingAudio: true)
+        pool.setMuted(true, tabID: muted.id)
+
+        let hibernated = await pool.hibernateHiddenTabs()
+        #expect(hibernated == [quiet.id, muted.id], "A song or a call would end; a muted tab can rest")
+    }
 }

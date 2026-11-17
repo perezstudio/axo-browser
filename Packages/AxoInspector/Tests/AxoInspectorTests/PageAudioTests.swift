@@ -23,11 +23,12 @@ struct PageAudioTests {
 
     @Test func observingStopsWhenReleased() {
         let webView = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
+        #expect(webView.observationInfo == nil)
         var observation = PageAudio().observe(webView) {}
         #expect(observation != nil)
-        // Releasing removes the observer; WebKit would throw on deallocating an observed view
-        // otherwise.
+        #expect(webView.observationInfo != nil, "It observes the web view")
         observation = nil
-        #expect(observation == nil)
+        // Releasing it removes the observer; one left behind would outlive it and crash.
+        #expect(webView.observationInfo == nil)
     }
 }

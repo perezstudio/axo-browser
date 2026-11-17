@@ -247,10 +247,8 @@ struct SidebarTabRow: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             // Sound and devices sit where the close button appears (the Tab row states board):
-            // the speaker stays under the pointer, so it can be clicked; the dot gives way.
-            if media.hasSound {
-                TabMuteButton(media: media) { toggleMute() }
-            }
+            // the dot gives way to the close button, and the speaker, last, never moves, so the
+            // pointer heading for it never lands on Close.
             if !media.capture.isEmpty, !isHovering {
                 TabCaptureDot(media: media)
             }
@@ -266,6 +264,9 @@ struct SidebarTabRow: View {
                 // Shown only under the pointer; VoiceOver and the keyboard also get the row's
                 // action, which is always there.
                 .accessibilityIdentifier("tabRowCloseButton")
+            }
+            if media.hasSound {
+                TabMuteButton(media: media) { toggleMute() }
             }
             // A pinned tab away from its pinned page shows it at a glance, as in Arc, with a
             // control that goes back (#73). Last in the row, so the close button appearing on
@@ -305,7 +306,7 @@ struct SidebarTabRow: View {
     }
 
     /// The row's tabs: a split's panes, or the tab.
-    private var rowTabIDs: [AxoCore.Tab.ID] { (panes ?? [tab]).map(\.id) }
+    private var rowTabIDs: [AxoCore.Tab.ID] { panes?.map(\.id) ?? model.muteTargets(for: tab.id) }
 
     /// What the row's pages play and use (#71, #74), for a split all its panes'.
     private var media: PageMedia { model.tabMedia(rowTabIDs) }
@@ -378,7 +379,7 @@ struct TabContextMenu: View {
 
     var body: some View {
         if media.hasSound {
-            Button(media.muteTitle) { model.toggleMuted((model.split(of: tab.id).map { model.panes(of: $0.id) } ?? [tab]).map(\.id)) }
+            Button(media.muteTitle) { model.toggleMuted(model.muteTargets(for: tab.id)) }
             Divider()
         }
         if let split = model.split(of: tab.id) {
