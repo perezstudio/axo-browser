@@ -93,6 +93,38 @@ struct EdgeHoverDetector: NSViewRepresentable {
         override func mouseExited(with event: NSEvent) { onHover(false) }
     }
 }
+/// A slim bar along the page's top edge that moves the window while the sidebar is hidden (#67),
+/// when nothing else on screen can: it shows once the pointer reaches the top edge and goes when
+/// the pointer leaves, as the floating sidebar does. Dragging it moves the window and a double
+/// click zooms it, as the title bar would. It takes the pointer only while it shows.
+struct WindowDragBar: View {
+    /// Reports the pointer entering and leaving the bar.
+    let onHover: (Bool) -> Void
+
+    /// The bar's height, its grabber included.
+    static let height: CGFloat = 14
+
+    var body: some View {
+        Capsule()
+            .fill(.secondary)
+            .frame(width: 36, height: 4)
+            .frame(maxWidth: .infinity)
+            .frame(height: Self.height)
+            .background(.bar)
+            .contentShape(.rect)
+            .gesture(WindowDragGesture())
+            .onTapGesture(count: 2) { NSApp.keyWindow?.performZoom(nil) }
+            .allowsWindowActivationEvents(true)
+            .onHover(perform: onHover)
+            .help("Drag to move the window")
+            // The window moves with the pointer; VoiceOver users move it with its own commands.
+            .accessibilityElement()
+            .accessibilityLabel("Window")
+            .accessibilityHint("Drag to move the window")
+            .accessibilityIdentifier("windowDragBar")
+    }
+}
+
 extension EnvironmentValues {
     /// Whether this is the floating sidebar's copy of the sidebar (#67).
     @Entry var isFloatingSidebar = false

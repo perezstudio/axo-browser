@@ -702,8 +702,9 @@ final class AxoUITests: XCTestCase {
     /// With the navigation bar in the sidebar, the sidebar's top row stands in for the window
     /// toolbar (#67): back, forward, reload, and Hide Sidebar sit beside the window's controls,
     /// the window has no toolbar, and the page reaches the window's top edge, where clicks reach
-    /// it. With the sidebar hidden the page fills the window and the sidebar floats in from the
-    /// left edge; with the sidebar's address bar hidden, the toolbar comes back.
+    /// it. With the sidebar hidden the page fills the window, the sidebar floats in from the left
+    /// edge, and a bar along the top edge moves the window; with the sidebar's address bar
+    /// hidden, the toolbar comes back.
     @MainActor
     func testTheSidebarReplacesTheToolbar() throws {
         let app = launchApp()
@@ -757,6 +758,20 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.waitForNonExistence(timeout: 5))
         XCTAssertFalse(window.toolbars.firstMatch.waitForExistence(timeout: 2), "No toolbar with the sidebar hidden")
         XCTAssertFalse(window.buttons[XCUIIdentifierCloseWindow].exists, "Nor the window's controls")
+
+        // The pointer at the page's top edge shows a bar that moves the window, and leaving it
+        // lets it go.
+        let dragBar = app.descendants(matching: .any)["windowDragBar"]
+        XCTAssertFalse(dragBar.exists, "No bar until the pointer reaches the top edge")
+        window.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0)).withOffset(CGVector(dx: 0, dy: 2)).hover()
+        XCTAssertTrue(dragBar.waitForExistence(timeout: 5), "The drag bar shows along the top edge")
+        XCTAssertEqual(dragBar.frame.minY, window.frame.minY, accuracy: 1)
+        let before = window.frame.origin
+        let grab = dragBar.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.5))
+        grab.press(forDuration: 0.3, thenDragTo: grab.withOffset(CGVector(dx: 40, dy: 30)))
+        XCTAssertGreaterThan(abs(window.frame.origin.x - before.x) + abs(window.frame.origin.y - before.y), 20, "Dragging it moves the window")
+        window.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.6)).hover()
+        XCTAssertTrue(dragBar.waitForNonExistence(timeout: 5), "The pointer leaving lets it go")
 
         // The pointer at the window's left edge floats the sidebar in, with the window's
         // controls and Keep Sidebar Shown in its top row.
