@@ -760,18 +760,34 @@ final class AxoUITests: XCTestCase {
         XCTAssertFalse(window.buttons[XCUIIdentifierCloseWindow].exists, "Nor the window's controls")
 
         // The pointer at the page's top edge shows a bar that moves the window, and leaving it
-        // lets it go.
-        let dragBar = app.descendants(matching: .any)["windowDragBar"]
-        XCTAssertFalse(dragBar.exists, "No bar until the pointer reaches the top edge")
-        window.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0)).withOffset(CGVector(dx: 0, dy: 2)).hover()
-        XCTAssertTrue(dragBar.waitForExistence(timeout: 5), "The drag bar shows along the top edge")
-        XCTAssertEqual(dragBar.frame.minY, window.frame.minY, accuracy: 1)
-        let before = window.frame.origin
-        let grab = dragBar.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.5))
-        grab.press(forDuration: 0.3, thenDragTo: grab.withOffset(CGVector(dx: 40, dy: 30)))
-        XCTAssertGreaterThan(abs(window.frame.origin.x - before.x) + abs(window.frame.origin.y - before.y), 20, "Dragging it moves the window")
+        // lets it go. It's only for the pointer (hidden from accessibility, as a title bar's
+        // space is), so it's found by the pixels it draws over the page; dragging it can't be
+        // checked here, since synthetic drags don't move windows on the hosted Mac.
+        let topEdge = window.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0)).withOffset(CGVector(dx: 0, dy: 2))
+        // The bar's grabber, a gray capsule centered on it, 7 pt down: it stands out from any page
+        // (which doesn't draw on the hosted Mac).
+        let barPoint = CGPoint(x: window.frame.width / 2, y: 7)
+        let pageColor = Self.color(at: barPoint, in: window)
+        topEdge.hover()
+        var barColor = Self.color(at: barPoint, in: window)
+        let showDeadline = Date.now.addingTimeInterval(5)
+        while Self.isClose(barColor, to: pageColor), Date.now < showDeadline {
+            RunLoop.current.run(until: .now.addingTimeInterval(0.25))
+            barColor = Self.color(at: barPoint, in: window)
+        }
+        let barShot = XCTAttachment(screenshot: window.screenshot())
+        barShot.name = "Drag bar along the top edge"
+        barShot.lifetime = .keepAlways
+        add(barShot)
+        XCTAssertFalse(Self.isClose(barColor, to: pageColor), "The drag bar shows along the top edge: \(pageColor) became \(barColor)")
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.6)).hover()
-        XCTAssertTrue(dragBar.waitForNonExistence(timeout: 5), "The pointer leaving lets it go")
+        var leftColor = Self.color(at: barPoint, in: window)
+        let hideDeadline = Date.now.addingTimeInterval(5)
+        while !Self.isClose(leftColor, to: pageColor), Date.now < hideDeadline {
+            RunLoop.current.run(until: .now.addingTimeInterval(0.25))
+            leftColor = Self.color(at: barPoint, in: window)
+        }
+        XCTAssertTrue(Self.isClose(leftColor, to: pageColor), "The pointer leaving lets it go")
 
         // The pointer at the window's left edge floats the sidebar in, with the window's
         // controls and Keep Sidebar Shown in its top row.
