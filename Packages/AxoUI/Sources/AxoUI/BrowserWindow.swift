@@ -222,6 +222,9 @@ public struct BrowserWindow: View {
                 ExtensionSidePanelView(model: model, panel: panel)
             }
         }
+        // The column's whole height, also for the empty state (No Tab Open), which is only as tall
+        // as its text: otherwise the column, its control bar included, sat centered in the window.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
             .safeAreaInset(edge: .top, spacing: 0) {
                 if let translation = model.selectedTranslation {
                     TranslationBar(model: model, translation: translation)

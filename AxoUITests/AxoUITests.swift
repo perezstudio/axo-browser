@@ -690,7 +690,8 @@ final class AxoUITests: XCTestCase {
         let sidebarTop = CGPoint(x: hide.minX - 30 - window.frame.minX, y: 8)
         let sidebarColor = Self.color(at: sidebarTop, in: window)
         XCTAssertFalse(Self.isClose(sidebarColor, to: raspberry), "The sidebar's top isn't tinted: \(sidebarColor)")
-        XCTAssertGreaterThan(app.descendants(matching: .any)["controlBar"].frame.minX, sidebar.frame.maxX - 1,
+        // The sidebar's list reaches 1 pt past its column, so the bar may start right at its end.
+        XCTAssertGreaterThanOrEqual(app.descendants(matching: .any)["controlBar"].frame.minX, sidebar.frame.maxX - 1,
                              "The control bar sits over the page, not the sidebar")
 
         app.typeKey(",", modifierFlags: .command)
