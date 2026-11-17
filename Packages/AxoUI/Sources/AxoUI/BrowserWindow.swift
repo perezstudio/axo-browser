@@ -420,7 +420,10 @@ public struct BrowserWindow: View {
             .modifier(PageTranslationTask(model: model))
             // Site Settings hangs from the sidebar's address bar; when that isn't on screen
             // (hidden, or the sidebar collapsed), from the top of the page instead.
+            // Only in the sidebar layout, the one place it presents from; elsewhere the 1 pt anchor
+            // showed in the accessibility tree as an element with no role (#136's audit).
             .overlay(alignment: .top) {
+                if navigationBarPlacement == .sidebar {
                 Color.clear
                     .frame(width: 1, height: 1)
                     .popover(isPresented: Binding(
@@ -429,13 +432,13 @@ public struct BrowserWindow: View {
                     ), arrowEdge: .top) {
                         SiteSettingsView(model: model)
                     }
-                    // After the popover, which otherwise brought the anchor back into the
-                    // accessibility tree as an element with no role (#136's audit).
                     .accessibilityHidden(true)
+                }
             }
             // So does a page's summary, which has no button while the sidebar shows (#67):
             // View › Summarize Page and the command bar ask for it.
             .overlay(alignment: .top) {
+                if navigationBarPlacement == .sidebar {
                 Color.clear
                     .frame(width: 1, height: 1)
                     .popover(isPresented: Binding(
@@ -444,9 +447,8 @@ public struct BrowserWindow: View {
                     ), arrowEdge: .top) {
                         PageSummaryView(state: model.pageSummary ?? .loading)
                     }
-                    // After the popover, which otherwise brought the anchor back into the
-                    // accessibility tree as an element with no role (#136's audit).
                     .accessibilityHidden(true)
+                }
             }
             .toolbar {
                 NavigationToolbar(model: model, placement: navigationBarPlacement,
