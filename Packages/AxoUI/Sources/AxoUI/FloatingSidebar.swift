@@ -10,6 +10,9 @@ import SwiftUI
 /// keyboard, and with VoiceOver.
 struct FloatingSidebar: View {
     let model: BrowserModel
+    /// Whether its top row holds back, forward, and reload (not above the page, where the
+    /// control bar has them).
+    var showsNavigation = true
     /// Shows the sidebar in the window again.
     let keepShown: () -> Void
     /// Reports the pointer entering and leaving the card.
@@ -24,7 +27,7 @@ struct FloatingSidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SidebarTopRow(model: model, isFloating: true, toggleSidebar: keepShown)
+            SidebarTopRow(model: model, isFloating: true, showsNavigation: showsNavigation, toggleSidebar: keepShown)
             SidebarView(model: model)
         }
         // The card holds the page's tools while it shows, as the sidebar does.

@@ -11,6 +11,9 @@ struct SidebarTopRow: View {
     let model: BrowserModel
     /// Whether this is the floating sidebar's row.
     var isFloating = false
+    /// Whether it holds back, forward, and reload: with the navigation bar above the page, the
+    /// page's control bar has them, and the row keeps only the window's controls and its button.
+    var showsNavigation = true
     /// Hides the sidebar, or, in the floating sidebar, keeps it shown.
     let toggleSidebar: () -> Void
 
@@ -46,17 +49,11 @@ struct SidebarTopRow: View {
                     .frame(width: WindowControls.size.width, height: WindowControls.size.height)
                     .padding(.leading, WindowControls.leading)
                 Spacer(minLength: 0)
-                HStack(spacing: 0) {
-                    BackForwardButtons(model: model)
-                        .buttonStyle(CapsuleIconButtonStyle(side: Self.capsuleButtonSide))
+                if showsNavigation {
+                    BackForwardCapsule(model: model)
+                    ReloadButton(model: model)
+                        .modifier(SidebarGlassButtonStyle())
                 }
-                .padding(.horizontal, Self.capsulePadding)
-                .frame(height: SidebarGlassButtonStyle.side)
-                .glassEffect(.regular.interactive(), in: .capsule)
-                .accessibilityElement(children: .contain)
-                .accessibilityLabel("Back and Forward")
-                ReloadButton(model: model)
-                    .modifier(SidebarGlassButtonStyle())
                 let title = isFloating ? "Keep Sidebar Shown" : "Hide Sidebar"
                 Button(title, systemImage: "sidebar.left", action: toggleSidebar)
                     .modifier(SidebarGlassButtonStyle())
@@ -76,6 +73,23 @@ struct SidebarTopRow: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("sidebarTopRow")
+    }
+}
+
+/// Back and forward in one glass capsule (#67), in the sidebar's top row or the page's control bar.
+struct BackForwardCapsule: View {
+    let model: BrowserModel
+
+    var body: some View {
+        HStack(spacing: 0) {
+            BackForwardButtons(model: model)
+                .buttonStyle(CapsuleIconButtonStyle(side: SidebarTopRow.capsuleButtonSide))
+        }
+        .padding(.horizontal, SidebarTopRow.capsulePadding)
+        .frame(height: SidebarGlassButtonStyle.side)
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Back and Forward")
     }
 }
 

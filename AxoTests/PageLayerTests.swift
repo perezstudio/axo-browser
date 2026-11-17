@@ -53,6 +53,30 @@ struct PageLayerTests {
         if let tabID { await model.closeTab(tabID) }
     }
 
+    /// Above the page (#170), the page's control bar sits at the top of the page's area, in
+    /// place of the window toolbar, and the page starts right below it.
+    @Test func thePageStartsBelowTheControlBarAboveThePage() async throws {
+        let model = try #require(AppEnvironment.browserModel)
+        let window = try #require(NSApp.windows.first { $0.identifier?.rawValue.contains("browser") == true })
+        let settings = AppEnvironment.settings
+        settings.set(NavigationBarPlacement.page.rawValue, forKey: NavigationBarPlacement.storageKey)
+        defer { settings.removeObject(forKey: NavigationBarPlacement.storageKey) }
+
+        let before = model.selectedTabID
+        await model.openTab(url: URL(string: "data:text/html,<title>Below</title>")!)
+        let tabID = model.selectedTabID != before ? model.selectedTabID : nil
+        #expect(tabID != nil, "A tab opened")
+        let top = window.frame.height
+        try await Self.waitUntil("the page sits below the control bar") {
+            Self.pageFrame(in: window).map { abs($0.maxY - (top - 52)) < 1 } ?? false
+        }
+        settings.removeObject(forKey: NavigationBarPlacement.storageKey)
+        try await Self.waitUntil("the page reaches the top again in the sidebar layout") {
+            Self.pageFrame(in: window).map { abs($0.maxY - top) < 1 } ?? false
+        }
+        if let tabID { await model.closeTab(tabID) }
+    }
+
     /// The sidebar's top row draws the window's own controls (its title bar is hidden); each is
     /// aimed at its window, so a click on a window in the background never closes, minimizes,
     /// or zooms the key one.
