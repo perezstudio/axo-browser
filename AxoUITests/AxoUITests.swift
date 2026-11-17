@@ -789,7 +789,8 @@ final class AxoUITests: XCTestCase {
         let sidebarTop = CGPoint(x: hide.minX - 30 - window.frame.minX, y: 8)
         let sidebarColor = Self.color(at: sidebarTop, in: window)
         XCTAssertFalse(Self.isClose(sidebarColor, to: raspberry), "The sidebar's top isn't tinted: \(sidebarColor)")
-        XCTAssertGreaterThan(app.descendants(matching: .any)["controlBar"].frame.minX, sidebar.frame.maxX - 1,
+        // The sidebar's list reaches 1 pt past its column, so the bar may start right at its end.
+        XCTAssertGreaterThanOrEqual(app.descendants(matching: .any)["controlBar"].frame.minX, sidebar.frame.maxX - 1,
                              "The control bar sits over the page, not the sidebar")
 
         app.typeKey(",", modifierFlags: .command)
@@ -940,7 +941,9 @@ final class AxoUITests: XCTestCase {
         XCTAssertFalse(window.toolbars.firstMatch.exists, "No toolbar with the sidebar shown")
 
         // Hidden from the menu (AppKit's own Toggle Sidebar, not the row's button), the page
-        // fills the window too, and ⌃⌘S shows the sidebar again.
+        // fills the window too, and ⌃⌘S shows the sidebar again. The page is clicked first, as
+        // a person would, so the shortcut doesn't depend on where Keep Sidebar Shown left focus.
+        page.click()
         app.typeKey("s", modifierFlags: [.command, .control])
         XCTAssertTrue(sidebar.waitForNonExistence(timeout: 5))
         XCTAssertFalse(window.toolbars.firstMatch.waitForExistence(timeout: 2), "No toolbar however the sidebar hides")

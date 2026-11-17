@@ -357,6 +357,9 @@ public struct BrowserWindow: View {
                 ExtensionSidePanelView(model: model, panel: panel)
             }
         }
+        // The column's whole height, also for the empty state (No Tab Open), which is only as tall
+        // as its text: otherwise the column, its control bar included, sat centered in the window.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
             .safeAreaInset(edge: .top, spacing: 0) {
                 if let translation = model.selectedTranslation {
                     TranslationBar(model: model, translation: translation)
@@ -420,26 +423,30 @@ public struct BrowserWindow: View {
             .overlay(alignment: .top) {
                 Color.clear
                     .frame(width: 1, height: 1)
-                    .accessibilityHidden(true)
                     .popover(isPresented: Binding(
                         get: { navigationBarPlacement == .sidebar && !model.isSidebarAddressBarOnScreen && model.isShowingSiteSettings },
                         set: { model.isShowingSiteSettings = $0 }
                     ), arrowEdge: .top) {
                         SiteSettingsView(model: model)
                     }
+                    // After the popover, which otherwise brought the anchor back into the
+                    // accessibility tree as an element with no role (#136's audit).
+                    .accessibilityHidden(true)
             }
             // So does a page's summary, which has no button while the sidebar shows (#67):
             // View › Summarize Page and the command bar ask for it.
             .overlay(alignment: .top) {
                 Color.clear
                     .frame(width: 1, height: 1)
-                    .accessibilityHidden(true)
                     .popover(isPresented: Binding(
                         get: { hidesToolbar && navigationBarPlacement == .sidebar && !model.isSidebarAddressBarOnScreen && model.isShowingSummary },
                         set: { model.isShowingSummary = $0 }
                     ), arrowEdge: .top) {
                         PageSummaryView(state: model.pageSummary ?? .loading)
                     }
+                    // After the popover, which otherwise brought the anchor back into the
+                    // accessibility tree as an element with no role (#136's audit).
+                    .accessibilityHidden(true)
             }
             .toolbar {
                 NavigationToolbar(model: model, placement: navigationBarPlacement,

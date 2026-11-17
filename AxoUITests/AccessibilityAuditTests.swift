@@ -77,7 +77,9 @@ final class AccessibilityAuditTests: XCTestCase {
                     // HSplitView's and VSplitView's host for one pane of a split view.
                     if children.count == 1, children[0].identifier == "splitPane" { return true }
                     // The split view's sidebar column, which holds the address bar.
-                    if children.contains(where: { ["sidebarAddressBar", "sidebarAddressField", "addressField"].contains($0.identifier) }) { return true }
+                    // The split view's sidebar column, which holds the address bar, or above the
+                    // page (#170) the sidebar's top row without one.
+                    if children.contains(where: { ["sidebarAddressBar", "sidebarAddressField", "addressField", "sidebarTopRow"].contains($0.identifier) }) { return true }
                     // Settings' sidebar column, which holds the list of panes in a scroll view,
                     // and the host of its search field. VoiceOver reads the list and the field.
                     if children.count == 1, children[0].elementType == .scrollView,
