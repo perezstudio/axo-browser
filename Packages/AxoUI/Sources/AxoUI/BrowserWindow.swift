@@ -26,8 +26,6 @@ public struct BrowserWindow: View {
     @State private var isSidebarFloating = false
     /// Whether the pointer is over the floating sidebar.
     @State private var isPointerOverFloatingSidebar = false
-    /// Whether a menu (a context menu from the floating sidebar, say) is open.
-    @State private var isMenuTracking = false
     /// The wait that lets the floating sidebar go, replaced by each newer one.
     @State private var floatingSidebarRelease: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -137,11 +135,6 @@ public struct BrowserWindow: View {
             }
             .onChange(of: model.fullscreenTabID) { dismissFloatingSidebar() }
             .onChange(of: isSidebarFloating) { model.isFloatingSidebarShown = isSidebarFloating }
-            .onReceive(NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)) { _ in isMenuTracking = true }
-            .onReceive(NotificationCenter.default.publisher(for: NSMenu.didEndTrackingNotification)) { _ in
-                isMenuTracking = false
-                letFloatingSidebarGo()
-            }
     }
 
     private var splitViewColumns: some View {
@@ -305,11 +298,19 @@ public struct BrowserWindow: View {
                 try? await Task.sleep(for: .milliseconds(300))
                 guard !Task.isCancelled, !isPointerOverFloatingSidebar else { return }
                 let window = splitController.controller?.view.window
-                if FloatingSidebar.isHolding(model) || FloatingSidebar.isHolding(window) || isMenuTracking { continue }
+                if FloatingSidebar.isHolding(model) || FloatingSidebar.isHolding(window) || Self.isMenuOpen { continue }
                 isSidebarFloating = false
                 return
             }
         }
+    }
+
+    /// Whether a menu (a context menu from the floating sidebar, the menu bar's) is open: the
+    /// main run loop runs in its event-tracking mode while one is. Read when needed rather than
+    /// followed in state, since a redraw of the window while a menu is open rebuilt the menu
+    /// bar's menus and closed it.
+    private static var isMenuOpen: Bool {
+        RunLoop.main.currentMode == .eventTracking
     }
 
     /// Takes the floating sidebar away at once, forgetting where the pointer was: a removed
