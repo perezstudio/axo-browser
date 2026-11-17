@@ -5,8 +5,9 @@ import WebKit
 @testable import Axo
 
 /// Where the page sits in the real browser window (#67), which these tests host in: with the
-/// navigation bar in the sidebar, the window has no toolbar and the page reaches the window's top
-/// edge, with the sidebar shown or hidden; with the sidebar's address bar hidden, the toolbar
+/// navigation bar in the sidebar, the window has no toolbar: the page reaches the window's top
+/// edge with the sidebar shown, and is a card inset 8 pt with it hidden; with the sidebar's
+/// address bar hidden, the toolbar
 /// comes back and the page sits below it, never under it (a visible toolbar takes every click in
 /// its 52 pt). Checked here
 /// rather than in a UI test because the hosted runner's accessibility reports a web view's frame
@@ -32,12 +33,15 @@ struct PageLayerTests {
             Self.pageFrame(in: window).map { abs($0.maxY - top) < 1 } ?? false
         }
 
-        // Hidden, the sidebar floats in from the edge instead, and the page still fills the
-        // window: no toolbar comes back (part 3 of #67).
+        // Hidden, the sidebar floats in from the edge instead, and no toolbar comes back
+        // (part 3 of #67).
         split.toggleSidebar(nil)
         try await Self.waitUntil("the sidebar collapses") { sidebar.isCollapsed }
-        try await Task.sleep(for: .milliseconds(500))
-        #expect(Self.pageFrame(in: window).map { abs($0.maxY - top) < 1 } == true, "The page still reaches the top")
+        // Hidden, the page is a card inset 8 pt from every edge of the window, on the Space's
+        // theme, whose margin moves the window.
+        try await Self.waitUntil("the page becomes a card inset from the window's edges") {
+            Self.pageFrame(in: window).map { abs($0.maxY - (top - 8)) < 1 && abs($0.minX - 8) < 1 && abs($0.minY - 8) < 1 } ?? false
+        }
         split.toggleSidebar(nil)
         try await Self.waitUntil("the sidebar shows again") { !sidebar.isCollapsed }
 

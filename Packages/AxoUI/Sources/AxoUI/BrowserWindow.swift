@@ -30,12 +30,6 @@ public struct BrowserWindow: View {
     @State private var isMenuTracking = false
     /// The wait that lets the floating sidebar go, replaced by each newer one.
     @State private var floatingSidebarRelease: Task<Void, Never>?
-    /// Whether the bar that moves the window shows along the page's top edge (#67).
-    @State private var isDragBarShown = false
-    /// Whether the pointer is over that bar.
-    @State private var isPointerOverDragBar = false
-    /// The wait that lets the drag bar go.
-    @State private var dragBarRelease: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Whether the window has no toolbar (#67): with the navigation bar in the sidebar and its
@@ -159,9 +153,6 @@ public struct BrowserWindow: View {
             .onChange(of: floatsSidebar) {
                 if !floatsSidebar {
                     dismissFloatingSidebar()
-                    dragBarRelease?.cancel()
-                    isDragBarShown = false
-                    isPointerOverDragBar = false
                 }
             }
             // Something the sidebar shows, opened from a menu (View › Show Downloads, Site
@@ -247,13 +238,12 @@ public struct BrowserWindow: View {
             }
             // With no toolbar above it, the page reaches the window's top edge (#67). After
             // the translation bar's inset, so the page sits below the bar rather than under it.
+            // With the sidebar hidden the page is a card on the Space's theme (#67), inset so
+            // the margin around it moves the window, as the board draws it.
+            .modifier(PageCard(isCard: floatsSidebar))
             .ignoresSafeArea(.container, edges: hidesToolbar ? .top : [])
+            .modifier(PageCardMargin(model: model, isCard: floatsSidebar))
             // The hidden sidebar floats in from the window's left edge (#67).
-            // The control bar moves the window above the page; in the sidebar layout, a bar
-            // along the top edge does.
-            .overlay(alignment: .top) {
-                if floatsSidebar, !showsControlBar { windowDragBar }
-            }
             .overlay(alignment: .leading) {
                 if floatsSidebar { floatingSidebar }
             }
@@ -343,43 +333,6 @@ public struct BrowserWindow: View {
         }
         .ignoresSafeArea(.container, edges: .top)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.26), value: isSidebarFloating)
-    }
-
-    /// The top edge's hover strip and, once the pointer reaches it, the bar that moves the window.
-    private var windowDragBar: some View {
-        ZStack(alignment: .top) {
-            EdgeHoverDetector { isOver in
-                if isOver {
-                    dragBarRelease?.cancel()
-                    isDragBarShown = true
-                } else {
-                    letDragBarGo()
-                }
-            }
-            .frame(height: 4)
-            .frame(maxWidth: .infinity)
-            .accessibilityHidden(true)
-            if isDragBarShown {
-                WindowDragBar { isOver in
-                    isPointerOverDragBar = isOver
-                    if isOver { dragBarRelease?.cancel() } else { letDragBarGo() }
-                }
-                .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
-            }
-        }
-        .ignoresSafeArea(.container, edges: .top)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: isDragBarShown)
-    }
-
-    /// Lets the drag bar go a moment after the pointer leaves it or the top edge.
-    private func letDragBarGo() {
-        guard isDragBarShown else { return }
-        dragBarRelease?.cancel()
-        dragBarRelease = Task {
-            try? await Task.sleep(for: .milliseconds(300))
-            guard !Task.isCancelled, !isPointerOverDragBar else { return }
-            isDragBarShown = false
-        }
     }
 
     /// Lets the floating sidebar go a moment after the pointer leaves it, and only once the
