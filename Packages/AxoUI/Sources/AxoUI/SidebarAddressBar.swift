@@ -29,8 +29,9 @@ struct SidebarAddressBar: View {
             }
         }
         .anchorPreference(key: AddressBarBounds.self, value: .bounds) { $0 }
-        .onAppear { model.isSidebarAddressBarOnScreen = true }
-        .onDisappear { model.isSidebarAddressBarOnScreen = false }
+        // Counted, since the floating sidebar's bar and the sidebar's can overlap for a moment.
+        .onAppear { model.sidebarAddressBarsOnScreen += 1 }
+        .onDisappear { model.sidebarAddressBarsOnScreen = max(0, model.sidebarAddressBarsOnScreen - 1) }
         // Site Settings hangs from the bar, which stays when the pointer leaves (the hover
         // button doesn't), whether it opened from there or from View › Site Settings….
         .popover(isPresented: Binding(get: { model.isShowingSiteSettings }, set: { model.isShowingSiteSettings = $0 }), arrowEdge: .bottom) {

@@ -14,6 +14,9 @@ struct SpaceThemeModifier: ViewModifier {
     /// The model, read here rather than by the window, so a theme change (each tick of a
     /// slider) redraws only the sidebar.
     let model: BrowserModel
+    /// Whether this is the floating sidebar's card (#67), drawn as the board's tinted glass over
+    /// the page rather than the window's background.
+    var isFloating = false
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -34,7 +37,11 @@ struct SpaceThemeModifier: ViewModifier {
             .environment(\.windowColorScheme, colorScheme)
             .background {
                 ZStack {
-                    if let resolved {
+                    if isFloating {
+                        FloatingThemeGlass(theme: resolved, reduceTransparency: reduceTransparency)
+                            .id(spaceID)
+                            .transition(.opacity)
+                    } else if let resolved {
                         SpaceThemeBackground(theme: resolved)
                             // One view per Space, so a change of Space cross-fades from the old
                             // look to the new one, while editing changes it in place.
@@ -105,6 +112,51 @@ struct SpaceThemeBackground: View {
         } else {
             LinearGradient(colors: colors, startPoint: .top, endPoint: .bottom)
         }
+    }
+}
+
+/// The floating sidebar's card as the board draws it (#67): the Space's theme colors at 58% over
+/// a blur of the page beneath, or the sidebar's material alone without a theme. It blends within
+/// the window, since the card floats over the page rather than at the window's edge.
+struct FloatingThemeGlass: View {
+    let theme: ResolvedSpaceTheme?
+    let reduceTransparency: Bool
+
+    /// The theme colors' opacity over the blur, the board's 58%.
+    static let tintOpacity = 0.58
+
+    var body: some View {
+        ZStack {
+            WithinWindowMaterial(isDark: theme?.isDark)
+            if let theme {
+                let colors = theme.colors.map(Color.init(themeColor:))
+                Group {
+                    if colors.count == 1 {
+                        colors[0]
+                    } else {
+                        LinearGradient(colors: colors, startPoint: .top, endPoint: .bottom)
+                    }
+                }
+                .opacity(reduceTransparency ? 1 : Self.tintOpacity)
+            }
+        }
+    }
+}
+
+/// The system's sidebar material, blurring what's beneath it in the window.
+private struct WithinWindowMaterial: NSViewRepresentable {
+    let isDark: Bool?
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .sidebar
+        view.blendingMode = .withinWindow
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {
+        view.appearance = isDark.map { NSAppearance(named: $0 ? .darkAqua : .aqua) } ?? nil
     }
 }
 

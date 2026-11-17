@@ -702,8 +702,8 @@ final class AxoUITests: XCTestCase {
     /// With the navigation bar in the sidebar, the sidebar's top row stands in for the window
     /// toolbar (#67): back, forward, reload, and Hide Sidebar sit beside the window's controls,
     /// the window has no toolbar, and the page reaches the window's top edge, where clicks reach
-    /// it. With the sidebar hidden the toolbar comes back (and the page sits below it, checked in
-    /// PageLayerTests).
+    /// it. With the sidebar hidden the page is a card on the Space's theme and the sidebar floats
+    /// in from the left edge; with the sidebar's address bar hidden, the toolbar comes back.
     @MainActor
     func testTheSidebarReplacesTheToolbar() throws {
         let app = launchApp()
@@ -750,24 +750,72 @@ final class AxoUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(page.frame.minY, findField.frame.maxY - 1, "The page sits below the find bar")
         app.typeKey(.escape, modifierFlags: [])
 
-        // Hidden from the button, the sidebar gives way to the toolbar, with the page below it.
+        // Hidden from the button, the sidebar leaves the page filling the window, with no
+        // toolbar (part 3 of #67; the page's place is checked in AxoTests' PageLayerTests, since
+        // the hosted runner's accessibility doesn't follow a web view's frame).
         row.buttons["hideSidebarButton"].click()
-        XCTAssertTrue(window.toolbars.firstMatch.waitForExistence(timeout: 5), "The toolbar comes back with the sidebar hidden")
         XCTAssertTrue(sidebar.waitForNonExistence(timeout: 5))
-        // That the page then sits below the toolbar is checked in AxoTests' PageLayerTests: the
-        // hosted runner's accessibility doesn't follow a web view's frame.
+        XCTAssertFalse(window.toolbars.firstMatch.waitForExistence(timeout: 2), "No toolbar with the sidebar hidden")
+        XCTAssertFalse(window.buttons[XCUIIdentifierCloseWindow].exists, "Nor the window's controls")
 
-        // Shown again (View › Show Sidebar), the top row takes over again.
-        app.typeKey("s", modifierFlags: [.command, .control])
+        // The page is a card on the Space's theme, inset so the margin moves the window (its
+        // place is checked in AxoTests' PageLayerTests; the screenshot shows the look).
+        let cardShot = XCTAttachment(screenshot: window.screenshot())
+        cardShot.name = "Page as a card with the sidebar hidden"
+        cardShot.lifetime = .keepAlways
+        add(cardShot)
+
+        // The pointer at the window's left edge floats the sidebar in, with the window's
+        // controls and Keep Sidebar Shown in its top row.
+        let floating = app.descendants(matching: .any)["floatingSidebar"]
+        let edge = window.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5)).withOffset(CGVector(dx: 2, dy: 0))
+        edge.hover()
+        XCTAssertTrue(floating.waitForExistence(timeout: 5), "The sidebar floats in from the left edge")
+        XCTAssertTrue(floating.buttons["keepSidebarShownButton"].exists)
+        XCTAssertTrue(window.buttons[XCUIIdentifierCloseWindow].exists, "The window's controls are in its top row")
+        // Accessibility reports the card with the margin around it (which counts as the card for
+        // the pointer), so its width is checked, not its inset; the screenshot shows the look.
+        XCTAssertGreaterThanOrEqual(floating.frame.width, 268, "The board's 268 pt card")
+        XCTAssertLessThan(floating.frame.width, window.frame.width / 2, "A card over the page, not across it")
+        let shot2 = XCTAttachment(screenshot: window.screenshot())
+        shot2.name = "Floating sidebar"
+        shot2.lifetime = .keepAlways
+        add(shot2)
+        // Its rows answer the pointer as the sidebar's do.
+        floating.staticTexts["Reached"].hover()
+        XCTAssertTrue(floating.buttons["tabRowCloseButton"].waitForExistence(timeout: 5), "Hovering a row shows its close button")
+
+        // Leaving it lets it go.
+        window.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.5)).hover()
+        XCTAssertTrue(floating.waitForNonExistence(timeout: 5), "The pointer leaving lets it go")
+
+        // Keep Sidebar Shown puts it back in the window, where the top row takes over again.
+        edge.hover()
+        XCTAssertTrue(floating.waitForExistence(timeout: 5))
+        floating.buttons["keepSidebarShownButton"].click()
+        XCTAssertTrue(floating.waitForNonExistence(timeout: 5))
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
         XCTAssertTrue(row.waitForExistence(timeout: 5))
-        XCTAssertTrue(window.toolbars.firstMatch.waitForNonExistence(timeout: 5), "No toolbar with the sidebar shown")
+        XCTAssertFalse(window.toolbars.firstMatch.exists, "No toolbar with the sidebar shown")
 
-        // Hidden from the menu (AppKit's own Toggle Sidebar, not the row's button), the toolbar
-        // comes back too.
+        // Hidden from the menu (AppKit's own Toggle Sidebar, not the row's button), the page
+        // fills the window too, and ⌃⌘S shows the sidebar again. The page is clicked first, as
+        // a person would, so the shortcut doesn't depend on where Keep Sidebar Shown left focus.
+        page.click()
         app.typeKey("s", modifierFlags: [.command, .control])
         XCTAssertTrue(sidebar.waitForNonExistence(timeout: 5))
-        XCTAssertTrue(window.toolbars.firstMatch.waitForExistence(timeout: 5), "The toolbar comes back however the sidebar hides")
+        XCTAssertFalse(window.toolbars.firstMatch.waitForExistence(timeout: 2), "No toolbar however the sidebar hides")
+        // View › Show Downloads while it's hidden brings the card in, with the list open.
+        app.menuBars.menuBarItems["View"].click()
+        app.menuBars.menuItems["Show Downloads"].click()
+        XCTAssertTrue(floating.waitForExistence(timeout: 5), "The card comes in for the list")
+        XCTAssertTrue(app.buttons["clearDownloadsButton"].waitForExistence(timeout: 5))
+        // The pointer away from the card: the open list still holds it.
+        window.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5)).hover()
+        XCTAssertTrue(floating.exists, "The open list holds the card")
+        app.typeKey("l", modifierFlags: [.command, .option])
+        XCTAssertTrue(app.buttons["clearDownloadsButton"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(floating.waitForNonExistence(timeout: 5), "And goes once it's closed, with the pointer elsewhere")
         app.typeKey("s", modifierFlags: [.command, .control])
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
 

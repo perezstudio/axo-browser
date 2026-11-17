@@ -5,15 +5,16 @@ import WebKit
 @testable import Axo
 
 /// Where the page sits in the real browser window (#67), which these tests host in: with the
-/// navigation bar in the sidebar and the sidebar shown, the window has no toolbar and the page
-/// reaches the window's top edge; with the sidebar hidden, the toolbar comes back and the page
-/// sits below it, never under it (a visible toolbar takes every click in its 52 pt). Checked here
+/// navigation bar in the sidebar, the window has no toolbar and the page reaches the window's top
+/// edge, with the sidebar shown or hidden; with the sidebar's address bar hidden, the toolbar
+/// comes back and the page sits below it, never under it (a visible toolbar takes every click in
+/// its 52 pt). Checked here
 /// rather than in a UI test because the hosted runner's accessibility reports a web view's frame
 /// without following the layout.
 @MainActor
 @Suite(.serialized)
 struct PageLayerTests {
-    @Test func thePageReachesTheWindowsTopOnlyWhileTheSidebarShows() async throws {
+    @Test func thePageReachesTheWindowsTopUnlessTheToolbarShows() async throws {
         let model = try #require(AppEnvironment.browserModel)
         let window = try #require(NSApp.windows.first { $0.identifier?.rawValue.contains("browser") == true })
         let split = try #require(Self.splitController(in: window.contentView))
@@ -31,14 +32,26 @@ struct PageLayerTests {
             Self.pageFrame(in: window).map { abs($0.maxY - top) < 1 } ?? false
         }
 
+        // Hidden, the sidebar floats in from the edge instead, and no toolbar comes back
+        // (part 3 of #67).
         split.toggleSidebar(nil)
+        try await Self.waitUntil("the sidebar collapses") { sidebar.isCollapsed }
+        // Hidden, the page is a card inset 8 pt from every edge of the window, on the Space's
+        // theme, whose margin moves the window.
+        try await Self.waitUntil("the page becomes a card inset from the window's edges") {
+            Self.pageFrame(in: window).map { abs($0.maxY - (top - 8)) < 1 && abs($0.minX - 8) < 1 && abs($0.minY - 8) < 1 } ?? false
+        }
+        split.toggleSidebar(nil)
+        try await Self.waitUntil("the sidebar shows again") { !sidebar.isCollapsed }
+
+        // With the sidebar's address bar hidden, the toolbar comes back, with the page below it.
+        model.setSidebarAddressBarShown(false)
         try await Self.waitUntil("the page moves below the toolbar") {
             Self.pageFrame(in: window).map { $0.maxY <= top - 40 } ?? false
         }
-
-        split.toggleSidebar(nil)
+        model.setSidebarAddressBarShown(true)
         try await Self.waitUntil("the page reaches the top again") {
-            !sidebar.isCollapsed && Self.pageFrame(in: window).map { abs($0.maxY - top) < 1 } ?? false
+            Self.pageFrame(in: window).map { abs($0.maxY - top) < 1 } ?? false
         }
         if let tabID { await model.closeTab(tabID) }
     }
