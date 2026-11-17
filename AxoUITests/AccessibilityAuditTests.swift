@@ -107,6 +107,27 @@ final class AccessibilityAuditTests: XCTestCase {
         }
     }
 
+    /// Tabs at the top (#136): the tab bar with a tab, and the floating tab bar.
+    @MainActor
+    func testAuditTabsOnTop() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        AxoUITests.openPage("data:text/html,<title>Pond</title><p>Axolotls.</p>", in: app)
+        XCTAssertTrue(sidebar.staticTexts["Pond"].waitForExistence(timeout: 10))
+        app.typeKey(",", modifierFlags: .command)
+        AxoUITests.selectSettingsPane("general", in: app)
+        app.radioButtons["At the top"].click()
+        app.typeKey("w", modifierFlags: .command)
+        XCTAssertTrue(app.descendants(matching: .any)["tabBar"].waitForExistence(timeout: 5))
+        try audit(app, "tabs on top")
+
+        app.buttons["tabBarToggleButton"].click()
+        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0)).withOffset(CGVector(dx: 0, dy: 3)).hover()
+        XCTAssertTrue(app.descendants(matching: .any)["floatingTabBar"].waitForExistence(timeout: 5))
+        try audit(app, "floating tab bar")
+    }
+
     /// The page's control bar with the navigation bar above the page (#170), with the sidebar
     /// shown and hidden (when it holds the window's controls and Show Sidebar).
     @MainActor

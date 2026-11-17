@@ -3,6 +3,14 @@ import SwiftUI
 
 // Mac only; iPhone and iPad have their own chrome.
 #if os(macOS)
+/// The control bar's button for the tab bar, with tabs at the top (#136).
+struct TabBarToggle {
+    /// Whether the tab bar is hidden.
+    let isHidden: Bool
+    /// Hides or shows it.
+    let toggle: () -> Void
+}
+
 /// The page's control bar with the navigation bar above the page (#170): back and forward,
 /// reload, the address field in the middle, and the page's tools (extensions, Downloads, the
 /// summary) at the right, in a bar at the top of the page's area, on the page's own color
@@ -14,10 +22,14 @@ struct ControlBar: View {
     /// Whether the sidebar is hidden; the bar then also holds the window's controls and Show
     /// Sidebar.
     let isSidebarHidden: Bool
+    /// With tabs at the top (#136), the button that hides or shows the tab bar.
+    var tabBar: TabBarToggle?
     /// Shows the sidebar again.
     let showSidebar: () -> Void
     @AppStorage(ToolbarTintSettings.storageKey) private var tintsFromPage = true
     @Environment(\.colorScheme) private var colorScheme
+    /// Whether the address field has focus, for the focus ring around its capsule.
+    @State private var isAddressFocused = false
 
     /// As tall as the title bar's area it sits in, so its 36 pt buttons are centered with the
     /// window's controls, 26 pt down.
@@ -38,6 +50,13 @@ struct ControlBar: View {
                         .help("Show Sidebar")
                         .accessibilityIdentifier("showSidebarButton")
                 }
+                if let tabBar {
+                    let title = tabBar.isHidden ? "Keep Tab Bar Shown" : "Hide Tab Bar"
+                    Button(title, systemImage: "rectangle.topthird.inset.filled", action: tabBar.toggle)
+                        .modifier(SidebarGlassButtonStyle())
+                        .help(title)
+                        .accessibilityIdentifier("tabBarToggleButton")
+                }
                 BackForwardCapsule(model: model)
                 ReloadButton(model: model)
                     .modifier(SidebarGlassButtonStyle())
@@ -47,6 +66,15 @@ struct ControlBar: View {
                     .layoutPriority(-1)
                     .frame(height: SidebarGlassButtonStyle.side)
                     .glassEffect(.regular, in: .capsule)
+                    // The field is plain; while it has focus, the capsule shows the focus ring.
+                    .overlay {
+                        if isAddressFocused {
+                            Capsule()
+                                .strokeBorder(Color(nsColor: .keyboardFocusIndicatorColor), lineWidth: 3)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .onPreferenceChange(AddressFieldFocus.self) { isAddressFocused = $0 }
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("pageAddressBar")
                     .frame(maxWidth: .infinity)
@@ -58,6 +86,14 @@ struct ControlBar: View {
         .background {
             ZStack {
                 Rectangle().fill(background)
+                    // Under the tab bar, the page's top edge casts the board's shadow up onto it,
+                    // with a hairline (#136).
+                    .shadow(color: .black.opacity(castsShadowUp ? 0.28 : 0), radius: 9, y: -6)
+                    .overlay(alignment: .top) {
+                        if castsShadowUp {
+                            Rectangle().fill(.black.opacity(0.18)).frame(height: 0.5)
+                        }
+                    }
                 // The bar's empty space moves the window, and a double click zooms it, as the
                 // title bar's did.
                 Color.clear
@@ -72,6 +108,9 @@ struct ControlBar: View {
         .accessibilityLabel("Controls")
         .accessibilityIdentifier("controlBar")
     }
+
+    /// Whether the tab bar sits above the bar, which the page's top edge casts a shadow on.
+    private var castsShadowUp: Bool { tabBar.map { !$0.isHidden } ?? false }
 
     /// The gap at the bar's ends.
     static let horizontalPadding: CGFloat = 12

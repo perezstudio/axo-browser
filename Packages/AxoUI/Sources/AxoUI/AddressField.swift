@@ -9,7 +9,14 @@ struct AddressField: View {
 
     var body: some View {
         TextField("Search or enter address", text: $text, selection: $selection)
+            #if os(macOS)
+            // Plain inside the control bar's capsule, which draws the focus ring around itself
+            // while the field has focus (`AddressFieldFocus`), as Safari's address field does.
+            .textFieldStyle(.plain)
+            .preference(key: AddressFieldFocus.self, value: isFocused)
+            #else
             .textFieldStyle(.roundedBorder)
+            #endif
             .focused($isFocused)
             .autocorrectionDisabled()
             .accessibilityLabel("Address")
@@ -55,4 +62,11 @@ struct AddressField: View {
     private var currentAddress: String {
         (model.selectedPage?.url ?? model.shownTab?.url)?.absoluteString ?? ""
     }
+}
+
+/// Whether the address field has keyboard focus, for the capsule around it to draw the focus
+/// ring (#170).
+struct AddressFieldFocus: PreferenceKey {
+    static let defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
 }

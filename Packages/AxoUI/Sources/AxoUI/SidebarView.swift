@@ -21,30 +21,7 @@ struct SidebarView: View {
 
     var body: some View {
         spacePages
-        .sheet(isPresented: $isShowingArchive) {
-            ArchivedTabsView(model: model).windowAppearance()
-        }
-        .sheet(item: Binding(get: { model.pendingExtensionInstall }, set: { if $0 == nil { Task { await model.cancelExtensionInstall() } } })) { prompt in
-            ExtensionInstallSheet(model: model, prompt: prompt).windowAppearance()
-        }
-        .sheet(isPresented: Binding(get: { model.isShowingExtensions }, set: { model.isShowingExtensions = $0 })) {
-            ExtensionsView(model: model).windowAppearance()
-        }
-        .sheet(item: Binding(get: { model.importSession }, set: { model.importSession = $0 })) { session in
-            ImportSheet(model: model, session: session).windowAppearance()
-        }
-        .sheet(item: Binding(get: { model.namingRequest }, set: { model.namingRequest = $0 })) { request in
-            folderNameSheet(for: request).windowAppearance()
-        }
-        .sheet(item: Binding(get: { model.customizationDraft }, set: { model.customizationDraft = $0 })) { draft in
-            CustomizeSiteSheet(model: model, customization: draft).windowAppearance()
-        }
-        .sheet(item: Binding(get: { model.spaceToRename }, set: { model.spaceToRename = $0 })) { space in
-            NameSheet(title: "Rename Space", initialName: space.name, confirmTitle: "Rename") { name in
-                Task { await model.renameSpace(space.id, to: name) }
-            }
-            .windowAppearance()
-        }
+        .modifier(BrowserSheets(model: model, isShowingArchive: $isShowingArchive))
         // Two-finger swipes over the favorites and tabs move between Spaces (not over the
         // address bar, which stays put).
         .background { SidebarSwipeCatcher(model: model, state: swipe) }
@@ -153,19 +130,6 @@ extension SidebarView {
     }
 
 
-    @ViewBuilder
-    private func folderNameSheet(for request: NamingRequest) -> some View {
-        switch request {
-        case .newFolder(let parent, let moving):
-            NameSheet(title: "New Folder", initialName: "", confirmTitle: "Create") { name in
-                Task { await model.createFolder(named: name, parent: parent, moving: moving) }
-            }
-        case .renameFolder(let folder):
-            NameSheet(title: "Rename Folder", initialName: folder.name, confirmTitle: "Rename") { name in
-                Task { await model.renameFolder(folder.id, to: name) }
-            }
-        }
-    }
 
 }
 

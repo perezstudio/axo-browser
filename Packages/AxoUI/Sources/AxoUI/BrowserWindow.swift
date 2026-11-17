@@ -7,7 +7,17 @@ import SwiftUI
 /// The root view of a browser window: the sidebar on the left and web content on the right.
 public struct BrowserWindow: View {
     @Bindable private var model: BrowserModel
-    @AppStorage(NavigationBarPlacement.storageKey) private var navigationBarPlacement = NavigationBarPlacement.sidebar
+    @AppStorage(NavigationBarPlacement.storageKey) private var chosenNavigationBarPlacement = NavigationBarPlacement.sidebar
+    @AppStorage(TabsPlacement.storageKey) private var tabsPlacement = TabsPlacement.sidebar
+    /// Whether the tab bar is hidden, with tabs at the top (#136): the page is a card, and the bar
+    /// floats in from the window's top edge.
+    @State private var isTabBarHidden = false
+    /// Whether the hidden tab bar floats over the page.
+    @State private var isTabBarFloating = false
+    /// Whether the pointer is over the floating tab bar.
+    @State private var isPointerOverFloatingTabBar = false
+    /// The wait that lets the floating tab bar go.
+    @State private var floatingTabBarRelease: Task<Void, Never>?
     @AppStorage(AddressBarSettings.showsSidebarAddressBarKey) private var showsSidebarAddressBar = true
     @AppStorage(AddressEditingPlacement.storageKey) private var addressEditingPlacement = AddressEditingPlacement.commandBar
     /// The split view's columns; the top row's Hide Sidebar sets them.
@@ -29,6 +39,14 @@ public struct BrowserWindow: View {
     /// The wait that lets the floating sidebar go, replaced by each newer one.
     @State private var floatingSidebarRelease: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Whether tabs are at the top (#136), in a tab bar rather than the sidebar.
+    private var tabsOnTop: Bool { tabsPlacement == .top }
+
+    /// Where the navigation bar goes: above the page while tabs are at the top.
+    private var navigationBarPlacement: NavigationBarPlacement {
+        tabsPlacement.navigationBarPlacement(chosen: chosenNavigationBarPlacement)
+    }
 
     /// Whether the window has no toolbar (#67): with the navigation bar in the sidebar and its
     /// address bar shown, outside full screen (where the title bar's area isn't there). The page
@@ -61,13 +79,24 @@ public struct BrowserWindow: View {
 
     /// Whether the sidebar's top row stands in for the window toolbar: while the sidebar shows.
     private var sidebarReplacesToolbar: Bool {
-        hidesToolbar && !isSidebarCollapsed
+        !tabsOnTop && hidesToolbar && !isSidebarCollapsed
     }
 
     /// Whether the hidden sidebar floats in from the window's left edge, as on the board, while
     /// the page fills the window.
     private var floatsSidebar: Bool {
-        hidesToolbar && isSidebarCollapsed
+        !tabsOnTop && hidesToolbar && isSidebarCollapsed
+    }
+
+    /// Whether the page is a card on the Space's theme: with the sidebar hidden (#67), or the
+    /// tab bar hidden (#136).
+    private var showsPageAsCard: Bool {
+        floatsSidebar || (tabsOnTop && isTabBarHidden && hidesToolbar)
+    }
+
+    /// Whether the tab bar sits above the control bar (#136).
+    private var showsTabBar: Bool {
+        tabsOnTop && !isTabBarHidden && hidesToolbar
     }
 
     /// Creates a window showing `model`.
@@ -89,6 +118,10 @@ public struct BrowserWindow: View {
                     .toolbar(.hidden, for: .windowToolbar)
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("fullscreenPage")
+            } else if tabsOnTop {
+                tabsOnTopLayout
+                    .disabled(model.firstRun != nil)
+                    .accessibilityHidden(model.firstRun != nil)
             } else {
                 splitView
                     // Nothing behind first run's card takes clicks, keys, or focus.
@@ -142,6 +175,91 @@ public struct BrowserWindow: View {
         } message: { message in
             Text(message)
         }
+    }
+
+    /// With tabs at the top (#136): the page column alone, its tab bar and control bar above the
+    /// page, and no split view (collapsing its sidebar would be saved in Axo's defaults, which UI
+    /// tests share with the person's Axo). The window's sheets that the sidebar presents in the
+    /// other layout are presented here.
+    private var tabsOnTopLayout: some View {
+        pageColumn
+            // The hidden tab bar floats in from the window's top edge.
+            .overlay(alignment: .top) {
+                if tabsOnTop, isTabBarHidden, hidesToolbar { floatingTabBar }
+            }
+            .modifier(BrowserSheets(model: model, isShowingArchive: Binding(
+                get: { model.isShowingArchive }, set: { model.isShowingArchive = $0 })))
+            .modifier(SpaceSheets(model: model))
+            .onChange(of: isTabBarHidden) { if !isTabBarHidden { dismissFloatingTabBar() } }
+    }
+
+    /// Hides or shows the tab bar (#136).
+    private func toggleTabBar() {
+        dismissFloatingTabBar()
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.26)) { isTabBarHidden.toggle() }
+    }
+
+    /// The top edge's hover strip and, once the pointer reaches it, the tab bar as glass over the
+    /// page, inset as the board draws it.
+    private var floatingTabBar: some View {
+        ZStack(alignment: .top) {
+            EdgeHoverDetector { isOver in
+                if isOver {
+                    floatingTabBarRelease?.cancel()
+                    isTabBarFloating = true
+                } else {
+                    letFloatingTabBarGo()
+                }
+            }
+            .frame(height: 14)
+            .frame(maxWidth: .infinity)
+            .accessibilityHidden(true)
+            if isTabBarFloating {
+                TabBar(model: model, isFloating: true)
+                    .modifier(SpaceThemeModifier(model: model, isFloating: true))
+                    .clipShape(.rect(cornerRadius: FloatingSidebar.cornerRadius))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: FloatingSidebar.cornerRadius)
+                            .strokeBorder(.white.opacity(0.28), lineWidth: 0.5)
+                            .allowsHitTesting(false)
+                    }
+                    .shadow(color: .black.opacity(0.35), radius: 25, y: 18)
+                    .padding(FloatingSidebar.inset)
+                    .contentShape(.rect)
+                    .onHover { isOver in
+                        isPointerOverFloatingTabBar = isOver
+                        if isOver { floatingTabBarRelease?.cancel() } else { letFloatingTabBarGo() }
+                    }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("floatingTabBar")
+                    .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .ignoresSafeArea(.container, edges: .top)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.26), value: isTabBarFloating)
+    }
+
+    /// Lets the floating tab bar go a moment after the pointer leaves it, once no menu (a
+    /// folder's, the Spaces') or sheet it opened is open.
+    private func letFloatingTabBarGo() {
+        guard isTabBarFloating else { return }
+        floatingTabBarRelease?.cancel()
+        floatingTabBarRelease = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled, !isPointerOverFloatingTabBar else { return }
+                if Self.isMenuOpen || FloatingSidebar.isHolding(model) { continue }
+                isTabBarFloating = false
+                return
+            }
+        }
+    }
+
+    /// Takes the floating tab bar away at once.
+    private func dismissFloatingTabBar() {
+        floatingTabBarRelease?.cancel()
+        isTabBarFloating = false
+        isPointerOverFloatingTabBar = false
     }
 
     private var splitView: some View {
@@ -226,16 +344,26 @@ public struct BrowserWindow: View {
             // Above the page, its control bar, over the translation bar (#170).
             .safeAreaInset(edge: .top, spacing: 0) {
                 if showsControlBar {
-                    ControlBar(model: model, isSidebarHidden: isSidebarCollapsed) { showSidebar() }
+                    ControlBar(model: model, isSidebarHidden: !tabsOnTop && isSidebarCollapsed,
+                               tabBar: tabsOnTop ? TabBarToggle(isHidden: isTabBarHidden, toggle: toggleTabBar) : nil) {
+                        showSidebar()
+                    }
+                }
+            }
+            // With tabs at the top, the tab bar above the control bar, on the Space's theme (#136).
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if showsTabBar {
+                    TabBar(model: model)
+                        .modifier(SpaceThemeModifier(model: model))
                 }
             }
             // With no toolbar above it, the page reaches the window's top edge (#67). After
             // the translation bar's inset, so the page sits below the bar rather than under it.
             // With the sidebar hidden the page is a card on the Space's theme (#67), inset so
             // the margin around it moves the window, as the board draws it.
-            .modifier(PageCard(isCard: floatsSidebar))
+            .modifier(PageCard(isCard: showsPageAsCard))
             .ignoresSafeArea(.container, edges: hidesToolbar ? .top : [])
-            .modifier(PageCardMargin(model: model, isCard: floatsSidebar))
+            .modifier(PageCardMargin(model: model, isCard: showsPageAsCard))
             // The hidden sidebar floats in from the window's left edge (#67).
             .overlay(alignment: .leading) {
                 if floatsSidebar { floatingSidebar }

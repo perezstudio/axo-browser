@@ -644,6 +644,96 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(controlBar.buttons["showSidebarButton"].waitForNonExistence(timeout: 5))
     }
 
+    /// Tabs at the top (#136): Settings › General › Show tabs puts the Space's tabs in a tab bar
+    /// across the top, as the board draws it (the Space's name, the pinned group, today's tabs,
+    /// New Tab), with the control bar under it. Tabs open, select, pin, and close from the bar,
+    /// the Space's name opens the Spaces menu, Hide Tab Bar leaves the page as a card that the bar
+    /// floats in over from the top edge, and switching back shows the same tabs in the sidebar.
+    @MainActor
+    func testTabsOnTop() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        AxoUITests.openPage("data:text/html,<title>Alpha</title>", in: app)
+        XCTAssertTrue(sidebar.staticTexts["Alpha"].waitForExistence(timeout: 10))
+
+        app.typeKey(",", modifierFlags: .command)
+        AxoUITests.selectSettingsPane("general", in: app)
+        app.radioButtons["At the top"].click()
+        XCTAssertFalse(app.radioGroups["navigationBarPlacementPicker"].isEnabled, "Tabs at the top hold the navigation bar above the page")
+        app.typeKey("w", modifierFlags: .command)
+
+        let window = app.windows.firstMatch
+        let bar = app.descendants(matching: .any)["tabBar"]
+        XCTAssertTrue(bar.waitForExistence(timeout: 5), "The tab bar shows")
+        XCTAssertFalse(sidebar.exists, "No sidebar")
+        XCTAssertFalse(window.toolbars.firstMatch.exists, "No toolbar")
+        XCTAssertEqual(bar.frame.minY, window.frame.minY, accuracy: 1, "At the window's top")
+        let controlBar = app.descendants(matching: .any)["controlBar"]
+        XCTAssertGreaterThanOrEqual(controlBar.frame.minY, bar.frame.maxY - 1, "The control bar sits under it")
+        let tab = { (title: String) in bar.buttons.matching(NSPredicate(format: "identifier == 'topTab' AND label == %@", title)).firstMatch }
+        XCTAssertTrue(tab("Alpha").exists, "Today's tab is on the bar")
+        XCTAssertTrue(bar.buttons["tabBarSpaceMenu"].exists)
+
+        // New Tab from the bar, and selecting a tab.
+        bar.buttons["tabBarNewTabButton"].click()
+        let commandField = app.textFields["commandField"]
+        XCTAssertTrue(commandField.waitForExistence(timeout: 5))
+        commandField.typeText("data:text/html,<title>Beta</title>\n")
+        XCTAssertTrue(tab("Beta").waitForExistence(timeout: 10))
+        XCTAssertTrue(tab("Beta").isSelected)
+        tab("Alpha").click()
+        expectation(for: NSPredicate(format: "isSelected == true"), evaluatedWith: tab("Alpha"))
+        waitForExpectations(timeout: 5)
+        let shot = XCTAttachment(screenshot: window.screenshot())
+        shot.name = "Tabs on top"
+        shot.lifetime = .keepAlways
+        add(shot)
+
+        // Pinning from a tab's menu moves it into the Pinned group.
+        tab("Beta").rightClick()
+        window.menuItems["Pin Tab"].click()
+        let pinned = bar.descendants(matching: .any)["tabBarPinned"]
+        XCTAssertTrue(pinned.waitForExistence(timeout: 5), "A Pinned group appears")
+        XCTAssertTrue(pinned.buttons.matching(NSPredicate(format: "identifier == 'topTab' AND label == 'Beta'")).firstMatch.waitForExistence(timeout: 5))
+
+        // Closing from the hover button.
+        tab("Alpha").hover()
+        let close = bar.buttons["tabBarCloseButton"]
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        close.click()
+        XCTAssertTrue(tab("Alpha").waitForNonExistence(timeout: 5), "Closed")
+
+        // The Space's name opens the Spaces menu.
+        bar.buttons["tabBarSpaceMenu"].click()
+        XCTAssertTrue(app.menuItems["New Space…"].waitForExistence(timeout: 5))
+        app.typeKey(.escape, modifierFlags: [])
+
+        // Hide Tab Bar: the page is a card and the bar floats in from the top edge.
+        controlBar.buttons["tabBarToggleButton"].click()
+        XCTAssertTrue(bar.waitForNonExistence(timeout: 5), "The tab bar hides")
+        let floating = app.descendants(matching: .any)["floatingTabBar"]
+        window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0)).withOffset(CGVector(dx: 0, dy: 3)).hover()
+        XCTAssertTrue(floating.waitForExistence(timeout: 5), "It floats in from the top edge")
+        let hiddenShot = XCTAttachment(screenshot: window.screenshot())
+        hiddenShot.name = "Tab bar floating over the page card"
+        hiddenShot.lifetime = .keepAlways
+        add(hiddenShot)
+        window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7)).hover()
+        XCTAssertTrue(floating.waitForNonExistence(timeout: 5), "And goes when the pointer leaves")
+        controlBar.buttons["tabBarToggleButton"].click()
+        XCTAssertTrue(bar.waitForExistence(timeout: 5), "Keep Tab Bar Shown brings it back")
+
+        // Back in the sidebar, the same tabs.
+        app.typeKey(",", modifierFlags: .command)
+        AxoUITests.selectSettingsPane("general", in: app)
+        app.radioButtons["In the sidebar"].firstMatch.click()
+        app.typeKey("w", modifierFlags: .command)
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5), "The sidebar is back")
+        XCTAssertTrue(sidebar.staticTexts["Beta"].exists, "With the same tabs")
+        XCTAssertFalse(bar.exists)
+    }
+
     /// Above the page, the control bar takes the page's `theme-color`, as in Safari (#107), the
     /// sidebar's top keeps its own color (#170), and turning "Tint the toolbar to match the page"
     /// off in Settings clears it. Checked on pixels of the control bar between the address field
