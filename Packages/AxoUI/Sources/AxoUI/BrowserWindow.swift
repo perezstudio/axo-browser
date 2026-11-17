@@ -57,6 +57,10 @@ public struct BrowserWindow: View {
         } else {
             withAnimation { columns = .all }
         }
+        // The button clicked (the floating card's, which goes) held keyboard focus: the page
+        // takes it, so View › Toggle Sidebar (⌃⌘S) still finds the split view in the responder
+        // chain rather than nothing.
+        model.focusPage()
     }
 
     /// Whether the sidebar's top row stands in for the window toolbar: while the sidebar shows.
