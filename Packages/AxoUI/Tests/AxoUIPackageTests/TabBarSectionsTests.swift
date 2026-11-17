@@ -50,11 +50,24 @@ struct TabBarSectionsTests {
 
         let sections = TabBarSections(try #require(model.shownSpaceRows))
         #expect(sections.today.count == 2, "The split's two tabs are one row, and C another")
-        if case .split(_, let panes) = sections.today.first {
+        if case .split(let leader, let panes) = sections.today.first {
             #expect(Set(panes.map(\.id)) == [ids[0], ids[1]])
+            // The tab that stands for the split, which its menu and close act on: the first in
+            // sidebar order, as the sidebar's split row.
+            #expect(leader == model.sidebarRowTab(for: ids[1]))
+            #expect(leader == ids[0])
         } else {
             Issue.record("The first row is the split")
         }
+    }
+
+    @Test func favoritesComeFromTheProfile() async throws {
+        let ids = try await open(["A", "B"])
+        await model.addToFavorites(ids[0])
+        try await waitUntil { model.favorites.count == 1 }
+        let sections = TabBarSections(try #require(model.shownSpaceRows))
+        #expect(sections.favorites.map(\.id) == [ids[0]], "The favorite is in the Space's container")
+        #expect(!sections.today.contains { $0.id == ids[0] }, "And no longer among today's tabs")
     }
 
     @Test func switchingSpacesSwapsTheBarsTabs() async throws {

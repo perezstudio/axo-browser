@@ -54,6 +54,8 @@ public struct BrowserWindow: View {
     /// address bar hidden, or in full screen, the toolbar comes back with the page's tools.
     /// Above the page (#170), the page's control bar stands in for the toolbar, always.
     private var hidesToolbar: Bool {
+        // Tabs at the top keep their bars in full screen too: the tab bar is where the tabs are.
+        if tabsOnTop { return true }
         guard !isWindowFullScreen else { return false }
         switch navigationBarPlacement {
         case .sidebar: return showsSidebarAddressBar
@@ -191,6 +193,20 @@ public struct BrowserWindow: View {
                 get: { model.isShowingArchive }, set: { model.isShowingArchive = $0 })))
             .modifier(SpaceSheets(model: model))
             .onChange(of: isTabBarHidden) { if !isTabBarHidden { dismissFloatingTabBar() } }
+            .onChange(of: model.fullscreenTabID) { dismissFloatingTabBar() }
+            // The View menu's Hide or Show Tab Bar.
+            .onAppear {
+                model.tabBarState.isAvailable = true
+                model.tabBarState.isHidden = isTabBarHidden
+                // Nothing floats over from the sidebar layout.
+                dismissFloatingSidebar()
+            }
+            .onDisappear {
+                model.tabBarState.isAvailable = false
+                dismissFloatingTabBar()
+            }
+            .onChange(of: isTabBarHidden) { model.tabBarState.isHidden = isTabBarHidden }
+            .onChange(of: model.tabBarState.toggleRequest) { toggleTabBar() }
     }
 
     /// Hides or shows the tab bar (#136).
@@ -211,7 +227,8 @@ public struct BrowserWindow: View {
                     letFloatingTabBarGo()
                 }
             }
-            .frame(height: 14)
+            // The card's top margin, above the control bar's buttons.
+            .frame(height: PageCard.inset)
             .frame(maxWidth: .infinity)
             .accessibilityHidden(true)
             if isTabBarFloating {
@@ -345,6 +362,9 @@ public struct BrowserWindow: View {
             .safeAreaInset(edge: .top, spacing: 0) {
                 if showsControlBar {
                     ControlBar(model: model, isSidebarHidden: !tabsOnTop && isSidebarCollapsed,
+                               // With the tab bar hidden the window's controls hide with it, so
+                               // the control bar holds them, as with the sidebar hidden.
+                               showsWindowControls: (!tabsOnTop && isSidebarCollapsed) || (tabsOnTop && isTabBarHidden),
                                tabBar: tabsOnTop ? TabBarToggle(isHidden: isTabBarHidden, toggle: toggleTabBar) : nil) {
                         showSidebar()
                     }

@@ -28,7 +28,7 @@ struct NavigationToolbar: ToolbarContent {
             // leaves it and draws its own circle.
             .sharedBackgroundVisibility(.hidden)
             ToolbarItem(placement: .principal) {
-                AddressBar(model: model)
+                AddressBar(model: model, drawsFocusRing: true)
                     .frame(minWidth: 240, idealWidth: 520, maxWidth: 680)
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("pageAddressBar")
@@ -115,6 +115,9 @@ struct ReloadButton: View {
 /// The address field and Site Settings, at the top of the sidebar or above the page.
 struct AddressBar: View {
     let model: BrowserModel
+    /// Whether it draws the focus ring around itself while the field has focus.
+    var drawsFocusRing = false
+    @State private var isFocused = false
 
     var body: some View {
         HStack(spacing: 6) {
@@ -124,6 +127,19 @@ struct AddressBar: View {
         // Inside the toolbar's capsule, so the address and the Site Settings button sit in from
         // its rounded ends rather than against them.
         .padding(.horizontal, 10)
+        #if os(macOS)
+        // In the window toolbar (window full screen), where nothing around it draws the focus
+        // ring for the plain field; the control bar's capsule draws its own.
+        .overlay {
+            if drawsFocusRing, isFocused {
+                Capsule()
+                    .strokeBorder(Color(nsColor: .keyboardFocusIndicatorColor), lineWidth: 3)
+                    .padding(-4)
+                    .allowsHitTesting(false)
+            }
+        }
+        .onPreferenceChange(AddressFieldFocus.self) { isFocused = $0 }
+        #endif
     }
 }
 #endif

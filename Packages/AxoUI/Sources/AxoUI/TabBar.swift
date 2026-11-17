@@ -31,14 +31,9 @@ struct TabBar: View {
                 .padding(.trailing, 8)
             FavoritesGroup(model: model, favorites: rows?.favorites ?? [])
             if let rows {
-                let sections = TabBarSections(rows)
-                if !sections.pinnedTabs.isEmpty {
-                    PinnedGroup(model: model, tabs: sections.pinnedTabs, splitPanes: rows.splitPanes)
-                }
-                ForEach(sections.folders, id: \.folder.id) { entry in
-                    FolderChip(model: model, folder: entry.folder, children: entry.children)
-                }
-                TodaysTabs(model: model, rows: sections.today)
+                // Everything after the favorites scrolls sideways once it doesn't fit, so many
+                // pinned tabs never push the window's controls off or widen the window.
+                ScrollingTabs(model: model, rows: rows)
             } else {
                 Spacer(minLength: 0)
             }
@@ -124,6 +119,11 @@ private struct FavoritesGroup: View {
                 .help(title)
                 .accessibilityLabel(title)
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
+                .accessibilityAction(named: "Move Left") { Task { await model.moveFavorite(favorite.id, by: -1) } }
+                .accessibilityAction(named: "Move Right") { Task { await model.moveFavorite(favorite.id, by: 1) } }
+                .contextMenu {
+                    FavoriteContextMenu(model: model, favorite: favorite, hasLeftHome: model.favoriteHasLeftHome(favorite))
+                }
                 .accessibilityIdentifier("tabBarFavorite")
             }
         }
@@ -142,19 +142,21 @@ private struct SpaceMenu: View {
 
     var body: some View {
         Menu {
-            ForEach(model.spaces) { space in
-                Button {
-                    Task { await model.selectSpace(space.id) }
-                } label: {
-                    if space.id == model.space?.id {
-                        Label(space.name, systemImage: "checkmark")
-                    } else {
-                        Text(space.name)
-                    }
+            // A picker, so the shown Space is checked as a selected item, for VoiceOver too.
+            Picker("Spaces", selection: Binding(
+                get: { model.space?.id },
+                set: { id in if let id { Task { await model.selectSpace(id) } } }
+            )) {
+                // ⌃1–9 switch Spaces from anywhere, through the Spaces menu.
+                ForEach(model.spaces) { space in
+                    Text(space.name).tag(Optional(space.id))
                 }
             }
+            .pickerStyle(.inline)
+            .labelsHidden()
             Divider()
             Button("New Space…") { model.isCreatingSpace = true }
+            Button("Show Archived Tabs") { model.isShowingArchive = true }
         } label: {
             Text(model.space?.name ?? "Space")
                 .font(.system(size: 12.5, weight: .bold))
@@ -267,26 +269,42 @@ private struct FolderMenuItems: View {
     }
 }
 
-/// The Space's other tabs, scrolling sideways once they don't fit, with the selected one kept in
-/// view, and New Tab after them.
-private struct TodaysTabs: View {
+/// The pinned group, the folders, the Space's other tabs, and New Tab, scrolling sideways once
+/// they don't fit, with the selected tab kept in view. The empty space after them still moves the
+/// window, as the bar's other empty space does.
+private struct ScrollingTabs: View {
     let model: BrowserModel
-    let rows: [SpaceSidebarPreview.Row]
+    let rows: SpaceSidebarPreview
+    @State private var width: CGFloat = 0
 
     var body: some View {
+        let sections = TabBarSections(rows)
         ScrollViewReader { proxy in
             ScrollView(.horizontal) {
                 HStack(spacing: 6) {
-                    ForEach(rows) { row in
-                        switch row {
-                        case .tab(let tab):
-                            TopTab(model: model, tab: tab, panes: nil, isSelected: isSelected(row), style: .regular)
-                        case .split(_, let panes):
-                            if let first = panes.first {
-                                TopTab(model: model, tab: first, panes: panes, isSelected: isSelected(row), style: .regular)
+                    if !sections.pinnedTabs.isEmpty {
+                        PinnedGroup(model: model, tabs: sections.pinnedTabs, splitPanes: rows.splitPanes)
+                    }
+                    ForEach(sections.folders, id: \.folder.id) { entry in
+                        FolderChip(model: model, folder: entry.folder, children: entry.children)
+                    }
+                    HStack(spacing: 6) {
+                        ForEach(sections.today) { row in
+                            switch row {
+                            case .tab(let tab):
+                                TopTab(model: model, tab: tab, panes: nil, isSelected: isSelected(row), style: .regular)
+                            case .split(let leader, let panes):
+                                // The row stands for its first tab in sidebar order, as the
+                                // sidebar's split row does, so its menu and close act on the same tab.
+                                if let tab = panes.first(where: { $0.id == leader }) ?? panes.first {
+                                    TopTab(model: model, tab: tab, panes: panes, isSelected: isSelected(row), style: .regular)
+                                }
                             }
                         }
                     }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel("Tabs")
+                    .accessibilityIdentifier("tabBarTabs")
                     Button { model.beginNewTab() } label: {
                         Image(systemName: "plus")
                             .frame(width: 30, height: 30)
@@ -298,17 +316,29 @@ private struct TodaysTabs: View {
                     .accessibilityIdentifier("tabBarNewTabButton")
                 }
                 .padding(.vertical, 4)
+                .frame(minWidth: width, alignment: .leading)
+                .background {
+                    Color.clear
+                        .contentShape(.rect)
+                        .gesture(WindowDragGesture())
+                        .onTapGesture(count: 2) { NSApp.keyWindow?.performZoom(nil) }
+                        .allowsWindowActivationEvents(true)
+                        .accessibilityHidden(true)
+                }
             }
             .scrollIndicators(.never)
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel("Tabs")
-            .accessibilityIdentifier("tabBarTabs")
-            .onChange(of: model.selectedTabID, initial: true) {
-                guard let selected = model.selectedTabID else { return }
-                withAnimation { proxy.scrollTo(model.sidebarRowTab(for: selected)) }
-            }
+            .scrollBounceBehavior(.basedOnSize)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+            .onChange(of: model.selectedTabID, initial: true) { scroll(proxy) }
+            // A tab opened past the edge arrives in the rows after the selection does.
+            .onChange(of: rows.rows.map(\.id)) { scroll(proxy) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func scroll(_ proxy: ScrollViewProxy) {
+        guard let selected = model.selectedTabID else { return }
+        withAnimation { proxy.scrollTo(model.sidebarRowTab(for: selected)) }
     }
 
     /// Whether the row holds the selection: its tab, or for a split, any of its panes.
@@ -340,10 +370,25 @@ private struct TopTab: View {
         return TabRow.displayTitle(for: tab)
     }
 
-    private var closeTitle: String { tab.isPinned ? "Unload Tab" : "Close Tab" }
+    /// On a split's tab it closes the row's tab, which leaves the split, so it names it, as the
+    /// sidebar's split row does.
+    private var closeTitle: String {
+        let verb = tab.isPinned ? "Unload" : "Close"
+        return panes == nil ? "\(verb) Tab" : "\(verb) \(TabRow.displayTitle(for: tab))"
+    }
+
+    /// Dimmed only when every pane is unloaded, as the sidebar's split row is.
+    private var isDimmed: Bool {
+        (panes ?? [tab]).allSatisfy { model.isTabDimmed($0.id, isSelected: isSelected) }
+    }
 
     var body: some View {
-        Button { model.select(tab.id) } label: {
+        Button {
+            model.select(tab.id)
+            // A click hands keyboard focus to the page, as a sidebar row's does; Full Keyboard
+            // Access and VoiceOver leave it where it is.
+            if SidebarClick.isClick(NSApp.currentEvent?.type) { model.focusPage() }
+        } label: {
             HStack(spacing: 6) {
                 ForEach(panes ?? [tab]) { pane in
                     if model.isTabLoading(pane.id) {
@@ -355,12 +400,12 @@ private struct TopTab: View {
                 }
                 Text(title)
                     .lineLimit(1)
-                    .foregroundStyle(model.isTabDimmed(tab.id, isSelected: isSelected) ? .secondary : .primary)
+                    .foregroundStyle(isDimmed ? .secondary : .primary)
                 Spacer(minLength: 0)
             }
-            .padding(.leading, 9)
-            // Room for the close button, which shows under the pointer.
-            .padding(.trailing, isHovering ? 26 : 9)
+            // The same width hovered or not, so tabs never shift under the pointer; the close
+            // button covers the title's end.
+            .padding(.horizontal, 9)
             .frame(height: style == .regular ? TabBar.itemHeight : 24)
             .frame(maxWidth: TabBar.tabMaxWidth)
             .background(background)
@@ -369,6 +414,18 @@ private struct TopTab: View {
         .buttonStyle(.plain)
         .fixedSize(horizontal: true, vertical: false)
         .frame(maxWidth: TabBar.tabMaxWidth)
+        // On the tab's own button only, so the close button keeps its own label and identifier.
+        .help(TabRow.tooltip(for: tab))
+        .accessibilityLabel(title)
+        .accessibilityValue(stateDescription)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityAction(named: closeTitle) { close() }
+        .accessibilityAction(named: "Move Left") { move(by: -1) }
+        .accessibilityAction(named: "Move Right") { move(by: 1) }
+        .accessibilityAction(named: tab.isPinned ? "Unpin" : "Pin") {
+            Task { await model.setPinned(!tab.isPinned, tabID: tab.id) }
+        }
+        .accessibilityIdentifier("topTab")
         .overlay(alignment: .trailing) {
             if isHovering {
                 Button { close() } label: {
@@ -383,14 +440,19 @@ private struct TopTab: View {
         }
         .onHover { isHovering = $0 }
         .contextMenu { TabContextMenu(model: model, tab: tab) }
-        .help(TabRow.tooltip(for: tab))
-        .accessibilityLabel(title)
-        .accessibilityValue(TabRow.stateDescription(
-            isLoading: model.isTabLoading(tab.id), isDimmed: model.isTabDimmed(tab.id, isSelected: isSelected),
-            isAwayFromHome: tab.hasLeftHome))
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .accessibilityAction(named: closeTitle) { close() }
-        .accessibilityIdentifier("topTab")
+    }
+
+    /// The tab's state for VoiceOver: the sidebar row's, and pinned.
+    private var stateDescription: String {
+        let state = TabRow.stateDescription(isLoading: model.isTabLoading(tab.id), isDimmed: isDimmed,
+                                            isAwayFromHome: tab.hasLeftHome)
+        return [tab.isPinned ? "Pinned" : nil, state.isEmpty ? nil : state].compactMap(\.self).joined(separator: ", ")
+    }
+
+    /// Moves the tab one place along the bar, as the sidebar's Move Up and Move Down do.
+    private func move(by offset: Int) {
+        model.selectSidebarItem(.tab(tab.id))
+        Task { await model.moveSelectedItem(by: offset) }
     }
 
     @ViewBuilder

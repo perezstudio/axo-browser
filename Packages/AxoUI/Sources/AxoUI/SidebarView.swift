@@ -25,7 +25,9 @@ struct SidebarView: View {
         // Two-finger swipes over the favorites and tabs move between Spaces (not over the
         // address bar, which stays put).
         .background { SidebarSwipeCatcher(model: model, state: swipe) }
-        .onChange(of: model.isShowingArchive) { isShowingArchive = model.isShowingArchive }
+        // Initially too: the archive can be open from the other layout (tabs at the top) when
+        // the sidebar comes back.
+        .onChange(of: model.isShowingArchive, initial: true) { isShowingArchive = model.isShowingArchive }
         .onChange(of: isShowingArchive) { if !isShowingArchive { model.isShowingArchive = false } }
         // Slide to the shown Space's page when it changes some other way (the keyboard, the
         // dots, the menu); after a swipe the pages are already there.

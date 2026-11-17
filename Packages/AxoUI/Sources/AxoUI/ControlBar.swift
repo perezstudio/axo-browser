@@ -22,6 +22,9 @@ struct ControlBar: View {
     /// Whether the sidebar is hidden; the bar then also holds the window's controls and Show
     /// Sidebar.
     let isSidebarHidden: Bool
+    /// Whether the bar holds the window's controls: with the sidebar or the tab bar hidden,
+    /// which takes the title bar's with it.
+    var showsWindowControls = false
     /// With tabs at the top (#136), the button that hides or shows the tab bar.
     var tabBar: TabBarToggle?
     /// Shows the sidebar again.
@@ -40,11 +43,13 @@ struct ControlBar: View {
     var body: some View {
         GlassEffectContainer {
             HStack(spacing: SidebarTopRow.spacing) {
-                if isSidebarHidden {
+                if showsWindowControls || isSidebarHidden {
                     WindowControls()
                         .frame(width: WindowControls.size.width, height: WindowControls.size.height)
                         .padding(.leading, WindowControls.leading - Self.horizontalPadding)
                         .padding(.trailing, 6)
+                }
+                if isSidebarHidden {
                     Button("Show Sidebar", systemImage: "sidebar.left", action: showSidebar)
                         .modifier(SidebarGlassButtonStyle())
                         .help("Show Sidebar")

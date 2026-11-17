@@ -660,7 +660,7 @@ final class AxoUITests: XCTestCase {
         app.typeKey(",", modifierFlags: .command)
         AxoUITests.selectSettingsPane("general", in: app)
         app.radioButtons["At the top"].click()
-        XCTAssertFalse(app.radioGroups["navigationBarPlacementPicker"].isEnabled, "Tabs at the top hold the navigation bar above the page")
+        XCTAssertFalse(app.radioButtons["Above the page"].isEnabled, "Tabs at the top hold the navigation bar above the page")
         app.typeKey("w", modifierFlags: .command)
 
         let window = app.windows.firstMatch
@@ -673,7 +673,8 @@ final class AxoUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(controlBar.frame.minY, bar.frame.maxY - 1, "The control bar sits under it")
         let tab = { (title: String) in bar.buttons.matching(NSPredicate(format: "identifier == 'topTab' AND label == %@", title)).firstMatch }
         XCTAssertTrue(tab("Alpha").exists, "Today's tab is on the bar")
-        XCTAssertTrue(bar.buttons["tabBarSpaceMenu"].exists)
+        let spaceMenu = bar.descendants(matching: .any)["tabBarSpaceMenu"]
+        XCTAssertTrue(spaceMenu.exists)
 
         // New Tab from the bar, and selecting a tab.
         bar.buttons["tabBarNewTabButton"].click()
@@ -705,13 +706,14 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(tab("Alpha").waitForNonExistence(timeout: 5), "Closed")
 
         // The Space's name opens the Spaces menu.
-        bar.buttons["tabBarSpaceMenu"].click()
+        spaceMenu.click()
         XCTAssertTrue(app.menuItems["New Space…"].waitForExistence(timeout: 5))
         app.typeKey(.escape, modifierFlags: [])
 
         // Hide Tab Bar: the page is a card and the bar floats in from the top edge.
         controlBar.buttons["tabBarToggleButton"].click()
         XCTAssertTrue(bar.waitForNonExistence(timeout: 5), "The tab bar hides")
+        XCTAssertTrue(window.buttons[XCUIIdentifierCloseWindow].exists, "The control bar takes the window's controls")
         let floating = app.descendants(matching: .any)["floatingTabBar"]
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0)).withOffset(CGVector(dx: 0, dy: 3)).hover()
         XCTAssertTrue(floating.waitForExistence(timeout: 5), "It floats in from the top edge")
@@ -723,6 +725,13 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(floating.waitForNonExistence(timeout: 5), "And goes when the pointer leaves")
         controlBar.buttons["tabBarToggleButton"].click()
         XCTAssertTrue(bar.waitForExistence(timeout: 5), "Keep Tab Bar Shown brings it back")
+        // View › Hide Tab Bar does the same.
+        app.menuBars.menuBarItems["View"].click()
+        app.menuBars.menuItems["Hide Tab Bar"].click()
+        XCTAssertTrue(bar.waitForNonExistence(timeout: 5), "View › Hide Tab Bar")
+        app.menuBars.menuBarItems["View"].click()
+        app.menuBars.menuItems["Show Tab Bar"].click()
+        XCTAssertTrue(bar.waitForExistence(timeout: 5), "View › Show Tab Bar")
 
         // Back in the sidebar, the same tabs.
         app.typeKey(",", modifierFlags: .command)

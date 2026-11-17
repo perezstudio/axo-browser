@@ -105,6 +105,11 @@ public struct BrowserCommands: Commands {
                 model.setSidebarAddressBarShown(!model.isSidebarAddressBarShown)
             }
             .disabled(model == nil)
+            // With tabs at the top (#136), as the control bar's button does.
+            Button(model?.tabBarState.isHidden == true ? "Show Tab Bar" : "Hide Tab Bar") {
+                model?.tabBarState.toggleRequest += 1
+            }
+            .disabled(model?.tabBarState.isAvailable != true)
             Button("Copy Link") { model?.copyShownPageLink() }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
                 .disabled(model?.shownPageURL == nil)

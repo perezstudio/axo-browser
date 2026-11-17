@@ -141,6 +141,9 @@ public final class BrowserModel {
     /// Whether the floating sidebar covers part of the page (#67), which takes the pointer, so
     /// the page's hovered-link label hides as under Peek.
     public var isFloatingSidebarShown = false
+    /// The tab bar's state with tabs at the top (#136), which the window keeps and the View
+    /// menu's Hide or Show Tab Bar reads and asks to change.
+    public var tabBarState = TabBarState()
     /// Whether the sidebar's address bar is showing, as the window last reported, for the View
     /// menu's title.
     public var isSidebarAddressBarShown = true
@@ -1830,4 +1833,17 @@ public final class BrowserModel {
         logger.error("\(message) \(error)")
         alertMessage = message
     }
+}
+
+/// The tab bar with tabs at the top (#136): whether there is one, whether it's hidden, and a
+/// request to hide or show it, which the window answers.
+public struct TabBarState: Equatable, Sendable {
+    /// Whether tabs are at the top, so the tab bar can be hidden or shown.
+    public var isAvailable = false
+    /// Whether the tab bar is hidden.
+    public var isHidden = false
+    /// Incremented to ask the window to hide or show the tab bar.
+    public var toggleRequest = 0
+
+    public init() {}
 }
