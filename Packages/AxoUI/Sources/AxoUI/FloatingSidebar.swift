@@ -38,17 +38,32 @@ struct FloatingSidebar: View {
         }
         .shadow(color: .black.opacity(0.25), radius: 18, y: 6)
         .frame(width: Self.width)
-        .padding(Self.inset)
-        .onHover(perform: onHover)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("floatingSidebar")
+        // The card's sidebar adds no toolbar items: the window has no toolbar while it shows.
+        .environment(\.isFloatingSidebar, true)
+        // The inset around the card counts as the card, so the pointer moving between the card
+        // and the window's edge never lets it go.
+        .padding(Self.inset)
+        .contentShape(.rect)
+        .onHover(perform: onHover)
     }
 
-    /// Whether something opened from the sidebar is showing, so the card stays while it does.
+    /// Whether something the sidebar shows is open, so the card stays while it is (and comes in
+    /// for it, when it opened from a menu): its popovers and sheets, or editing the address in it.
     static func isHolding(_ model: BrowserModel) -> Bool {
         model.isShowingDownloads || model.isShowingSiteSettings || model.isShowingSummary
             || model.isCreatingSpace || model.themeEditing != nil || model.spaceToRename != nil
+            || model.namingRequest != nil || model.isShowingArchive || model.pendingExtensionInstall != nil
+            || model.isShowingExtensions || model.importSession != nil || model.customizationDraft != nil
             || (model.isCommandBarVisible && model.isAddressEditedInSidebar)
+    }
+
+    /// Whether `window` shows something the card may have opened that the model doesn't know of:
+    /// a sheet, or a child window such as an extension's popup (popovers are child windows).
+    static func isHolding(_ window: NSWindow?) -> Bool {
+        guard let window else { return false }
+        return window.attachedSheet != nil || !(window.childWindows ?? []).isEmpty
     }
 }
 
@@ -67,7 +82,8 @@ struct EdgeHoverDetector: NSViewRepresentable {
         init(onHover: @escaping (Bool) -> Void) {
             self.onHover = onHover
             super.init(frame: .zero)
-            addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            // While Axo is the active app, key window or not.
+            addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
                                            owner: self, userInfo: nil))
         }
         required init?(coder: NSCoder) { nil }
@@ -76,5 +92,9 @@ struct EdgeHoverDetector: NSViewRepresentable {
         override func mouseEntered(with event: NSEvent) { onHover(true) }
         override func mouseExited(with event: NSEvent) { onHover(false) }
     }
+}
+extension EnvironmentValues {
+    /// Whether this is the floating sidebar's copy of the sidebar (#67).
+    @Entry var isFloatingSidebar = false
 }
 #endif

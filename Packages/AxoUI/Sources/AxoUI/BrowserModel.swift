@@ -73,7 +73,7 @@ public final class BrowserModel {
     /// Whether Peek or the command bar covers the window's pages. Their link status labels hide
     /// then: the cover takes the pointer, so the engine never says it left the link. An address
     /// edited in the sidebar covers nothing.
-    public var arePagesCovered: Bool { peek != nil || (isCommandBarVisible && !isAddressEditedInSidebar) }
+    public var arePagesCovered: Bool { peek != nil || isFloatingSidebarShown || (isCommandBarVisible && !isAddressEditedInSidebar) }
     /// Incremented to ask the address field to take focus.
     public private(set) var addressFocusRequest = 0
     /// A problem worth telling the user about, such as the database failing to open.
@@ -126,12 +126,21 @@ public final class BrowserModel {
     /// each request is seen. The windows keep the setting, in their own settings store; every
     /// window sets the same value, so two windows can't undo each other.
     public private(set) var sidebarAddressBarRequest: (count: Int, shown: Bool) = (0, true)
-    /// Whether the sidebar's address bar is on screen now (it's hidden, or the sidebar is
-    /// collapsed, otherwise), so Site Settings knows where to appear.
-    public var isSidebarAddressBarOnScreen = false {
+    /// How many of the sidebar's address bars are on screen: the sidebar's, and the floating
+    /// sidebar's (#67), which can both be there for a moment as one replaces the other.
+    public var sidebarAddressBarsOnScreen = 0 {
         // The address being edited there has nowhere to show.
         didSet { if !isSidebarAddressBarOnScreen, isAddressEditedInSidebar { hideCommandBar(focusingPage: false) } }
     }
+    /// Whether the sidebar's address bar is on screen now (it's hidden, or the sidebar is
+    /// collapsed with no floating sidebar, otherwise), so Site Settings knows where to appear.
+    public var isSidebarAddressBarOnScreen: Bool {
+        get { sidebarAddressBarsOnScreen > 0 }
+        set { sidebarAddressBarsOnScreen = newValue ? 1 : 0 }
+    }
+    /// Whether the floating sidebar covers part of the page (#67), which takes the pointer, so
+    /// the page's hovered-link label hides as under Peek.
+    public var isFloatingSidebarShown = false
     /// Whether the sidebar's address bar is showing, as the window last reported, for the View
     /// menu's title.
     public var isSidebarAddressBarShown = true

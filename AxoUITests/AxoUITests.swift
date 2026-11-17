@@ -755,7 +755,7 @@ final class AxoUITests: XCTestCase {
         // the hosted runner's accessibility doesn't follow a web view's frame).
         row.buttons["hideSidebarButton"].click()
         XCTAssertTrue(sidebar.waitForNonExistence(timeout: 5))
-        XCTAssertFalse(window.toolbars.firstMatch.exists, "No toolbar with the sidebar hidden")
+        XCTAssertFalse(window.toolbars.firstMatch.waitForExistence(timeout: 2), "No toolbar with the sidebar hidden")
         XCTAssertFalse(window.buttons[XCUIIdentifierCloseWindow].exists, "Nor the window's controls")
 
         // The pointer at the window's left edge floats the sidebar in, with the window's
@@ -792,7 +792,18 @@ final class AxoUITests: XCTestCase {
         // fills the window too, and ⌃⌘S shows the sidebar again.
         app.typeKey("s", modifierFlags: [.command, .control])
         XCTAssertTrue(sidebar.waitForNonExistence(timeout: 5))
-        XCTAssertFalse(window.toolbars.firstMatch.exists, "No toolbar however the sidebar hides")
+        XCTAssertFalse(window.toolbars.firstMatch.waitForExistence(timeout: 2), "No toolbar however the sidebar hides")
+        // View › Show Downloads while it's hidden brings the card in, with the list open.
+        app.menuBars.menuBarItems["View"].click()
+        app.menuBars.menuItems["Show Downloads"].click()
+        XCTAssertTrue(floating.waitForExistence(timeout: 5), "The card comes in for the list")
+        XCTAssertTrue(app.buttons["clearDownloadsButton"].waitForExistence(timeout: 5))
+        // The pointer away from the card: the open list still holds it.
+        window.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5)).hover()
+        XCTAssertTrue(floating.exists, "The open list holds the card")
+        app.typeKey("l", modifierFlags: [.command, .option])
+        XCTAssertTrue(app.buttons["clearDownloadsButton"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(floating.waitForNonExistence(timeout: 5), "And goes once it's closed, with the pointer elsewhere")
         app.typeKey("s", modifierFlags: [.command, .control])
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
 

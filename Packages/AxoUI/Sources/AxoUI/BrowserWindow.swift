@@ -26,6 +26,10 @@ public struct BrowserWindow: View {
     @State private var isSidebarFloating = false
     /// Whether the pointer is over the floating sidebar.
     @State private var isPointerOverFloatingSidebar = false
+    /// Whether a menu (a context menu from the floating sidebar, say) is open.
+    @State private var isMenuTracking = false
+    /// The wait that lets the floating sidebar go, replaced by each newer one.
+    @State private var floatingSidebarRelease: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Whether the window has no toolbar (#67): with the navigation bar in the sidebar and its
@@ -125,9 +129,18 @@ public struct BrowserWindow: View {
         splitViewColumns
             // The floating sidebar goes once the sidebar is back in the window, and once nothing
             // it opened is showing while the pointer is elsewhere.
-            .onChange(of: floatsSidebar) { if !floatsSidebar { isSidebarFloating = false } }
+            .onChange(of: floatsSidebar) { if !floatsSidebar { dismissFloatingSidebar() } }
+            // Something the sidebar shows, opened from a menu (View › Show Downloads, Site
+            // Settings) while the sidebar is hidden, brings the card in to show it.
             .onChange(of: FloatingSidebar.isHolding(model)) {
-                if !FloatingSidebar.isHolding(model), !isPointerOverFloatingSidebar { isSidebarFloating = false }
+                if FloatingSidebar.isHolding(model), floatsSidebar { isSidebarFloating = true } else { letFloatingSidebarGo() }
+            }
+            .onChange(of: model.fullscreenTabID) { dismissFloatingSidebar() }
+            .onChange(of: isSidebarFloating) { model.isFloatingSidebarShown = isSidebarFloating }
+            .onReceive(NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)) { _ in isMenuTracking = true }
+            .onReceive(NotificationCenter.default.publisher(for: NSMenu.didEndTrackingNotification)) { _ in
+                isMenuTracking = false
+                letFloatingSidebarGo()
             }
     }
 
@@ -251,18 +264,24 @@ public struct BrowserWindow: View {
     private var floatingSidebar: some View {
         ZStack(alignment: .leading) {
             EdgeHoverDetector { isOver in
-                if isOver { isSidebarFloating = true }
+                if isOver {
+                    floatingSidebarRelease?.cancel()
+                    isSidebarFloating = true
+                } else {
+                    // The pointer passing over the edge on its way out of the window.
+                    letFloatingSidebarGo()
+                }
             }
             .frame(width: 6)
             .frame(maxHeight: .infinity)
             .accessibilityHidden(true)
             if isSidebarFloating {
                 FloatingSidebar(model: model) {
-                    isSidebarFloating = false
+                    dismissFloatingSidebar()
                     splitController.controller?.toggleSidebar(nil)
                 } onHover: { isOver in
                     isPointerOverFloatingSidebar = isOver
-                    if !isOver { letFloatingSidebarGo() }
+                    if isOver { floatingSidebarRelease?.cancel() } else { letFloatingSidebarGo() }
                 }
                 .transition(reduceMotion ? .opacity : .move(edge: .leading).combined(with: .opacity))
             }
@@ -271,13 +290,30 @@ public struct BrowserWindow: View {
         .animation(reduceMotion ? nil : .easeOut(duration: 0.26), value: isSidebarFloating)
     }
 
-    /// Lets the floating sidebar go a moment after the pointer leaves it, unless the pointer is
-    /// back or something it opened is showing.
+    /// Lets the floating sidebar go a moment after the pointer leaves it, and only once the
+    /// pointer stays away and nothing it shows is open: its popovers and sheets, an extension's
+    /// popup, or a menu.
     private func letFloatingSidebarGo() {
-        Task {
-            try? await Task.sleep(for: .milliseconds(300))
-            if !isPointerOverFloatingSidebar, !FloatingSidebar.isHolding(model) { isSidebarFloating = false }
+        guard isSidebarFloating else { return }
+        floatingSidebarRelease?.cancel()
+        floatingSidebarRelease = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled, !isPointerOverFloatingSidebar else { return }
+                let window = splitController.controller?.view.window
+                if FloatingSidebar.isHolding(model) || FloatingSidebar.isHolding(window) || isMenuTracking { continue }
+                isSidebarFloating = false
+                return
+            }
         }
+    }
+
+    /// Takes the floating sidebar away at once, forgetting where the pointer was: a removed
+    /// view never hears the pointer leave.
+    private func dismissFloatingSidebar() {
+        floatingSidebarRelease?.cancel()
+        isSidebarFloating = false
+        isPointerOverFloatingSidebar = false
     }
 
     @ViewBuilder

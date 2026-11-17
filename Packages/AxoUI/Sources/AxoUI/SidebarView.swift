@@ -9,6 +9,7 @@ struct SidebarView: View {
     let model: BrowserModel
     @State private var isShowingArchive = false
     @AppStorage(NavigationBarPlacement.storageKey) private var navigationBarPlacement = NavigationBarPlacement.sidebar
+    @Environment(\.isFloatingSidebar) private var isFloatingSidebar
     @AppStorage(AddressBarSettings.showsSidebarAddressBarKey) private var showsAddressBar = true
     /// The Spaces' pages and a swipe between them as it happens (#84).
     @State private var swipe = SidebarSwipeState()
@@ -88,13 +89,16 @@ struct SidebarView: View {
             }
         }
         .toolbar {
-            if navigationBarPlacement == .sidebar {
-                SidebarNavigationToolbar(model: model)
-            }
-            ToolbarItem {
-                Button("New Tab", systemImage: "plus") { model.beginNewTab() }
-                    .help("New Tab")
-                    .accessibilityIdentifier("newTabButton")
+            // The floating sidebar's copy adds none: the window has no toolbar while it shows.
+            if !isFloatingSidebar {
+                if navigationBarPlacement == .sidebar {
+                    SidebarNavigationToolbar(model: model)
+                }
+                ToolbarItem {
+                    Button("New Tab", systemImage: "plus") { model.beginNewTab() }
+                        .help("New Tab")
+                        .accessibilityIdentifier("newTabButton")
+                }
             }
         }
     }

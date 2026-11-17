@@ -60,10 +60,6 @@ struct SidebarTopRowTests {
         #expect(ExtensionToolbarButtons.shownCount(of: 12, limit: nil) == 12)
     }
 
-    @Test func theFloatingSidebarFitsItsTopRow() {
-        #expect(FloatingSidebar.width >= SidebarTopRow.requiredWidth)
-    }
-
     /// The floating sidebar stays while something it opened shows (#67), so a popover or sheet
     /// from it never loses its anchor when the pointer moves onto it.
     @Test func theFloatingSidebarStaysWhileItsPopoversShow() throws {
@@ -84,7 +80,54 @@ struct SidebarTopRowTests {
         model.isCreatingSpace = true
         #expect(FloatingSidebar.isHolding(model))
         model.isCreatingSpace = false
+        model.isShowingArchive = true
+        #expect(FloatingSidebar.isHolding(model))
+        model.isShowingArchive = false
+        model.isShowingExtensions = true
+        #expect(FloatingSidebar.isHolding(model))
+        model.isShowingExtensions = false
         #expect(!FloatingSidebar.isHolding(model))
+    }
+
+    /// An extension's popup is a child window of the browser window, which the model doesn't
+    /// know of: the card stays while one shows.
+    @Test func theFloatingSidebarStaysWhileAChildWindowShows() {
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: true)
+        let child = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 100, height: 100), styleMask: [.borderless], backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        child.isReleasedWhenClosed = false
+        defer { child.close(); window.close() }
+        #expect(!FloatingSidebar.isHolding(window))
+        window.addChildWindow(child, ordered: .above)
+        #expect(FloatingSidebar.isHolding(window))
+        window.removeChildWindow(child)
+        #expect(!FloatingSidebar.isHolding(window))
+        #expect(!FloatingSidebar.isHolding(nil as NSWindow?))
+    }
+
+    /// The floating sidebar's address bar and the sidebar's can both be on screen for a moment
+    /// as one replaces the other: the bar counts as shown until both have gone.
+    @Test func theAddressBarStaysOnScreenUntilBothCopiesGo() throws {
+        let pool = WebViewPool(engine: FakeEngine())
+        pool.reportsScreenTimeUsage = false
+        let model = BrowserModel(store: try TabStore.makeInMemory(), pool: pool)
+        model.sidebarAddressBarsOnScreen += 1 // the floating sidebar's
+        model.sidebarAddressBarsOnScreen += 1 // the sidebar's, shown again
+        model.sidebarAddressBarsOnScreen -= 1 // the floating one leaves after
+        #expect(model.isSidebarAddressBarOnScreen)
+        model.sidebarAddressBarsOnScreen -= 1
+        #expect(!model.isSidebarAddressBarOnScreen)
+    }
+
+    /// The floating sidebar covers the page and takes the pointer, so the page's hovered-link
+    /// label hides as it does under Peek.
+    @Test func theFloatingSidebarCoversThePage() throws {
+        let pool = WebViewPool(engine: FakeEngine())
+        pool.reportsScreenTimeUsage = false
+        let model = BrowserModel(store: try TabStore.makeInMemory(), pool: pool)
+        #expect(!model.arePagesCovered)
+        model.isFloatingSidebarShown = true
+        #expect(model.arePagesCovered)
     }
 }
 #endif
