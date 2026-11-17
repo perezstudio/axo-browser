@@ -77,7 +77,9 @@ final class AccessibilityAuditTests: XCTestCase {
                     // HSplitView's and VSplitView's host for one pane of a split view.
                     if children.count == 1, children[0].identifier == "splitPane" { return true }
                     // The split view's sidebar column, which holds the address bar.
-                    if children.contains(where: { ["sidebarAddressBar", "sidebarAddressField", "addressField"].contains($0.identifier) }) { return true }
+                    // The split view's sidebar column, which holds the address bar, or above the
+                    // page (#170) the sidebar's top row without one.
+                    if children.contains(where: { ["sidebarAddressBar", "sidebarAddressField", "addressField", "sidebarTopRow"].contains($0.identifier) }) { return true }
                     // Settings' sidebar column, which holds the list of panes in a scroll view,
                     // and the host of its search field. VoiceOver reads the list and the field.
                     if children.count == 1, children[0].elementType == .scrollView,
@@ -105,6 +107,27 @@ final class AccessibilityAuditTests: XCTestCase {
             print("AUDIT [\(screen)] \(issue.compactDescription): \(describe(snapshot, depth: 0)) frame=\(snapshot.frame)")
             return false
         }
+    }
+
+    /// The page's control bar with the navigation bar above the page (#170), with the sidebar
+    /// shown and hidden (when it holds the window's controls and Show Sidebar).
+    @MainActor
+    func testAuditControlBar() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        app.typeKey(",", modifierFlags: .command)
+        AxoUITests.selectSettingsPane("general", in: app)
+        app.radioButtons["Above the page"].click()
+        app.typeKey("w", modifierFlags: .command)
+        XCTAssertTrue(app.descendants(matching: .any)["controlBar"].waitForExistence(timeout: 5))
+        AxoUITests.openPage("data:text/html,<title>Pond</title><p>Axolotls.</p>", in: app)
+        XCTAssertTrue(sidebar.staticTexts["Pond"].waitForExistence(timeout: 10))
+        try audit(app, "control bar")
+
+        app.buttons["hideSidebarButton"].click()
+        XCTAssertTrue(app.buttons["showSidebarButton"].waitForExistence(timeout: 5))
+        try audit(app, "control bar, sidebar hidden")
     }
 
     /// The address edited in the sidebar (Settings › General › Edit the address in › Sidebar),

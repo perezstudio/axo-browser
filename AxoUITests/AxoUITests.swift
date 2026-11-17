@@ -577,8 +577,10 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Got ArrowDown"].waitForExistence(timeout: 5), "Arrow keys go to the page too")
     }
 
-    /// Settings › General moves the navigation bar from the sidebar to the page's toolbar, where
-    /// ⌘L still focuses the address field. (UI testing keeps settings in its own store.)
+    /// Settings › General moves the navigation bar from the sidebar to the page's control bar at
+    /// the top of the page's area (#170), where ⌘L still focuses the address field, and which
+    /// takes the window's controls and Show Sidebar while the sidebar is hidden. (UI testing keeps
+    /// settings in its own store.)
     @MainActor
     func testNavigationBarPlacement() throws {
         let app = launchApp()
@@ -602,7 +604,7 @@ final class AxoUITests: XCTestCase {
         let address = pageBar.textFields["addressField"]
         XCTAssertTrue(address.exists, "Above the page, it's an editable field, as in Safari")
         XCTAssertFalse(sidebarBar.exists, "The sidebar no longer has one")
-        XCTAssertGreaterThan(address.frame.minX, sidebar.frame.maxX - 1, "It sits in the page's toolbar")
+        XCTAssertGreaterThan(address.frame.minX, sidebar.frame.maxX - 1, "It sits in the page's control bar")
         XCTAssertTrue(app.buttons["backButton"].exists && app.buttons["reloadButton"].exists)
         XCTAssertLessThan(app.buttons["reloadButton"].frame.maxX, pageBar.frame.minX,
                           "Reload stays with back and forward, before the address field")
@@ -612,11 +614,40 @@ final class AxoUITests: XCTestCase {
         app.typeKey("l", modifierFlags: .command)
         app.typeText("data:text/html,<title>Above</title>\n")
         XCTAssertTrue(sidebar.staticTexts["Above"].waitForExistence(timeout: 10), "⌘L focuses the address field above the page")
+
+        // The control bar's Summarize Page opens one summary, from the bar (no hidden toolbar
+        // copy answers too).
+        app.descendants(matching: .any)["controlBar"].buttons["summarizeButton"].click()
+        XCTAssertTrue(app.staticTexts["summaryText"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.popovers.count, 1, "One summary")
+        app.typeKey(.escape, modifierFlags: [])
+
+        // The control bar sits at the top of the page's area, not in a toolbar across the
+        // window (#170); with the sidebar hidden it takes the window's controls and Show Sidebar.
+        let window = app.windows.firstMatch
+        let controlBar = app.descendants(matching: .any)["controlBar"]
+        XCTAssertTrue(controlBar.exists)
+        XCTAssertFalse(window.toolbars.firstMatch.exists, "No toolbar across the window")
+        XCTAssertEqual(controlBar.frame.minY, window.frame.minY, accuracy: 1, "At the window's top edge")
+        XCTAssertFalse(controlBar.buttons["showSidebarButton"].exists, "No Show Sidebar while it shows")
+        app.buttons["hideSidebarButton"].click()
+        XCTAssertTrue(sidebar.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(controlBar.buttons["showSidebarButton"].waitForExistence(timeout: 5), "The control bar takes Show Sidebar")
+        XCTAssertTrue(window.buttons[XCUIIdentifierCloseWindow].exists, "And the window's controls")
+        XCTAssertLessThan(window.buttons[XCUIIdentifierCloseWindow].frame.maxX, controlBar.buttons["showSidebarButton"].frame.minX)
+        let shot = XCTAttachment(screenshot: window.screenshot())
+        shot.name = "Control bar with the sidebar hidden"
+        shot.lifetime = .keepAlways
+        add(shot)
+        controlBar.buttons["showSidebarButton"].click()
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        XCTAssertTrue(controlBar.buttons["showSidebarButton"].waitForNonExistence(timeout: 5))
     }
 
-    /// Above the page, the toolbar takes the page's `theme-color`, as in Safari (#107), and
-    /// turning "Tint the toolbar to match the page" off in Settings clears it. Checked on a pixel
-    /// of the toolbar between the address field and the page's tools, in window screenshots.
+    /// Above the page, the control bar takes the page's `theme-color`, as in Safari (#107), the
+    /// sidebar's top keeps its own color (#170), and turning "Tint the toolbar to match the page"
+    /// off in Settings clears it. Checked on pixels of the control bar between the address field
+    /// and the page's tools, and of the sidebar's top row, in window screenshots.
     @MainActor
     func testToolbarTakesThePagesThemeColor() throws {
         let raspberry = (red: 155.0 / 255, green: 42.0 / 255, blue: 92.0 / 255)
@@ -650,6 +681,18 @@ final class AxoUITests: XCTestCase {
             XCTAssertEqual(Self.isClose(color, to: raspberry), tinted, "\(name): toolbar pixel \(color)")
         }
         waitForToolbar(tinted: true, "Toolbar tinted to the page")
+        // The tint colors only the page's control bar (#170): the sidebar keeps its own color up
+        // to the window's top, beside its top row's buttons.
+        let row = app.descendants(matching: .any)["sidebarTopRow"]
+        XCTAssertTrue(row.exists, "The sidebar's top row, not a toolbar, is above the sidebar")
+        XCTAssertFalse(window.toolbars.firstMatch.exists, "No toolbar across the window")
+        let hide = app.buttons["hideSidebarButton"].frame
+        let sidebarTop = CGPoint(x: hide.minX - 30 - window.frame.minX, y: 8)
+        let sidebarColor = Self.color(at: sidebarTop, in: window)
+        XCTAssertFalse(Self.isClose(sidebarColor, to: raspberry), "The sidebar's top isn't tinted: \(sidebarColor)")
+        // The sidebar's list reaches 1 pt past its column, so the bar may start right at its end.
+        XCTAssertGreaterThanOrEqual(app.descendants(matching: .any)["controlBar"].frame.minX, sidebar.frame.maxX - 1,
+                             "The control bar sits over the page, not the sidebar")
 
         app.typeKey(",", modifierFlags: .command)
         AxoUITests.selectSettingsPane("general", in: app)
@@ -852,9 +895,9 @@ final class AxoUITests: XCTestCase {
 
     /// The sidebar's footer matches the top of the window (#135): its buttons and the Space dots'
     /// capsule are as tall as the buttons at the top, round, and as far from the window's edges.
-    /// With the navigation bar in the sidebar, the top is the sidebar's top row (#67), lined up
-    /// with the window's controls; above the page, the window toolbar. Checked in light and
-    /// dark mode, with window screenshots.
+    /// The top is the sidebar's top row (#67) and, above the page, the page's control bar (#170),
+    /// both in line with the window's controls. Checked in light and dark mode, with window
+    /// screenshots.
     @MainActor
     func testSidebarFooterMatchesTheToolbar() throws {
         for appearance in ["Light", "Dark"] {
@@ -917,27 +960,18 @@ final class AxoUITests: XCTestCase {
     private func checkFooterMatchesToolbar(in app: XCUIApplication, appearance: String, placement: String) {
         let window = app.windows.firstMatch.frame
         let inSidebar = placement == "sidebar"
-        // The buttons at the top: the sidebar's top row (reload, hide sidebar), or the toolbar's
-        // (back, the page's tools at its trailing end).
-        let top = app.buttons[inSidebar ? "reloadButton" : "backButton"].frame
-        let trailing = app.buttons[inSidebar ? "hideSidebarButton" : "summarizeButton"].frame
+        // The buttons at the top: reload (the sidebar's top row's, or above the page the control
+        // bar's, #170) and Hide Sidebar, both 36 pt glass in line with the window's controls.
+        let top = app.buttons["reloadButton"].frame
+        let trailing = app.buttons["hideSidebarButton"].frame
         let leading = app.buttons[inSidebar ? "downloadsButton" : "settingsButton"].frame
         let newSpace = app.buttons["newSpaceButton"].frame
         let dots = app.descendants(matching: .any)["spaceDots"].frame
         let context = "\(appearance), navigation bar \(placement)"
-        if inSidebar {
-            // The top row's buttons are the footer's glass circles.
-            XCTAssertEqual(top.height, 36, accuracy: 1, "The top row's glass, \(context)")
-            XCTAssertEqual(trailing.height, 36, accuracy: 1, "The top row's glass, \(context)")
-            // In line with the window's controls, as the toolbar's buttons were.
-            let close = app.windows.firstMatch.buttons[XCUIIdentifierCloseWindow].frame
-            XCTAssertEqual(close.midY, top.midY, accuracy: 1.5, "The top row lines up with the window's controls, \(context)")
-        } else {
-            // A toolbar item's frame is its whole 52 pt slot, the 36 pt glass button centered in
-            // it (measured from window screenshots on macOS 27). If the slot changes, measure the
-            // glass again and update SidebarGlassButtonStyle and SpaceDots.
-            XCTAssertEqual(top.height, 52, accuracy: 1, "The toolbar's slot, \(context)")
-        }
+        XCTAssertEqual(top.height, 36, accuracy: 1, "Reload's glass, \(context)")
+        XCTAssertEqual(trailing.height, 36, accuracy: 1, "Hide Sidebar's glass, \(context)")
+        let close = app.windows.firstMatch.buttons[XCUIIdentifierCloseWindow].frame
+        XCTAssertEqual(close.midY, top.midY, accuracy: 1.5, "The top lines up with the window's controls, \(context)")
         for (name, frame) in [("The footer's leading button", leading), ("New Space", newSpace)] {
             XCTAssertEqual(frame.height, 36, accuracy: 1, "\(name) is the toolbar's glass size, \(context)")
             XCTAssertEqual(frame.width, frame.height, accuracy: 1, "\(name) is round, \(context)")
@@ -976,7 +1010,7 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(address.waitForExistence(timeout: 5))
         for id in ["backButton", "forwardButton", "reloadButton", "siteSettingsButton"] {
             let button = app.buttons[id]
-            XCTAssertTrue(button.exists, "\(id) is in the page's toolbar")
+            XCTAssertTrue(button.exists, "\(id) is in the page's control bar")
             XCTAssertGreaterThan(button.frame.minX, sidebar.frame.maxX - 1, "\(id) sits over the page")
         }
 

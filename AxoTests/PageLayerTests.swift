@@ -5,8 +5,9 @@ import WebKit
 @testable import Axo
 
 /// Where the page sits in the real browser window (#67), which these tests host in: with the
-/// navigation bar in the sidebar, the window has no toolbar and the page reaches the window's top
-/// edge, with the sidebar shown or hidden; with the sidebar's address bar hidden, the toolbar
+/// navigation bar in the sidebar, the window has no toolbar: the page reaches the window's top
+/// edge with the sidebar shown, and is a card inset 8 pt with it hidden; with the sidebar's
+/// address bar hidden, the toolbar
 /// comes back and the page sits below it, never under it (a visible toolbar takes every click in
 /// its 52 pt). Checked here
 /// rather than in a UI test because the hosted runner's accessibility reports a web view's frame
@@ -51,6 +52,34 @@ struct PageLayerTests {
         }
         model.setSidebarAddressBarShown(true)
         try await Self.waitUntil("the page reaches the top again") {
+            Self.pageFrame(in: window).map { abs($0.maxY - top) < 1 } ?? false
+        }
+        if let tabID { await model.closeTab(tabID) }
+    }
+
+    /// Above the page (#170), the page's control bar sits at the top of the page's area, in
+    /// place of the window toolbar, and the page starts right below it.
+    @Test func thePageStartsBelowTheControlBarAboveThePage() async throws {
+        let model = try #require(AppEnvironment.browserModel)
+        let window = try #require(NSApp.windows.first { $0.identifier?.rawValue.contains("browser") == true })
+        let settings = AppEnvironment.settings
+        settings.set(NavigationBarPlacement.page.rawValue, forKey: NavigationBarPlacement.storageKey)
+        defer { settings.removeObject(forKey: NavigationBarPlacement.storageKey) }
+
+        let before = model.selectedTabID
+        await model.openTab(url: URL(string: "data:text/html,<title>Below</title>")!)
+        let tabID = model.selectedTabID != before ? model.selectedTabID : nil
+        #expect(tabID != nil, "A tab opened")
+        let top = window.frame.height
+        try await Self.waitUntil("the page sits below the control bar") {
+            Self.pageFrame(in: window).map { abs($0.maxY - (top - 52)) < 1 } ?? false
+        }
+        // Below the control bar, not a toolbar: the window's title bar (where a toolbar would be,
+        // with the window's own controls) is hidden.
+        let titleBarControl = try #require(window.standardWindowButton(.closeButton))
+        #expect(titleBarControl.isHiddenOrHasHiddenAncestor, "No toolbar above the page")
+        settings.removeObject(forKey: NavigationBarPlacement.storageKey)
+        try await Self.waitUntil("the page reaches the top again in the sidebar layout") {
             Self.pageFrame(in: window).map { abs($0.maxY - top) < 1 } ?? false
         }
         if let tabID { await model.closeTab(tabID) }

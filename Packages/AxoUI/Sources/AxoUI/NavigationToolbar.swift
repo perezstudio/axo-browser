@@ -13,7 +13,9 @@ struct NavigationToolbar: ToolbarContent {
     let showsPageTools: Bool
 
     var body: some ToolbarContent {
-        if placement == .page {
+        // Above the page, only while the toolbar shows (window full screen): otherwise the page's
+        // control bar has them, and a hidden copy would answer ⌘L and Site Settings too (#170).
+        if placement == .page, showsPageTools {
             // Back and forward share one glass capsule; reload is its own circle (#67).
             ToolbarItemGroup(placement: .navigation) {
                 BackForwardButtons(model: model)
