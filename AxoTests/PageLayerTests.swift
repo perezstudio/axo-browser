@@ -70,6 +70,10 @@ struct PageLayerTests {
         try await Self.waitUntil("the page sits below the control bar") {
             Self.pageFrame(in: window).map { abs($0.maxY - (top - 52)) < 1 } ?? false
         }
+        // Below the control bar, not a toolbar: the window's title bar (where a toolbar would be,
+        // with the window's own controls) is hidden.
+        let titleBarControl = try #require(window.standardWindowButton(.closeButton))
+        #expect(titleBarControl.isHiddenOrHasHiddenAncestor, "No toolbar above the page")
         settings.removeObject(forKey: NavigationBarPlacement.storageKey)
         try await Self.waitUntil("the page reaches the top again in the sidebar layout") {
             Self.pageFrame(in: window).map { abs($0.maxY - top) < 1 } ?? false

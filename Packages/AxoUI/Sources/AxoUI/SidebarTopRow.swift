@@ -14,6 +14,9 @@ struct SidebarTopRow: View {
     /// Whether it holds back, forward, and reload: with the navigation bar above the page, the
     /// page's control bar has them, and the row keeps only the window's controls and its button.
     var showsNavigation = true
+    /// Whether it draws the window's controls: not in the floating card above the page, where
+    /// the control bar beside it already has them.
+    var showsWindowControls = true
     /// Hides the sidebar, or, in the floating sidebar, keeps it shown.
     let toggleSidebar: () -> Void
 
@@ -48,6 +51,9 @@ struct SidebarTopRow: View {
                 WindowControls()
                     .frame(width: WindowControls.size.width, height: WindowControls.size.height)
                     .padding(.leading, WindowControls.leading)
+                    .opacity(showsWindowControls ? 1 : 0)
+                    .allowsHitTesting(showsWindowControls)
+                    .accessibilityHidden(!showsWindowControls)
                 Spacer(minLength: 0)
                 if showsNavigation {
                     BackForwardCapsule(model: model)
@@ -68,6 +74,7 @@ struct SidebarTopRow: View {
             Color.clear
                 .contentShape(.rect)
                 .gesture(WindowDragGesture())
+                .onTapGesture(count: 2) { NSApp.keyWindow?.performZoom(nil) }
                 .allowsWindowActivationEvents(true)
                 .accessibilityHidden(true)
         }

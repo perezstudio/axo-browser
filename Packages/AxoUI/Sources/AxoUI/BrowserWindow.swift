@@ -60,7 +60,11 @@ public struct BrowserWindow: View {
     /// Shows the sidebar again, as View › Show Sidebar does.
     private func showSidebar() {
         dismissFloatingSidebar()
-        splitController.controller?.toggleSidebar(nil)
+        if let controller = splitController.controller {
+            controller.toggleSidebar(nil)
+        } else {
+            withAnimation { columns = .all }
+        }
     }
 
     /// Whether the sidebar's top row stands in for the window toolbar: while the sidebar shows.
@@ -163,7 +167,8 @@ public struct BrowserWindow: View {
             // Something the sidebar shows, opened from a menu (View › Show Downloads, Site
             // Settings) while the sidebar is hidden, brings the card in to show it.
             .onChange(of: FloatingSidebar.isHolding(model)) {
-                // Above the page, the control bar shows them itself.
+                // Above the page, the control bar shows Downloads, Site Settings, and the summary
+                // itself; the card isn't brought in there.
                 if FloatingSidebar.isHolding(model), floatsSidebar, navigationBarPlacement == .sidebar {
                     isSidebarFloating = true
                 } else {

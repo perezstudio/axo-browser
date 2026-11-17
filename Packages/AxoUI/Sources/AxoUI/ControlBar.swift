@@ -42,7 +42,9 @@ struct ControlBar: View {
                 ReloadButton(model: model)
                     .modifier(SidebarGlassButtonStyle())
                 AddressBar(model: model)
-                    .frame(minWidth: 200, maxWidth: Self.addressMaxWidth)
+                    // It gives way first in a narrow window, so the buttons at the ends stay.
+                    .frame(minWidth: 120, maxWidth: Self.addressMaxWidth)
+                    .layoutPriority(-1)
                     .frame(height: SidebarGlassButtonStyle.side)
                     .glassEffect(.regular, in: .capsule)
                     .accessibilityElement(children: .contain)
@@ -56,10 +58,12 @@ struct ControlBar: View {
         .background {
             ZStack {
                 Rectangle().fill(background)
-                // The bar's empty space moves the window.
+                // The bar's empty space moves the window, and a double click zooms it, as the
+                // title bar's did.
                 Color.clear
                     .contentShape(.rect)
                     .gesture(WindowDragGesture())
+                    .onTapGesture(count: 2) { NSApp.keyWindow?.performZoom(nil) }
                     .allowsWindowActivationEvents(true)
             }
             .accessibilityHidden(true)
@@ -79,14 +83,23 @@ struct ControlBar: View {
         return tint.map { Color(pageColor: $0.color) } ?? Color(nsColor: .windowBackgroundColor)
     }
 
-    /// Extensions, Downloads (once there's a download), and Summarize Page.
+    /// Whether any extension has a button.
+    private var hasExtensions: Bool {
+        guard let provider = model.extensionToolbar, let profileID = model.space?.profileID else { return false }
+        return !provider.toolbarItems(profileID: profileID, tabID: model.selectedTabID).isEmpty
+    }
+
+    /// Extensions (the first few, and a menu with the rest), Downloads (once there's a download),
+    /// and Summarize Page.
     @ViewBuilder
     private var pageTools: some View {
         HStack(spacing: 2) {
-            ExtensionToolbarButtons(model: model)
-                .buttonStyle(.borderless)
-                .frame(width: 28, height: 28)
-                .contentShape(.rect)
+            if hasExtensions {
+                ExtensionToolbarButtons(model: model, limit: ExtensionToolbarButtons.addressBarLimit)
+                    .buttonStyle(.borderless)
+                    .frame(width: 28, height: 28)
+                    .contentShape(.rect)
+            }
             if !model.pool.downloads.items.isEmpty || model.isShowingDownloads {
                 DownloadsButton(model: model)
                     .modifier(SidebarGlassButtonStyle())

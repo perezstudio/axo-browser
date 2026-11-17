@@ -29,7 +29,9 @@ nonisolated struct ToolbarTint: Equatable, Sendable {
 
 #if os(macOS)
 /// Tints the window toolbar to the shown page's color, as Safari does, when the navigation bar
-/// sits above the page and the setting is on. The bar has no text of its own (the title is
+/// sits above the page and the setting is on; the toolbar shows there only in window full screen,
+/// since the page's control bar (#170) takes its place and computes its own tint. It also tells
+/// the pool whether to read pages' colors. The bar has no text of its own (the title is
 /// removed), and its glass buttons and address field pick their own text color for what's
 /// behind them, so they stay readable on any color; forcing the toolbar's dark appearance on dark
 /// colors made white text on pale tinted glass. The sidebar's list keeps Axo's own colors.

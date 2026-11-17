@@ -2,8 +2,8 @@ import SwiftUI
 
 // Mac only; iPhone and iPad have their own chrome.
 #if os(macOS)
-/// The sidebar while it's hidden, with the navigation bar in the sidebar (#67): the page fills
-/// the window with no toolbar or window controls, and the pointer reaching the window's left
+/// The sidebar while it's hidden (#67): in the sidebar layout the page fills the window with no
+/// toolbar or window controls (above the page, the control bar keeps them, #170), and the pointer reaching the window's left
 /// edge floats the sidebar in over the page as a card in the Space's theme. Its top row has the
 /// window's controls and Keep Sidebar Shown; the pointer leaving it lets it go, unless one of
 /// its popovers or sheets is open. ⌃⌘S (View › Show Sidebar) shows the sidebar from the
@@ -27,7 +27,9 @@ struct FloatingSidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SidebarTopRow(model: model, isFloating: true, showsNavigation: showsNavigation, toggleSidebar: keepShown)
+            // Above the page, the control bar beside it keeps the window's controls.
+            SidebarTopRow(model: model, isFloating: true, showsNavigation: showsNavigation,
+                          showsWindowControls: showsNavigation, toggleSidebar: keepShown)
             SidebarView(model: model)
         }
         // The card holds the page's tools while it shows, as the sidebar does.

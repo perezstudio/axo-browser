@@ -615,6 +615,13 @@ final class AxoUITests: XCTestCase {
         app.typeText("data:text/html,<title>Above</title>\n")
         XCTAssertTrue(sidebar.staticTexts["Above"].waitForExistence(timeout: 10), "⌘L focuses the address field above the page")
 
+        // The control bar's Summarize Page opens one summary, from the bar (no hidden toolbar
+        // copy answers too).
+        app.descendants(matching: .any)["controlBar"].buttons["summarizeButton"].click()
+        XCTAssertTrue(app.staticTexts["summaryText"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.popovers.count, 1, "One summary")
+        app.typeKey(.escape, modifierFlags: [])
+
         // The control bar sits at the top of the page's area, not in a toolbar across the
         // window (#170); with the sidebar hidden it takes the window's controls and Show Sidebar.
         let window = app.windows.firstMatch
@@ -890,9 +897,9 @@ final class AxoUITests: XCTestCase {
 
     /// The sidebar's footer matches the top of the window (#135): its buttons and the Space dots'
     /// capsule are as tall as the buttons at the top, round, and as far from the window's edges.
-    /// With the navigation bar in the sidebar, the top is the sidebar's top row (#67), lined up
-    /// with the window's controls; above the page, the window toolbar. Checked in light and
-    /// dark mode, with window screenshots.
+    /// The top is the sidebar's top row (#67) and, above the page, the page's control bar (#170),
+    /// both in line with the window's controls. Checked in light and dark mode, with window
+    /// screenshots.
     @MainActor
     func testSidebarFooterMatchesTheToolbar() throws {
         for appearance in ["Light", "Dark"] {
