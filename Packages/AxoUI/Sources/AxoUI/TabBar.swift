@@ -123,7 +123,8 @@ private struct FavoritesGroup: View {
                 .accessibilityAction(named: "Move Left") { Task { await model.moveFavorite(favorite.id, by: -1) } }
                 .accessibilityAction(named: "Move Right") { Task { await model.moveFavorite(favorite.id, by: 1) } }
                 .contextMenu {
-                    FavoriteContextMenu(model: model, favorite: favorite, hasLeftHome: model.favoriteHasLeftHome(favorite))
+                    FavoriteContextMenu(model: model, favorite: favorite, hasLeftHome: model.favoriteHasLeftHome(favorite),
+                                        isLive: model.pool.isLive(favorite.id))
                 }
                 .accessibilityIdentifier("tabBarFavorite")
             }
@@ -306,7 +307,11 @@ private struct ScrollingTabs: View {
                     .accessibilityElement(children: .contain)
                     .accessibilityLabel("Tabs")
                     .accessibilityIdentifier("tabBarTabs")
-                    Button { model.beginNewTab() } label: {
+                    Button {
+                        // A turn later: the click's own handling in the scroll view took keyboard
+                        // focus back from the command bar's field, which then took no typing.
+                        Task { @MainActor in model.beginNewTab() }
+                    } label: {
                         Image(systemName: "plus")
                             .frame(width: 30, height: 30)
                             .contentShape(.rect)

@@ -258,6 +258,9 @@ public struct BrowserWindow: View {
         }
         .ignoresSafeArea(.container, edges: .top)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.26), value: isTabBarFloating)
+        // A container across the window, not an element of its own: without this the overlay
+        // showed in the accessibility tree with no role (the floating tab bar's audit).
+        .accessibilityElement(children: .contain)
     }
 
     /// Lets the floating tab bar go a moment after the pointer leaves it, once no menu (a
