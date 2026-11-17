@@ -72,6 +72,13 @@ final class AccessibilityAuditTests: XCTestCase {
                    containerFrames.contains(where: { $0.insetBy(dx: -1, dy: -1).contains(snapshot.frame) && $0.width - snapshot.frame.width < 2 }) {
                     return true
                 }
+                // The same layer with no role (an element of type "other", with no children),
+                // which SwiftUI makes for the page column's overlays in the tabs-at-the-top layout
+                // while the tab bar floats (#136). It has nothing for VoiceOver to read.
+                if snapshot.elementType == .other, snapshot.children.isEmpty,
+                   containerFrames.contains(where: { $0.insetBy(dx: -1, dy: -1).contains(snapshot.frame) && $0.width - snapshot.frame.width < 2 }) {
+                    return true
+                }
                 if snapshot.elementType == .group {
                     let children = snapshot.children
                     // HSplitView's and VSplitView's host for one pane of a split view.
