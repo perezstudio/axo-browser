@@ -43,20 +43,7 @@ struct SpaceSwitcher: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Spaces")
         .accessibilityIdentifier("spaceSwitcher")
-        .sheet(isPresented: $model.isCreatingSpace) {
-            NewSpaceSheet(model: model).windowAppearance()
-        }
-        .confirmationDialog(
-            "Delete “\(model.spaceToDelete?.name ?? "")”?",
-            isPresented: Binding(get: { model.spaceToDelete != nil }, set: { if !$0 { model.spaceToDelete = nil } }),
-            presenting: model.spaceToDelete
-        ) { space in
-            Button("Delete Space", role: .destructive) {
-                Task { await model.deleteSpace(space.id) }
-            }
-        } message: { _ in
-            Text("Its tabs will be closed. Its profile and website data are kept.")
-        }
+        .modifier(SpaceSheets(model: model))
     }
 }
 

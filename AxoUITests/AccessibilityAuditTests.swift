@@ -72,6 +72,13 @@ final class AccessibilityAuditTests: XCTestCase {
                    containerFrames.contains(where: { $0.insetBy(dx: -1, dy: -1).contains(snapshot.frame) && $0.width - snapshot.frame.width < 2 }) {
                     return true
                 }
+                // The same layer with no role (an element of type "other", with no children),
+                // which SwiftUI makes for the page column's overlays in the tabs-at-the-top layout
+                // while the tab bar floats (#136). It has nothing for VoiceOver to read.
+                if snapshot.elementType == .other, snapshot.children.isEmpty,
+                   containerFrames.contains(where: { $0.insetBy(dx: -1, dy: -1).contains(snapshot.frame) && $0.width - snapshot.frame.width < 2 }) {
+                    return true
+                }
                 if snapshot.elementType == .group {
                     let children = snapshot.children
                     // HSplitView's and VSplitView's host for one pane of a split view.
@@ -107,6 +114,27 @@ final class AccessibilityAuditTests: XCTestCase {
             print("AUDIT [\(screen)] \(issue.compactDescription): \(describe(snapshot, depth: 0)) frame=\(snapshot.frame)")
             return false
         }
+    }
+
+    /// Tabs at the top (#136): the tab bar with a tab, and the floating tab bar.
+    @MainActor
+    func testAuditTabsOnTop() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        AxoUITests.openPage("data:text/html,<title>Pond</title><p>Axolotls.</p>", in: app)
+        XCTAssertTrue(sidebar.staticTexts["Pond"].waitForExistence(timeout: 10))
+        app.typeKey(",", modifierFlags: .command)
+        AxoUITests.selectSettingsPane("general", in: app)
+        app.radioButtons["At the top"].click()
+        app.typeKey("w", modifierFlags: .command)
+        XCTAssertTrue(app.descendants(matching: .any)["tabBar"].waitForExistence(timeout: 5))
+        try audit(app, "tabs on top")
+
+        app.buttons["tabBarToggleButton"].click()
+        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0)).withOffset(CGVector(dx: 0, dy: 3)).hover()
+        XCTAssertTrue(app.descendants(matching: .any)["floatingTabBar"].waitForExistence(timeout: 5))
+        try audit(app, "floating tab bar")
     }
 
     /// The page's control bar with the navigation bar above the page (#170), with the sidebar

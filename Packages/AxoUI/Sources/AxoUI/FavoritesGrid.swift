@@ -110,7 +110,9 @@ private struct FavoriteTile: View {
         .accessibilityIdentifier("favoriteTile")
         .accessibilityAction(named: "Move Left") { Task { await model.moveFavorite(favorite.id, by: -1) } }
         .accessibilityAction(named: "Move Right") { Task { await model.moveFavorite(favorite.id, by: 1) } }
-        .contextMenu { menu(hasLeftHome: hasLeftHome) }
+        .contextMenu {
+            FavoriteContextMenu(model: model, favorite: favorite, hasLeftHome: hasLeftHome, isLive: model.pool.isLive(favorite.id))
+        }
         .draggable(favorite.id.uuidString)
         .dropDestination(for: String.self) { items, _ in
             guard let dragged = items.first.flatMap(UUID.init(uuidString:)), dragged != favorite.id else { return false }
@@ -136,8 +138,27 @@ private struct FavoriteTile: View {
         }
     }
 
-    @ViewBuilder
-    private func menu(hasLeftHome: Bool) -> some View {
+    /// Drops another favorite onto this one: it takes this tile's place.
+    private func drop(_ dragged: Favorite.ID) async {
+        let order = model.favorites.map(\.id)
+        guard let from = order.firstIndex(of: dragged), let to = order.firstIndex(of: favorite.id) else { return }
+        if from < to {
+            await model.moveFavorite(dragged, after: favorite.id)
+        } else {
+            await model.moveFavorite(dragged, after: to > 0 ? order[to - 1] : nil)
+        }
+    }
+}
+/// A favorite's menu, on its tile in the sidebar and on the tab bar (#136).
+struct FavoriteContextMenu: View {
+    let model: BrowserModel
+    let favorite: Favorite
+    let hasLeftHome: Bool
+    /// Whether its page is loaded, read by the caller's body, so the menu follows it: read
+    /// here, the menu kept an old answer and Unload stayed enabled after unloading.
+    let isLive: Bool
+
+    var body: some View {
         Button("Make This Page the Favorite") { Task { await model.setFavoriteHome(favorite.id) } }
             .disabled(!hasLeftHome)
         Button("Move to Pinned Tabs") { Task { await model.moveFavoriteToPinned(favorite.id) } }
@@ -148,19 +169,8 @@ private struct FavoriteTile: View {
             .disabled(model.favorites.last?.id == favorite.id)
         Divider()
         Button("Unload") { Task { await model.closeTab(favorite.id) } }
-            .disabled(!model.pool.isLive(favorite.id))
+            .disabled(!isLive)
         Button("Remove from Favorites") { Task { await model.removeFavorite(favorite.id) } }
-    }
-
-    /// Drops another favorite onto this one: it takes this tile's place.
-    private func drop(_ dragged: Favorite.ID) async {
-        let order = model.favorites.map(\.id)
-        guard let from = order.firstIndex(of: dragged), let to = order.firstIndex(of: favorite.id) else { return }
-        if from < to {
-            await model.moveFavorite(dragged, after: favorite.id)
-        } else {
-            await model.moveFavorite(dragged, after: to > 0 ? order[to - 1] : nil)
-        }
     }
 }
 #endif
