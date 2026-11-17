@@ -2,6 +2,32 @@ import AxoCore
 import AxoWeb
 import SwiftUI
 
+/// How the tab bar lays out a Space's rows (#136), in the sidebar's order: its favorites, the
+/// top-level pinned tabs as one group, each top-level pinned folder as a collapsed group, then
+/// the other tabs, a split as one tab.
+/// Shared with iOS, where its tests run too; only the bar that draws it is Mac only.
+struct TabBarSections {
+    /// The favorites, in order.
+    let favorites: [Favorite]
+    /// The pinned tabs outside any folder, in order.
+    let pinnedTabs: [AxoCore.Tab]
+    /// The top-level pinned folders, in order, with what's inside each.
+    let folders: [(folder: Folder, children: [PinnedNode])]
+    /// The other tabs, a split as one row.
+    let today: [SpaceSidebarPreview.Row]
+
+    init(_ rows: SpaceSidebarPreview) {
+        favorites = rows.favorites
+        pinnedTabs = rows.pinnedTree.compactMap { node in
+            if case .tab(let tab) = node { tab } else { nil }
+        }
+        folders = rows.pinnedTree.compactMap { node in
+            if case .folder(let folder, let children) = node { (folder, children) } else { nil }
+        }
+        today = rows.rows
+    }
+}
+
 // Mac only; iPhone and iPad have their own chrome.
 #if os(macOS)
 /// The tab bar with tabs at the top (#136), as the board draws it: the window's controls, the
@@ -54,31 +80,6 @@ struct TabBar: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Tab bar")
         .accessibilityIdentifier("tabBar")
-    }
-}
-
-/// How the tab bar lays out a Space's rows (#136), in the sidebar's order: its favorites, the
-/// top-level pinned tabs as one group, each top-level pinned folder as a collapsed group, then
-/// the other tabs, a split as one tab.
-struct TabBarSections {
-    /// The favorites, in order.
-    let favorites: [Favorite]
-    /// The pinned tabs outside any folder, in order.
-    let pinnedTabs: [AxoCore.Tab]
-    /// The top-level pinned folders, in order, with what's inside each.
-    let folders: [(folder: Folder, children: [PinnedNode])]
-    /// The other tabs, a split as one row.
-    let today: [SpaceSidebarPreview.Row]
-
-    init(_ rows: SpaceSidebarPreview) {
-        favorites = rows.favorites
-        pinnedTabs = rows.pinnedTree.compactMap { node in
-            if case .tab(let tab) = node { tab } else { nil }
-        }
-        folders = rows.pinnedTree.compactMap { node in
-            if case .folder(let folder, let children) = node { (folder, children) } else { nil }
-        }
-        today = rows.rows
     }
 }
 
