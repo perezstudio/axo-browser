@@ -93,33 +93,65 @@ struct EdgeHoverDetector: NSViewRepresentable {
         override func mouseExited(with event: NSEvent) { onHover(false) }
     }
 }
-/// A slim bar along the page's top edge that moves the window while the sidebar is hidden (#67),
-/// when nothing else on screen can: it shows once the pointer reaches the top edge and goes when
-/// the pointer leaves, as the floating sidebar does. Dragging it moves the window and a double
-/// click zooms it, as the title bar would. It takes the pointer only while it shows.
-struct WindowDragBar: View {
-    /// Reports the pointer entering and leaving the bar.
-    let onHover: (Bool) -> Void
+/// The page as a card on the Space's theme while the sidebar is hidden (#67): inset by
+/// ``inset`` with rounded corners and a soft shadow, as the board draws it. The margin around
+/// it is the window's to drag, and a double click there zooms it, as on a title bar, since
+/// nothing else on screen can move the window then. The card takes the page column's whole
+/// place again once the sidebar shows.
+///
+/// It comes in two parts around the page column's `ignoresSafeArea` (the title bar's 52 pt
+/// area): ``PageCard`` (the card's shape and its top margin) goes before it, so the margin is
+/// measured from the window's top, and ``PageCardMargin`` (the other margins and the theme
+/// behind) after it. Padding the column after it left the card under the title bar's area, and
+/// before it, 8 pt below that area.
+struct PageCard: ViewModifier {
+    let isCard: Bool
 
-    /// The bar's height, its grabber included.
-    static let height: CGFloat = 14
+    /// The margin around the card.
+    static let inset: CGFloat = 8
+    /// The card's corners.
+    static let cornerRadius: CGFloat = 10
 
-    var body: some View {
-        Capsule()
-            .fill(.secondary)
-            .frame(width: 36, height: 4)
-            .frame(maxWidth: .infinity)
-            .frame(height: Self.height)
-            .background(.bar)
-            .contentShape(.rect)
-            .gesture(WindowDragGesture())
-            .onTapGesture(count: 2) { NSApp.keyWindow?.performZoom(nil) }
-            .allowsWindowActivationEvents(true)
-            .onHover(perform: onHover)
-            .help("Drag to move the window")
-            // Only for the pointer, as a title bar's empty space is: VoiceOver and the keyboard
-            // move the window with the Window menu and macOS's own commands.
-            .accessibilityHidden(true)
+    func body(content: Content) -> some View {
+        content
+            .clipShape(.rect(cornerRadius: isCard ? Self.cornerRadius : 0))
+            .overlay {
+                if isCard {
+                    RoundedRectangle(cornerRadius: Self.cornerRadius)
+                        .strokeBorder(.black.opacity(0.2), lineWidth: 0.5)
+                        .allowsHitTesting(false)
+                }
+            }
+            .shadow(color: .black.opacity(isCard ? 0.25 : 0), radius: 10, y: 6)
+            .padding(.top, isCard ? Self.inset : 0)
+    }
+}
+
+/// The card's side and bottom margins and the Space's theme behind it, whose margin moves the
+/// window; see ``PageCard``.
+struct PageCardMargin: ViewModifier {
+    let model: BrowserModel
+    let isCard: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .padding([.leading, .trailing, .bottom], isCard ? PageCard.inset : 0)
+            .background {
+                if isCard {
+                    ZStack {
+                        Rectangle().fill(.background)
+                        Color.clear.modifier(SpaceThemeModifier(model: model))
+                        // The margin moves the window, and a double click zooms it.
+                        Color.clear
+                            .contentShape(.rect)
+                            .gesture(WindowDragGesture())
+                            .onTapGesture(count: 2) { NSApp.keyWindow?.performZoom(nil) }
+                            .allowsWindowActivationEvents(true)
+                    }
+                    .ignoresSafeArea()
+                    .accessibilityHidden(true)
+                }
+            }
     }
 }
 

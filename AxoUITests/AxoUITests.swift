@@ -702,9 +702,8 @@ final class AxoUITests: XCTestCase {
     /// With the navigation bar in the sidebar, the sidebar's top row stands in for the window
     /// toolbar (#67): back, forward, reload, and Hide Sidebar sit beside the window's controls,
     /// the window has no toolbar, and the page reaches the window's top edge, where clicks reach
-    /// it. With the sidebar hidden the page fills the window, the sidebar floats in from the left
-    /// edge, and a bar along the top edge moves the window; with the sidebar's address bar
-    /// hidden, the toolbar comes back.
+    /// it. With the sidebar hidden the page is a card on the Space's theme and the sidebar floats
+    /// in from the left edge; with the sidebar's address bar hidden, the toolbar comes back.
     @MainActor
     func testTheSidebarReplacesTheToolbar() throws {
         let app = launchApp()
@@ -759,35 +758,12 @@ final class AxoUITests: XCTestCase {
         XCTAssertFalse(window.toolbars.firstMatch.waitForExistence(timeout: 2), "No toolbar with the sidebar hidden")
         XCTAssertFalse(window.buttons[XCUIIdentifierCloseWindow].exists, "Nor the window's controls")
 
-        // The pointer at the page's top edge shows a bar that moves the window, and leaving it
-        // lets it go. It's only for the pointer (hidden from accessibility, as a title bar's
-        // space is), so it's found by the pixels it draws over the page; dragging it can't be
-        // checked here, since synthetic drags don't move windows on the hosted Mac.
-        let topEdge = window.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0)).withOffset(CGVector(dx: 0, dy: 2))
-        // The bar's grabber, a gray capsule centered on it, 7 pt down: it stands out from any page
-        // (which doesn't draw on the hosted Mac).
-        let barPoint = CGPoint(x: window.frame.width / 2, y: 7)
-        let pageColor = Self.color(at: barPoint, in: window)
-        topEdge.hover()
-        var barColor = Self.color(at: barPoint, in: window)
-        let showDeadline = Date.now.addingTimeInterval(5)
-        while Self.isClose(barColor, to: pageColor), Date.now < showDeadline {
-            RunLoop.current.run(until: .now.addingTimeInterval(0.25))
-            barColor = Self.color(at: barPoint, in: window)
-        }
-        let barShot = XCTAttachment(screenshot: window.screenshot())
-        barShot.name = "Drag bar along the top edge"
-        barShot.lifetime = .keepAlways
-        add(barShot)
-        XCTAssertFalse(Self.isClose(barColor, to: pageColor), "The drag bar shows along the top edge: \(pageColor) became \(barColor)")
-        window.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.6)).hover()
-        var leftColor = Self.color(at: barPoint, in: window)
-        let hideDeadline = Date.now.addingTimeInterval(5)
-        while !Self.isClose(leftColor, to: pageColor), Date.now < hideDeadline {
-            RunLoop.current.run(until: .now.addingTimeInterval(0.25))
-            leftColor = Self.color(at: barPoint, in: window)
-        }
-        XCTAssertTrue(Self.isClose(leftColor, to: pageColor), "The pointer leaving lets it go")
+        // The page is a card on the Space's theme, inset so the margin moves the window (its
+        // place is checked in AxoTests' PageLayerTests; the screenshot shows the look).
+        let cardShot = XCTAttachment(screenshot: window.screenshot())
+        cardShot.name = "Page as a card with the sidebar hidden"
+        cardShot.lifetime = .keepAlways
+        add(cardShot)
 
         // The pointer at the window's left edge floats the sidebar in, with the window's
         // controls and Keep Sidebar Shown in its top row.
