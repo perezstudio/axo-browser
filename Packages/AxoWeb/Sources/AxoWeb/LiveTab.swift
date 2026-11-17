@@ -40,7 +40,10 @@ final class LiveTab: EnginePageDelegate {
         self.pool = pool
         self.lastUsed = lastUsed
         page.delegate = self
+        // A tab muted before it hibernated, or before its page was replaced, stays muted.
+        if pool.mutedTabs.contains(tabID) { page.setAudioMuted(true) }
         syncState()
+        state.media = page.media
     }
 
     /// Copies the page's state into ``state``, reporting URL and title changes to the pool.
@@ -82,6 +85,11 @@ final class LiveTab: EnginePageDelegate {
         pool?.loadFavicon(for: tabID)
         finishedLoads += 1
         pool?.refreshPageColors(of: self)
+    }
+
+    func pageMediaDidChange(_ page: any EnginePage) {
+        let media = page.media
+        if state.media != media { state.media = media }
     }
 
     func pageWantsToBeShown(_ page: any EnginePage) {

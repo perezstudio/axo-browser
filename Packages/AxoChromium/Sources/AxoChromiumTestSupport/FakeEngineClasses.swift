@@ -269,6 +269,24 @@ public final class FakePage: NSObject, AXOPage {
     /// left of the bounds it's given, as with DevTools docked to the right.
     public var devToolsView: NSView?
     public var hasDevTools = false
+
+    /// Sound and devices (#71, #74); ``simulateMedia(isPlayingAudio:capture:)`` reports a change
+    /// as the engine would.
+    public var isPlayingAudio = false
+    public var audioMuted = false {
+        didSet { if audioMuted != oldValue { delegate?.pageAudioStateDidChange?(self) } }
+    }
+    public var capture: AXOPageCapture = []
+    public func simulateMedia(isPlayingAudio: Bool? = nil, capture: AXOPageCapture? = nil) {
+        if let isPlayingAudio {
+            self.isPlayingAudio = isPlayingAudio
+            delegate?.pageAudioStateDidChange?(self)
+        }
+        if let capture {
+            self.capture = capture
+            delegate?.pageCaptureDidChange?(self)
+        }
+    }
     public var devToolsPageWidth: CGFloat = 600
     public private(set) var devToolsLayoutBounds: [NSRect] = []
     public func devToolsPageFrame(inBounds bounds: NSRect) -> NSRect {

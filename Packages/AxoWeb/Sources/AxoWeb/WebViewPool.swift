@@ -630,10 +630,24 @@ public final class WebViewPool {
         live[tabID]?.page.exitFullscreen()
     }
 
+    /// The tabs muted (#71). Muting lasts while the tab is open, through hibernation and its
+    /// page being replaced, but not across launches, as in Arc.
+    public private(set) var mutedTabs: Set<Tab.ID> = []
+
+    /// Mutes a tab's sound, or unmutes it, now and for any page it gets later.
+    public func setMuted(_ muted: Bool, tabID: Tab.ID) {
+        if muted { mutedTabs.insert(tabID) } else { mutedTabs.remove(tabID) }
+        for liveTab in [live[tabID], hibernated[tabID]?.kept].compactMap(\.self) {
+            liveTab.page.setAudioMuted(muted)
+            liveTab.pageMediaDidChange(liveTab.page)
+        }
+    }
+
     /// Forgets a tab entirely, for example when it closes. Its page and saved history are
     /// discarded.
     public func discard(_ tabID: Tab.ID) {
         awaitingAdoption[tabID] = nil
+        mutedTabs.remove(tabID)
         hibernated.removeValue(forKey: tabID)?.kept?.tearDown()
         visibleCounts[tabID] = nil
         live.removeValue(forKey: tabID)?.tearDown()

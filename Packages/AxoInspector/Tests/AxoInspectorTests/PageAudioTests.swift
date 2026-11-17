@@ -1,0 +1,33 @@
+import Foundation
+import Testing
+import WebKit
+@testable import AxoInspector
+
+@MainActor
+struct PageAudioTests {
+    @Test func theRuntimeHasThePrivateCalls() {
+        // If a macOS update removes them, this fails first, and WebKit pages lose only sound.
+        #expect(PageAudio.isAvailable)
+    }
+
+    @Test func mutingAPageIsReported() {
+        let webView = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
+        let audio = PageAudio()
+        #expect(!audio.isMuted(in: webView))
+        #expect(!audio.isPlayingAudio(in: webView))
+        audio.setMuted(true, in: webView)
+        #expect(audio.isMuted(in: webView))
+        audio.setMuted(false, in: webView)
+        #expect(!audio.isMuted(in: webView))
+    }
+
+    @Test func observingStopsWhenReleased() {
+        let webView = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
+        var observation = PageAudio().observe(webView) {}
+        #expect(observation != nil)
+        // Releasing removes the observer; WebKit would throw on deallocating an observed view
+        // otherwise.
+        observation = nil
+        #expect(observation == nil)
+    }
+}

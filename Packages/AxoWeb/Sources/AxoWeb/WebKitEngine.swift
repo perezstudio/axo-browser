@@ -22,6 +22,11 @@ public final class WebKitEngine: WebEngine {
     private let pages = NSHashTable<WebKitPage>.weakObjects()
     private let downloads = WebKitDownloads()
 
+    /// Whether pages play sound, and muting them (#71), which `WKWebView` offers only through
+    /// private API, so the app sets this from AxoInspector. Without it, WebKit pages never
+    /// report sound and can't be muted. Set it before making pages.
+    public var audio: (any WebKitPageAudio)?
+
     /// WebKit never changes tabs on its own, so it never calls this.
     public weak var delegate: (any WebEngineDelegate)?
 
@@ -68,7 +73,7 @@ public final class WebKitEngine: WebEngine {
         configurators.forEach { $0(configuration, profileID) }
         let webView = PooledWebView(frame: .zero, configuration: configuration)
         webView.allowsBackForwardNavigationGestures = true
-        let page = WebKitPage(webView: webView, downloads: downloads)
+        let page = WebKitPage(webView: webView, downloads: downloads, audio: audio)
         hoveredLinks.page = page
         pages.add(page)
         return page
@@ -104,10 +109,13 @@ public final class WebKitPage: NSObject, EnginePage {
     public weak var delegate: (any EnginePageDelegate)?
     private let downloads: WebKitDownloads
     private var observations: [NSKeyValueObservation] = []
+    private let audio: (any WebKitPageAudio)?
+    private var audioObservation: AnyObject?
 
-    init(webView: PooledWebView, downloads: WebKitDownloads) {
+    init(webView: PooledWebView, downloads: WebKitDownloads, audio: (any WebKitPageAudio)? = nil) {
         self.webView = webView
         self.downloads = downloads
+        self.audio = audio
         super.init()
         webView.navigationDelegate = self
         webView.uiDelegate = self
@@ -131,9 +139,40 @@ public final class WebKitPage: NSObject, EnginePage {
             webView.observe(\.canGoBack) { webView, _ in changed(webView) },
             webView.observe(\.canGoForward) { webView, _ in changed(webView) },
         ]
+        let mediaChanged: @Sendable (WKWebView) -> Void = { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.delegate?.pageMediaDidChange(self)
+            }
+        }
+        observations += [
+            webView.observe(\.cameraCaptureState) { webView, _ in mediaChanged(webView) },
+            webView.observe(\.microphoneCaptureState) { webView, _ in mediaChanged(webView) },
+        ]
+        audioObservation = audio?.observe(webView) { [weak self] in
+            guard let self else { return }
+            self.delegate?.pageMediaDidChange(self)
+        }
     }
 
     public var view: PlatformView { webView }
+
+    /// The camera and microphone come from `WKWebView`'s capture states; sound and muting from
+    /// ``WebKitPageAudio``. WebKit has no public way to tell screen sharing or location in use.
+    public var media: PageMedia {
+        var capture: PageCapture = []
+        if webView.cameraCaptureState == .active { capture.insert(.camera) }
+        if webView.microphoneCaptureState == .active { capture.insert(.microphone) }
+        return PageMedia(
+            isPlayingAudio: audio?.isPlayingAudio(in: webView) ?? false,
+            isMuted: audio?.isMuted(in: webView) ?? false,
+            capture: capture
+        )
+    }
+
+    public func setAudioMuted(_ muted: Bool) {
+        audio?.setMuted(muted, in: webView)
+    }
     public var url: URL? { webView.url }
     public var title: String { webView.title ?? "" }
     public var isLoading: Bool { webView.isLoading }
@@ -218,6 +257,7 @@ public final class WebKitPage: NSObject, EnginePage {
     public func close() {
         observations.forEach { $0.invalidate() }
         observations = []
+        audioObservation = nil
         webView.stopLoading()
         webView.navigationDelegate = nil
         webView.uiDelegate = nil
@@ -514,4 +554,19 @@ extension WebViewPool {
         get { requiredWebKitEngine.removeDataStore }
         set { requiredWebKitEngine.removeDataStore = newValue }
     }
+}
+
+/// Sound in a `WKWebView`, which WebKit offers only through private API (AxoInspector's
+/// `PageAudio`). ``WebKitEngine/audio``.
+@MainActor
+public protocol WebKitPageAudio: AnyObject {
+    /// Whether the page plays sound now, muted or not.
+    func isPlayingAudio(in webView: WKWebView) -> Bool
+    /// Whether the page's sound is muted.
+    func isMuted(in webView: WKWebView) -> Bool
+    /// Mutes or unmutes the page's sound (not its camera or microphone).
+    func setMuted(_ muted: Bool, in webView: WKWebView)
+    /// Calls `changed` on the main actor whenever the page starts or stops playing sound, until
+    /// the returned object is released. Nil when it can't tell.
+    func observe(_ webView: WKWebView, changed: @escaping @MainActor () -> Void) -> AnyObject?
 }

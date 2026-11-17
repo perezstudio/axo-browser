@@ -168,15 +168,57 @@ public protocol EnginePage: AnyObject {
     func loadIfDiscarded()
     /// Whether the page is discarded (``discard()``), until it loads again.
     var isDiscarded: Bool { get }
+
+    /// Whether the page plays sound, whether it's muted, and what it uses (the camera, the
+    /// microphone, the screen, the person's location), for its tab's row (#71, #74). Engines
+    /// report changes through ``EnginePageDelegate/pageMediaDidChange(_:)``.
+    var media: PageMedia { get }
+    /// Mutes the page's sound, or unmutes it.
+    func setAudioMuted(_ muted: Bool)
 }
 
 extension EnginePage {
+    /// Nothing known, for engines that can't tell.
+    public var media: PageMedia { PageMedia() }
+    /// Does nothing, for engines that can't mute.
+    public func setAudioMuted(_ muted: Bool) {}
     public func discard() -> Bool { false }
     public func loadIfDiscarded() {}
     public var isDiscarded: Bool { false }
     public func toggleDevTools() -> Bool { false }
     public func showDevToolsConsole() -> Bool { false }
     public var hasDevTools: Bool { false }
+}
+
+/// What a page uses that its tab's row shows (#74), as Chrome's tab strip does.
+public struct PageCapture: OptionSet, Hashable, Sendable {
+    public let rawValue: Int
+    public init(rawValue: Int) { self.rawValue = rawValue }
+
+    /// The camera.
+    public static let camera = PageCapture(rawValue: 1 << 0)
+    /// The microphone.
+    public static let microphone = PageCapture(rawValue: 1 << 1)
+    /// The screen, a window, or a tab, shared by the page.
+    public static let screen = PageCapture(rawValue: 1 << 2)
+    /// The person's location.
+    public static let location = PageCapture(rawValue: 1 << 3)
+}
+
+/// A page's sound and what it uses (#71, #74).
+public struct PageMedia: Hashable, Sendable {
+    /// Whether the page plays sound, muted or not.
+    public var isPlayingAudio = false
+    /// Whether its sound is muted.
+    public var isMuted = false
+    /// What it uses now.
+    public var capture: PageCapture = []
+
+    public init(isPlayingAudio: Bool = false, isMuted: Bool = false, capture: PageCapture = []) {
+        self.isPlayingAudio = isPlayingAudio
+        self.isMuted = isMuted
+        self.capture = capture
+    }
 }
 
 /// Receives a ``EnginePage``'s events. ``WebViewPool`` implements it for each live tab.
@@ -242,6 +284,9 @@ public protocol EnginePageDelegate: AnyObject {
     /// The page opened another page that's already loading (`window.open`, a `target="_blank"`
     /// link), for engines that keep the new page connected to its opener.
     func page(_ page: any EnginePage, didOpen opened: OpenedPage)
+    /// The page started or stopped playing sound, was muted or unmuted, or started or stopped
+    /// using a device. Read ``EnginePage/media``.
+    func pageMediaDidChange(_ page: any EnginePage)
 }
 
 /// A page another page opened, already loading, with its opener (`window.opener`) and the

@@ -400,6 +400,28 @@ struct ChromiumEngineTests {
         #expect(asked == [tab.id])
     }
 
+    @Test func soundAndDevicesReachTheTabAndMutingReachesThePage() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine)
+        let tab = Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial)
+        pool.page(for: tab, profileID: profileID)
+        let fake = try #require(FakePage.made.first)
+
+        fake.simulateMedia(isPlayingAudio: true)
+        #expect(pool.state(for: tab.id)?.media.isPlayingAudio == true)
+        fake.simulateMedia(capture: [.camera, .microphone, .screen, .location])
+        #expect(pool.state(for: tab.id)?.media.capture == [.camera, .microphone, .screen, .location])
+
+        pool.setMuted(true, tabID: tab.id)
+        #expect(fake.audioMuted)
+        #expect(pool.state(for: tab.id)?.media.isMuted == true)
+        pool.setMuted(false, tabID: tab.id)
+        #expect(!fake.audioMuted)
+    }
+
     @Test func aPagesFilePickerReachesThePoolAsARequest() async throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)

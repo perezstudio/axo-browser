@@ -408,6 +408,10 @@ private struct TopTab: View {
                     .lineLimit(1)
                     .foregroundStyle(isDimmed ? .secondary : .primary)
                 Spacer(minLength: 0)
+                // Room for the speaker and dot, drawn over the tab's end with the close button.
+                if media.hasSound || !media.capture.isEmpty {
+                    Color.clear.frame(width: indicatorsWidth, height: 1)
+                }
             }
             // The same width hovered or not, so tabs never shift under the pointer; the close
             // button covers the title's end.
@@ -426,6 +430,11 @@ private struct TopTab: View {
         .accessibilityValue(stateDescription)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityAction(named: closeTitle) { close() }
+        .accessibilityActions {
+            if media.hasSound {
+                Button(media.muteTitle) { toggleMute() }
+            }
+        }
         .accessibilityAction(named: "Move Left") { move(by: -1) }
         .accessibilityAction(named: "Move Right") { move(by: 1) }
         .accessibilityAction(named: tab.isPinned ? "Unpin" : "Pin") {
@@ -433,25 +442,48 @@ private struct TopTab: View {
         }
         .accessibilityIdentifier("topTab")
         .overlay(alignment: .trailing) {
-            if isHovering {
-                Button { close() } label: {
-                    TabRowCloseSquare(systemImage: tab.isPinned ? "minus" : "xmark")
+            HStack(spacing: 2) {
+                // As in a sidebar row: the speaker stays under the pointer, the dot gives way to
+                // the close button.
+                if media.hasSound {
+                    TabMuteButton(media: media) { toggleMute() }
                 }
-                .buttonStyle(.borderless)
-                .padding(.trailing, 5)
-                .help(closeTitle)
-                .accessibilityLabel(closeTitle)
-                .accessibilityIdentifier("tabBarCloseButton")
+                if !media.capture.isEmpty, !isHovering {
+                    TabCaptureDot(media: media)
+                }
+                if isHovering {
+                    Button { close() } label: {
+                        TabRowCloseSquare(systemImage: tab.isPinned ? "minus" : "xmark")
+                    }
+                    .buttonStyle(.borderless)
+                    .help(closeTitle)
+                    .accessibilityLabel(closeTitle)
+                    .accessibilityIdentifier("tabBarCloseButton")
+                }
             }
+            .padding(.trailing, 5)
         }
         .onHover { isHovering = $0 }
-        .contextMenu { TabContextMenu(model: model, tab: tab) }
+        .contextMenu { TabContextMenu(model: model, tab: tab, media: media) }
     }
+
+    /// The tab's pages: a split's panes, or the tab.
+    private var tabIDs: [AxoCore.Tab.ID] { (panes ?? [tab]).map(\.id) }
+
+    /// What the tab's pages play and use (#71, #74).
+    private var media: PageMedia { model.tabMedia(tabIDs) }
+
+    /// The speaker and dot's width, which the title leaves free.
+    private var indicatorsWidth: CGFloat {
+        (media.hasSound ? 22 : 0) + (media.capture.isEmpty ? 0 : 22)
+    }
+
+    private func toggleMute() { model.toggleMuted(tabIDs) }
 
     /// The tab's state for VoiceOver: the sidebar row's, and pinned.
     private var stateDescription: String {
         let state = TabRow.stateDescription(isLoading: model.isTabLoading(tab.id), isDimmed: isDimmed,
-                                            isAwayFromHome: tab.hasLeftHome)
+                                            isAwayFromHome: tab.hasLeftHome, media: media)
         return [tab.isPinned ? "Pinned" : nil, state.isEmpty ? nil : state].compactMap(\.self).joined(separator: ", ")
     }
 

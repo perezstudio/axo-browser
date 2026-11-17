@@ -35,6 +35,14 @@ Limitations in `WKWebView` and `WKWebExtension` that block or shape Axo features
 - **Reproduction:** load a page with `<video src="clip.mov" controls>` in a window and, after `loadedmetadata`, check `video.webkitSupportsPresentationMode('picture-in-picture')`.
 - **For now:** AxoInspector's `PictureInPicture.enable(in:)` sets the private preference behind a `responds(to:)` check. Element fullscreen is public (`WKPreferences.isElementFullscreenEnabled`) but off by default, and AxoWeb turns it on.
 
+## Sound, screen sharing, and location in use have no public API
+
+- **Found:** November 2026, macOS 27 SDK (Xcode 27).
+- **Need:** show in a tab's row that its page plays sound, with a speaker that mutes it (#71), and that it uses the camera, microphone, screen, or location (#74), as Safari's tabs do.
+- **What happens:** `WKWebView` reports the camera and microphone publicly (`cameraCaptureState`, `microphoneCaptureState`, key-value observable), but whether a page plays sound, muting it, screen sharing (`getDisplayMedia()`), and location in use are private (`_isPlayingAudio`, `_setPageMuted:`, `_mediaCaptureState`) or not exposed at all.
+- **Reproduction:** load a page that plays an `AudioContext` tone after a click; no public `WKWebView` property changes.
+- **For now:** AxoInspector's `PageAudio` uses the private sound calls behind `responds(to:)` checks. WebKit pages (iPhone, iPad, and Mac test runs) never show screen sharing or location in use. Chromium, the Mac's engine, reports all of them.
+
 ## `runtime.onInstalled` doesn't fire
 
 - **Found:** October 2026, macOS 27 SDK (Xcode 27).
