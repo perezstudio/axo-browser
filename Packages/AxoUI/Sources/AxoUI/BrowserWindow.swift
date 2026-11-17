@@ -276,6 +276,10 @@ public struct BrowserWindow: View {
                 FloatingSidebar(model: model) {
                     dismissFloatingSidebar()
                     splitController.controller?.toggleSidebar(nil)
+                    // The card, which had keyboard focus from the click, goes: the page takes it,
+                    // so View › Toggle Sidebar (⌃⌘S) still finds the split view in the responder
+                    // chain rather than nothing.
+                    model.focusPage()
                 } onHover: { isOver in
                     isPointerOverFloatingSidebar = isOver
                     if isOver { floatingSidebarRelease?.cancel() } else { letFloatingSidebarGo() }
