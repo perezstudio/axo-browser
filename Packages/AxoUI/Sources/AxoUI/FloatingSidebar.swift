@@ -4,7 +4,8 @@ import SwiftUI
 #if os(macOS)
 /// The sidebar while it's hidden (#67): in the sidebar layout the page fills the window with no
 /// toolbar or window controls (above the page, the control bar keeps them, #170), and the pointer reaching the window's left
-/// edge floats the sidebar in over the page as a card in the Space's theme. Its top row has the
+/// edge floats the sidebar in over the page as the board's card: the Space's theme as tinted glass
+/// over the page (`FloatingThemeGlass`). Its top row has the
 /// window's controls and Keep Sidebar Shown; the pointer leaving it lets it go, unless one of
 /// its popovers or sheets is open. ⌃⌘S (View › Show Sidebar) shows the sidebar from the
 /// keyboard, and with VoiceOver.
@@ -18,8 +19,8 @@ struct FloatingSidebar: View {
     /// Reports the pointer entering and leaving the card.
     let onHover: (Bool) -> Void
 
-    /// The card's width: as wide as the narrowest sidebar with its top row.
-    static let width: CGFloat = SidebarTopRow.minimumSidebarWidth + 18
+    /// The card's width, the board's 268 pt.
+    static let width: CGFloat = 268
     /// How far the card sits in from the window's edges.
     static let inset: CGFloat = 8
     /// The card's corners, the window's own radius on macOS 27.
@@ -34,14 +35,19 @@ struct FloatingSidebar: View {
         }
         // The card holds the page's tools while it shows, as the sidebar does.
         .environment(\.pageToolsInSidebar, true)
-        .modifier(SpaceThemeModifier(model: model))
+        // Outside the split view's column, the list doesn't get the sidebar's style on its own,
+        // and drew a plain, opaque list over the card.
+        .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .modifier(SpaceThemeModifier(model: model, isFloating: true))
         .clipShape(.rect(cornerRadius: Self.cornerRadius))
+        // The board's panel: a hairline light edge and a deep, soft shadow.
         .overlay {
             RoundedRectangle(cornerRadius: Self.cornerRadius)
-                .strokeBorder(.separator, lineWidth: 0.5)
+                .strokeBorder(.white.opacity(0.28), lineWidth: 0.5)
                 .allowsHitTesting(false)
         }
-        .shadow(color: .black.opacity(0.25), radius: 18, y: 6)
+        .shadow(color: .black.opacity(0.35), radius: 25, y: 18)
         .frame(width: Self.width)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("floatingSidebar")
