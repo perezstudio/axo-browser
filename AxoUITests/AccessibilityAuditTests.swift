@@ -170,6 +170,16 @@ final class AccessibilityAuditTests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Pond"].waitForExistence(timeout: 10))
         try audit(app, "page")
 
+        // The sidebar hidden, floating in from the window's left edge (#67).
+        app.typeKey("s", modifierFlags: [.command, .control])
+        XCTAssertTrue(sidebar.waitForNonExistence(timeout: 5))
+        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5)).withOffset(CGVector(dx: 2, dy: 0)).hover()
+        XCTAssertTrue(app.descendants(matching: .any)["floatingSidebar"].waitForExistence(timeout: 5))
+        try audit(app, "floating sidebar")
+        app.typeKey("s", modifierFlags: [.command, .control])
+        XCTAssertTrue(app.descendants(matching: .any)["sidebarTopRow"].waitForExistence(timeout: 5))
+        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.5)).hover()
+
         // No button while the sidebar shows (#67): View › Summarize Page.
         app.menuBars.menuBarItems["View"].click()
         app.menuBars.menuItems["Summarize Page"].click()

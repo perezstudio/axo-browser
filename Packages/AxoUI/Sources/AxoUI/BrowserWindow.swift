@@ -21,13 +21,30 @@ public struct BrowserWindow: View {
     @State private var isWindowFullScreen = false
     /// The split view's controller, which Hide Sidebar collapses as View › Toggle Sidebar does.
     @State private var splitController: WeakSplitController = WeakSplitController()
+    /// Whether the hidden sidebar floats over the page (#67), from the pointer reaching the
+    /// window's left edge until it leaves the card.
+    @State private var isSidebarFloating = false
+    /// Whether the pointer is over the floating sidebar.
+    @State private var isPointerOverFloatingSidebar = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Whether the sidebar's top row stands in for the window toolbar (#67): with the navigation
-    /// bar in the sidebar and its address bar shown, while the sidebar shows. The page then
-    /// reaches the window's top edge and the page's tools are in the sidebar. With the sidebar
-    /// or its address bar hidden, the toolbar comes back for now, with the page's tools.
+    /// Whether the window has no toolbar (#67): with the navigation bar in the sidebar and its
+    /// address bar shown, outside full screen (where the title bar's area isn't there). The page
+    /// reaches the window's top edge and the page's tools are in the sidebar. With the sidebar's
+    /// address bar hidden, or in full screen, the toolbar comes back with the page's tools.
+    private var hidesToolbar: Bool {
+        navigationBarPlacement == .sidebar && showsSidebarAddressBar && !isWindowFullScreen
+    }
+
+    /// Whether the sidebar's top row stands in for the window toolbar: while the sidebar shows.
     private var sidebarReplacesToolbar: Bool {
-        navigationBarPlacement == .sidebar && showsSidebarAddressBar && !isSidebarCollapsed && !isWindowFullScreen
+        hidesToolbar && !isSidebarCollapsed
+    }
+
+    /// Whether the hidden sidebar floats in from the window's left edge, as on the board, while
+    /// the page fills the window.
+    private var floatsSidebar: Bool {
+        hidesToolbar && isSidebarCollapsed
     }
 
     /// Creates a window showing `model`.
@@ -64,7 +81,7 @@ public struct BrowserWindow: View {
         .animation(.easeInOut(duration: 0.4), value: model.firstRun == nil)
         // While first run shows, the toolbar hides and the menus' commands (which need the
         // window's model) are off, so nothing acts on the window behind the card.
-        .toolbar(model.firstRun != nil || sidebarReplacesToolbar ? .hidden : .automatic, for: .windowToolbar)
+        .toolbar(model.firstRun != nil || hidesToolbar ? .hidden : .automatic, for: .windowToolbar)
         .focusedSceneValue(\.browserModel, model.firstRun == nil ? model : nil)
         // ⌘L: with the navigation bar in the sidebar, the address is edited in the command bar,
         // as in Arc (also when the sidebar's address bar is hidden); above the page, its field
@@ -105,6 +122,16 @@ public struct BrowserWindow: View {
     }
 
     private var splitView: some View {
+        splitViewColumns
+            // The floating sidebar goes once the sidebar is back in the window, and once nothing
+            // it opened is showing while the pointer is elsewhere.
+            .onChange(of: floatsSidebar) { if !floatsSidebar { isSidebarFloating = false } }
+            .onChange(of: FloatingSidebar.isHolding(model)) {
+                if !FloatingSidebar.isHolding(model), !isPointerOverFloatingSidebar { isSidebarFloating = false }
+            }
+    }
+
+    private var splitViewColumns: some View {
         NavigationSplitView(columnVisibility: $columns) {
             SidebarView(model: model)
                 // The top row sits in the title bar's area above the sidebar's content, which
@@ -155,7 +182,11 @@ public struct BrowserWindow: View {
                 }
                 // With no toolbar above it, the page reaches the window's top edge (#67). After
                 // the translation bar's inset, so the page sits below the bar rather than under it.
-                .ignoresSafeArea(.container, edges: sidebarReplacesToolbar ? .top : [])
+                .ignoresSafeArea(.container, edges: hidesToolbar ? .top : [])
+                // The hidden sidebar floats in from the window's left edge (#67).
+                .overlay(alignment: .leading) {
+                    if floatsSidebar { floatingSidebar }
+                }
                 .background {
                     SidebarCollapseObserver(
                         onChange: { isSidebarCollapsed = $0 },
@@ -199,7 +230,7 @@ public struct BrowserWindow: View {
                         .frame(width: 1, height: 1)
                         .accessibilityHidden(true)
                         .popover(isPresented: Binding(
-                            get: { sidebarReplacesToolbar && !model.isSidebarAddressBarOnScreen && model.isShowingSummary },
+                            get: { hidesToolbar && !model.isSidebarAddressBarOnScreen && model.isShowingSummary },
                             set: { model.isShowingSummary = $0 }
                         ), arrowEdge: .top) {
                             PageSummaryView(state: model.pageSummary ?? .loading)
@@ -207,12 +238,45 @@ public struct BrowserWindow: View {
                 }
                 .toolbar {
                     NavigationToolbar(model: model, placement: navigationBarPlacement,
-                                      showsPageTools: !sidebarReplacesToolbar)
+                                      showsPageTools: !hidesToolbar)
                 }
                 // The address field already shows where you are.
                 .toolbar(removing: .title)
                 // Above the page, the toolbar takes the page's color, as in Safari.
                 .modifier(PageToolbarTint(page: model.selectedPage, pool: model.pool, placement: navigationBarPlacement))
+        }
+    }
+
+    /// The left edge's hover strip and, once the pointer reaches it, the floating sidebar.
+    private var floatingSidebar: some View {
+        ZStack(alignment: .leading) {
+            EdgeHoverDetector { isOver in
+                if isOver { isSidebarFloating = true }
+            }
+            .frame(width: 6)
+            .frame(maxHeight: .infinity)
+            .accessibilityHidden(true)
+            if isSidebarFloating {
+                FloatingSidebar(model: model) {
+                    isSidebarFloating = false
+                    splitController.controller?.toggleSidebar(nil)
+                } onHover: { isOver in
+                    isPointerOverFloatingSidebar = isOver
+                    if !isOver { letFloatingSidebarGo() }
+                }
+                .transition(reduceMotion ? .opacity : .move(edge: .leading).combined(with: .opacity))
+            }
+        }
+        .ignoresSafeArea(.container, edges: .top)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.26), value: isSidebarFloating)
+    }
+
+    /// Lets the floating sidebar go a moment after the pointer leaves it, unless the pointer is
+    /// back or something it opened is showing.
+    private func letFloatingSidebarGo() {
+        Task {
+            try? await Task.sleep(for: .milliseconds(300))
+            if !isPointerOverFloatingSidebar, !FloatingSidebar.isHolding(model) { isSidebarFloating = false }
         }
     }
 

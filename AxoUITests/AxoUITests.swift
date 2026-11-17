@@ -702,8 +702,8 @@ final class AxoUITests: XCTestCase {
     /// With the navigation bar in the sidebar, the sidebar's top row stands in for the window
     /// toolbar (#67): back, forward, reload, and Hide Sidebar sit beside the window's controls,
     /// the window has no toolbar, and the page reaches the window's top edge, where clicks reach
-    /// it. With the sidebar hidden the toolbar comes back (and the page sits below it, checked in
-    /// PageLayerTests).
+    /// it. With the sidebar hidden the page fills the window and the sidebar floats in from the
+    /// left edge; with the sidebar's address bar hidden, the toolbar comes back.
     @MainActor
     func testTheSidebarReplacesTheToolbar() throws {
         let app = launchApp()
@@ -750,24 +750,49 @@ final class AxoUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(page.frame.minY, findField.frame.maxY - 1, "The page sits below the find bar")
         app.typeKey(.escape, modifierFlags: [])
 
-        // Hidden from the button, the sidebar gives way to the toolbar, with the page below it.
+        // Hidden from the button, the sidebar leaves the page filling the window, with no
+        // toolbar (part 3 of #67; the page's place is checked in AxoTests' PageLayerTests, since
+        // the hosted runner's accessibility doesn't follow a web view's frame).
         row.buttons["hideSidebarButton"].click()
-        XCTAssertTrue(window.toolbars.firstMatch.waitForExistence(timeout: 5), "The toolbar comes back with the sidebar hidden")
         XCTAssertTrue(sidebar.waitForNonExistence(timeout: 5))
-        // That the page then sits below the toolbar is checked in AxoTests' PageLayerTests: the
-        // hosted runner's accessibility doesn't follow a web view's frame.
+        XCTAssertFalse(window.toolbars.firstMatch.exists, "No toolbar with the sidebar hidden")
+        XCTAssertFalse(window.buttons[XCUIIdentifierCloseWindow].exists, "Nor the window's controls")
 
-        // Shown again (View › Show Sidebar), the top row takes over again.
-        app.typeKey("s", modifierFlags: [.command, .control])
+        // The pointer at the window's left edge floats the sidebar in, with the window's
+        // controls and Keep Sidebar Shown in its top row.
+        let floating = app.descendants(matching: .any)["floatingSidebar"]
+        let edge = window.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5)).withOffset(CGVector(dx: 2, dy: 0))
+        edge.hover()
+        XCTAssertTrue(floating.waitForExistence(timeout: 5), "The sidebar floats in from the left edge")
+        XCTAssertTrue(floating.buttons["keepSidebarShownButton"].exists)
+        XCTAssertTrue(window.buttons[XCUIIdentifierCloseWindow].exists, "The window's controls are in its top row")
+        XCTAssertEqual(floating.frame.minX - window.frame.minX, 8, accuracy: 1, "A card inset from the window's edge")
+        let shot2 = XCTAttachment(screenshot: window.screenshot())
+        shot2.name = "Floating sidebar"
+        shot2.lifetime = .keepAlways
+        add(shot2)
+        // Its rows answer the pointer as the sidebar's do.
+        floating.staticTexts["Reached"].hover()
+        XCTAssertTrue(floating.buttons["tabRowCloseButton"].waitForExistence(timeout: 5), "Hovering a row shows its close button")
+
+        // Leaving it lets it go.
+        window.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.5)).hover()
+        XCTAssertTrue(floating.waitForNonExistence(timeout: 5), "The pointer leaving lets it go")
+
+        // Keep Sidebar Shown puts it back in the window, where the top row takes over again.
+        edge.hover()
+        XCTAssertTrue(floating.waitForExistence(timeout: 5))
+        floating.buttons["keepSidebarShownButton"].click()
+        XCTAssertTrue(floating.waitForNonExistence(timeout: 5))
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
         XCTAssertTrue(row.waitForExistence(timeout: 5))
-        XCTAssertTrue(window.toolbars.firstMatch.waitForNonExistence(timeout: 5), "No toolbar with the sidebar shown")
+        XCTAssertFalse(window.toolbars.firstMatch.exists, "No toolbar with the sidebar shown")
 
-        // Hidden from the menu (AppKit's own Toggle Sidebar, not the row's button), the toolbar
-        // comes back too.
+        // Hidden from the menu (AppKit's own Toggle Sidebar, not the row's button), the page
+        // fills the window too, and ⌃⌘S shows the sidebar again.
         app.typeKey("s", modifierFlags: [.command, .control])
         XCTAssertTrue(sidebar.waitForNonExistence(timeout: 5))
-        XCTAssertTrue(window.toolbars.firstMatch.waitForExistence(timeout: 5), "The toolbar comes back however the sidebar hides")
+        XCTAssertFalse(window.toolbars.firstMatch.exists, "No toolbar however the sidebar hides")
         app.typeKey("s", modifierFlags: [.command, .control])
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
 

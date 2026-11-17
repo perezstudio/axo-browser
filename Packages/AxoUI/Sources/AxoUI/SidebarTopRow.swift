@@ -5,10 +5,14 @@ import SwiftUI
 /// The sidebar's top row with the navigation bar in the sidebar (#67): beside the window's
 /// controls, back and forward in one glass capsule, reload in its own glass circle, and the
 /// button that hides the sidebar. It replaces the window toolbar, so the page beside it reaches
-/// the window's top edge, and dragging its empty space moves the window.
+/// the window's top edge, and dragging its empty space moves the window. In the floating sidebar
+/// (`isFloating`, while the sidebar is hidden) that button keeps the sidebar shown instead.
 struct SidebarTopRow: View {
     let model: BrowserModel
-    let hideSidebar: () -> Void
+    /// Whether this is the floating sidebar's row.
+    var isFloating = false
+    /// Hides the sidebar, or, in the floating sidebar, keeps it shown.
+    let toggleSidebar: () -> Void
 
     /// As tall as the window's title bar area, so the 36 pt buttons are centered with the
     /// window's controls, 26 pt from the top, as the toolbar's were.
@@ -53,10 +57,11 @@ struct SidebarTopRow: View {
                 .accessibilityLabel("Back and Forward")
                 ReloadButton(model: model)
                     .modifier(SidebarGlassButtonStyle())
-                Button("Hide Sidebar", systemImage: "sidebar.left", action: hideSidebar)
+                let title = isFloating ? "Keep Sidebar Shown" : "Hide Sidebar"
+                Button(title, systemImage: "sidebar.left", action: toggleSidebar)
                     .modifier(SidebarGlassButtonStyle())
-                    .help("Hide Sidebar")
-                    .accessibilityIdentifier("hideSidebarButton")
+                    .help(title)
+                    .accessibilityIdentifier(isFloating ? "keepSidebarShownButton" : "hideSidebarButton")
             }
             .padding(.trailing, Self.trailingPadding)
         }

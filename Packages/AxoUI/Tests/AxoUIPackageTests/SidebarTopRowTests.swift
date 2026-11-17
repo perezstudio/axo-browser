@@ -1,8 +1,11 @@
 #if os(macOS)
 import AppKit
+import AxoCore
+import AxoWebTestSupport
 import CoreGraphics
 import Testing
 @testable import AxoUI
+@testable import AxoWeb
 
 /// The sidebar's top row, footer, and address bar with the navigation bar in the sidebar (#67).
 @MainActor
@@ -55,6 +58,33 @@ struct SidebarTopRowTests {
     @Test func theToolbarShowsEveryExtension() {
         #expect(ExtensionToolbarButtons.split(Array(1...12), limit: nil) == (Array(1...12), []))
         #expect(ExtensionToolbarButtons.shownCount(of: 12, limit: nil) == 12)
+    }
+
+    @Test func theFloatingSidebarFitsItsTopRow() {
+        #expect(FloatingSidebar.width >= SidebarTopRow.requiredWidth)
+    }
+
+    /// The floating sidebar stays while something it opened shows (#67), so a popover or sheet
+    /// from it never loses its anchor when the pointer moves onto it.
+    @Test func theFloatingSidebarStaysWhileItsPopoversShow() throws {
+        let pool = WebViewPool(engine: FakeEngine())
+        pool.reportsScreenTimeUsage = false
+        let model = BrowserModel(store: try TabStore.makeInMemory(), pool: pool)
+        model.announce = { _ in }
+        #expect(!FloatingSidebar.isHolding(model))
+        model.isShowingDownloads = true
+        #expect(FloatingSidebar.isHolding(model))
+        model.isShowingDownloads = false
+        model.isShowingSiteSettings = true
+        #expect(FloatingSidebar.isHolding(model))
+        model.isShowingSiteSettings = false
+        model.isShowingSummary = true
+        #expect(FloatingSidebar.isHolding(model))
+        model.isShowingSummary = false
+        model.isCreatingSpace = true
+        #expect(FloatingSidebar.isHolding(model))
+        model.isCreatingSpace = false
+        #expect(!FloatingSidebar.isHolding(model))
     }
 }
 #endif
