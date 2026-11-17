@@ -799,7 +799,9 @@ final class AxoUITests: XCTestCase {
         XCTAssertFalse(window.toolbars.firstMatch.exists, "No toolbar with the sidebar shown")
 
         // Hidden from the menu (AppKit's own Toggle Sidebar, not the row's button), the page
-        // fills the window too, and ⌃⌘S shows the sidebar again.
+        // fills the window too, and ⌃⌘S shows the sidebar again. The page is clicked first, as
+        // a person would, so the shortcut doesn't depend on where Keep Sidebar Shown left focus.
+        page.click()
         app.typeKey("s", modifierFlags: [.command, .control])
         XCTAssertTrue(sidebar.waitForNonExistence(timeout: 5))
         XCTAssertFalse(window.toolbars.firstMatch.waitForExistence(timeout: 2), "No toolbar however the sidebar hides")
