@@ -334,6 +334,9 @@ private struct ScrollingTabs: View {
             }
             .scrollIndicators(.never)
             .scrollBounceBehavior(.basedOnSize)
+            .onScrollPhaseChange { _, phase in model.setSidebarScrolling(phase.isScrolling) }
+            // Switching to the sidebar mid-scroll mustn't leave the flag set.
+            .onDisappear { model.setSidebarScrolling(false) }
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
             .onChange(of: model.selectedTabID, initial: true) { scroll(proxy) }
             // A tab opened past the edge arrives in the rows after the selection does.
@@ -368,6 +371,8 @@ private struct TopTab: View {
     let isSelected: Bool
     let style: Style
     @State private var isHovering = false
+    /// The tab's frame in the window, where its hover card goes, kept outside SwiftUI's state.
+    @State private var frame = TabPreviewFrame()
 
     private var title: String {
         if let panes, panes.count > 1 {
@@ -427,8 +432,12 @@ private struct TopTab: View {
         .fixedSize(horizontal: true, vertical: false)
         .frame(maxWidth: TabBar.tabMaxWidth)
         // On the tab's own button only, so the close button keeps its own label and identifier.
-        .help(TabRow.tooltip(for: tab))
+        // Resting the pointer on it shows its card (#76) below it, in place of a tooltip.
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame.rect = $0 }
         .accessibilityLabel(title)
+        .accessibilityCustomContent(Text(panes == nil ? "Address" : "Addresses"),
+                                    Text(verbatim: (panes ?? [tab]).map(\.url.absoluteString).formatted(.list(type: .and))))
+        .modifier(PinnedPageContent(tab: tab))
         .accessibilityValue(stateDescription)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityAction(named: closeTitle) { close() }
@@ -471,7 +480,15 @@ private struct TopTab: View {
             }
             .padding(.trailing, 5)
         }
-        .onHover { isHovering = $0 }
+        .onHover { hovering in
+            isHovering = hovering
+            if hovering {
+                model.beginTabPreview(tabIDs, anchor: frame.rect, edge: .bottom)
+            } else {
+                model.endTabPreview(tabIDs)
+            }
+        }
+        .onDisappear { model.endTabPreview(tabIDs) }
         .contextMenu { TabContextMenu(model: model, tab: tab, media: media) }
     }
 

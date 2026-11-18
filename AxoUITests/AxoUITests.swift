@@ -609,6 +609,43 @@ final class AxoUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: unmuted, evaluatedWith: speaker)], timeout: 5), .completed)
     }
 
+    /// Resting the pointer on a tab's row shows its card beside the sidebar, with its title and
+    /// address, never over the row; it goes once the pointer leaves (#76).
+    @MainActor
+    func testHoveringATabRowShowsItsCard() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        AxoUITests.openPage("data:text/html,<title>Card</title><h1>Card</h1>", in: app)
+        XCTAssertTrue(sidebar.staticTexts["Card"].waitForExistence(timeout: 10))
+        AxoUITests.openPage("data:text/html,<title>Other</title>", in: app)
+        XCTAssertTrue(sidebar.staticTexts["Other"].waitForExistence(timeout: 10))
+
+        let row = sidebar.descendants(matching: .any).matching(identifier: "tabRow").matching(NSPredicate(format: "label == 'Card'")).firstMatch
+        row.hover()
+        let card = app.descendants(matching: .any)["tabPreviewCard"]
+        XCTAssertTrue(card.waitForExistence(timeout: 5), "Resting on the row shows its card")
+        XCTAssertTrue(card.staticTexts["Card"].exists, "Its title")
+        let address = card.descendants(matching: .any)["tabPreviewAddress"]
+        XCTAssertTrue(address.exists, "Its address")
+        XCTAssertTrue(address.label.hasPrefix("data:text/html"), "Got \(address.label)")
+        XCTAssertGreaterThanOrEqual(card.frame.minX, row.frame.maxX - 1, "Beside the row, never over it")
+
+        app.descendants(matching: .any)["webContent"].hover()
+        XCTAssertTrue(card.waitForNonExistence(timeout: 5), "It goes when the pointer leaves")
+
+        // With tabs at the top, below the tab.
+        app.typeKey(",", modifierFlags: .command)
+        AxoUITests.selectSettingsPane("general", in: app)
+        app.radioButtons["At the top"].click()
+        app.typeKey("w", modifierFlags: .command)
+        let tab = app.descendants(matching: .any).matching(identifier: "topTab").matching(NSPredicate(format: "label == 'Card'")).firstMatch
+        XCTAssertTrue(tab.waitForExistence(timeout: 5))
+        tab.hover()
+        XCTAssertTrue(card.waitForExistence(timeout: 5), "A top tab shows its card too")
+        XCTAssertGreaterThanOrEqual(card.frame.minY, tab.frame.maxY - 1, "Below the tab, never over it")
+    }
+
     /// A page whose process ends shows "This Page Stopped" in its place, and its row says so and
     /// dims, until Reload brings it back (#75). The Testing menu ends the process, as a crash
     /// would.

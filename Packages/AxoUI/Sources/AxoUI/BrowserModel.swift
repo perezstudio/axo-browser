@@ -42,6 +42,17 @@ public final class BrowserModel {
     public internal(set) var peek: Peek?
     /// Pages open in mini windows (links from other apps), oldest first.
     public internal(set) var miniWindows: [MiniWindow] = []
+    /// The hover card showing for a tab row, if any (#76, `TabPreviews.swift`).
+    public internal(set) var tabPreview: TabPreview?
+    /// The rows the pointer rests on, while their card is coming or showing.
+    @ObservationIgnored var tabPreviewRequest: [AxoCore.Tab.ID]?
+    @ObservationIgnored var tabPreviewTask: Task<Void, Never>?
+    /// When the last card went, so the next row's shows at once.
+    @ObservationIgnored var tabPreviewHiddenAt: ContinuousClock.Instant?
+    /// How long the pointer rests on a row before its card shows. Tests shorten it.
+    @ObservationIgnored public var tabPreviewDelay: Duration = .milliseconds(600)
+    /// Whether the sidebar or the tab bar is scrolling: no card shows meanwhile.
+    @ObservationIgnored public internal(set) var isSidebarScrolling = false
     /// Shows a mini window on screen. The default makes an AppKit window; tests record instead.
     @ObservationIgnored public var presentMiniWindow: ((MiniWindow) -> Void)?
     /// Brings the browser window forward, reopening it if it was closed, so a tab added from
@@ -695,6 +706,9 @@ public final class BrowserModel {
     /// sidebar never draws the new Space with the old one's rows (its page slides in already
     /// filled, #84).
     private func show(_ target: Space) async throws {
+        hideTabPreview()
+        // The old Space's list may never say its scrolling stopped once it's hidden.
+        isSidebarScrolling = false
         spaceBeingShown = target.id
         defer { if spaceBeingShown == target.id { spaceBeingShown = nil } }
         let newTabs = try await store.tabs(in: target.id)
@@ -809,6 +823,7 @@ public final class BrowserModel {
 
     /// Shows the tab with `id`, or nothing if `id` is `nil`.
     public func select(_ id: AxoCore.Tab.ID?) {
+        hideTabPreview()
         if id != selectedTabID, isFindBarVisible {
             closeFindBar()
         }
@@ -973,6 +988,8 @@ public final class BrowserModel {
     /// `byPerson` (⌘W, the context menu) shows a notice with Undo for an unpinned tab; closes
     /// the engine or an extension asks for are only announced.
     public func closeTab(_ id: AxoCore.Tab.ID, byPerson: Bool = false) async {
+        // Its row goes, and SwiftUI doesn't always say the pointer left it (#76).
+        if tabPreviewRequest?.contains(id) == true { hideTabPreview() }
         logger.notice("Closing tab \(id, privacy: .public)\(byPerson ? " (by the person)" : "", privacy: .public); selected: \(self.selectedTabID?.uuidString ?? "none", privacy: .public)")
         if miniWindows.contains(where: { $0.id == id }) {
             closeMiniWindowForEngine(id)

@@ -204,6 +204,19 @@ final class AccessibilityAuditTests: XCTestCase {
         try audit(app, "stopped page")
     }
 
+    /// A tab row's hover card (#76).
+    @MainActor
+    func testAuditTabHoverCard() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        AxoUITests.openPage("data:text/html,<title>Pond</title><p>Axolotls.</p>", in: app)
+        XCTAssertTrue(sidebar.staticTexts["Pond"].waitForExistence(timeout: 10))
+        sidebar.descendants(matching: .any).matching(identifier: "tabRow").firstMatch.hover()
+        XCTAssertTrue(app.descendants(matching: .any)["tabPreviewCard"].waitForExistence(timeout: 5))
+        try audit(app, "tab hover card")
+    }
+
     /// First run's steps (#175): the welcome and setting up the first Space (nothing to import
     /// in UI testing mode's empty folder).
     @MainActor

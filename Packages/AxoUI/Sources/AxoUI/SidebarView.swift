@@ -224,6 +224,9 @@ struct SidebarTabRow: View {
     /// Whether the row holds the selection, from the parent, so rows don't each read it.
     let isSelected: Bool
     @State private var isHovering = false
+    /// The row's frame in the window, where its hover card goes (#76), kept outside SwiftUI's
+    /// state so scrolling (every row's frame changing) redraws nothing.
+    @State private var frame = TabPreviewFrame()
 
     /// What the button and the accessibility action are called. On a split row it closes the
     /// row's tab, the first pane, so it names it.
@@ -291,7 +294,18 @@ struct SidebarTabRow: View {
         // The whole row's width counts as over it, not just its icon and title, for every row
         // (hibernated ones included).
         .contentShape(.rect)
-        .onHover { isHovering = $0 }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame.rect = $0 }
+        .onHover { hovering in
+            isHovering = hovering
+            // Resting the pointer shows the row's card beside the sidebar (#76).
+            if hovering {
+                model.beginTabPreview(rowTabIDs, anchor: frame.rect, edge: .trailing)
+            } else {
+                model.endTabPreview(rowTabIDs)
+            }
+        }
+        // A row that goes (its tab closed) may never say the pointer left.
+        .onDisappear { model.endTabPreview(rowTabIDs) }
         // Here rather than on the list's row, so the menu gets the sound it shows from the row,
         // which redraws when it changes.
         .contextMenu { TabContextMenu(model: model, tab: tab, media: media) }
@@ -377,8 +391,8 @@ struct SplitRow: View {
         // Only when there's state to tell: a value replaces the text a row exposes.
         .modifier(StateValue(description: TabRow.stateDescription(isLoading: isLoading, isDimmed: isDimmed,
                                                                    media: media, problem: problem)))
-        .help(panes.map(TabRow.displayTitle(for:)).joined(separator: "\n"))
         .accessibilityLabel("Split view: " + panes.map(TabRow.displayTitle(for:)).formatted(.list(type: .and)))
+        .accessibilityCustomContent(Text("Addresses"), Text(verbatim: panes.map(\.url.absoluteString).formatted(.list(type: .and))))
         .accessibilityIdentifier("splitRow")
     }
 }
@@ -600,7 +614,10 @@ struct TabRow: View {
             .accessibilityHidden(true)
         }
         .lineLimit(1)
-        .help(Self.tooltip(for: tab))
+        // The address for VoiceOver, which the hover card (#76) shows on screen, and a pinned tab's
+        // pinned page (#73), which the tooltip told before.
+        .accessibilityCustomContent(Text("Address"), Text(verbatim: tab.url.absoluteString))
+        .modifier(PinnedPageContent(tab: tab))
         // The title is the label, so a value can add state without replacing it.
         .accessibilityLabel(Self.displayTitle(for: tab))
         .accessibilityValue(Self.stateDescription(
@@ -620,14 +637,14 @@ struct TabRow: View {
             .joined(separator: ", ")
     }
 
-    /// The row's tooltip: its title, and for a pinned tab away from its pinned page, that page
-    /// too (#73).
-    static func tooltip(for tab: AxoCore.Tab) -> String {
-        guard tab.hasLeftHome, let home = tab.homeURL else { return displayTitle(for: tab) }
+    /// For a pinned tab away from its pinned page (#73), that page, for its hover card (#76);
+    /// nil otherwise.
+    static func pinnedPageNote(for tab: AxoCore.Tab) -> String? {
+        guard tab.hasLeftHome, let home = tab.homeURL else { return nil }
         // The site, or for a page without one (a data: page holds a whole file), the start of
         // its address.
         let page = home.host() ?? String(home.absoluteString.prefix(80))
-        return "\(displayTitle(for: tab))\nPinned page: \(page)"
+        return "Pinned page: \(page)"
     }
 
     /// The page title, or the host (or full URL) for pages without one.

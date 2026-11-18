@@ -195,6 +195,9 @@ struct SidebarSwipeCatcher: NSViewRepresentable {
                       isBeginning: event.phase == .began, hasPreciseDeltas: event.hasPreciseScrollingDeltas,
                       spaceCount: model.spaces.count, isLanding: isLanding)
             else { return event }
+            // A gesture over the sidebar moves its rows (a swipe, or scrolling): no hover card
+            // (#76) stays at a row that's moving away.
+            model.hideTabPreview()
             var lock = SwipeAxisLock()
             _ = lock.add(deltaX: event.scrollingDeltaX, deltaY: event.scrollingDeltaY)
             pending = (lock, SpaceSwipe(index: index, count: model.spaces.count), view.bounds.width, fingerDelta(event))
