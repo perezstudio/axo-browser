@@ -43,8 +43,6 @@ struct SpacePage: View {
             }
         }
         .focused(focusedList, equals: space.id)
-        // Rows drag between Pinned, folders, the tabs section, and Favorites (#77).
-        .sidebarReordering(model: model, isEnabled: isShown)
         // No hover card (#76), nor its picture, while the rows move under the pointer.
         .onScrollPhaseChange { _, phase in
             // A hidden page's scrolling stopping still counts, so the flag can't stick.

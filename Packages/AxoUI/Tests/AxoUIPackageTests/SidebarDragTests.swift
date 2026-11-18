@@ -40,6 +40,30 @@ struct SidebarDragTests {
 
     private var unpinned: [String] { model.unpinnedTabs.map(name) }
 
+    @Test func aDropLandsBeforeTheFirstRowAtItsPointThatIsntMoving() {
+        let a = PinnedItem.tab(UUID()), b = PinnedItem.tab(UUID()), c = PinnedItem.tab(UUID())
+        #expect(SidebarDrop.target(before: 0, in: [a, b, c], moving: []) == a)
+        #expect(SidebarDrop.target(before: 3, in: [a, b, c], moving: []) == nil, "The end")
+        #expect(SidebarDrop.target(before: 1, in: [a, b, c], moving: [b]) == c, "Dropped on its own place: stays")
+        #expect(SidebarDrop.target(before: 2, in: [a, b, c], moving: [b, c]) == nil)
+        #expect(SidebarDrop.target(before: -1, in: [a, b, c], moving: []) == nil)
+    }
+
+    @Test func aDropFromElsewhereMovesRowsAndFavoritesButNothingElse() async throws {
+        let a = try await tab("a"), b = try await tab("b", pinned: true)
+        await model.receiveSidebarDrop(SidebarDragPayload.text(for: .tab(a.id)), to: .pinned(nil), before: .tab(b.id))
+        #expect(describe(model.pinnedTree) == ["a", "b"], "A row from the tabs section, pinned before b")
+
+        let c = try await tab("c")
+        await model.addToFavorites(c.id)
+        await model.receiveSidebarDrop(c.id.uuidString, to: .tabs, before: nil)
+        #expect(model.unpinnedTabs.map(name) == ["c"], "A favorite's tile becomes a tab there")
+
+        await model.receiveSidebarDrop("https://example.com", to: .tabs, before: nil)
+        await model.receiveSidebarDrop(UUID().uuidString, to: .tabs, before: nil)
+        #expect(model.unpinnedTabs.map(name) == ["c"] && describe(model.pinnedTree) == ["a", "b"], "Other text does nothing")
+    }
+
     @Test func aTabDroppedInPinnedIsPinnedAtTheDropPoint() async throws {
         let a = try await tab("a", pinned: true)
         _ = try await tab("b", pinned: true)
