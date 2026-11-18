@@ -701,8 +701,8 @@ final class AxoUITests: XCTestCase {
 
     /// Dragging rows between sections (#77): a tab into Pinned and back out, into a folder, and
     /// a favorite out of Favorites into the tabs section and into Pinned.
-    /// The selected row is highlighted (rows draw it themselves since they became reorderable,
-    /// #77, which stopped the list drawing its selection), and the highlight follows a click.
+    /// The selected row is highlighted, and the highlight follows a click: SwiftUI 27's
+    /// reorderable rows (tried for #77) stopped the sidebar list drawing its selection.
     @MainActor
     func testTheSelectedRowIsHighlighted() throws {
         let app = launchApp()
