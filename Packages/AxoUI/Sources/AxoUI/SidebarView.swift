@@ -294,7 +294,7 @@ struct SidebarTabRow: View {
         // The whole row's width counts as over it, not just its icon and title, for every row
         // (hibernated ones included).
         .contentShape(.rect)
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(TabPreviewLayer.space)) } action: { frame.rect = $0 }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame.rect = $0 }
         .onHover { hovering in
             isHovering = hovering
             // Resting the pointer shows the row's card beside the sidebar (#76).
