@@ -175,6 +175,15 @@ public protocol EnginePage: AnyObject {
     var media: PageMedia { get }
     /// Mutes the page's sound, or unmutes it.
     func setAudioMuted(_ muted: Bool)
+
+    /// Whether the page stopped working, and why (#75): its content process crashed or ran out of
+    /// memory, or it stopped responding. A crash lasts until the page loads again (``reload()``,
+    /// or another address); not responding lasts until it responds. Engines report changes
+    /// through ``EnginePageDelegate/pageProblemDidChange(_:)``. ``reload()`` recovers either.
+    var problem: PageProblem? { get }
+    /// Gives a page that stopped responding more time; the engine reports it again if it still
+    /// doesn't respond. Does nothing otherwise.
+    func waitForResponse()
 }
 
 extension EnginePage {
@@ -182,12 +191,28 @@ extension EnginePage {
     public var media: PageMedia { PageMedia() }
     /// Does nothing, for engines that can't mute.
     public func setAudioMuted(_ muted: Bool) {}
+    /// Nothing known, for engines that can't tell.
+    public var problem: PageProblem? { nil }
+    /// Does nothing, for engines that can't tell a page stopped responding.
+    public func waitForResponse() {}
     public func discard() -> Bool { false }
     public func loadIfDiscarded() {}
     public var isDiscarded: Bool { false }
     public func toggleDevTools() -> Bool { false }
     public func showDevToolsConsole() -> Bool { false }
     public var hasDevTools: Bool { false }
+}
+
+/// Why a page stopped working (#75), as Chrome's sad tab and "Page unresponsive" dialog tell.
+public enum PageProblem: Hashable, Sendable {
+    /// Its content process crashed or was ended, with the process's exit code when the engine
+    /// gives one.
+    case crashed(errorCode: Int?)
+    /// Its content process ran out of memory.
+    case outOfMemory
+    /// It stopped responding to input. It may recover on its own;
+    /// ``EnginePage/waitForResponse()`` gives it more time.
+    case unresponsive
 }
 
 /// What a page uses that its tab's row shows (#74), as Chrome's tab strip does.
@@ -287,6 +312,8 @@ public protocol EnginePageDelegate: AnyObject {
     /// The page started or stopped playing sound, was muted or unmuted, or started or stopped
     /// using a device. Read ``EnginePage/media``.
     func pageMediaDidChange(_ page: any EnginePage)
+    /// The page stopped working, or works again. Read ``EnginePage/problem``.
+    func pageProblemDidChange(_ page: any EnginePage)
 }
 
 /// A page another page opened, already loading, with its opener (`window.opener`) and the

@@ -119,7 +119,10 @@ public struct BrowserWindow: View {
             // A page filling the screen (element.requestFullscreen()) shows alone, in place of the
             // split view, so the sidebar's own state is left alone.
             if model.fullscreenTabID != nil, let tab = model.shownTab, let space = model.space {
-                ZStack { WebViewHost(tab: tab, profileID: space.profileID, pool: model.pool).linkStatus(for: model.selectedPage) }
+                ZStack {
+                    WebViewHost(tab: tab, profileID: space.profileID, pool: model.pool).linkStatus(for: model.selectedPage)
+                        .pageProblem(for: tab.id, model: model)
+                }
                     .ignoresSafeArea()
                     .toolbar(.hidden, for: .windowToolbar)
                     .accessibilityElement(children: .contain)
@@ -542,6 +545,7 @@ public struct BrowserWindow: View {
                 .linkStatus(for: model.arePagesCovered ? nil : model.selectedPage)
                 .overlay(alignment: .top) { RestoringSnapshot(page: model.selectedPage) }
                 .overlay(alignment: .top) { if model.showsPageLoadingBar { LoadingBar(page: model.selectedPage) } }
+                .pageProblem(for: tab.id, model: model)
         } else {
             ContentUnavailableView {
                 Label("No Tab Open", systemImage: "safari")
@@ -589,6 +593,7 @@ private struct SplitPanesView: View {
                 .overlay(alignment: .top) {
                     if tab.id != model.selectedTabID || model.showsPageLoadingBar { LoadingBar(page: page) }
                 }
+                .pageProblem(for: tab.id, model: model)
                 .overlay {
                     if tab.id == model.selectedTabID {
                         Rectangle()

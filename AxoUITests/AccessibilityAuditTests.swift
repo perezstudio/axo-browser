@@ -189,6 +189,21 @@ final class AccessibilityAuditTests: XCTestCase {
         try audit(app, "notice")
     }
 
+    /// A page that stopped working (#75): its place, with Reload, and its row's warning. The
+    /// Testing menu ends the page's process, as a crash would.
+    @MainActor
+    func testAuditStoppedPage() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        AxoUITests.openPage("data:text/html,<title>Pond</title><p>Axolotls.</p>", in: app)
+        XCTAssertTrue(sidebar.staticTexts["Pond"].waitForExistence(timeout: 10))
+        app.menuBars.menuBarItems["Testing"].click()
+        app.menuBars.menuItems["End the Page’s Process"].click()
+        XCTAssertTrue(app.descendants(matching: .any)["pageProblem"].waitForExistence(timeout: 10))
+        try audit(app, "stopped page")
+    }
+
     /// First run's steps (#175): the welcome and setting up the first Space (nothing to import
     /// in UI testing mode's empty folder).
     @MainActor

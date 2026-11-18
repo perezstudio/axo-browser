@@ -401,15 +401,17 @@ private struct TopTab: View {
                         TabRowSpinner()
                     } else {
                         TabIcon(image: model.favicon(for: pane))
-                            .opacity(model.isTabDimmed(pane.id, isSelected: isSelected) ? TabRow.dimmedIconOpacity : 1)
+                            .opacity(model.isTabDimmed(pane.id, isSelected: isSelected) || problem != nil
+                                     ? TabRow.dimmedIconOpacity : 1)
                     }
                 }
                 Text(title)
                     .lineLimit(1)
-                    .foregroundStyle(isDimmed ? .secondary : .primary)
+                    .foregroundStyle(isDimmed || problem != nil ? .secondary : .primary)
                 Spacer(minLength: 0)
-                // Room for the speaker and dot, drawn over the tab's end with the close button.
-                if media.hasSound || !media.capture.isEmpty {
+                // Room for the speaker, dot, and warning, drawn over the tab's end with the close
+                // button.
+                if indicatorsWidth > 0 {
                     Color.clear.frame(width: indicatorsWidth, height: 1)
                 }
             }
@@ -434,6 +436,9 @@ private struct TopTab: View {
             if media.hasSound {
                 Button(media.muteTitle) { toggleMute() }
             }
+            if problem != nil {
+                Button("Reload Page") { model.reloadStoppedPages(tabIDs) }
+            }
         }
         .accessibilityAction(named: "Move Left") { move(by: -1) }
         .accessibilityAction(named: "Move Right") { move(by: 1) }
@@ -456,7 +461,10 @@ private struct TopTab: View {
                     .accessibilityLabel(closeTitle)
                     .accessibilityIdentifier("tabBarCloseButton")
                 }
-                // Last, so it never moves under the pointer when the close button appears.
+                // After the close button, so neither moves under the pointer when it appears.
+                if let problem {
+                    TabProblemButton(problem: problem) { model.reloadStoppedPages(tabIDs) }
+                }
                 if media.hasSound {
                     TabMuteButton(media: media) { toggleMute() }
                 }
@@ -473,9 +481,12 @@ private struct TopTab: View {
     /// What the tab's pages play and use (#71, #74).
     private var media: PageMedia { model.tabMedia(tabIDs) }
 
-    /// The speaker and dot's width, which the title leaves free.
+    /// Why the tab's page (a split's, any pane's) stopped working (#75).
+    private var problem: PageProblem? { model.tabProblem(tabIDs) }
+
+    /// The speaker, dot, and warning's width, which the title leaves free.
     private var indicatorsWidth: CGFloat {
-        (media.hasSound ? 22 : 0) + (media.capture.isEmpty ? 0 : 22)
+        (media.hasSound ? 22 : 0) + (media.capture.isEmpty ? 0 : 22) + (problem == nil ? 0 : 22)
     }
 
     private func toggleMute() { model.toggleMuted(tabIDs) }
@@ -483,7 +494,7 @@ private struct TopTab: View {
     /// The tab's state for VoiceOver: the sidebar row's, and pinned.
     private var stateDescription: String {
         let state = TabRow.stateDescription(isLoading: model.isTabLoading(tab.id), isDimmed: isDimmed,
-                                            isAwayFromHome: tab.hasLeftHome, media: media)
+                                            isAwayFromHome: tab.hasLeftHome, media: media, problem: problem)
         return [tab.isPinned ? "Pinned" : nil, state.isEmpty ? nil : state].compactMap(\.self).joined(separator: ", ")
     }
 
