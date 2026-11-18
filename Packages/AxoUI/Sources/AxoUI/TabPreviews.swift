@@ -141,7 +141,12 @@ struct TabPreviewLayer: View {
                     let anchor = preview.anchor
                     TabPreviewCard(preview: preview)
                         .onGeometryChange(for: CGSize.self) { $0.size } action: { cardSize = $0 }
-                        .offset(Self.offset(for: anchor, edge: preview.edge, card: cardSize, in: geometry.size))
+                        // Placed by padding, not `.offset`: an offset moves only the drawing, so
+                        // the card's accessibility frame (what VoiceOver and UI tests see) stayed
+                        // 40 pt from where it's drawn.
+                        .padding(.leading, Self.offset(for: anchor, edge: preview.edge, card: cardSize, in: geometry.size).width)
+                        .padding(.top, Self.offset(for: anchor, edge: preview.edge, card: cardSize, in: geometry.size).height)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
                 .transition(.opacity)
                 .allowsHitTesting(false)
