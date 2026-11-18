@@ -363,7 +363,7 @@ struct TabStoreTests {
 
         try await store.moveTab(id: a.id, toSpace: work.id)
         let returned = try await store.returnTab(id: a.id, from: work.id, to: home.id, folder: before.folderID,
-                                                 sortKey: before.sortKey)
+                                                 sortKey: before.sortKey, wasPinned: before.isPinned)
         #expect(returned)
         let back = try #require(try await store.tab(id: a.id))
         #expect(back.spaceID == home.id && back.folderID == folder.id && back.sortKey == before.sortKey && back.isPinned)
@@ -379,18 +379,47 @@ struct TabStoreTests {
 
         try await store.moveTab(id: a.id, toSpace: work.id)
         try await store.moveTab(id: a.id, toSpace: other.id)
-        #expect(try await store.returnTab(id: a.id, from: work.id, to: home.id, folder: nil, sortKey: before.sortKey) == false,
+        #expect(try await store.returnTab(id: a.id, from: work.id, to: home.id, folder: nil, sortKey: before.sortKey, wasPinned: false) == false,
                 "It moved on since: Undo leaves it")
         #expect(try #require(try await store.tab(id: a.id)).spaceID == other.id)
 
         try await store.deleteFolder(id: folder.id)
-        #expect(try await store.returnTab(id: a.id, from: other.id, to: home.id, folder: folder.id, sortKey: before.sortKey))
+        #expect(try await store.returnTab(id: a.id, from: other.id, to: home.id, folder: folder.id, sortKey: before.sortKey, wasPinned: false))
         #expect(try #require(try await store.tab(id: a.id)).folderID == nil, "Its folder is gone: the top level")
 
         let personal = try await store.createProfile(name: "Personal")
         let theirs = try await store.createSpace(name: "Theirs", profileID: personal.id)
-        #expect(try await store.returnTab(id: a.id, from: home.id, to: theirs.id, folder: nil, sortKey: before.sortKey) == false,
+        #expect(try await store.returnTab(id: a.id, from: home.id, to: theirs.id, folder: nil, sortKey: before.sortKey, wasPinned: false) == false,
                 "Never into another profile's Space")
+    }
+
+    @Test func aReturnedTabNeverSharesAKeyOrKeepsAFolderUnpinned() async throws {
+        let home = try await store.bootstrap()
+        let work = try await store.createSpace(name: "Work", profileID: home.profileID)
+        let a = try await store.openTab(url: url("a"), title: "A", in: home.id)
+        let t = try await store.openTab(url: url("t"), title: "T", in: home.id)
+        try await store.openTab(url: url("b"), title: "B", in: home.id)
+        let before = try #require(try await store.tab(id: t.id))
+
+        // Another tab takes T's old key while it's away.
+        try await store.moveTab(id: t.id, toSpace: work.id)
+        let u = try await store.openTab(url: url("u"), title: "U", in: home.id)
+        try await store.moveTab(id: u.id, to: .after(a.id))
+        #expect(try #require(try await store.tab(id: u.id)).sortKey == before.sortKey, "The clash this guards against")
+        try await store.returnTab(id: t.id, from: work.id, to: home.id, folder: nil, sortKey: before.sortKey, wasPinned: false)
+        #expect(try await titles(in: home) == ["A", "U", "T", "B"], "Just after the row that took its key")
+
+        // A pinned tab in a folder, unpinned while away, comes back unpinned and out of the folder.
+        let folder = try await store.createFolder(named: "Reading", in: home.id)
+        try await store.setPinned(true, tabID: t.id)
+        try await store.movePinnedItem(.tab(t.id), into: folder.id, after: nil)
+        let pinned = try #require(try await store.tab(id: t.id))
+        try await store.moveTab(id: t.id, toSpace: work.id)
+        try await store.setPinned(false, tabID: t.id)
+        try await store.returnTab(id: t.id, from: work.id, to: home.id, folder: folder.id, sortKey: pinned.sortKey, wasPinned: true)
+        let back = try #require(try await store.tab(id: t.id))
+        #expect(!back.isPinned && back.folderID == nil)
+        #expect(try await titles(in: home).last == "T", "At the end of the tabs section")
     }
 
     @Test func aMovedTabLeavesItsSplit() async throws {

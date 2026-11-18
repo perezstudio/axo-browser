@@ -89,7 +89,9 @@ struct SidebarGlassLabelStyle: LabelStyle {
 /// plus the capsule's padding.
 private struct SpaceDots: View {
     let model: BrowserModel
-    /// The Space a dragged row is over (#78), whose dot grows and names it.
+    /// The Space a dragged row is over (#78), whose dot grows and names it. Any text dragged
+    /// over another of the profile's Spaces counts (a drag's payload can't be read until it
+    /// drops), so a folder or a favorite grows the dot too, and its drop is refused.
     @State private var dropTargetID: Space.ID?
 
     var body: some View {
@@ -97,6 +99,8 @@ private struct SpaceDots: View {
             dots
             ScrollView(.horizontal) { dots }
                 .scrollIndicators(.never)
+                // A dragged row's Space name (#78) shows above the dots, outside the scroll view.
+                .scrollClipDisabled()
                 // As tall as the dots, so the capsule is the buttons' height either way.
                 .frame(height: SpaceDot.height)
         }

@@ -120,6 +120,21 @@ struct TabActionTests {
         #expect(model.tabToMove(droppedAs: ["https://example.com"], to: work.id) == nil)
     }
 
+    @Test func undoingTheMoveOfATabThatWasntSelectedKeepsTheSelection() async throws {
+        let a = try await open("a")
+        let b = try await open("b")
+        await model.createSpace(name: "Work")
+        let home = try #require(model.spaces.first { $0.name != "Work" })
+        await model.selectSpace(home.id)
+        let work = try #require(model.spacesToMoveTabsTo.first)
+        model.select(a)
+        await model.moveTab(b, toSpace: work.id)
+        let undo = try #require(model.notice?.undo)
+        await undo()
+        #expect(paths == ["a", "b"])
+        #expect(model.selectedTabID == a)
+    }
+
     @Test func aMoveCantBeUndoneFromAnotherSpace() async throws {
         try await open("a")
         let b = try await open("b")

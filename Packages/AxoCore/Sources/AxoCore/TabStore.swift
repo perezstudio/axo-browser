@@ -473,12 +473,14 @@ public final class TabStore: Sendable {
     }
 
     /// Puts a tab moved to another Space back where it was (Undo of a move, #78): in `spaceID`,
-    /// at `sortKey`, inside `folderID` when that folder is still in the Space (otherwise at the
-    /// top level). Only a tab still in `fromSpaceID` moves, so an Undo after the tab moved on
-    /// (or was archived) does nothing; it reports whether the tab moved.
+    /// at `sortKey`, inside `folderID` when it's still pinned and that folder is still in the
+    /// Space (otherwise at the top level). Only a tab still in `fromSpaceID` moves, so an Undo
+    /// after the tab moved on (or was archived) does nothing; it reports whether the tab moved.
+    /// A tab pinned or unpinned meanwhile goes to the end of its section, and one whose old key
+    /// another row took meanwhile goes just after that row, so no two rows share a key.
     @discardableResult
     public func returnTab(id: Tab.ID, from fromSpaceID: Space.ID, to spaceID: Space.ID, folder folderID: Folder.ID?,
-                          sortKey: String) async throws -> Bool {
+                          sortKey: String, wasPinned: Bool) async throws -> Bool {
         try await database.writer.write { db in
             guard var tab = try Tab.fetchOne(db, id: id), tab.spaceID == fromSpaceID, tab.archivedAt == nil,
                   let target = try Space.fetchOne(db, id: spaceID),
@@ -488,9 +490,22 @@ public final class TabStore: Sendable {
             try Self.leaveSplit(id, db)
             tab = try Tab.fetchOne(db, id: id) ?? tab
             let folder = try folderID.flatMap { try Folder.fetchOne(db, id: $0) }
+            let level = tab.isPinned && folder?.spaceID == spaceID ? folder?.id : nil
+            let keys: [String] = if tab.isPinned {
+                try Self.pinnedLevelKeys(in: spaceID, parent: level, excluding: .tab(id), db)
+            } else {
+                try String.fetchAll(db, Tab.filter(Tab.Columns.spaceID == spaceID).filter(Tab.Columns.isPinned == false)
+                    .filter(Tab.Columns.id != id).select(Tab.Columns.sortKey).order(Tab.Columns.sortKey))
+            }
             tab.spaceID = spaceID
-            tab.folderID = folder?.spaceID == spaceID ? folder?.id : nil
-            tab.sortKey = sortKey
+            tab.folderID = level
+            if tab.isPinned != wasPinned {
+                tab.sortKey = try SortKey.between(keys.last, nil)
+            } else if keys.contains(sortKey) {
+                tab.sortKey = try Self.key(after: sortKey, among: keys)
+            } else {
+                tab.sortKey = sortKey
+            }
             try tab.update(db)
             return true
         }

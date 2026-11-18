@@ -103,12 +103,14 @@ extension BrowserModel {
         guard let space, space.id == tab.spaceID else { return }
         do {
             let returned = try await store.returnTab(id: tab.id, from: destination, to: space.id, folder: tab.folderID,
-                                                     sortKey: tab.sortKey)
-            guard returned else { return }
+                                                     sortKey: tab.sortKey, wasPinned: tab.isPinned)
+            // The Space may have changed meanwhile: then its own reads show the tab, and this
+            // one's sidebar and selection are left alone.
+            guard returned, self.space?.id == space.id else { return }
             tabs = try await store.tabs(in: space.id)
             onTabEvent?(.opened(tab.id))
             try await refreshSidebar()
-            if select { self.select(tab.id) }
+            if select, self.space?.id == space.id { self.select(tab.id) }
         } catch {
             report(error, "Axo couldn't move the tab back.")
             return
