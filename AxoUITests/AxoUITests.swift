@@ -761,15 +761,24 @@ final class AxoUITests: XCTestCase {
             XCTAssertTrue(condition(), what)
         }
 
+        // Before each drag the pointer leaves the rows and the dragged row must take clicks: the
+        // previous drag leaves the pointer on a row, whose hover card (#76) can show meanwhile.
+        func drag(_ source: XCUIElement, to target: XCUIElement) {
+            app.descendants(matching: .any)["sidebarAddressBar"].hover()
+            let deadline = Date().addingTimeInterval(5)
+            while !source.isHittable, Date() < deadline { usleep(100_000) }
+            source.click(forDuration: 0.6, thenDragTo: target)
+        }
+
         // Pin Alpha from the keyboard, then drag Beta onto it: it's pinned there.
         sidebar.staticTexts["Alpha"].click()
         app.typeKey("p", modifierFlags: [.command, .control])
         XCTAssertTrue(pinned.waitForExistence(timeout: 5))
-        sidebar.staticTexts["Beta"].click(forDuration: 0.6, thenDragTo: sidebar.staticTexts["Alpha"])
+        drag(sidebar.staticTexts["Beta"], to: sidebar.staticTexts["Alpha"])
         wait("Beta is pinned") { isPinned("Beta") }
 
         // And back out, onto Gamma in the tabs section.
-        sidebar.staticTexts["Beta"].click(forDuration: 0.6, thenDragTo: sidebar.staticTexts["Gamma"])
+        drag(sidebar.staticTexts["Beta"], to: sidebar.staticTexts["Gamma"])
         wait("Beta is unpinned") { !isPinned("Beta") && sidebar.staticTexts["Beta"].exists }
 
         // Into a folder: Alpha goes into a new folder, then Beta onto the folder.
@@ -784,7 +793,7 @@ final class AxoUITests: XCTestCase {
         let folder = sidebar.descendants(matching: .any)
             .matching(NSPredicate(format: "label == 'Work' AND value ENDSWITH 'item' OR label == 'Work' AND value ENDSWITH 'items'")).firstMatch
         XCTAssertTrue(folder.waitForExistence(timeout: 5))
-        sidebar.staticTexts["Beta"].click(forDuration: 0.6, thenDragTo: folder)
+        drag(sidebar.staticTexts["Beta"], to: folder)
         wait("Beta is in the folder") { (folder.value as? String) == "2 items" }
 
         // A favorite out of Favorites, into the tabs section and then into Pinned.
@@ -792,13 +801,13 @@ final class AxoUITests: XCTestCase {
         app.windows.firstMatch.menuItems["Add to Favorites"].click()
         let tile = app.buttons["favoriteTile"]
         XCTAssertTrue(tile.waitForExistence(timeout: 5))
-        tile.click(forDuration: 0.6, thenDragTo: sidebar.staticTexts["Delta"])
+        drag(tile, to: sidebar.staticTexts["Delta"])
         wait("Gamma is a tab again") { !tile.exists && sidebar.staticTexts["Gamma"].exists && !isPinned("Gamma") }
 
         sidebar.staticTexts["Gamma"].rightClick()
         app.windows.firstMatch.menuItems["Add to Favorites"].click()
         XCTAssertTrue(tile.waitForExistence(timeout: 5))
-        tile.click(forDuration: 0.6, thenDragTo: folder)
+        drag(tile, to: folder)
         wait("Gamma is pinned") { !tile.exists && isPinned("Gamma") }
     }
 
