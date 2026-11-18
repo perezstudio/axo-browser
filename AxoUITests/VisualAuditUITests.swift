@@ -74,7 +74,10 @@ final class VisualAuditUITests: XCTestCase {
             app.menuBars.menuItems["New Folder…"].click()
             let name = app.textFields["nameField"]
             if name.waitForExistence(timeout: 5) { name.typeText("Work\n") }
-            sidebar.staticTexts["Weekly sync"].click()
+            // The sheet hides the sidebar from the accessibility tree until it has gone.
+            _ = sidebar.staticTexts["Work"].waitForExistence(timeout: 5)
+            let weeklySync = sidebar.staticTexts["Weekly sync"]
+            if weeklySync.waitForExistence(timeout: 5) { weeklySync.click() }
             shoot(app, appearance, "Window, sidebar")
 
             sidebar.staticTexts["Design notes"].hover()
