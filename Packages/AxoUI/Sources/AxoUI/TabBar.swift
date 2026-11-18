@@ -433,7 +433,7 @@ private struct TopTab: View {
         .frame(maxWidth: TabBar.tabMaxWidth)
         // On the tab's own button only, so the close button keeps its own label and identifier.
         // Resting the pointer on it shows its card (#76) below it, in place of a tooltip.
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(TabPreviewLayer.space)) } action: { frame.rect = $0 }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame.rect = $0 }
         .accessibilityLabel(title)
         .accessibilityCustomContent(Text(panes == nil ? "Address" : "Addresses"),
                                     Text(verbatim: (panes ?? [tab]).map(\.url.absoluteString).formatted(.list(type: .and))))

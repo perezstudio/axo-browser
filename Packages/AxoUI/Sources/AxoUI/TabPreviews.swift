@@ -125,9 +125,6 @@ enum TabPreviewAddress {
 /// takes the pointer or focus, so the row and page keep theirs.
 struct TabPreviewLayer: View {
     let model: BrowserModel
-    /// The coordinate space top tabs measure themselves in for the card: the browser window's
-    /// root view, which holds this layer (sidebar rows use `.global`).
-    static let space = "tabPreviewWindow"
     @State private var cardSize = CGSize(width: TabPreviewCard.width, height: 220)
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.appearsActive) private var appearsActive
@@ -138,13 +135,11 @@ struct TabPreviewLayer: View {
         ZStack {
             if let preview = model.tabPreview {
                 GeometryReader { geometry in
-                    // Sidebar rows (edge `.trailing`) report their frames in `.global`: the
-                    // sidebar is its own split view column, outside the window root's named
-                    // space. Top tabs (edge `.bottom`) report them in that named space, since
-                    // `.global` inside the tab bar's scroll view came out 40 pt up and put the
-                    // card over the tab. This layer converts from the anchor's space.
-                    let space: CoordinateSpace = preview.edge == .bottom ? .named(Self.space) : .global
-                    let origin = geometry.frame(in: space).origin
+                    // Rows report their frames in `.global`, and the card is placed from where
+                    // this reader sits in that space. The reader respects the safe area, so it
+                    // draws where it measures: ignoring it drew from the window's top while
+                    // measuring 40 pt lower, which put a top tab's card over the tab.
+                    let origin = geometry.frame(in: .global).origin
                     let anchor = preview.anchor.offsetBy(dx: -origin.x, dy: -origin.y)
                     TabPreviewCard(preview: preview)
                         .onGeometryChange(for: CGSize.self) { $0.size } action: { cardSize = $0 }
@@ -152,7 +147,6 @@ struct TabPreviewLayer: View {
                 }
                 .transition(.opacity)
                 .allowsHitTesting(false)
-                .ignoresSafeArea()
             }
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: model.tabPreview?.tabIDs)
