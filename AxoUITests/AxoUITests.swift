@@ -8,6 +8,12 @@
 import AppKit
 import XCTest
 
+/// Where `testTheSelectedRowIsHighlighted` reads a row's shade: past the highlight's 10 pt inset,
+/// before the row's icon.
+enum SidebarHighlightProbe {
+    static let x: CGFloat = 14
+}
+
 final class AxoUITests: XCTestCase {
 
     override class func setUp() {
@@ -638,6 +644,44 @@ final class AxoUITests: XCTestCase {
 
     /// Dragging rows between sections (#77): a tab into Pinned and back out, into a folder, and
     /// a favorite out of Favorites into the tabs section and into Pinned.
+    /// The selected row is highlighted (rows draw it themselves since they became reorderable,
+    /// #77, which stopped the list drawing its selection), and the highlight follows a click.
+    @MainActor
+    func testTheSelectedRowIsHighlighted() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        AxoUITests.openPage(page("First"), in: app)
+        XCTAssertTrue(sidebar.staticTexts["First"].waitForExistence(timeout: 10))
+        AxoUITests.openPage(page("Second"), in: app)
+        XCTAssertTrue(sidebar.staticTexts["Second"].waitForExistence(timeout: 10))
+        let window = app.windows.firstMatch
+        app.descendants(matching: .any)["sidebarAddressBar"].hover() // Away from the rows.
+
+        // Just inside the highlight's leading edge, before the row's icon.
+        func shade(of title: String) -> Double {
+            let row = sidebar.staticTexts[title].frame
+            let point = CGPoint(x: sidebar.frame.minX - window.frame.minX + SidebarHighlightProbe.x,
+                                y: row.midY - window.frame.minY)
+            let color = AxoUITests.color(at: point, in: window)
+            return (color.red + color.green + color.blue) / 3
+        }
+        let deadline = Date().addingTimeInterval(5)
+        while abs(shade(of: "Second") - shade(of: "First")) < 0.03, Date() < deadline { usleep(200_000) }
+        XCTAssertGreaterThan(abs(shade(of: "Second") - shade(of: "First")), 0.03, "The selected row, Second, is highlighted")
+
+        sidebar.staticTexts["First"].click()
+        app.descendants(matching: .any)["sidebarAddressBar"].hover()
+        let moved = Date().addingTimeInterval(5)
+        while abs(shade(of: "First") - shade(of: "Second")) < 0.03, Date() < moved { usleep(200_000) }
+        XCTAssertGreaterThan(abs(shade(of: "First") - shade(of: "Second")), 0.03, "The highlight follows the click")
+
+        let shot = XCTAttachment(screenshot: window.screenshot())
+        shot.name = "Selected row"
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+
     @MainActor
     func testDraggingRowsBetweenSections() throws {
         let app = launchApp()
