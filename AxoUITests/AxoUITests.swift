@@ -63,6 +63,33 @@ final class AxoUITests: XCTestCase {
         return app
     }
 
+    /// A port on this Mac nothing listens on, so a load there is refused without leaving the
+    /// Mac. The UI test runner is sandboxed and can't listen on a port itself, so it tries random
+    /// high ports until a connection to one is refused. Where the sandbox refuses the connection
+    /// too, it can't check, and takes a random high port (a listener there is very unlikely).
+    static func closedPort() throws -> UInt16 {
+        for _ in 0..<50 {
+            let port = UInt16.random(in: 49_152...65_000)
+            let socket = Darwin.socket(AF_INET, SOCK_STREAM, 0)
+            guard socket >= 0 else { continue }
+            defer { close(socket) }
+            var address = sockaddr_in()
+            address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+            address.sin_family = sa_family_t(AF_INET)
+            address.sin_addr.s_addr = inet_addr("127.0.0.1")
+            address.sin_port = port.bigEndian
+            let connected = withUnsafePointer(to: &address) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                    connect(socket, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+                }
+            }
+            if connected != 0, errno == ECONNREFUSED || errno == EPERM || errno == EACCES {
+                return port
+            }
+        }
+        throw XCTSkip("No closed port")
+    }
+
     /// Opens `address` in a new tab through the command bar (⌘T). It types into the command
     /// field itself, once it's there: typed at the app as the bar opens, the first letters could
     /// be lost or go elsewhere, turning an address into a search.
@@ -607,6 +634,30 @@ final class AxoUITests: XCTestCase {
         app.menuBars.menuItems["Unmute Tab"].click()
         let unmuted = NSPredicate(format: "label == 'Mute Tab'")
         XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: unmuted, evaluatedWith: speaker)], timeout: 5), .completed)
+    }
+
+    /// A page that can't be reached shows Axo's Can't Connect page in its place, and Go Back
+    /// returns to the page before (#178). The address is a port on this Mac nothing listens on, so
+    /// nothing leaves the Mac.
+    @MainActor
+    func testCantConnectAndGoBack() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        AxoUITests.openPage("data:text/html,<title>Before</title><h1>Before</h1>", in: app)
+        XCTAssertTrue(sidebar.staticTexts["Before"].waitForExistence(timeout: 10))
+
+        app.typeKey("l", modifierFlags: .command)
+        XCTAssertTrue(app.textFields["commandField"].waitForExistence(timeout: 5))
+        app.typeText("http://127.0.0.1:\(try AxoUITests.closedPort())/\n")
+        let cantConnect = app.descendants(matching: .any)["pageLoadError"]
+        XCTAssertTrue(cantConnect.waitForExistence(timeout: 15), "Axo's own page shows in place of the page")
+        XCTAssertTrue(cantConnect.staticTexts["Axo Can’t Connect to This Site"].exists)
+        XCTAssertTrue(cantConnect.buttons["pageErrorRetry"].exists)
+
+        cantConnect.buttons["pageErrorGoBack"].click()
+        XCTAssertTrue(cantConnect.waitForNonExistence(timeout: 10), "Go Back leaves it")
+        XCTAssertTrue(sidebar.staticTexts["Before"].exists, "The page before shows again")
     }
 
     /// A page with nothing to say about its connection (a data: page) shows no lock and no

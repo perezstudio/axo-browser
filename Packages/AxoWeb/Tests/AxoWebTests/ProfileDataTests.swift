@@ -38,8 +38,11 @@ struct ProfileDataTests {
 
     /// The real removal, for a profile that never had data. WebKit crashes if it runs off the
     /// main thread.
-    @Test func removingAStoreThatNeverExistedIsHarmless() async {
+    @Test func removingAStoreThatNeverExistedIsHarmless() async throws {
         let pool = WebViewPool.forTesting()
         try? await pool.removeDataStore(UUID())
+        // WebKit answers before its own work for the removal is done; if this test runs last,
+        // the process could exit meanwhile, and WebKit crashed reaching the gone main run loop.
+        try await Task.sleep(for: .seconds(1))
     }
 }

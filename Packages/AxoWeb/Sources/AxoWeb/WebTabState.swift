@@ -36,6 +36,14 @@ public final class WebTabState {
     public internal(set) var problem: PageProblem?
     /// How secure the page's connection is, and its certificates (#96), for the address bar.
     public internal(set) var security = PageSecurity()
+    /// Why the page's last load failed, while the engine's error page shows (#178).
+    public internal(set) var loadError: PageLoadError?
+    /// The warning showing in place of the page, if any (#178).
+    public internal(set) var warning: PageWarning?
+
+    /// Whether Axo covers the page with its own (#75, #178): it stopped working, a load failed,
+    /// or a warning shows. The engine's page underneath mustn't take keys or be pictured.
+    public var isCovered: Bool { problem != nil || loadError != nil || warning != nil }
 
     init() {}
 }

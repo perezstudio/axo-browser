@@ -46,6 +46,8 @@ final class LiveTab: EnginePageDelegate {
         state.media = page.media
         state.problem = page.problem
         state.security = page.security
+        state.loadError = page.loadError
+        state.warning = page.warning
     }
 
     /// Copies the page's state into ``state``, reporting URL and title changes to the pool.
@@ -106,6 +108,15 @@ final class LiveTab: EnginePageDelegate {
         // Muting changed by the engine itself (an extension, say) lasts like the person's.
         if media.isMuted != state.media.isMuted { pool?.pageChangedMuting(media.isMuted, tabID: tabID) }
         state.media = media
+    }
+
+    func pageErrorDidChange(_ page: any EnginePage) {
+        let loadError = page.loadError
+        let warning = page.warning
+        guard state.loadError != loadError || state.warning != warning else { return }
+        state.loadError = loadError
+        state.warning = warning
+        pool?.onPageError?(tabID)
     }
 
     func pageSecurityDidChange(_ page: any EnginePage) {

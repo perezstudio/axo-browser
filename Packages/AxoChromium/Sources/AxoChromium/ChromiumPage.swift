@@ -207,6 +207,39 @@ final class ChromiumPage: NSObject, EnginePage {
         page?.waitForResponse()
     }
 
+    // MARK: Error pages and warnings (#178)
+
+    var loadError: PageLoadError? {
+        guard let page, page.loadErrorCode != 0 else { return nil }
+        return PageLoadError(kind: PageLoadError.kind(chromiumCode: page.loadErrorCode),
+                             code: page.loadErrorName ?? "\(page.loadErrorCode)", url: page.loadErrorURL)
+    }
+
+    var warning: PageWarning? {
+        guard let page else { return nil }
+        let kind: PageWarning.Kind
+        switch page.warning {
+        case .certificate: kind = .certificate
+        case .deceptiveSite: kind = .deceptiveSite
+        case .harmfulSite: kind = .harmfulSite
+        case .other: kind = .other
+        default: return nil
+        }
+        return PageWarning(kind: kind, url: page.loadErrorURL, code: page.loadErrorName,
+                           allowsVisiting: page.warningAllowsVisiting)
+    }
+
+    func leaveWarning() { page?.leaveWarning() }
+    /// Reloads the error page's entry, which tries the original request again.
+    func retryFailedLoad() { page?.reload() }
+    func visitDespiteWarning() { page?.visitDespiteWarning() }
+
+    /// Chromium commits its error page as an entry of its own: back to the page before it.
+    func leaveLoadError() {
+        guard let page, page.loadErrorCode != 0, page.canGoBack else { return }
+        page.goBack()
+    }
+
     // MARK: Connection security (#96)
 
     var security: PageSecurity {
@@ -500,6 +533,11 @@ extension ChromiumPage: AXOPageDelegate {
     /// The page's connection security changed.
     func pageSecurityDidChange(_ page: any AXOPage) {
         delegate?.pageSecurityDidChange(self)
+    }
+
+    /// The page committed an error page or a warning, or a page again.
+    func pageErrorDidChange(_ page: any AXOPage) {
+        delegate?.pageErrorDidChange(self)
     }
 
     /// A page this one opened (`window.open`, `target="_blank"`), already loading and connected

@@ -132,6 +132,27 @@ public final class FakePage: EnginePage {
         delegate?.pageSecurityDidChange(self)
     }
 
+    /// Why its last load failed, and the warning it shows (#178); ``simulateLoadError(_:)`` and
+    /// ``simulateWarning(_:)`` change them as an engine would.
+    public private(set) var loadError: PageLoadError?
+    public private(set) var warning: PageWarning?
+    /// What the page was asked: "leaveWarning", "visitDespiteWarning", "leaveLoadError".
+    public private(set) var errorActions: [String] = []
+
+    public func simulateLoadError(_ loadError: PageLoadError?) {
+        self.loadError = loadError
+        delegate?.pageErrorDidChange(self)
+    }
+
+    public func simulateWarning(_ warning: PageWarning?) {
+        self.warning = warning
+        delegate?.pageErrorDidChange(self)
+    }
+
+    public func leaveWarning() { errorActions.append("leaveWarning") }
+    public func visitDespiteWarning() { errorActions.append("visitDespiteWarning") }
+    public func leaveLoadError() { errorActions.append("leaveLoadError") }
+
     /// Changes `problem` without reporting it, as when an engine misses a report.
     public func changeProblemQuietly(_ problem: PageProblem?) {
         self.problem = problem

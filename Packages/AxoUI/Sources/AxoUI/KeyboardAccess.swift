@@ -164,6 +164,8 @@ extension BrowserModel {
         pageFocusRequestCount += 1
         pageFocusTask?.cancel()
         guard let selectedTabID else { return }
+        // A page under Axo's own page (stopped, failed, a warning) never gets keys (#75, #178).
+        guard pool.state(for: selectedTabID)?.isCovered != true else { return }
         let pool = pool
         let deadline = ContinuousClock.now + pageFocusWaitLimit
         pageFocusTask = Task { @MainActor [weak self] in
