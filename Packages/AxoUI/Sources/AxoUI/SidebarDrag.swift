@@ -154,7 +154,7 @@ extension View {
     /// Makes a sidebar row draggable (#77): it carries its ID as text (``SidebarDragPayload``)
     /// to the other sections, folders, Favorites, and the Space dots.
     func sidebarDraggable(_ item: PinnedItem, isEnabled: Bool) -> some View {
-        itemProvider(isEnabled ? { NSItemProvider(object: SidebarDragPayload.text(for: item) as NSString) } : nil)
+        draggable(SidebarDragPayload.text(for: item))
     }
 }
 
