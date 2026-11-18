@@ -14,7 +14,9 @@ struct PictureInPictureTests {
         window.orderFront(nil)
         defer { window.orderOut(nil) }
         webView.loadFileURL(folder.appending(path: "video.html"), allowingReadAccessTo: folder)
-        let deadline = ContinuousClock.now + .seconds(10)
+        // Only a guard against hangs: other tests' web views share the main thread, so a load can
+        // take many seconds on a busy machine.
+        let deadline = ContinuousClock.now + .seconds(60)
         while webView.isLoading || webView.title != "Video" {
             try #require(ContinuousClock.now < deadline, "The page didn't load")
             try await Task.sleep(for: .milliseconds(25))
