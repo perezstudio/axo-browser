@@ -172,19 +172,7 @@ extension View {
             }
             Task { await model.moveSidebarItems(difference.sources, to: difference.destination.collectionID, before: before) }
         }
-        .dragContainer(for: SidebarDragItem.self) { (item: PinnedItem) in
-            isEnabled ? [SidebarDragItem(id: item)] : []
-        }
-        .dropDestination(for: String.self, isEnabled: isEnabled) { items, session in
-            guard let favorite = items.first.flatMap(UUID.init(uuidString:)),
-                  model.favorites.contains(where: { $0.id == favorite }) else { return }
-            let destination = session.reorderDestination(for: PinnedNode.self, in: SidebarCollection.self)
-            let before: PinnedItem? = switch destination?.position {
-            case .before(let item): item
-            default: nil
-            }
-            Task { await model.moveFavoriteToSidebar(favorite, to: destination?.collectionID ?? .tabs, before: before) }
-        }
+        // Temporary: no drag container or drop destination.
     }
 }
 
