@@ -818,7 +818,9 @@ final class AxoUITests: XCTestCase {
         let nameField = app.textFields["nameField"]
         XCTAssertTrue(nameField.waitForExistence(timeout: 5))
         nameField.typeText("Work\n")
-        let folder = sidebar.descendants(matching: .any).matching(identifier: "folderRow").firstMatch
+        // By its name and item count: the Pinned section's identifier replaces `folderRow` too.
+        let folder = sidebar.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == 'Work' AND value ENDSWITH 'item' OR label == 'Work' AND value ENDSWITH 'items'")).firstMatch
         XCTAssertTrue(folder.waitForExistence(timeout: 5))
         sidebar.staticTexts["Beta"].click(forDuration: 0.6, thenDragTo: folder)
         wait("Beta is in the folder") { (folder.value as? String) == "2 items" }
