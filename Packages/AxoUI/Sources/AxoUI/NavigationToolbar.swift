@@ -98,14 +98,19 @@ private struct HistoryButton: View {
     let model: BrowserModel
     let direction: HistoryDirection
     @State private var isShowingHistory = false
-    /// Set by a long press, so the click its release ends doesn't also go one page.
-    @State private var pressShowedHistory = false
+    /// When a long press last showed the history, so the click its release ends doesn't also go
+    /// one page. A time rather than a flag, so a release that never reaches the button (dragged
+    /// off, or taken by the popover) can't swallow a later click.
+    @State private var historyShownAt: Date?
 
     var body: some View {
         let isBack = direction == .back
+        // The history isn't observable, so the menu reads it again whenever the page's address
+        // or title changes; otherwise its entries (and their indexes) could be a page behind.
+        let _ = (model.selectedPage?.url, model.selectedPage?.title)
         Button(isBack ? "Back" : "Forward", systemImage: isBack ? "chevron.backward" : "chevron.forward") {
-            if pressShowedHistory {
-                pressShowedHistory = false
+            if let shown = historyShownAt, Date().timeIntervalSince(shown) < 2 {
+                historyShownAt = nil
             } else if isBack {
                 model.goBack()
             } else {
@@ -117,7 +122,7 @@ private struct HistoryButton: View {
         .accessibilityIdentifier(isBack ? "backButton" : "forwardButton")
         .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in
             guard !model.history(direction).isEmpty else { return }
-            pressShowedHistory = true
+            historyShownAt = Date()
             isShowingHistory = true
         })
         .contextMenu {
@@ -147,6 +152,8 @@ private struct HistoryEntryLabel: View {
     var body: some View {
         Label {
             Text(HistoryList.title(of: entry))
+                .lineLimit(1)
+                .truncationMode(.middle)
         } icon: {
             if let icon = model.favicon(for: entry.url) {
                 Image(platformImage: icon)
@@ -163,9 +170,23 @@ struct HistoryList: View {
     let direction: HistoryDirection
     let close: () -> Void
 
-    /// What a history entry shows: its title, or its address when it has none.
+    /// The most characters an entry shows, since pages choose their titles and a `data:`
+    /// address can hold a whole file.
+    static let maxLength = 120
+
+    /// What a history entry shows: its title, or its address when it has none, cut to
+    /// ``maxLength``.
     static func title(of entry: HistoryEntry) -> String {
-        entry.title.isEmpty ? entry.url.absoluteString : entry.title
+        cut(entry.title.isEmpty ? entry.url.absoluteString : entry.title, to: maxLength)
+    }
+
+    /// The entry's address for its tooltip, cut as hovered links are.
+    static func address(of entry: HistoryEntry) -> String {
+        cut(entry.url.absoluteString, to: 2048)
+    }
+
+    private static func cut(_ text: String, to length: Int) -> String {
+        text.count > length ? String(text.prefix(length - 1)) + "…" : text
     }
 
     var body: some View {
@@ -185,7 +206,7 @@ struct HistoryList: View {
                 .buttonStyle(.plain)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .help(entry.url.absoluteString)
+                .help(Self.address(of: entry))
                 .accessibilityIdentifier("historyEntry")
             }
         }

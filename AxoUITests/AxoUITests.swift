@@ -268,9 +268,19 @@ final class AxoUITests: XCTestCase {
         forward.press(forDuration: 1)
         let list = app.descendants(matching: .any)["historyList"]
         XCTAssertTrue(list.waitForExistence(timeout: 5))
+        sleep(1) // Time for a forward load the hold might have started to commit.
         XCTAssertTrue(sidebar.staticTexts["First"].exists, "The hold didn't also go forward")
         list.buttons.element(boundBy: 1).click()
         XCTAssertTrue(sidebar.staticTexts["Third"].waitForExistence(timeout: 10))
+
+        // A plain click after a hold still goes one page, and the menu reads the history afresh.
+        sleep(2)
+        back.click()
+        XCTAssertTrue(sidebar.staticTexts["Second"].waitForExistence(timeout: 10))
+        back.rightClick()
+        XCTAssertTrue(window.menuItems["First"].waitForExistence(timeout: 5))
+        XCTAssertEqual(window.menus.firstMatch.menuItems.allElementsBoundByIndex.map(\.title), ["First"])
+        app.typeKey(.escape, modifierFlags: [])
     }
 
     /// New Tab (⌘T; the sidebar's top row has no button for it, as on the board, #67) and a

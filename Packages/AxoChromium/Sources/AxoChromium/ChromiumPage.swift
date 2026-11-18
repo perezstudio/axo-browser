@@ -109,11 +109,12 @@ final class ChromiumPage: NSObject, EnginePage {
     var forwardHistory: [HistoryEntry] { Self.historyEntries(page?.forwardHistory ?? []) }
     func goToHistoryOffset(_ offset: Int) { page?.go(toHistoryOffset: offset) }
 
-    /// The engine's history entries (`title`, `url`), skipping any without an address.
+    /// The engine's history entries (`title`, `url`). Every entry is kept, one without an
+    /// address as `about:blank`, since each one's place is its offset.
     static func historyEntries(_ entries: [[String: Any]]) -> [HistoryEntry] {
-        entries.compactMap { entry in
-            guard let url = entry["url"] as? URL else { return nil }
-            return HistoryEntry(title: entry["title"] as? String ?? "", url: url)
+        entries.map { entry in
+            HistoryEntry(title: entry["title"] as? String ?? "",
+                         url: entry["url"] as? URL ?? URL(string: "about:blank")!)
         }
     }
     func reload() { page?.reload() }

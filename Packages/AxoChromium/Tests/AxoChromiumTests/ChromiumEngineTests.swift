@@ -1022,8 +1022,9 @@ struct ChromiumEngineTests {
         fake.backHistory = [["title": "Two", "url": two], ["title": "", "url": one], ["title": "No address"]]
         fake.forwardHistory = [["title": "Three", "url": three]]
 
-        #expect(page.backHistory == [HistoryEntry(title: "Two", url: two), HistoryEntry(title: "", url: one)],
-                "Nearest first, an untitled page kept, one with no address skipped")
+        #expect(page.backHistory == [HistoryEntry(title: "Two", url: two), HistoryEntry(title: "", url: one),
+                                     HistoryEntry(title: "No address", url: URL(string: "about:blank")!)],
+                "Nearest first, every entry kept so each one's place is its offset")
         #expect(page.forwardHistory == [HistoryEntry(title: "Three", url: three)])
         #expect(pool.backHistory(for: tab.id) == page.backHistory)
         pool.goToHistoryOffset(-2, in: tab.id)

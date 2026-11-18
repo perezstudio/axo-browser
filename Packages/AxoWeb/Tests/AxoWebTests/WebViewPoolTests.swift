@@ -145,6 +145,7 @@ struct WebViewPoolTests {
 
         pool.goToHistoryOffset(5, in: tab.id)
         pool.goToHistoryOffset(0, in: tab.id)
+        try await Task.sleep(for: .milliseconds(500)) // Long enough for a load of a local page to commit.
         #expect(pool.state(for: tab.id)?.url == first, "Out of range or nowhere does nothing")
     }
 

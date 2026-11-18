@@ -59,6 +59,8 @@ struct EngineNeutralModelTests {
         #expect(model.history(.back) == [two, one], "Nearest first")
         #expect(model.history(.forward) == [four])
         #expect(HistoryList.title(of: two) == "https://example.com/two", "No title shows the address")
+        let long = HistoryEntry(title: String(repeating: "a", count: 10_000), url: URL(string: "https://example.com/")!)
+        #expect(HistoryList.title(of: long).count == HistoryList.maxLength, "A page's long title is cut")
         model.goToHistory(.back, index: 1)
         model.goToHistory(.forward, index: 0)
         model.goToHistory(.back, index: -1)
