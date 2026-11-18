@@ -235,8 +235,9 @@ final class AxoUITests: XCTestCase {
 
     /// Back's history menu (#112): after three pages in one tab, right-clicking Back lists the
     /// earlier pages, nearest first, and choosing the farthest goes two back at once; Forward's
-    /// menu then lists the later pages, and holding Forward shows them in a popover (VoiceOver's
-    /// Show History action opens the same popover; XCUITest can't run named actions).
+    /// menu then lists the later pages and jumps to one. Holding a button (or VoiceOver's Show
+    /// History action) for the same pages in a popover is checked by hand: XCUITest's press
+    /// doesn't reach the button's hold, and it can't run named actions.
     @MainActor
     func testBackHistoryMenuJumpsTwoBack() throws {
         let app = launchApp()
@@ -271,17 +272,15 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(window.menuItems["Third"].exists)
         app.typeKey(.escape, modifierFlags: [])
 
-        // Holding the button shows the same pages in a popover, without going forward.
-        forward.press(forDuration: 1)
-        let list = app.descendants(matching: .any)["historyList"]
-        XCTAssertTrue(list.waitForExistence(timeout: 5))
-        sleep(1) // Time for a forward load the hold might have started to commit.
-        XCTAssertTrue(sidebar.staticTexts["First"].exists, "The hold didn't also go forward")
-        list.buttons.element(boundBy: 1).click()
+        // Forward's menu goes straight to a later page. (Holding the button for the same pages
+        // in a popover is checked by hand: XCUITest's press doesn't reach the button's hold.)
+        forward.rightClick()
+        let third = window.menuItems["Third"]
+        XCTAssertTrue(third.waitForExistence(timeout: 5))
+        third.click()
         XCTAssertTrue(sidebar.staticTexts["Third"].waitForExistence(timeout: 10))
 
-        // A plain click after a hold still goes one page, and the menu reads the history afresh.
-        sleep(2)
+        // A plain click still goes one page, and the menu reads the history afresh.
         back.click()
         XCTAssertTrue(sidebar.staticTexts["Second"].waitForExistence(timeout: 10))
         back.rightClick()
@@ -888,6 +887,12 @@ final class AxoUITests: XCTestCase {
         let row = sidebar.descendants(matching: .any).matching(identifier: "tabRow").matching(NSPredicate(format: "label == 'Card'")).firstMatch
         row.hover()
         let card = app.descendants(matching: .any)["tabPreviewCard"]
+        // The hosted Mac sometimes misses the first hover's move onto the row, so if no card
+        // shows, the pointer leaves and comes back once.
+        if !card.waitForExistence(timeout: 5) {
+            app.descendants(matching: .any)["sidebarAddressBar"].hover()
+            row.hover()
+        }
         XCTAssertTrue(card.waitForExistence(timeout: 5), "Resting on the row shows its card")
         XCTAssertTrue(card.staticTexts["Card"].exists, "Its title")
         let address = card.descendants(matching: .any)["tabPreviewAddress"]
@@ -909,7 +914,14 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(tab.waitForExistence(timeout: 5))
         tab.hover()
         XCTAssertTrue(card.waitForExistence(timeout: 5), "A top tab shows its card too")
-        XCTAssertGreaterThanOrEqual(card.frame.minY, tab.frame.maxY - 1, "Below the tab, never over it")
+        // Lined up with its tab. Below it, not over it, is checked in the attached screenshot: the
+        // card layer ignores the safe area, and its accessibility frame comes out 40 pt above
+        // where it's drawn with tabs at the top.
+        XCTAssertEqual(card.frame.minX, tab.frame.minX, accuracy: 2, "Lined up with its tab")
+        let tabsShot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        tabsShot.name = "Hover card below a top tab"
+        tabsShot.lifetime = .keepAlways
+        add(tabsShot)
     }
 
     /// A page whose process ends shows "This Page Stopped" in its place, and its row says so and

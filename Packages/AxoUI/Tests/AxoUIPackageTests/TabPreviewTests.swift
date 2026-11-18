@@ -14,6 +14,28 @@ import UIKit
 /// make a page or get taken while the sidebar scrolls.
 @MainActor
 struct TabPreviewTests {
+    #if os(macOS)
+    @Test func aRowsFrameIsReadInItsWindowFromTheTopLeft() throws {
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled],
+                              backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let content = NSView(frame: CGRect(x: 0, y: 0, width: 400, height: 300))
+        window.contentView = content
+        let holder = NSView(frame: CGRect(x: 20, y: 100, width: 300, height: 150))
+        content.addSubview(holder)
+        let row = NSView(frame: CGRect(x: 10, y: 20, width: 200, height: 30))
+        holder.addSubview(row)
+        let frame = TabPreviewFrame()
+        #expect(frame.rect == .zero, "Not on screen yet")
+        frame.view = row
+        // In the unflipped content view the row runs from y 120 to 150, so 150 to 180 from the top.
+        #expect(frame.rect == CGRect(x: 30, y: 150, width: 200, height: 30))
+        row.removeFromSuperview()
+        #expect(frame.rect == .zero, "Off screen again")
+    }
+    #endif
+
     let engine = FakeEngine()
     let model: BrowserModel
     let anchor = CGRect(x: 10, y: 100, width: 240, height: 28)
