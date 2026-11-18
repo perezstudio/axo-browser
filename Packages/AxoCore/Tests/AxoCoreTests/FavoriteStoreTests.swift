@@ -58,5 +58,10 @@ struct FavoriteStoreTests {
         try await favorites.remove(b.id)
         #expect(try await favorites.search("c.example", profileID: home.profileID).map(\.id) == [c.id])
         #expect(try await favorites.search("B.EXAMPLE", profileID: home.profileID).isEmpty)
+
+        // A favorite dropped in the tabs section (#77): an unpinned tab in one write, never pinned.
+        let unpinned = try await favorites.moveToTab(c.id, in: home.id, pinned: false)
+        #expect(unpinned.id == c.id && !unpinned.isPinned && unpinned.homeURL == nil)
+        #expect(try await favorites.favorites(for: home.profileID).isEmpty)
     }
 }

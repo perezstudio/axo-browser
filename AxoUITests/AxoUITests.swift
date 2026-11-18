@@ -628,6 +628,64 @@ final class AxoUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: unmuted, evaluatedWith: speaker)], timeout: 5), .completed)
     }
 
+    /// Dragging rows between sections (#77): a tab into Pinned and back out, into a folder, and
+    /// a favorite out of Favorites into the tabs section and into Pinned.
+    @MainActor
+    func testDraggingRowsBetweenSections() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        for name in ["Alpha", "Beta", "Gamma", "Delta"] {
+            AxoUITests.openPage("data:text/html,<title>\(name)</title>", in: app)
+            XCTAssertTrue(sidebar.staticTexts[name].waitForExistence(timeout: 10))
+        }
+        let pinned = sidebar.descendants(matching: .any)["pinnedSection"]
+        func isPinned(_ name: String) -> Bool { pinned.staticTexts[name].exists }
+        func wait(_ what: String, until condition: @escaping () -> Bool) {
+            let deadline = Date().addingTimeInterval(10)
+            while !condition(), Date() < deadline { usleep(100_000) }
+            XCTAssertTrue(condition(), what)
+        }
+
+        // Pin Alpha from the keyboard, then drag Beta onto it: it's pinned there.
+        sidebar.staticTexts["Alpha"].click()
+        app.typeKey("p", modifierFlags: [.command, .control])
+        XCTAssertTrue(pinned.waitForExistence(timeout: 5))
+        sidebar.staticTexts["Beta"].click(forDuration: 0.6, thenDragTo: sidebar.staticTexts["Alpha"])
+        wait("Beta is pinned") { isPinned("Beta") }
+
+        // And back out, onto Gamma in the tabs section.
+        sidebar.staticTexts["Beta"].click(forDuration: 0.6, thenDragTo: sidebar.staticTexts["Gamma"])
+        wait("Beta is unpinned") { !isPinned("Beta") && sidebar.staticTexts["Beta"].exists }
+
+        // Into a folder: Alpha goes into a new folder, then Beta onto the folder.
+        sidebar.staticTexts["Alpha"].click()
+        app.menuBars.menuBarItems["Tabs"].click()
+        app.menuBars.menuItems["Move to Folder"].hover()
+        app.menuBars.menuItems["New Folder…"].click()
+        let nameField = app.textFields["nameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.typeText("Work\n")
+        let folder = sidebar.descendants(matching: .any).matching(identifier: "folderRow").firstMatch
+        XCTAssertTrue(folder.waitForExistence(timeout: 5))
+        sidebar.staticTexts["Beta"].click(forDuration: 0.6, thenDragTo: folder)
+        wait("Beta is in the folder") { (folder.value as? String) == "2 items" }
+
+        // A favorite out of Favorites, into the tabs section and then into Pinned.
+        sidebar.staticTexts["Gamma"].rightClick()
+        app.windows.firstMatch.menuItems["Add to Favorites"].click()
+        let tile = app.buttons["favoriteTile"]
+        XCTAssertTrue(tile.waitForExistence(timeout: 5))
+        tile.click(forDuration: 0.6, thenDragTo: sidebar.staticTexts["Delta"])
+        wait("Gamma is a tab again") { !tile.exists && sidebar.staticTexts["Gamma"].exists && !isPinned("Gamma") }
+
+        sidebar.staticTexts["Gamma"].rightClick()
+        app.windows.firstMatch.menuItems["Add to Favorites"].click()
+        XCTAssertTrue(tile.waitForExistence(timeout: 5))
+        tile.click(forDuration: 0.6, thenDragTo: folder)
+        wait("Gamma is pinned") { !tile.exists && isPinned("Gamma") }
+    }
+
     /// A page that can't be reached shows Axo's Can't Connect page in its place, and Go Back
     /// returns to the page before (#178). The address is a port on this Mac nothing listens on, so
     /// nothing leaves the Mac.
