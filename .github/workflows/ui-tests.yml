@@ -63,6 +63,8 @@ jobs:
         env:
           # Skips the few tests that can't pass on this virtual Mac (AxoUITests.isOnHostedRunner).
           TEST_RUNNER_AXO_HOSTED_RUNNER: "1"
+          # The visual audit's screenshots run only when asked for by name.
+          TEST_RUNNER_AXO_VISUAL_AUDIT: ${{ contains(env.ONLY_TESTING, 'VisualAuditUITests') && '1' || '' }}
         run: |
           mkdir -p "$RUNNER_TEMP/screenshots"
           ( while true; do
