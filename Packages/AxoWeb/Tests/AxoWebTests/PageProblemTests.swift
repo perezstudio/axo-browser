@@ -80,7 +80,7 @@ struct PageProblemTests {
     @Test func aStoppedPageIsntSnapshotted() async throws {
         pool.page(for: tab, profileID: profileID)
         let page = try #require(engine.pages.last)
-        page.snapshotImage = PlatformImage(size: CGSize(width: 10, height: 10))
+        page.snapshotImage = SnapshotTimingTests.image(width: 10, height: 10, red: 0, green: 1, blue: 0)
         page.simulateProblem(.crashed(errorCode: nil))
 
         pool.beginShowing(tab.id)
@@ -93,7 +93,7 @@ struct PageProblemTests {
         let working = Tab.testTab(url: URL(string: "https://example.com/working")!)
         pool.page(for: working, profileID: profileID)
         let workingPage = try #require(engine.pages.last)
-        workingPage.snapshotImage = PlatformImage(size: CGSize(width: 10, height: 10))
+        workingPage.snapshotImage = SnapshotTimingTests.image(width: 10, height: 10, red: 0, green: 1, blue: 0)
         pool.beginShowing(working.id)
         pool.endShowing(working.id)
         try await waitUntil("the snapshot") { !pool.isSnapshotting(working.id) }

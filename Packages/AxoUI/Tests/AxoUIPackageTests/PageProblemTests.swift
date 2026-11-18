@@ -100,7 +100,7 @@ struct PageProblemTests {
     }
 
     @Test func waitGivesAHungPageMoreTime() async throws {
-        let (id, page) = try await openPage(URL(string: "https://example.com/")!)
+        let (_, page) = try await openPage(URL(string: "https://example.com/")!)
         page.simulateProblem(.unresponsive)
         #expect(announced == ["This Page Isn’t Responding"])
 
