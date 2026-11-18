@@ -159,45 +159,51 @@ extension View {
 }
 
 extension View {
-    /// Lets a tab's row take a drop onto itself (#77): a row from elsewhere, or a favorite,
-    /// lands just before it in its section. The section's insert only takes drops between rows.
+    /// Makes a row a drop target (#77): a row from anywhere in the sidebar, or a favorite,
+    /// lands just before it, or just after it (before `next`) when dropped on its lower half,
+    /// in its section. Rows are the drop targets, not the list: while a section had the list's
+    /// own move or insert, the list took every drop over its rows and a row dragged onto
+    /// another section landed nowhere.
     func sidebarRowDropTarget(model: BrowserModel, collection: SidebarCollection, item: PinnedItem,
-                              isEnabled: Bool) -> some View {
-        dropDestination(for: String.self, isEnabled: isEnabled) { texts, _ in
-            guard let text = texts.first, SidebarDragPayload.item(from: text) != item else { return }
-            Task { await model.receiveSidebarDrop(text, to: collection, before: item) }
-        }
+                              next: PinnedItem?, isEnabled: Bool) -> some View {
+        modifier(RowDropTarget(model: model, collection: collection, item: item, next: next, isEnabled: isEnabled))
     }
 }
 
-extension DynamicViewContent {
-    /// Makes one section's rows (a pinned level or the tabs section) reorderable, and lets it
-    /// take rows dragged from the other sections and favorites dropped in (#77), at the drop
-    /// point. Rows use the list's own move and insert, not SwiftUI 27's reorderable
-    /// containers: with those, the sidebar list stopped selecting rows on a click and drawing
-    /// the selected row.
-    func sidebarDropTarget(model: BrowserModel, collection: SidebarCollection, items: [PinnedItem],
-                           isEnabled: Bool) -> some DynamicViewContent {
-        onMove(perform: isEnabled ? { source, destination in
-            let moving = source.compactMap { items.indices.contains($0) ? items[$0] : nil }
-            let before = SidebarDrop.target(before: destination, in: items, moving: moving)
-            Task { await model.moveSidebarItems(moving, to: collection, before: before) }
-        } : nil)
-        .onInsert(of: [.utf8PlainText]) { index, providers in
-            guard isEnabled else { return }
-            let before = SidebarDrop.target(before: index, in: items, moving: [])
-            for provider in providers {
-                _ = provider.loadTransferable(type: String.self) { result in
-                    guard let text = try? result.get() else { return }
-                    Task { @MainActor in await model.receiveSidebarDrop(text, to: collection, before: before) }
+private struct RowDropTarget: ViewModifier {
+    let model: BrowserModel
+    let collection: SidebarCollection
+    let item: PinnedItem
+    let next: PinnedItem?
+    let isEnabled: Bool
+    @State private var height: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+                .dropDestination(for: String.self) { texts, location in
+                    guard let text = texts.first else { return false }
+                    // A row dropped on its own place stays.
+                    if let dropped = SidebarDragPayload.item(from: text), dropped == item { return false }
+                    let before = SidebarDrop.target(droppedAt: location.y, height: height, on: item, next: next)
+                    Task { await model.receiveSidebarDrop(text, to: collection, before: before) }
+                    return true
                 }
-            }
+        } else {
+            content
         }
     }
 }
 
 /// Where a drop lands in one section of the sidebar (#77).
 enum SidebarDrop {
+    /// The row a drop on `item`'s row goes before: `item` itself on its upper half, the row
+    /// after it (`next`, nil for the section's end) on its lower half.
+    static func target(droppedAt y: CGFloat, height: CGFloat, on item: PinnedItem, next: PinnedItem?) -> PinnedItem? {
+        height > 0 && y > height / 2 ? next : item
+    }
+
     /// The row a drop at `index` goes before: the first row from `index` on that isn't being
     /// moved (dropping a row on its own place keeps it there), or nil for the end.
     static func target(before index: Int, in items: [PinnedItem], moving: [PinnedItem]) -> PinnedItem? {

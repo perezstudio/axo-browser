@@ -169,12 +169,17 @@ struct SidebarSections: View {
                               isSelected: data.holdsSelection(tab.id))
                     .tag(PinnedItem.tab(tab.id))
                     .sidebarDraggable(.tab(tab.id), isEnabled: isLive)
-                    .sidebarRowDropTarget(model: model, collection: .tabs, item: .tab(tab.id), isEnabled: isLive)
+                    .sidebarRowDropTarget(model: model, collection: .tabs, item: .tab(tab.id),
+                                          next: Self.item(after: tab.id, in: rowTabs.map { .tab($0.id) }), isEnabled: isLive)
                     .sidebarMoveActions(model: model, item: .tab(tab.id))
             }
-            // Rows drag between Pinned, folders, the tabs section, and Favorites (#77).
-            .sidebarDropTarget(model: model, collection: .tabs, items: rowTabs.map { .tab($0.id) }, isEnabled: isLive)
         }
+    }
+
+    /// The row after `id`'s in a section, for a drop on its lower half (#77).
+    static func item(after id: AxoCore.Tab.ID, in items: [PinnedItem]) -> PinnedItem? {
+        guard let index = items.firstIndex(of: .tab(id)), index + 1 < items.count else { return nil }
+        return items[index + 1]
     }
 
     /// The tab a row stands for: a split's first tab in sidebar order.
@@ -489,7 +494,8 @@ struct PinnedLevel: View {
                               isSelected: selectedTabID.map { holdsSelection(tab, $0) } ?? false)
                     .tag(PinnedItem.tab(tab.id))
                     .sidebarDraggable(.tab(tab.id), isEnabled: isLive)
-                    .sidebarRowDropTarget(model: model, collection: .pinned(parent), item: .tab(tab.id), isEnabled: isLive)
+                    .sidebarRowDropTarget(model: model, collection: .pinned(parent), item: .tab(tab.id),
+                                          next: SidebarSections.item(after: tab.id, in: nodes.map(\.item)), isEnabled: isLive)
                     .sidebarMoveActions(model: model, item: .tab(tab.id))
             case .folder(let folder, let children):
                 DisclosureGroup(isExpanded: Binding(
@@ -517,8 +523,6 @@ struct PinnedLevel: View {
                 }
             }
         }
-        // Rows drag between Pinned, folders, the tabs section, and Favorites (#77).
-        .sidebarDropTarget(model: model, collection: .pinned(parent), items: nodes.map(\.item), isEnabled: isLive)
     }
 }
 
