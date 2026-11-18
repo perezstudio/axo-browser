@@ -54,6 +54,11 @@ final class AccessibilityAuditTests: XCTestCase {
                 s.identifier == "siri" || s.children.contains(where: containsSiriOrb)
             }
             if containsSiriOrb(snapshot) { return true }
+            // A tab row named by its page's host because the page has no title (a page that
+            // couldn't load, such as 127.0.0.1 in the Can't Connect audit): the audit's word
+            // check can't read an address, but VoiceOver reads it as written.
+            if issue.auditType == .sufficientElementDescription, snapshot.identifier == "tabRow",
+               URL(string: "http://\(snapshot.label)/")?.host() == snapshot.label { return true }
             // A tooltip window (help tag), shown wherever the pointer happens to rest, sometimes
             // with no text while it appears. The text belongs to the control's `.help`, which
             // VoiceOver reads on the control itself, and the audit checks those controls.
