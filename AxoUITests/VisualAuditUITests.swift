@@ -85,7 +85,9 @@ final class VisualAuditUITests: XCTestCase {
             shoot(app, appearance, "Hover card")
 
             if app.buttons["hideSidebarButton"].waitForExistence(timeout: 5) { app.buttons["hideSidebarButton"].click() }
-            app.descendants(matching: .any)["webContent"].hover()
+            // Over the page, away from the window's left edge (the page's view isn't in the
+            // accessibility tree on the hosted Mac, where WebKit draws nothing).
+            app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.5)).hover()
             shoot(app, appearance, "Sidebar hidden")
             app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5)).withOffset(CGVector(dx: 2, dy: 0)).hover()
             _ = app.descendants(matching: .any)["floatingSidebar"].waitForExistence(timeout: 5)
