@@ -164,14 +164,7 @@ extension View {
     /// and the tabs section, in one reorder container; rows carry their ID to Favorites; and a
     /// favorite dropped in becomes a tab at the drop point.
     func sidebarReordering(model: BrowserModel, isEnabled: Bool) -> some View {
-        reorderContainer(for: PinnedNode.self, in: SidebarCollection.self) { difference in
-            guard isEnabled else { return }
-            let before: PinnedItem? = switch difference.destination.position {
-            case .before(let item): item
-            case .end: nil
-            }
-            Task { await model.moveSidebarItems(difference.sources, to: difference.destination.collectionID, before: before) }
-        }
+        self
         .dragContainer(for: SidebarDragItem.self) { (item: PinnedItem) in
             isEnabled ? [SidebarDragItem(id: item)] : []
         }

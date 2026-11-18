@@ -168,7 +168,6 @@ struct SidebarSections: View {
                         .sidebarMoveActions(model: model, item: .tab(tab.id))
                 }
             }
-            .reorderable(collectionID: SidebarCollection.tabs)
         }
     }
 
@@ -507,7 +506,6 @@ struct PinnedLevel: View {
                 }
             }
         }
-        .reorderable(collectionID: SidebarCollection.pinned(parent))
     }
 }
 
