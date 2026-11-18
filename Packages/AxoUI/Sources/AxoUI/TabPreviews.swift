@@ -135,8 +135,11 @@ struct TabPreviewLayer: View {
         ZStack {
             if let preview = model.tabPreview {
                 GeometryReader { geometry in
-                    let origin = geometry.frame(in: .global).origin
-                    let anchor = preview.anchor.offsetBy(dx: -origin.x, dy: -origin.y)
+                    // Rows report their frames in the window's coordinates, and this layer draws
+                    // from the window's top-left (it ignores the safe area), so the anchor is used
+                    // as is. Its reported origin isn't where it draws with tabs at the top (it
+                    // said 40 pt down while drawing from the top), which put the card over the tab.
+                    let anchor = preview.anchor
                     TabPreviewCard(preview: preview)
                         .onGeometryChange(for: CGSize.self) { $0.size } action: { cardSize = $0 }
                         .offset(Self.offset(for: anchor, edge: preview.edge, card: cardSize, in: geometry.size))
