@@ -22,19 +22,6 @@ struct FavoritesGrid: View {
                 }
             }
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-            // A sidebar row dropped on the grid itself, not a tile, joins at the end (#77). On a
-            // view behind the tiles: as a modifier on the grid it wrapped the tiles in an
-            // unnamed accessibility element.
-            .background {
-                Color.clear
-                    .contentShape(.rect)
-                    .dropDestination(for: String.self) { items, _ in
-                        guard case .tab(let tabID)? = items.first.flatMap(SidebarDragPayload.item(from:)) else { return false }
-                        Task { await model.dropTabOnFavorites(tabID, before: nil) }
-                        return true
-                    }
-                    .accessibilityHidden(true)
-            }
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Favorites")
             .accessibilityIdentifier("favoritesGrid")
