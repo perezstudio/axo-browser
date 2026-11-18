@@ -188,6 +188,24 @@ public protocol EnginePage: AnyObject {
     /// How secure the page's connection is, and its server's certificates (#96). Engines report
     /// changes through ``EnginePageDelegate/pageSecurityDidChange(_:)``.
     var security: PageSecurity { get }
+
+    /// Why the page's last load failed, while the engine's error page shows (#178); nil once a
+    /// page loads. Engines report changes through ``EnginePageDelegate/pageErrorDidChange(_:)``.
+    var loadError: PageLoadError? { get }
+    /// The warning the engine shows in place of the page (an untrusted certificate, a dangerous
+    /// site), if any (#178).
+    var warning: PageWarning? { get }
+    /// Leaves the warning for the page before (the warning's "Go Back"). Does nothing without one.
+    func leaveWarning()
+    /// Goes on to the site despite the warning; does nothing when ``PageWarning/allowsVisiting``
+    /// is false.
+    func visitDespiteWarning()
+    /// Leaves a failed load: back to the page before, or (an engine that keeps the page that was
+    /// showing, WebKit) that page again.
+    func leaveLoadError()
+    /// Tries the failed load again (Try Again): Chromium reloads its error page's entry, which
+    /// tries the original request again; others load the failed address.
+    func retryFailedLoad()
 }
 
 extension EnginePage {
@@ -201,6 +219,16 @@ extension EnginePage {
     public func waitForResponse() {}
     /// Nothing known, for engines that can't tell.
     public var security: PageSecurity { PageSecurity() }
+    /// Nothing known, for engines that can't tell.
+    public var loadError: PageLoadError? { nil }
+    /// Nothing known, for engines that can't tell.
+    public var warning: PageWarning? { nil }
+    public func leaveWarning() {}
+    public func visitDespiteWarning() {}
+    public func leaveLoadError() {}
+    public func retryFailedLoad() {
+        if let url = loadError?.url { load(url) }
+    }
     public func discard() -> Bool { false }
     public func loadIfDiscarded() {}
     public var isDiscarded: Bool { false }
@@ -237,6 +265,86 @@ public struct PageSecurity: Equatable, @unchecked Sendable {
         self.level = level
         self.certificates = certificates
         self.hasCertificateError = hasCertificateError
+    }
+}
+
+/// Why a page couldn't load (#178), for Axo's own Can't Connect page.
+public struct PageLoadError: Equatable, Sendable {
+    public enum Kind: Hashable, Sendable {
+        /// This Mac isn't connected to the internet.
+        case offline
+        /// No server has the site's name.
+        case serverNotFound
+        /// The server didn't answer in time.
+        case timedOut
+        /// The server refused or dropped the connection.
+        case cantConnect
+        /// Something else went wrong.
+        case other
+    }
+
+    public var kind: Kind
+    /// The engine's name for the error, such as `ERR_NAME_NOT_RESOLVED` or `NSURLErrorDomain -1003`.
+    public var code: String
+    /// The address that didn't load.
+    public var url: URL?
+
+    public init(kind: Kind, code: String, url: URL?) {
+        self.kind = kind
+        self.code = code
+        self.url = url
+    }
+
+    /// The kind for one of Chromium's `net::Error` codes.
+    public static func kind(chromiumCode code: Int) -> Kind {
+        switch code {
+        case -106: .offline                          // ERR_INTERNET_DISCONNECTED
+        case -105, -137: .serverNotFound             // ERR_NAME_NOT_RESOLVED, ERR_NAME_RESOLUTION_FAILED
+        case -7, -118: .timedOut                     // ERR_TIMED_OUT, ERR_CONNECTION_TIMED_OUT
+        case -100, -101, -102, -104, -109: .cantConnect // closed, reset, refused, failed, unreachable
+        default: .other
+        }
+    }
+
+    /// The kind for one of Foundation's `NSURLError` codes, as WebKit reports them.
+    public static func kind(urlErrorCode code: Int) -> Kind {
+        switch code {
+        case NSURLErrorNotConnectedToInternet, NSURLErrorNetworkConnectionLost, NSURLErrorDataNotAllowed: .offline
+        case NSURLErrorCannotFindHost, NSURLErrorDNSLookupFailed: .serverNotFound
+        case NSURLErrorTimedOut: .timedOut
+        case NSURLErrorCannotConnectToHost: .cantConnect
+        default: .other
+        }
+    }
+}
+
+/// A warning shown in place of a page (#178), for Axo's own warning page.
+public struct PageWarning: Equatable, Sendable {
+    public enum Kind: Hashable, Sendable {
+        /// The site's certificate isn't trusted.
+        case certificate
+        /// Safe Browsing lists the site as deceptive (phishing).
+        case deceptiveSite
+        /// Safe Browsing lists the site as harmful (malware, unwanted software).
+        case harmfulSite
+        /// Another warning the engine shows.
+        case other
+    }
+
+    public var kind: Kind
+    /// The address the warning is about.
+    public var url: URL?
+    /// The engine's name for the problem, such as `ERR_CERT_COMMON_NAME_INVALID`.
+    public var code: String?
+    /// Whether the person may go on to the site anyway: not for certificate errors that can't be
+    /// skipped, nor on engines that refuse untrusted certificates (WebKit).
+    public var allowsVisiting: Bool
+
+    public init(kind: Kind, url: URL?, code: String?, allowsVisiting: Bool) {
+        self.kind = kind
+        self.url = url
+        self.code = code
+        self.allowsVisiting = allowsVisiting
     }
 }
 
@@ -353,6 +461,9 @@ public protocol EnginePageDelegate: AnyObject {
     func pageProblemDidChange(_ page: any EnginePage)
     /// The page's connection security or certificates changed. Read ``EnginePage/security``.
     func pageSecurityDidChange(_ page: any EnginePage)
+    /// A load failed, a warning shows, or a page loaded again. Read ``EnginePage/loadError`` and
+    /// ``EnginePage/warning``.
+    func pageErrorDidChange(_ page: any EnginePage)
 }
 
 /// A page another page opened, already loading, with its opener (`window.opener`) and the

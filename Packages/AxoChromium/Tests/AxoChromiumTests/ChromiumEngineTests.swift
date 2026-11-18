@@ -479,6 +479,36 @@ struct ChromiumEngineTests {
         SecCertificateCreateWithData(nil, Data(base64Encoded: "MIICEzCCAboCCQCJOpEx6U6H7jAKBggqhkjOPQQDAjAYMRYwFAYDVQQDDA1BeG8gVGVzdCBTaXRlMB4XDTI2MTExODAyMzIxMVoXDTM2MTExNTAyMzIxMVowGDEWMBQGA1UEAwwNQXhvIFRlc3QgU2l0ZTCCAUswggEDBgcqhkjOPQIBMIH3AgEBMCwGByqGSM49AQECIQD/////AAAAAQAAAAAAAAAAAAAAAP///////////////zBbBCD/////AAAAAQAAAAAAAAAAAAAAAP///////////////AQgWsY12Ko6k+ez671VdpiGvGUdBrDMU7D2O848PifSYEsDFQDEnTYIhucEk2pmeOETnSa3gZ9+kARBBGsX0fLhLEJH+Lzm5WOkQPJ3A32BLeszoPShOUXYmMKWT+NC4v4af5uO5+tKfA+eFivOM1drMV7Oy7ZAaDe/UfUCIQD/////AAAAAP//////////vOb6racXnoTzucrC/GMlUQIBAQNCAAT9+4dE6Yfj0gxd8/wqgrDUOHrwbWhDvwE2UiibJLPfgp6Rorhum031EXSCQp/yIlb7835UO07p7/+kRsy+rQtoMAoGCCqGSM49BAMCA0cAMEQCIF8Hk+L/Sids5JlGL6c54bjHTjYqasQ9TITWrSzxpBkQAiB/1RjL/zhUspx0xMo7Rk2YkBuqTY1mMCuLiHiFF+lpzw==")! as CFData)!
     }()
 
+    @Test func errorPagesAndWarningsReachTheTabAndItsAnswersReachThePage() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine)
+        let tab = Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial)
+        let page = pool.page(for: tab, profileID: profileID)
+        let fake = try #require(FakePage.made.first)
+
+        let failed = URL(string: "https://shop.example/")!
+        fake.simulateLoadError(code: -105, name: "ERR_NAME_NOT_RESOLVED", url: failed)
+        #expect(pool.state(for: tab.id)?.loadError == PageLoadError(kind: .serverNotFound, code: "ERR_NAME_NOT_RESOLVED", url: failed))
+        #expect(pool.state(for: tab.id)?.warning == nil)
+
+        fake.simulateWarning(.certificate, allowsVisiting: true, name: "ERR_CERT_AUTHORITY_INVALID", url: failed)
+        #expect(pool.state(for: tab.id)?.loadError == nil, "A warning isn't a failed load")
+        #expect(pool.state(for: tab.id)?.warning
+                == PageWarning(kind: .certificate, url: failed, code: "ERR_CERT_AUTHORITY_INVALID", allowsVisiting: true))
+        page.visitDespiteWarning()
+        page.leaveWarning()
+        #expect(fake.warningActions == ["visit", "leave"])
+
+        fake.simulateWarning(.deceptiveSite, allowsVisiting: true, name: nil, url: failed)
+        #expect(pool.state(for: tab.id)?.warning?.kind == .deceptiveSite)
+        fake.simulateLoadError(code: 0, name: nil, url: nil)
+        #expect(pool.state(for: tab.id)?.warning == nil)
+        #expect(pool.state(for: tab.id)?.loadError == nil)
+    }
+
     @Test func aPagesFilePickerReachesThePoolAsARequest() async throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)

@@ -384,6 +384,7 @@ Features beyond the milestones above, each a GitHub issue with its approach and 
 - Pages (engine work, also tracked under [#65](https://github.com/perezstudio/axo-browser/issues/65)):
   - [x] [#95](https://github.com/perezstudio/axo-browser/issues/95) Show a link's URL when hovering it.
   - [x] [#96](https://github.com/perezstudio/axo-browser/issues/96) Connection security indicator and certificate details: a lock, a not-secure mark, or a "Not Private" chip in the address bar, opening the connection's details and macOS's certificate view.
+  - [x] [#178](https://github.com/perezstudio/axo-browser/issues/178) Axo's own error pages and warnings: Can't Connect with the surprised Axo, and certificate and dangerous-site warnings with Go Back as the default.
   - [x] [#97](https://github.com/perezstudio/axo-browser/issues/97) Swipe back and forward with two fingers on Chromium pages.
   - [x] [#98](https://github.com/perezstudio/axo-browser/issues/98) Ask before links open other apps (`mailto:`, `zoommtg:`, and the rest): Axo asks, naming the site and the app, remembers Always Allow per site and scheme (listed in Site Settings), and says when no app opens a link, on both engines (API version 33).
   - [ ] [#99](https://github.com/perezstudio/axo-browser/issues/99) Now Playing and media keys for tabs playing media.
