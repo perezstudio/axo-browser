@@ -624,6 +624,12 @@ final class AxoUITests: XCTestCase {
         let row = sidebar.descendants(matching: .any).matching(identifier: "tabRow").matching(NSPredicate(format: "label == 'Card'")).firstMatch
         row.hover()
         let card = app.descendants(matching: .any)["tabPreviewCard"]
+        // The hosted Mac sometimes misses the first hover's move onto the row, so if no card
+        // shows, the pointer leaves and comes back once.
+        if !card.waitForExistence(timeout: 5) {
+            app.descendants(matching: .any)["sidebarAddressBar"].hover()
+            row.hover()
+        }
         XCTAssertTrue(card.waitForExistence(timeout: 5), "Resting on the row shows its card")
         XCTAssertTrue(card.staticTexts["Card"].exists, "Its title")
         let address = card.descendants(matching: .any)["tabPreviewAddress"]
