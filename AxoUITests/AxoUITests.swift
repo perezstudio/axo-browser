@@ -692,7 +692,13 @@ final class AxoUITests: XCTestCase {
             XCTAssertTrue(sidebar.staticTexts[name].waitForExistence(timeout: 10))
         }
         let pinned = sidebar.descendants(matching: .any)["pinnedSection"]
-        func isPinned(_ name: String) -> Bool { pinned.staticTexts[name].exists }
+        // The Pinned section's identifier lands on each pinned row (replacing `tabRow`), not on a
+        // container around them, so a row is pinned when it shows but isn't a `tabRow`.
+        func isPinned(_ name: String) -> Bool {
+            sidebar.staticTexts[name].exists
+                && !sidebar.descendants(matching: .any).matching(identifier: "tabRow")
+                    .matching(NSPredicate(format: "label == %@", name)).firstMatch.exists
+        }
         func wait(_ what: String, until condition: @escaping () -> Bool) {
             let deadline = Date().addingTimeInterval(10)
             while !condition(), Date() < deadline { usleep(100_000) }
