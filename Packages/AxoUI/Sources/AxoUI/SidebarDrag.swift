@@ -175,6 +175,9 @@ extension View {
         .dragContainer(for: SidebarDragItem.self) { (item: PinnedItem) in
             isEnabled ? [SidebarDragItem(id: item)] : []
         }
+        // The list's selection is the drag container's too; without it the selected row lost
+        // its highlight.
+        .dragContainerSelection(model.selectedSidebarItem.map { [$0] } ?? [])
         .dropDestination(for: String.self, isEnabled: isEnabled) { items, session in
             guard let favorite = items.first.flatMap(UUID.init(uuidString:)),
                   model.favorites.contains(where: { $0.id == favorite }) else { return }
