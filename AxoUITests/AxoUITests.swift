@@ -628,7 +628,8 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(card.staticTexts["Card"].exists, "Its title")
         let address = card.descendants(matching: .any)["tabPreviewAddress"]
         XCTAssertTrue(address.exists, "Its address")
-        XCTAssertTrue(address.label.hasPrefix("data:text/html"), "Got \(address.label)")
+        let spoken = address.label.isEmpty ? (address.value as? String ?? "") : address.label
+        XCTAssertTrue(spoken.hasPrefix("data:text/html"), "Got \(spoken)")
         XCTAssertGreaterThanOrEqual(card.frame.minX, row.frame.maxX - 1, "Beside the row, never over it")
 
         app.descendants(matching: .any)["webContent"].hover()
