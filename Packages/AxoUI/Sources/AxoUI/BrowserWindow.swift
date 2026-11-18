@@ -146,6 +146,8 @@ public struct BrowserWindow: View {
             }
         }
         .animation(.easeInOut(duration: 0.4), value: model.firstRun == nil)
+        // Where rows measure themselves for their hover card (#76) and the card places itself.
+        .coordinateSpace(.named(TabPreviewLayer.space))
         // While first run shows, the toolbar hides and the menus' commands (which need the
         // window's model) are off, so nothing acts on the window behind the card.
         .toolbar(model.firstRun != nil || hidesToolbar ? .hidden : .automatic, for: .windowToolbar)

@@ -125,6 +125,9 @@ enum TabPreviewAddress {
 /// takes the pointer or focus, so the row and page keep theirs.
 struct TabPreviewLayer: View {
     let model: BrowserModel
+    /// The coordinate space rows measure themselves in for the card: the browser window's root
+    /// view, which holds this layer.
+    static let space = "tabPreviewWindow"
     @State private var cardSize = CGSize(width: TabPreviewCard.width, height: 220)
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.appearsActive) private var appearsActive
@@ -135,11 +138,11 @@ struct TabPreviewLayer: View {
         ZStack {
             if let preview = model.tabPreview {
                 GeometryReader { geometry in
-                    // Rows report their frames in the window's coordinates, and this layer draws
-                    // from the window's top-left (it ignores the safe area), so the anchor is used
-                    // as is. Its reported origin isn't where it draws with tabs at the top (it
-                    // said 40 pt down while drawing from the top), which put the card over the tab.
-                    let anchor = preview.anchor
+                    // Rows report their frames in the window root's named space (`.global`
+                    // inside the tab bar's scroll view came out 40 pt up, which put the card over
+                    // the tab), and this layer converts to its own place in that space.
+                    let origin = geometry.frame(in: .named(Self.space)).origin
+                    let anchor = preview.anchor.offsetBy(dx: -origin.x, dy: -origin.y)
                     TabPreviewCard(preview: preview)
                         .onGeometryChange(for: CGSize.self) { $0.size } action: { cardSize = $0 }
                         .offset(Self.offset(for: anchor, edge: preview.edge, card: cardSize, in: geometry.size))
