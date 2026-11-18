@@ -624,12 +624,13 @@ final class AxoUITests: XCTestCase {
         let row = sidebar.descendants(matching: .any).matching(identifier: "tabRow").matching(NSPredicate(format: "label == 'Card'")).firstMatch
         row.hover()
         let card = app.descendants(matching: .any)["tabPreviewCard"]
-        let appeared = card.waitForExistence(timeout: 5)
-        let sidebarShot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
-        sidebarShot.name = "Sidebar card: row \(row.frame), card exists \(appeared), window \(app.windows.firstMatch.frame)"
-        sidebarShot.lifetime = .keepAlways
-        add(sidebarShot)
-        XCTAssertTrue(appeared, "Resting on the row shows its card")
+        // The hosted Mac sometimes misses the first hover's move onto the row, so if no card
+        // shows, the pointer leaves and comes back once.
+        if !card.waitForExistence(timeout: 5) {
+            app.descendants(matching: .any)["sidebarAddressBar"].hover()
+            row.hover()
+        }
+        XCTAssertTrue(card.waitForExistence(timeout: 5), "Resting on the row shows its card")
         XCTAssertTrue(card.staticTexts["Card"].exists, "Its title")
         let address = card.descendants(matching: .any)["tabPreviewAddress"]
         XCTAssertTrue(address.exists, "Its address")
@@ -650,10 +651,6 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(tab.waitForExistence(timeout: 5))
         tab.hover()
         XCTAssertTrue(card.waitForExistence(timeout: 5), "A top tab shows its card too")
-        let shot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
-        shot.name = "Card with tabs at the top: tab \(tab.frame), card \(card.frame), window \(app.windows.firstMatch.frame)"
-        shot.lifetime = .keepAlways
-        add(shot)
         XCTAssertGreaterThanOrEqual(card.frame.minY, tab.frame.maxY - 1, "Below the tab, never over it")
     }
 
