@@ -287,6 +287,19 @@ public final class FakePage: NSObject, AXOPage {
             delegate?.pageCaptureDidChange?(self)
         }
     }
+    /// Why the page stopped working (#75); ``simulateProblem(_:crashErrorCode:)`` reports a change
+    /// as the engine would.
+    public private(set) var problem: AXOPageProblem = .none
+    public private(set) var crashErrorCode = 0
+    public private(set) var waitsForResponse = 0
+    public func simulateProblem(_ problem: AXOPageProblem, crashErrorCode: Int = 0) {
+        self.problem = problem
+        self.crashErrorCode = problem == .crashed ? crashErrorCode : 0
+        delegate?.pageProblemDidChange?(self)
+    }
+    public func waitForResponse() {
+        waitsForResponse += 1
+    }
     public var devToolsPageWidth: CGFloat = 600
     public private(set) var devToolsLayoutBounds: [NSRect] = []
     public func devToolsPageFrame(inBounds bounds: NSRect) -> NSRect {

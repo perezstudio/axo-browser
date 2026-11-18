@@ -89,6 +89,9 @@ public struct BrowserCommands: Commands {
             Button("Reload Page") { model?.reloadOrStop() }
                 .keyboardShortcut("r")
                 .disabled(model?.selectedTabID == nil)
+            // A page that stopped responding (#75): the page's Wait, from the keyboard.
+            Button("Wait for Page") { model?.waitForShownPage() }
+                .disabled(model?.shownPageIsUnresponsive != true)
             Button("Show Extensions") { model?.isShowingExtensions = true }
                 .keyboardShortcut("e", modifiers: [.command, .shift])
                 .disabled(model?.extensionManagement == nil)

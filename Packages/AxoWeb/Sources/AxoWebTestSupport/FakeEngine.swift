@@ -63,8 +63,12 @@ public final class FakeEngine: WebEngine {
     /// Creates an engine with no pages.
     public init() {}
 
+    /// The problem new pages start with, as a page whose renderer is already gone.
+    public var problemForNewPages: PageProblem?
+
     public func makePage(profileID: Profile.ID) -> any EnginePage {
         let page = FakePage(profileID: profileID)
+        page.problem = problemForNewPages
         pages.append(page)
         return page
     }
@@ -106,6 +110,27 @@ public final class FakePage: EnginePage {
         if let isPlayingAudio { media.isPlayingAudio = isPlayingAudio }
         if let capture { media.capture = capture }
         delegate?.pageMediaDidChange(self)
+    }
+    /// Why it stopped working (#75); ``simulateProblem(_:)`` changes it as an engine would.
+    /// Reloading and waiting only record the call: tests report the page's recovery themselves.
+    public fileprivate(set) var problem: PageProblem?
+    /// How many times it was given more time to respond.
+    public private(set) var waitsForResponse = 0
+
+    /// Reports `problem` as an engine would.
+    public func simulateProblem(_ problem: PageProblem?) {
+        self.problem = problem
+        delegate?.pageProblemDidChange(self)
+    }
+
+    /// Changes `problem` without reporting it, as when an engine misses a report.
+    public func changeProblemQuietly(_ problem: PageProblem?) {
+        self.problem = problem
+    }
+
+    /// Records the call.
+    public func waitForResponse() {
+        waitsForResponse += 1
     }
     /// Whether the page reports developer tools open.
     public var hasDevTools = false
@@ -266,6 +291,7 @@ public final class FakePage: EnginePage {
 
     public func goBack() { navigation.append("back") }
     public func goForward() { navigation.append("forward") }
+    /// Records the reload.
     public func reload() { navigation.append("reload") }
     public func stopLoading() { navigation.append("stop") }
 

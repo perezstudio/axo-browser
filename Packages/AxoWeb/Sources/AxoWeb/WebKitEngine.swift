@@ -111,6 +111,8 @@ public final class WebKitPage: NSObject, EnginePage {
     private var observations: [NSKeyValueObservation] = []
     private let audio: (any WebKitPageAudio)?
     private var audioObservation: AnyObject?
+    /// Set when the web content process ends, until the page starts loading again.
+    private var contentProcessEnded = false
 
     init(webView: PooledWebView, downloads: WebKitDownloads, audio: (any WebKitPageAudio)? = nil) {
         self.webView = webView
@@ -173,6 +175,10 @@ public final class WebKitPage: NSObject, EnginePage {
     public func setAudioMuted(_ muted: Bool) {
         audio?.setMuted(muted, in: webView)
     }
+
+    /// A crash only: WebKit tells neither why its content process ended nor, publicly, that a
+    /// page stopped responding (`docs/webkit-gaps.md`).
+    public var problem: PageProblem? { contentProcessEnded ? .crashed(errorCode: nil) : nil }
     public var url: URL? { webView.url }
     public var title: String { webView.title ?? "" }
     public var isLoading: Bool { webView.isLoading }
@@ -397,6 +403,21 @@ extension WebKitPage: WKNavigationDelegate, WKUIDelegate {
 
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         delegate?.pageDidFinishLoad(self)
+    }
+
+    public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        contentProcessEnded = true
+        delegate?.pageProblemDidChange(self)
+        // Its loads end with it.
+        delegate?.pageStateDidChange(self)
+    }
+
+    public func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        // A new content process is loading the page, as Chrome hides its sad tab once a new
+        // renderer is ready.
+        guard contentProcessEnded else { return }
+        contentProcessEnded = false
+        delegate?.pageProblemDidChange(self)
     }
 
     public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {

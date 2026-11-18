@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 34
+#define AXO_ENGINE_API_VERSION 35
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -411,6 +411,11 @@ NS_SWIFT_UI_ACTOR
 /// The page started or stopped using the camera, the microphone, the screen, or the person's
 /// location (`capture`).
 - (void)pageCaptureDidChange:(id<AXOPage>)page NS_SWIFT_NAME(pageCaptureDidChange(_:));
+/// The page stopped working or started again: its renderer crashed, was killed, or ran out of
+/// memory, or it stopped responding to input or became responsive again (`problem`). Chrome shows
+/// its sad tab or "Page unresponsive" dialog here; neither shows in a host app. It comes on a later
+/// turn, so read `problem` then; it may be unchanged.
+- (void)pageProblemDidChange:(id<AXOPage>)page NS_SWIFT_NAME(pageProblemDidChange(_:));
 /// The page asked to be shown: `window.focus()` after the person clicks one of its notifications,
 /// or a service worker's `clients.focus()`, which pages can only do after something the person did;
 /// but Chrome also asks when the page enters full screen, for a media session's "raise", and when
@@ -485,6 +490,19 @@ typedef NS_OPTIONS(NSUInteger, AXOPageCapture) {
   AXOPageCaptureLocation = 1 << 3,
 };
 
+/// Why a page stopped working, as Chrome's sad tab and hung page dialog tell.
+typedef NS_ENUM(NSInteger, AXOPageProblem) {
+  /// The page works.
+  AXOPageProblemNone = 0,
+  /// Its renderer crashed or was killed (Chrome's sad tab). `crashErrorCode` says how.
+  AXOPageProblemCrashed,
+  /// Its renderer ran out of memory (Chrome's sad tab for memory).
+  AXOPageProblemOutOfMemory,
+  /// It stopped responding to input (Chrome's "Page unresponsive" dialog): `-waitForResponse`
+  /// gives it more time, and `-reload` ends its renderer and loads it again.
+  AXOPageProblemUnresponsive,
+};
+
 /// One tab's page: a Chromium `WebContents` and its view.
 NS_SWIFT_UI_ACTOR
 @protocol AXOPage <NSObject>
@@ -526,6 +544,7 @@ NS_SWIFT_UI_ACTOR
 - (void)loadURL:(NSURL*)url;
 - (void)goBack;
 - (void)goForward;
+/// Loads the page again. A page that stopped responding has its renderer ended first.
 - (void)reload;
 - (void)stopLoading;
 
@@ -573,6 +592,15 @@ NS_SWIFT_UI_ACTOR
 @property(nonatomic) BOOL audioMuted;
 /// What the page uses now: the camera, the microphone, the screen, or the person's location.
 @property(nonatomic, readonly) AXOPageCapture capture;
+/// Whether the page stopped working, and why. A crash lasts until the page loads again
+/// (`-reload`, or another address), not responding until it responds again.
+@property(nonatomic, readonly) AXOPageProblem problem;
+/// The renderer's exit code while `problem` is `AXOPageProblemCrashed`, as Chrome's sad tab shows
+/// it ("Error code: 5"); 0 otherwise.
+@property(nonatomic, readonly) NSInteger crashErrorCode;
+/// Gives a page that stopped responding more time, as the dialog's Wait does. Does nothing
+/// otherwise.
+- (void)waitForResponse;
 /// The page's docked DevTools, or `nil` while it's closed. Show it filling the area the page had,
 /// with the page's view on top at `-devToolsPageFrameInBounds:`: DevTools draws its own divider and
 /// dock-side menu around the page, and changes the page's place as the person drags or docks it to

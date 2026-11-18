@@ -31,6 +31,9 @@ public final class WebTabState {
     public internal(set) var pageColors: PageColors?
     /// Whether the page plays sound, is muted, and what it uses (#71, #74), for its tab's row.
     public internal(set) var media = PageMedia()
+    /// Whether the page stopped working, and why (#75), for its tab's row and the page's place;
+    /// `nil` while it works.
+    public internal(set) var problem: PageProblem?
 
     init() {}
 }

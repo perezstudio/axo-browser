@@ -244,6 +244,9 @@ struct SidebarTabRow: View {
                     if media.hasSound {
                         Button(media.muteTitle) { toggleMute() }
                     }
+                    if problem != nil {
+                        Button("Reload Page") { reloadStopped() }
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             // Sound and devices sit where the close button appears (the Tab row states board):
@@ -264,6 +267,10 @@ struct SidebarTabRow: View {
                 // Shown only under the pointer; VoiceOver and the keyboard also get the row's
                 // action, which is always there.
                 .accessibilityIdentifier("tabRowCloseButton")
+            }
+            // A page that stopped working (#75): after the close button, so it never moves.
+            if let problem {
+                TabProblemButton(problem: problem) { reloadStopped() }
             }
             if media.hasSound {
                 TabMuteButton(media: media) { toggleMute() }
@@ -297,11 +304,11 @@ struct SidebarTabRow: View {
                      isLoading: panes.contains { model.isTabLoading($0.id) },
                      // Dimmed only when every pane is unloaded.
                      isDimmed: panes.allSatisfy { model.isTabDimmed($0.id, isSelected: isSelected) },
-                     media: media)
+                     media: media, problem: problem)
         } else {
             TabRow(tab: tab, favicon: model.favicon(for: tab),
                    isLoading: model.isTabLoading(tab.id), isDimmed: model.isTabDimmed(tab.id, isSelected: isSelected),
-                   media: media)
+                   media: media, problem: problem)
         }
     }
 
@@ -312,6 +319,11 @@ struct SidebarTabRow: View {
     private var media: PageMedia { model.tabMedia(rowTabIDs) }
 
     private func toggleMute() { model.toggleMuted(rowTabIDs) }
+
+    /// Whether the row's page (for a split, any pane's) stopped working (#75).
+    private var problem: PageProblem? { model.tabProblem(rowTabIDs) }
+
+    private func reloadStopped() { model.reloadStoppedPages(rowTabIDs) }
 
     /// Whether the row is a pinned tab away from its pinned page. A split row shows its panes
     /// instead.
@@ -336,11 +348,12 @@ struct SplitRow: View {
     var isLoading = false
     var isDimmed = false
     var media = PageMedia()
+    var problem: PageProblem?
 
     var body: some View {
         Label {
             Text(panes.map(TabRow.displayTitle(for:)).joined(separator: " | "))
-                .foregroundStyle(isDimmed ? .secondary : .primary)
+                .foregroundStyle(isDimmed || problem != nil ? .secondary : .primary)
         } icon: {
             HStack(spacing: 2) {
                 if isLoading {
@@ -357,12 +370,13 @@ struct SplitRow: View {
                     }
                 }
             }
-            .opacity(isDimmed ? TabRow.dimmedIconOpacity : 1)
+            .opacity(isDimmed || problem != nil ? TabRow.dimmedIconOpacity : 1)
             .accessibilityHidden(true)
         }
         .lineLimit(1)
         // Only when there's state to tell: a value replaces the text a row exposes.
-        .modifier(StateValue(description: TabRow.stateDescription(isLoading: isLoading, isDimmed: isDimmed, media: media)))
+        .modifier(StateValue(description: TabRow.stateDescription(isLoading: isLoading, isDimmed: isDimmed,
+                                                                   media: media, problem: problem)))
         .help(panes.map(TabRow.displayTitle(for:)).joined(separator: "\n"))
         .accessibilityLabel("Split view: " + panes.map(TabRow.displayTitle(for:)).formatted(.list(type: .and)))
         .accessibilityIdentifier("splitRow")
@@ -557,6 +571,9 @@ struct TabRow: View {
     /// What its page plays and uses (#71, #74), for its accessibility value; the row's speaker
     /// and dot show it.
     var media = PageMedia()
+    /// Why its page stopped working (#75): the row dims like an unloaded one, and its warning
+    /// says why.
+    var problem: PageProblem?
 
     /// How faded a dimmed row's icon is.
     static let dimmedIconOpacity = 0.5
@@ -564,7 +581,7 @@ struct TabRow: View {
     var body: some View {
         Label {
             Text(Self.displayTitle(for: tab))
-                .foregroundStyle(isDimmed ? .secondary : .primary)
+                .foregroundStyle(isDimmed || problem != nil ? .secondary : .primary)
         } icon: {
             Group {
                 if isLoading {
@@ -579,7 +596,7 @@ struct TabRow: View {
                     Image(systemName: "globe")
                 }
             }
-            .opacity(isDimmed ? Self.dimmedIconOpacity : 1)
+            .opacity(isDimmed || problem != nil ? Self.dimmedIconOpacity : 1)
             .accessibilityHidden(true)
         }
         .lineLimit(1)
@@ -587,15 +604,18 @@ struct TabRow: View {
         // The title is the label, so a value can add state without replacing it.
         .accessibilityLabel(Self.displayTitle(for: tab))
         .accessibilityValue(Self.stateDescription(
-            isLoading: isLoading, isDimmed: isDimmed, isAwayFromHome: tab.hasLeftHome, media: media))
+            isLoading: isLoading, isDimmed: isDimmed, isAwayFromHome: tab.hasLeftHome, media: media,
+            problem: problem))
         .accessibilityIdentifier("tabRow")
     }
 
-    /// The row's state for VoiceOver: "Loading", "Unloaded", "Away from pinned page", "Playing
-    /// audio" or "Muted", and the devices it uses, as they apply.
+    /// The row's state for VoiceOver: "Page stopped working" or "Page isn't responding",
+    /// "Loading", "Unloaded", "Away from pinned page", "Playing audio" or "Muted", and the devices
+    /// it uses, as they apply.
     static func stateDescription(isLoading: Bool, isDimmed: Bool, isAwayFromHome: Bool = false,
-                                 media: PageMedia = PageMedia()) -> String {
-        ([isLoading ? "Loading" : nil, isDimmed ? "Unloaded" : nil, isAwayFromHome ? "Away from pinned page" : nil]
+                                 media: PageMedia = PageMedia(), problem: PageProblem? = nil) -> String {
+        ([problem?.rowDescription, isLoading ? "Loading" : nil, isDimmed ? "Unloaded" : nil,
+          isAwayFromHome ? "Away from pinned page" : nil]
             .compactMap(\.self) + media.stateDescription)
             .joined(separator: ", ")
     }

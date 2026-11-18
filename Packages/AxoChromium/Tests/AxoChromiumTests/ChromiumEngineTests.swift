@@ -422,6 +422,28 @@ struct ChromiumEngineTests {
         #expect(!fake.audioMuted)
     }
 
+    @Test func crashedAndHungPagesReachTheTabAndWaitReachesThePage() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine)
+        let tab = Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial)
+        let page = pool.page(for: tab, profileID: profileID)
+        let fake = try #require(FakePage.made.first)
+
+        fake.simulateProblem(.crashed, crashErrorCode: 11)
+        #expect(pool.state(for: tab.id)?.problem == .crashed(errorCode: 11))
+        fake.simulateProblem(.outOfMemory)
+        #expect(pool.state(for: tab.id)?.problem == .outOfMemory)
+        fake.simulateProblem(.unresponsive)
+        #expect(pool.state(for: tab.id)?.problem == .unresponsive)
+        page.waitForResponse()
+        #expect(fake.waitsForResponse == 1)
+        fake.simulateProblem(.none)
+        #expect(pool.state(for: tab.id)?.problem == nil)
+    }
+
     @Test func aPagesFilePickerReachesThePoolAsARequest() async throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)

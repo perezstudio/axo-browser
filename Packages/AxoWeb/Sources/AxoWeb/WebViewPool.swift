@@ -117,6 +117,9 @@ public final class WebViewPool {
     /// also when entering full screen, and other times the person didn't start): select the tab
     /// only when that's what the person meant (AxoUI does it while Axo is active).
     public var onPageWantsToBeShown: ((Tab.ID) -> Void)?
+    /// Called when a tab's page stops working or works again (#75), with its problem (`nil` once
+    /// it works), after the tab's ``WebTabState/problem`` changed.
+    public var onPageProblem: ((Tab.ID, PageProblem?) -> Void)?
     /// Called when a tab's page asks to fill the screen, or to stop (Chromium's
     /// `element.requestFullscreen()`).
     public var onPageFullscreen: ((Tab.ID, Bool) -> Void)?
@@ -477,10 +480,11 @@ public final class WebViewPool {
     /// hidden, is snapshotted again once that one is done.
     ///
     /// A page still loading isn't snapshotted: its picture would be blank or half drawn, and could
-    /// replace a good one. Hibernation snapshots it if it finishes loading while hidden.
+    /// replace a good one. Hibernation snapshots it if it finishes loading while hidden. Nor is a
+    /// page that stopped working (#75), whose picture is blank or frozen.
     private func refreshSnapshot(of liveTab: LiveTab) {
         guard liveTab.snapshotTask == nil, liveTab.snapshotVersion != liveTab.contentVersion,
-              !liveTab.page.isLoading else { return }
+              !liveTab.page.isLoading, liveTab.state.problem == nil else { return }
         let version = liveTab.contentVersion
         liveTab.snapshotTask = Task { [weak self] in
             let snapshot = await PageSnapshot.capture(liveTab.page)
@@ -524,7 +528,10 @@ public final class WebViewPool {
         guard !isVisible(tabID), let liveTab = live[tabID] else { return false }
         // A snapshot being taken, and any retake it starts for a page that changed meanwhile.
         while let taking = liveTab.snapshotTask { await taking.value }
-        if liveTab.snapshot == nil || liveTab.snapshotVersion != liveTab.contentVersion {
+        // A page that stopped working draws nothing worth keeping (#75), so its earlier snapshot
+        // stays; it loads again when it wakes.
+        if liveTab.state.problem == nil,
+           liveTab.snapshot == nil || liveTab.snapshotVersion != liveTab.contentVersion {
             let version = liveTab.contentVersion
             if let captured = await PageSnapshot.capture(liveTab.page) {
                 liveTab.snapshot = captured

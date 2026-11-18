@@ -96,6 +96,13 @@ struct AxoApp: App {
                         Task { await model.openExternalURL(url, sourceApp: environment["AXO_UI_TESTING_SOURCE_APP"]) }
                     }
                     .keyboardShortcut("u", modifiers: [.command, .control, .option])
+                    // Ends the shown page's web content process, as a crash would, for the
+                    // crashed page's UI test (#75). WebKit only: UI testing mode never uses
+                    // Chromium, whose crashes the engine's scripts/test_page_problems.sh checks.
+                    Button("End the Page’s Process") {
+                        guard let id = model.shownTab?.id, let webView = model.pool.liveWebView(for: id) else { return }
+                        WebContentProcess.end(for: webView)
+                    }
                 }
             }
             // Show or hide the sidebar from the keyboard (View › Toggle Sidebar, ⌃⌘S).

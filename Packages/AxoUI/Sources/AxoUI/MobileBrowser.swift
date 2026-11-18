@@ -160,6 +160,7 @@ struct MobilePage: View {
                 WebViewHost(tab: tab, profileID: space.profileID, pool: model.pool)
                     .ignoresSafeArea(edges: sizeClass == .compact ? .top : [])
                     .accessibilityIdentifier("webContent")
+                    .pageProblem(for: tab.id, model: model)
             } else {
                 ContentUnavailableView {
                     Label("No Tab Open", systemImage: "safari")

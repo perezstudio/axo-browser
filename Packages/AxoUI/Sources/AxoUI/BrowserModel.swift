@@ -456,6 +456,9 @@ public final class BrowserModel {
         pool.onPageWantsToBeShown = { [weak self] id in
             Task { await self?.showTabForPage(id) }
         }
+        pool.onPageProblem = { [weak self] id, problem in
+            self?.pageProblemChanged(id, problem)
+        }
         pool.onLinkClick = { [weak self] click in
             self?.handleLinkClick(click) ?? false
         }

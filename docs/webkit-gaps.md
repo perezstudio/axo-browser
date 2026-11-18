@@ -43,6 +43,14 @@ Limitations in `WKWebView` and `WKWebExtension` that block or shape Axo features
 - **Reproduction:** load a page that plays an `AudioContext` tone after a click; no public `WKWebView` property changes.
 - **For now:** on the Mac, AxoInspector's `PageAudio` uses the private sound calls behind `responds(to:)` checks; WebKit there runs only in test runs, so screen sharing through `_mediaCaptureState` wasn't added. The iPhone and iPad apps ship through the App Store and use no private API, so they show the camera and microphone but no sound, mute, screen sharing, or location. Chromium, the Mac's engine, reports all of them.
 
+## A page that stops responding, and why a page crashed, have no public API
+
+- **Found:** November 2026, macOS 27 SDK (Xcode 27).
+- **Need:** show a tab whose page crashed, ran out of memory, or stopped responding, with Reload (and Wait for a hang), as Safari and Chrome do (#75).
+- **What happens:** `WKNavigationDelegate.webViewWebContentProcessDidTerminate(_:)` reports that the content process ended, but not why (crash, memory, or killed; the reason is only in the private `_webView:webContentProcessDidTerminateWithReason:`), and nothing public reports a page that stopped responding (WebKit has the private `_webViewWebProcessDidBecomeUnresponsive:` and `_webViewWebProcessDidBecomeResponsive:`). Nor is there a public way to end a page's process, which tests need.
+- **Reproduction:** run `while (true) {}` in a page, then click it; no public `WKWebView` or delegate call reports anything.
+- **For now:** WebKit pages report only a crash, with no code (so the page shows no Show Details), and never a hang. Handling the termination also stops WebKit reloading the page by itself, which it does only for delegates that don't implement it, so a process WebKit ends for memory or CPU (a hidden tab's, often on iPhone) leaves its tab "stopped" until Reload. UI testing mode ends a page's process through AxoInspector's `WebContentProcess` (`_webProcessIdentifier`, private) to test what Axo shows. Chromium, the Mac's engine, reports crashes with their code, running out of memory, and hangs.
+
 ## `runtime.onInstalled` doesn't fire
 
 - **Found:** October 2026, macOS 27 SDK (Xcode 27).

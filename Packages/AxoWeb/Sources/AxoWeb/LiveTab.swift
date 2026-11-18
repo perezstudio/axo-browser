@@ -44,6 +44,7 @@ final class LiveTab: EnginePageDelegate {
         if pool.mutedTabs.contains(tabID) { page.setAudioMuted(true) }
         syncState()
         state.media = page.media
+        state.problem = page.problem
     }
 
     /// Copies the page's state into ``state``, reporting URL and title changes to the pool.
@@ -76,9 +77,13 @@ final class LiveTab: EnginePageDelegate {
     func pageStateDidChange(_ page: any EnginePage) {
         syncState()
         pool?.keptPageMayHaveWoken(self)
+        // Engines report problems themselves; a page that moved on without a report (another
+        // site after a crash) mustn't keep showing one.
+        if state.problem != nil { pageProblemDidChange(page) }
     }
 
     func pageDidFinishLoad(_ page: any EnginePage) {
+        if state.problem != nil { pageProblemDidChange(page) }
         contentVersion += 1
         state.restoringSnapshot = nil
         pool?.keptPageMayHaveWoken(self)
@@ -93,6 +98,13 @@ final class LiveTab: EnginePageDelegate {
         // Muting changed by the engine itself (an extension, say) lasts like the person's.
         if media.isMuted != state.media.isMuted { pool?.pageChangedMuting(media.isMuted, tabID: tabID) }
         state.media = media
+    }
+
+    func pageProblemDidChange(_ page: any EnginePage) {
+        let problem = page.problem
+        guard state.problem != problem else { return }
+        state.problem = problem
+        pool?.onPageProblem?(tabID, problem)
     }
 
     /// Whether the page plays sound (unmuted) or uses a device, so hibernating it would end a

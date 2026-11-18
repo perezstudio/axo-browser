@@ -191,6 +191,22 @@ final class ChromiumPage: NSObject, EnginePage {
         page?.audioMuted = muted
     }
 
+    // MARK: Crashed and unresponsive pages (#75)
+
+    var problem: PageProblem? {
+        guard let page else { return nil }
+        switch page.problem {
+        case .crashed: return .crashed(errorCode: page.crashErrorCode)
+        case .outOfMemory: return .outOfMemory
+        case .unresponsive: return .unresponsive
+        default: return nil
+        }
+    }
+
+    func waitForResponse() {
+        page?.waitForResponse()
+    }
+
     /// Lays out the page and its docked DevTools in ``view``: DevTools fills it, and the page
     /// sits on top where DevTools puts it (DevTools draws its own divider and dock-side menu
     /// around the page). Without DevTools, the page fills ``view``. Frames and autoresizing
@@ -454,6 +470,11 @@ extension ChromiumPage: AXOPageDelegate {
     /// The page started or stopped using the camera, microphone, screen, or location.
     func pageCaptureDidChange(_ page: any AXOPage) {
         delegate?.pageMediaDidChange(self)
+    }
+
+    /// The page's renderer crashed or stopped responding, or it works again.
+    func pageProblemDidChange(_ page: any AXOPage) {
+        delegate?.pageProblemDidChange(self)
     }
 
     /// A page this one opened (`window.open`, `target="_blank"`), already loading and connected

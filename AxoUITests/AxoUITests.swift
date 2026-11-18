@@ -609,6 +609,35 @@ final class AxoUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: unmuted, evaluatedWith: speaker)], timeout: 5), .completed)
     }
 
+    /// A page whose process ends shows "This Page Stopped" in its place, and its row says so and
+    /// dims, until Reload brings it back (#75). The Testing menu ends the process, as a crash
+    /// would.
+    @MainActor
+    func testACrashedPageShowsThatItStoppedUntilReload() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        AxoUITests.openPage("data:text/html,<title>Fragile</title><h1>Fragile</h1>", in: app)
+        XCTAssertTrue(sidebar.staticTexts["Fragile"].waitForExistence(timeout: 10))
+        let stopped = app.descendants(matching: .any)["pageProblem"]
+        XCTAssertFalse(stopped.exists)
+
+        app.menuBars.menuBarItems["Testing"].click()
+        app.menuBars.menuItems["End the Page’s Process"].click()
+        XCTAssertTrue(stopped.waitForExistence(timeout: 10), "The page's place says it stopped")
+        XCTAssertTrue(stopped.staticTexts["This Page Stopped"].exists)
+        XCTAssertFalse(stopped.buttons["pageProblemDetails"].exists, "WebKit gives no error code to show")
+        let row = sidebar.descendants(matching: .any).matching(identifier: "tabRow").element(boundBy: 0)
+        XCTAssertTrue((row.value as? String)?.contains("Page stopped working") == true)
+        XCTAssertTrue(sidebar.buttons["tabProblemButton"].exists, "The row's warning, which reloads")
+
+        stopped.buttons["pageProblemReload"].click()
+        let gone = NSPredicate(format: "exists == false")
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: gone, evaluatedWith: stopped)], timeout: 10), .completed)
+        XCTAssertFalse(sidebar.buttons["tabProblemButton"].exists)
+        XCTAssertFalse((row.value as? String)?.contains("Page stopped working") == true)
+    }
+
     /// Settings › General moves the navigation bar from the sidebar to the page's control bar at
     /// the top of the page's area (#170), where ⌘L still focuses the address field, and which
     /// takes the window's controls and Show Sidebar while the sidebar is hidden. (UI testing keeps
