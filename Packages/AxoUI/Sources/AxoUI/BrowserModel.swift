@@ -474,6 +474,9 @@ public final class BrowserModel {
         pool.onPageProblem = { [weak self] id, problem in
             self?.pageProblemChanged(id, problem)
         }
+        pool.onPageError = { [weak self] id in
+            self?.pageErrorChanged(id)
+        }
         pool.onLinkClick = { [weak self] click in
             self?.handleLinkClick(click) ?? false
         }

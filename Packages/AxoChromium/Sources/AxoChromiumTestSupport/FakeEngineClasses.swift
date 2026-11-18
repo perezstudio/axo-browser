@@ -311,6 +311,31 @@ public final class FakePage: NSObject, AXOPage {
         self.certificateHasError = certificateHasError
         delegate?.pageSecurityDidChange?(self)
     }
+    /// Error pages and warnings (#178); ``simulateLoadError(code:name:url:)`` and
+    /// ``simulateWarning(_:allowsVisiting:name:url:)`` report a change.
+    public private(set) var loadErrorCode = 0
+    public private(set) var loadErrorName: String?
+    public private(set) var loadErrorURL: URL?
+    public private(set) var warning: AXOPageWarning = .none
+    public private(set) var warningAllowsVisiting = false
+    public private(set) var warningActions: [String] = []
+    public func simulateLoadError(code: Int, name: String?, url: URL?) {
+        loadErrorCode = code
+        loadErrorName = name
+        loadErrorURL = url
+        warning = .none
+        delegate?.pageErrorDidChange?(self)
+    }
+    public func simulateWarning(_ warning: AXOPageWarning, allowsVisiting: Bool, name: String?, url: URL?) {
+        self.warning = warning
+        warningAllowsVisiting = allowsVisiting
+        loadErrorCode = 0
+        loadErrorName = name
+        loadErrorURL = url
+        delegate?.pageErrorDidChange?(self)
+    }
+    public func leaveWarning() { warningActions.append("leave") }
+    public func visitDespiteWarning() { warningActions.append("visit") }
     public var devToolsPageWidth: CGFloat = 600
     public private(set) var devToolsLayoutBounds: [NSRect] = []
     public func devToolsPageFrame(inBounds bounds: NSRect) -> NSRect {

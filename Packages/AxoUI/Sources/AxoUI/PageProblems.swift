@@ -62,10 +62,21 @@ extension BrowserModel {
     /// (⌘R) work again: a page that crashed or hangs never hands key presses back.
     func pageProblemChanged(_ tabID: AxoCore.Tab.ID, _ problem: PageProblem?) {
         guard let problem else { return }
+        guard isOnScreen(tabID) else { return }
+        announce(problem.title)
+        resignPageFocus(tabID)
+    }
+
+    /// Whether the tab's page is on screen: the page showing, a pane of its split, Peek, or a
+    /// mini window.
+    func isOnScreen(_ tabID: AxoCore.Tab.ID) -> Bool {
         let onScreen = (shownTab.map { muteTargets(for: $0.id) } ?? [])
             + [peek?.tab.id].compactMap(\.self) + miniWindows.map(\.tab.id)
-        guard onScreen.contains(tabID) else { return }
-        announce(problem.title)
+        return onScreen.contains(tabID)
+    }
+
+    /// Takes keyboard focus off the tab's page, if it has it.
+    func resignPageFocus(_ tabID: AxoCore.Tab.ID) {
         #if os(macOS)
         if let view = pool.livePage(for: tabID)?.view, let window = view.window,
            let responder = window.firstResponder as? NSView, responder.isDescendant(of: view) {
@@ -208,7 +219,9 @@ struct PageProblemView: View {
 }
 
 extension View {
-    /// Covers a tab's page with ``PageProblemView`` while the page stopped working (#75).
+    /// Covers a tab's page with Axo's own page while it can't be shown: ``PageProblemView`` while
+    /// it stopped working (#75), ``PageWarningView`` over a warning, and ``PageLoadErrorView``
+    /// over the engine's error page (#178).
     func pageProblem(for tabID: AxoCore.Tab.ID?, model: BrowserModel) -> some View {
         modifier(PageProblemCover(tabID: tabID, model: model))
     }
@@ -219,13 +232,31 @@ private struct PageProblemCover: ViewModifier {
     let model: BrowserModel
 
     func body(content: Content) -> some View {
-        content.overlay {
+        // The engine's page under the cover stays out of VoiceOver's way.
+        let isCovered = tabID.map { model.pool.liveness(for: $0).state?.isCovered == true } ?? false
+        content
+            .accessibilityHidden(isCovered)
+            .overlay {
             if let tabID, let problem = model.tabProblem(tabID) {
                 PageProblemView(
                     problem: problem,
                     tint: model.space?.markerColor ?? .accentColor,
                     reload: { model.reloadStoppedPages([tabID]) },
                     wait: { model.waitForResponse(tabID) }
+                )
+            } else if let tabID, let warning = model.tabWarning(tabID) {
+                PageWarningView(
+                    warning: warning,
+                    goBack: { model.leaveWarning(tabID) },
+                    visit: { model.visitDespiteWarning(tabID) }
+                )
+            } else if let tabID, let error = model.tabLoadError(tabID) {
+                PageLoadErrorView(
+                    error: error,
+                    tint: model.space?.markerColor ?? .accentColor,
+                    canGoBack: model.canLeaveLoadError(tabID),
+                    retry: { model.retryLoad(tabID) },
+                    goBack: { model.leaveLoadError(tabID) }
                 )
             }
         }

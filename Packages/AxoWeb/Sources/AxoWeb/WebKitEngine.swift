@@ -113,6 +113,11 @@ public final class WebKitPage: NSObject, EnginePage {
     private var audioObservation: AnyObject?
     /// Set when the web content process ends, until the page starts loading again.
     private var contentProcessEnded = false
+    /// Why the last load failed, until another starts (#178).
+    private var failure: (loadError: PageLoadError?, warning: PageWarning?)?
+    /// The address showing when the load failed (the page before), so moving on from it clears
+    /// the failure.
+    private var failedAt: URL?
     /// The address of the page that last committed. While another loads, `webView.url` is already
     /// the new one but `hasOnlySecureContent` and `serverTrust` are still the old page's (#96).
     private var committedURL: URL?
@@ -156,6 +161,15 @@ public final class WebKitPage: NSObject, EnginePage {
                 self.delegate?.pageSecurityDidChange(self)
             }
         }
+        // A same-document navigation (Back to an anchor, pushState) moves on from a failed load
+        // without a new load starting or committing.
+        let urlChanged: @Sendable (WKWebView) -> Void = { [weak self] webView in
+            MainActor.assumeIsolated {
+                guard let self, let failedAt = self.failedAt, webView.url != failedAt else { return }
+                self.clearFailure()
+            }
+        }
+        observations.append(webView.observe(\.url) { webView, _ in urlChanged(webView) })
         observations += [
             webView.observe(\.hasOnlySecureContent) { webView, _ in securityChanged(webView) },
             webView.observe(\.serverTrust) { webView, _ in securityChanged(webView) },
@@ -435,10 +449,13 @@ extension WebKitPage: WKNavigationDelegate, WKUIDelegate {
 
     public func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         committedURL = webView.url
+        clearFailure()
         delegate?.pageSecurityDidChange(self)
     }
 
     public func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        // Another load starts: the failed one's page goes (it comes back if this one fails too).
+        clearFailure()
         // A new content process is loading the page, as Chrome hides its sad tab once a new
         // renderer is ready.
         guard contentProcessEnded else { return }
@@ -451,7 +468,48 @@ extension WebKitPage: WKNavigationDelegate, WKUIDelegate {
     }
 
     public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        let failed = Self.failure(for: error as NSError)
+        if failed.loadError != nil || failed.warning != nil {
+            failure = failed
+            failedAt = webView.url
+            delegate?.pageErrorDidChange(self)
+        }
         delegate?.pageDidFailLoad(self)
+    }
+
+    public var loadError: PageLoadError? { failure?.loadError }
+    public var warning: PageWarning? { failure?.warning }
+
+    /// WebKit keeps the page that was showing when a load fails, so leaving the error or the
+    /// warning shows it again.
+    public func leaveLoadError() { clearFailure() }
+    public func leaveWarning() { clearFailure() }
+
+    private func clearFailure() {
+        guard failure != nil else { return }
+        failure = nil
+        failedAt = nil
+        delegate?.pageErrorDidChange(self)
+    }
+
+    /// What a failed load shows: a certificate warning (WebKit refuses untrusted certificates, so
+    /// it never allows visiting), or a Can't Connect page; nothing for a load that was cancelled
+    /// or replaced (a new navigation, a download).
+    static func failure(for error: NSError) -> (loadError: PageLoadError?, warning: PageWarning?) {
+        let url = error.userInfo[NSURLErrorFailingURLErrorKey] as? URL
+        let code = "\(error.domain) \(error.code)"
+        guard error.domain == NSURLErrorDomain else { return (nil, nil) }
+        switch error.code {
+        case NSURLErrorCancelled:
+            return (nil, nil)
+        // Only the server's certificate: a failed handshake or a client certificate is a failed
+        // load, not a site pretending to be another.
+        case NSURLErrorServerCertificateUntrusted, NSURLErrorServerCertificateHasBadDate,
+             NSURLErrorServerCertificateHasUnknownRoot, NSURLErrorServerCertificateNotYetValid:
+            return (nil, PageWarning(kind: .certificate, url: url, code: code, allowsVisiting: false))
+        default:
+            return (PageLoadError(kind: PageLoadError.kind(urlErrorCode: error.code), code: code, url: url), nil)
+        }
     }
 
     public func webView(
