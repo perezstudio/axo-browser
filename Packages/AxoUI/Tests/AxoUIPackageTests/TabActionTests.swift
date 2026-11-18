@@ -81,6 +81,61 @@ struct TabActionTests {
         #expect(paths == ["a"])
     }
 
+    @Test func undoingAMoveToSpacePutsTheTabBackSelected() async throws {
+        try await open("a")
+        let b = try await open("b")
+        try await open("c")
+        let home = try #require(model.space)
+        await model.createSpace(name: "Work")
+        await model.selectSpace(home.id)
+        let work = try #require(model.spacesToMoveTabsTo.first)
+        let page = try #require(model.pool.livePage(for: b))
+        model.select(b)
+
+        await model.moveTab(b, toSpace: work.id)
+        #expect(paths == ["a", "c"])
+        let undo = try #require(model.notice?.undo, "The notice offers Undo")
+        await undo()
+        #expect(paths == ["a", "b", "c"], "Back in its place")
+        #expect(model.selectedTabID == b, "And selected again")
+        #expect(model.pool.livePage(for: b) === page)
+        await model.selectSpace(work.id)
+        #expect(paths.isEmpty, "Gone from Work")
+    }
+
+    @Test func onlyATabRowDropsOnAnotherOfTheProfilesSpaces() async throws {
+        let a = try await open("a")
+        let home = try #require(model.space)
+        await model.createSpace(name: "Work")
+        await model.createSpace(name: "Personal", newProfileName: "Personal")
+        await model.selectSpace(home.id)
+        let work = try #require(model.spaces.first { $0.name == "Work" })
+        let personal = try #require(model.spaces.first { $0.name == "Personal" })
+
+        #expect(model.tabToMove(droppedAs: ["tab:\(a.uuidString)"], to: work.id) == a)
+        #expect(model.tabToMove(droppedAs: ["tab:\(a.uuidString)"], to: home.id) == nil, "Its own Space")
+        #expect(model.tabToMove(droppedAs: ["tab:\(a.uuidString)"], to: personal.id) == nil, "Another profile's")
+        #expect(model.tabToMove(droppedAs: ["folder:\(UUID().uuidString)"], to: work.id) == nil)
+        #expect(model.tabToMove(droppedAs: [a.uuidString], to: work.id) == nil, "A favorite's bare ID")
+        #expect(model.tabToMove(droppedAs: ["https://example.com"], to: work.id) == nil)
+    }
+
+    @Test func aMoveCantBeUndoneFromAnotherSpace() async throws {
+        try await open("a")
+        let b = try await open("b")
+        let home = try #require(model.space)
+        await model.createSpace(name: "Work")
+        await model.selectSpace(home.id)
+        let work = try #require(model.spacesToMoveTabsTo.first)
+        await model.moveTab(b, toSpace: work.id)
+        let undo = try #require(model.notice?.undo)
+
+        await model.selectSpace(work.id)
+        #expect(model.notice == nil, "Notices go with the Space")
+        await undo()
+        #expect(paths == ["b"], "An Undo run anyway leaves it in Work")
+    }
+
     @Test func closingSeveralTabsCanBeUndoneInTheirOrder() async throws {
         let names = ["a", "b", "c", "d", "e", "f"]
         var ids: [AxoCore.Tab.ID] = []

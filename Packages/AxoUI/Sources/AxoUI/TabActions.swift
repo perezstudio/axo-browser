@@ -58,12 +58,21 @@ extension BrowserModel {
         split(of: id) == nil && !spacesToMoveTabsTo.isEmpty && tabs.contains { $0.id == id }
     }
 
+    /// The tab a drop onto a Space's dot in the switcher moves there (#78): a sidebar row's tab
+    /// (`tab:<id>`) that can move to that Space, never a folder, a favorite, or other text.
+    func tabToMove(droppedAs items: [String], to space: Space.ID) -> AxoCore.Tab.ID? {
+        guard let item = items.first.flatMap(SidebarDragPayload.item(from:)), case .tab(let id) = item,
+              canMoveToSpace(id), spacesToMoveTabsTo.contains(where: { $0.id == space }) else { return nil }
+        return id
+    }
+
     /// Moves a tab to another of the profile's Spaces, keeping its live page; it leaves any
     /// folder. If it was selected, the tab next to it is selected.
     public func moveTab(_ id: AxoCore.Tab.ID, toSpace target: Space.ID) async {
         guard let space, canMoveToSpace(id), let destination = spacesToMoveTabsTo.first(where: { $0.id == target }),
               let tab = tabs.first(where: { $0.id == id }) else { return }
         let order = visibleTabOrder
+        let selectedTabIDBeforeMove = selectedTabID
         do {
             try await store.moveTab(id: id, toSpace: destination.id)
             tabs = try await store.tabs(in: space.id)
@@ -81,7 +90,31 @@ extension BrowserModel {
         await refreshPreview(of: destination.id)
         // Gone from this Space's window, as for a closed tab (the WebKit extension bridge).
         onTabEvent?(.closed(id))
-        postNotice("Moved \(TabRow.displayTitle(for: tab)) to \(destination.name)")
+        let wasSelected = selectedTabIDBeforeMove == id
+        postNotice("Moved \(TabRow.displayTitle(for: tab)) to \(destination.name)") { [weak self] in
+            await self?.returnMovedTab(tab, from: destination.id, select: wasSelected)
+        }
+    }
+
+    /// Undo of Move to Space (#78): puts the tab back in this Space where it was (its folder and
+    /// place), and selects it again if it was selected. Notices go when the Space changes, so this
+    /// runs only while its old Space is shown; a tab that moved on since stays where it is.
+    func returnMovedTab(_ tab: AxoCore.Tab, from destination: Space.ID, select: Bool) async {
+        guard let space, space.id == tab.spaceID else { return }
+        do {
+            let returned = try await store.returnTab(id: tab.id, from: destination, to: space.id, folder: tab.folderID,
+                                                     sortKey: tab.sortKey)
+            guard returned else { return }
+            tabs = try await store.tabs(in: space.id)
+            onTabEvent?(.opened(tab.id))
+            try await refreshSidebar()
+            if select { self.select(tab.id) }
+        } catch {
+            report(error, "Axo couldn't move the tab back.")
+            return
+        }
+        await refreshPreview(of: destination)
+        announce("Moved \(TabRow.displayTitle(for: tab)) back")
     }
 
     /// The unpinned sidebar rows, in order, each as its tabs: one tab, or a split's panes.

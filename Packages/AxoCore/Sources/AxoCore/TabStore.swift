@@ -472,6 +472,30 @@ public final class TabStore: Sendable {
         }
     }
 
+    /// Puts a tab moved to another Space back where it was (Undo of a move, #78): in `spaceID`,
+    /// at `sortKey`, inside `folderID` when that folder is still in the Space (otherwise at the
+    /// top level). Only a tab still in `fromSpaceID` moves, so an Undo after the tab moved on
+    /// (or was archived) does nothing; it reports whether the tab moved.
+    @discardableResult
+    public func returnTab(id: Tab.ID, from fromSpaceID: Space.ID, to spaceID: Space.ID, folder folderID: Folder.ID?,
+                          sortKey: String) async throws -> Bool {
+        try await database.writer.write { db in
+            guard var tab = try Tab.fetchOne(db, id: id), tab.spaceID == fromSpaceID, tab.archivedAt == nil,
+                  let target = try Space.fetchOne(db, id: spaceID),
+                  let source = try Space.fetchOne(db, id: fromSpaceID), source.profileID == target.profileID else {
+                return false
+            }
+            try Self.leaveSplit(id, db)
+            tab = try Tab.fetchOne(db, id: id) ?? tab
+            let folder = try folderID.flatMap { try Folder.fetchOne(db, id: $0) }
+            tab.spaceID = spaceID
+            tab.folderID = folder?.spaceID == spaceID ? folder?.id : nil
+            tab.sortKey = sortKey
+            try tab.update(db)
+            return true
+        }
+    }
+
     /// Archives several tabs in one write, as ``archiveTab(id:at:)`` does for one (Close Other
     /// Tabs, Close Tabs Below). Tabs that don't exist or are already archived are skipped.
     ///
