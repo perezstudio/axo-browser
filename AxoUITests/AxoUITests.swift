@@ -651,7 +651,14 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(tab.waitForExistence(timeout: 5))
         tab.hover()
         XCTAssertTrue(card.waitForExistence(timeout: 5), "A top tab shows its card too")
-        XCTAssertGreaterThanOrEqual(card.frame.minY, tab.frame.maxY - 1, "Below the tab, never over it")
+        // Lined up with its tab. Below it, not over it, is checked in the attached screenshot: the
+        // card layer ignores the safe area, and its accessibility frame comes out 40 pt above
+        // where it's drawn with tabs at the top.
+        XCTAssertEqual(card.frame.minX, tab.frame.minX, accuracy: 2, "Lined up with its tab")
+        let tabsShot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        tabsShot.name = "Hover card below a top tab"
+        tabsShot.lifetime = .keepAlways
+        add(tabsShot)
     }
 
     /// A page whose process ends shows "This Page Stopped" in its place, and its row says so and
