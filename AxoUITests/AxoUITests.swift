@@ -645,6 +645,10 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(tab.waitForExistence(timeout: 5))
         tab.hover()
         XCTAssertTrue(card.waitForExistence(timeout: 5), "A top tab shows its card too")
+        let shot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        shot.name = "Card with tabs at the top: tab \(tab.frame), card \(card.frame), window \(app.windows.firstMatch.frame)"
+        shot.lifetime = .keepAlways
+        add(shot)
         XCTAssertGreaterThanOrEqual(card.frame.minY, tab.frame.maxY - 1, "Below the tab, never over it")
     }
 
