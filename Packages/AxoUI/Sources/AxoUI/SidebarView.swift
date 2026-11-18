@@ -169,6 +169,7 @@ struct SidebarSections: View {
                               isSelected: data.holdsSelection(tab.id))
                     .tag(PinnedItem.tab(tab.id))
                     .sidebarDraggable(.tab(tab.id), isEnabled: isLive)
+                    .sidebarRowDropTarget(model: model, collection: .tabs, item: .tab(tab.id), isEnabled: isLive)
                     .sidebarMoveActions(model: model, item: .tab(tab.id))
             }
             // Rows drag between Pinned, folders, the tabs section, and Favorites (#77).
@@ -300,7 +301,7 @@ struct SidebarTabRow: View {
         // The whole row's width counts as over it, not just its icon and title, for every row
         // (hibernated ones included).
         .contentShape(.rect)
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame.rect = $0 }
+        .tabPreviewAnchor(frame)
         .onHover { hovering in
             isHovering = hovering
             // Resting the pointer shows the row's card beside the sidebar (#76).
@@ -488,6 +489,7 @@ struct PinnedLevel: View {
                               isSelected: selectedTabID.map { holdsSelection(tab, $0) } ?? false)
                     .tag(PinnedItem.tab(tab.id))
                     .sidebarDraggable(.tab(tab.id), isEnabled: isLive)
+                    .sidebarRowDropTarget(model: model, collection: .pinned(parent), item: .tab(tab.id), isEnabled: isLive)
                     .sidebarMoveActions(model: model, item: .tab(tab.id))
             case .folder(let folder, let children):
                 DisclosureGroup(isExpanded: Binding(
