@@ -239,9 +239,7 @@ struct TabPreviewCard: View {
         }
         .font(.system(size: 11))
         .lineLimit(1)
-        // One element named by the whole address: combining the two lines' text left the
-        // label empty (SwiftUI exposes a Text's string as its value).
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .combine)
         .accessibilityLabel(url.absoluteString)
         .accessibilityIdentifier("tabPreviewAddress")
     }
