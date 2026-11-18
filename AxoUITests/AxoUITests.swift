@@ -227,6 +227,52 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(app.windows.firstMatch.waitForNonExistence(timeout: 5))
     }
 
+    /// Back's history menu (#112): after three pages in one tab, right-clicking Back lists the
+    /// earlier pages, nearest first, and choosing the farthest goes two back at once; Forward's
+    /// menu then lists the later pages, and holding Forward shows them in a popover (VoiceOver's
+    /// Show History action opens the same popover; XCUITest can't run named actions).
+    @MainActor
+    func testBackHistoryMenuJumpsTwoBack() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        AxoUITests.openPage(page("First"), in: app)
+        XCTAssertTrue(sidebar.staticTexts["First"].waitForExistence(timeout: 10))
+        for title in ["Second", "Third"] {
+            app.typeKey("l", modifierFlags: .command)
+            app.typeText(page(title) + "\n")
+            XCTAssertTrue(sidebar.staticTexts[title].waitForExistence(timeout: 10))
+        }
+
+        let back = app.buttons["backButton"]
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: back)
+        waitForExpectations(timeout: 10)
+        back.rightClick()
+        let window = app.windows.firstMatch
+        let first = window.menuItems["First"]
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        let titles = window.menus.firstMatch.menuItems.allElementsBoundByIndex.map(\.title)
+        XCTAssertEqual(titles, ["Second", "First"], "The nearest page first")
+        first.click()
+        XCTAssertTrue(sidebar.staticTexts["First"].waitForExistence(timeout: 10))
+
+        let forward = app.buttons["forwardButton"]
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: forward)
+        waitForExpectations(timeout: 10)
+        forward.rightClick()
+        XCTAssertTrue(window.menuItems["Second"].waitForExistence(timeout: 5))
+        XCTAssertTrue(window.menuItems["Third"].exists)
+        app.typeKey(.escape, modifierFlags: [])
+
+        // Holding the button shows the same pages in a popover, without going forward.
+        forward.press(forDuration: 1)
+        let list = app.descendants(matching: .any)["historyList"]
+        XCTAssertTrue(list.waitForExistence(timeout: 5))
+        XCTAssertTrue(sidebar.staticTexts["First"].exists, "The hold didn't also go forward")
+        list.buttons.element(boundBy: 1).click()
+        XCTAssertTrue(sidebar.staticTexts["Third"].waitForExistence(timeout: 10))
+    }
+
     /// New Tab (⌘T; the sidebar's top row has no button for it, as on the board, #67) and a
     /// second tab: the sidebar lists both, and selecting one shows it.
     @MainActor

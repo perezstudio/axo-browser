@@ -33,7 +33,7 @@ The pool never touches a browser engine directly. It talks to two protocols, so 
   - When a hibernated tab wakes, its `WebTabState.restoringSnapshot` holds that picture until the restored page finishes loading.
   - `discard(_:)` forgets a closed tab.
   - `addWebViewConfigurator(_:)` (WebKit only) adds a function called, in order, with each new web view's configuration and profile. AxoExtensions uses it to attach the profile's extension controller, and the app uses it to turn on developer tools.
-  - `load(_:in:)`, `goBack(in:)`, `goForward(in:)`, `reload(_:)`, and `stopLoading(_:)` drive a live tab.
+  - `load(_:in:)`, `goBack(in:)`, `goForward(in:)`, `reload(_:)`, and `stopLoading(_:)` drive a live tab; `backHistory(for:)`, `forwardHistory(for:)`, and `goToHistoryOffset(_:in:)` give Back and Forward their history menus (#112).
   - `find(_:in:backwards:)` highlights and scrolls to the next or previous match (ignoring case, wrapping) and returns whether it found one. `clearFind(in:)` removes the highlight. WebKit's public API doesn't report match counts.
   - `printOperation(for:)` returns an `NSPrintOperation` for the page, titled with the page title and fit to the page width. Run it with `runModal(for:…)`: a synchronous `run()` hangs, because WebKit prints asynchronously.
   - `onLinkClick` asks the app about each link click in a page's main frame (`LinkClick`: tab, URL, source page, modifier keys, and `leavesSite`). Returning `true` takes the click and the page doesn't navigate. AxoUI uses it for Peek.

@@ -1315,6 +1315,29 @@ public final class BrowserModel {
         if let selectedTabID { pool.goForward(in: selectedTabID) }
     }
 
+    /// The pages Back (or Forward) would go to in the selected tab, the nearest first, for the
+    /// buttons' history menus (#112). Empty without a live page.
+    public func history(_ direction: HistoryDirection) -> [HistoryEntry] {
+        guard let selectedTabID else { return [] }
+        switch direction {
+        case .back: return pool.backHistory(for: selectedTabID)
+        case .forward: return pool.forwardHistory(for: selectedTabID)
+        }
+    }
+
+    /// Goes straight to the `index`th page (0 is the nearest) of the selected tab's back or
+    /// forward history, as choosing it from a history menu does.
+    public func goToHistory(_ direction: HistoryDirection, index: Int) {
+        guard let selectedTabID, index >= 0 else { return }
+        let steps = index + 1
+        pool.goToHistoryOffset(direction == .back ? -steps : steps, in: selectedTabID)
+    }
+
+    /// The icon Axo has for `url`'s site, for the history menus.
+    public func favicon(for url: URL) -> PlatformImage? {
+        Favicon.key(for: url).flatMap { favicons[$0] }
+    }
+
     /// Reloads the selected tab, or stops it if it's loading.
     public func reloadOrStop() {
         guard let selectedTabID else { return }
@@ -1877,4 +1900,10 @@ public struct TabBarState: Equatable, Sendable {
     public var toggleRequest = 0
 
     public init() {}
+}
+
+/// Which way a history menu goes (#112): Back's earlier pages or Forward's later ones.
+public enum HistoryDirection: Hashable, Sendable {
+    case back
+    case forward
 }

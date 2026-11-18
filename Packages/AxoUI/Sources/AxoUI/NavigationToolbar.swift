@@ -86,14 +86,114 @@ struct BackForwardButtons: View {
     let model: BrowserModel
 
     var body: some View {
-        Button("Back", systemImage: "chevron.backward") { model.goBack() }
-            .disabled(model.selectedPage?.canGoBack != true)
-            .help("Go back")
-            .accessibilityIdentifier("backButton")
-        Button("Forward", systemImage: "chevron.forward") { model.goForward() }
-            .disabled(model.selectedPage?.canGoForward != true)
-            .help("Go forward")
-            .accessibilityIdentifier("forwardButton")
+        HistoryButton(model: model, direction: .back)
+        HistoryButton(model: model, direction: .forward)
+    }
+}
+
+/// Back or Forward (#112): a click goes one page; a right-click shows the tab's earlier (or
+/// later) pages as a menu, and a long press (or VoiceOver's Show History) shows them in a
+/// popover, the nearest first; choosing one goes there directly.
+private struct HistoryButton: View {
+    let model: BrowserModel
+    let direction: HistoryDirection
+    @State private var isShowingHistory = false
+    /// Set by a long press, so the click its release ends doesn't also go one page.
+    @State private var pressShowedHistory = false
+
+    var body: some View {
+        let isBack = direction == .back
+        Button(isBack ? "Back" : "Forward", systemImage: isBack ? "chevron.backward" : "chevron.forward") {
+            if pressShowedHistory {
+                pressShowedHistory = false
+            } else if isBack {
+                model.goBack()
+            } else {
+                model.goForward()
+            }
+        }
+        .disabled(isBack ? model.selectedPage?.canGoBack != true : model.selectedPage?.canGoForward != true)
+        .help(isBack ? "Go back (hold for history)" : "Go forward (hold for history)")
+        .accessibilityIdentifier(isBack ? "backButton" : "forwardButton")
+        .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in
+            guard !model.history(direction).isEmpty else { return }
+            pressShowedHistory = true
+            isShowingHistory = true
+        })
+        .contextMenu {
+            ForEach(Array(model.history(direction).enumerated()), id: \.offset) { index, entry in
+                Button {
+                    model.goToHistory(direction, index: index)
+                } label: {
+                    HistoryEntryLabel(model: model, entry: entry)
+                }
+            }
+        }
+        .accessibilityAction(named: "Show History") {
+            if !model.history(direction).isEmpty { isShowingHistory = true }
+        }
+        .popover(isPresented: $isShowingHistory, arrowEdge: .bottom) {
+            HistoryList(model: model, direction: direction) { isShowingHistory = false }
+                .windowAppearance()
+        }
+    }
+}
+
+/// A page in a history menu: its site's icon and its title, or its address without one.
+private struct HistoryEntryLabel: View {
+    let model: BrowserModel
+    let entry: HistoryEntry
+
+    var body: some View {
+        Label {
+            Text(HistoryList.title(of: entry))
+        } icon: {
+            if let icon = model.favicon(for: entry.url) {
+                Image(platformImage: icon)
+            } else {
+                Image(systemName: "globe")
+            }
+        }
+    }
+}
+
+/// The history popover's list (#112), the nearest page first.
+struct HistoryList: View {
+    let model: BrowserModel
+    let direction: HistoryDirection
+    let close: () -> Void
+
+    /// What a history entry shows: its title, or its address when it has none.
+    static func title(of entry: HistoryEntry) -> String {
+        entry.title.isEmpty ? entry.url.absoluteString : entry.title
+    }
+
+    var body: some View {
+        let entries = model.history(direction)
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(entries.enumerated()), id: \.offset) { index, entry in
+                Button {
+                    close()
+                    model.goToHistory(direction, index: index)
+                } label: {
+                    HistoryEntryLabel(model: model, entry: entry)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .help(entry.url.absoluteString)
+                .accessibilityIdentifier("historyEntry")
+            }
+        }
+        .padding(.vertical, 6)
+        .frame(width: 280)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(direction == .back ? "Back History" : "Forward History")
+        .accessibilityIdentifier("historyList")
     }
 }
 

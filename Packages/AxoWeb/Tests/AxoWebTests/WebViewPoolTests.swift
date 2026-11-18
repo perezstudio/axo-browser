@@ -123,6 +123,31 @@ struct WebViewPoolTests {
         try await waitForPage("second", tab: tab, pool: pool)
     }
 
+    @Test func historyMenusListPagesAndJumpSeveralAtOnce() async throws {
+        let pool = WebViewPool.forTesting()
+        let first = try pages.page("first"), second = try pages.page("second"), third = try pages.page("third")
+        let tab = Tab.testTab(url: first)
+        _ = pool.webView(for: tab, profileID: profileID)
+        try await waitForPage("first", tab: tab, pool: pool)
+        pool.load(second, in: tab.id)
+        try await waitForPage("second", tab: tab, pool: pool)
+        pool.load(third, in: tab.id)
+        try await waitForPage("third", tab: tab, pool: pool)
+
+        #expect(pool.backHistory(for: tab.id) == [HistoryEntry(title: "second", url: second),
+                                                   HistoryEntry(title: "first", url: first)], "Nearest first")
+        #expect(pool.forwardHistory(for: tab.id).isEmpty)
+
+        pool.goToHistoryOffset(-2, in: tab.id)
+        try await waitForPage("first", tab: tab, pool: pool)
+        #expect(pool.backHistory(for: tab.id).isEmpty)
+        #expect(pool.forwardHistory(for: tab.id).map(\.url) == [second, third])
+
+        pool.goToHistoryOffset(5, in: tab.id)
+        pool.goToHistoryOffset(0, in: tab.id)
+        #expect(pool.state(for: tab.id)?.url == first, "Out of range or nowhere does nothing")
+    }
+
     @Test func linksThatTargetANewWindowAskForANewTab() async throws {
         let pool = WebViewPool.forTesting()
         let target = try pages.page("target")

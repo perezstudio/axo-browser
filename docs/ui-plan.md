@@ -85,7 +85,7 @@ The boards: Floating command bar, Proposed 1.0 window.
 
 - [x] **Narrow results while typing (#122), ranking (#121), menu commands (#123).** In the order set earlier (#122, #121, #123). A typed address is learned for the page it commits, and menu items run once the page has focus back.
 - [ ] **Command bar as a native floating panel (#87).** The board's floating bar, in browser and mini windows.
-- [ ] **History menus on Back and Forward (#112).**
+- [x] **History menus on Back and Forward (#112).** Right-click Back or Forward for a menu of the tab's earlier or later pages, nearest first, with their icons; hold the button (or use VoiceOver's Show History) for the same list in a popover. Chromium reads the page's `NavigationController` (API 38).
 - [x] **Google as the default search engine (#172).** Replace the DuckDuckGo placeholder in `AddressInput` with Google, keeping Bing and DuckDuckGo for the Search pane (#132) to offer (decision 6). Small; can go any time.
 
 ## Phase 4: page tools, menus, and prompts

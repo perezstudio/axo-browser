@@ -104,6 +104,18 @@ final class ChromiumPage: NSObject, EnginePage {
 
     func goBack() { page?.goBack() }
     func goForward() { page?.goForward() }
+
+    var backHistory: [HistoryEntry] { Self.historyEntries(page?.backHistory ?? []) }
+    var forwardHistory: [HistoryEntry] { Self.historyEntries(page?.forwardHistory ?? []) }
+    func goToHistoryOffset(_ offset: Int) { page?.go(toHistoryOffset: offset) }
+
+    /// The engine's history entries (`title`, `url`), skipping any without an address.
+    static func historyEntries(_ entries: [[String: Any]]) -> [HistoryEntry] {
+        entries.compactMap { entry in
+            guard let url = entry["url"] as? URL else { return nil }
+            return HistoryEntry(title: entry["title"] as? String ?? "", url: url)
+        }
+    }
     func reload() { page?.reload() }
     func stopLoading() { page?.stopLoading() }
 
