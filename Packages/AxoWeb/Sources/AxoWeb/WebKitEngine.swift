@@ -113,6 +113,9 @@ public final class WebKitPage: NSObject, EnginePage {
     private var audioObservation: AnyObject?
     /// Set when the web content process ends, until the page starts loading again.
     private var contentProcessEnded = false
+    /// The address of the page that last committed. While another loads, `webView.url` is already
+    /// the new one but `hasOnlySecureContent` and `serverTrust` are still the old page's (#96).
+    private var committedURL: URL?
 
     init(webView: PooledWebView, downloads: WebKitDownloads, audio: (any WebKitPageAudio)? = nil) {
         self.webView = webView
@@ -147,6 +150,17 @@ public final class WebKitPage: NSObject, EnginePage {
                 self.delegate?.pageMediaDidChange(self)
             }
         }
+        let securityChanged: @Sendable (WKWebView) -> Void = { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.delegate?.pageSecurityDidChange(self)
+            }
+        }
+        observations += [
+            webView.observe(\.hasOnlySecureContent) { webView, _ in securityChanged(webView) },
+            webView.observe(\.serverTrust) { webView, _ in securityChanged(webView) },
+            webView.observe(\.url) { webView, _ in securityChanged(webView) },
+        ]
         observations += [
             webView.observe(\.cameraCaptureState) { webView, _ in mediaChanged(webView) },
             webView.observe(\.microphoneCaptureState) { webView, _ in mediaChanged(webView) },
@@ -174,6 +188,13 @@ public final class WebKitPage: NSObject, EnginePage {
 
     public func setAudioMuted(_ muted: Bool) {
         audio?.setMuted(muted, in: webView)
+    }
+
+    /// From the address, `hasOnlySecureContent`, and `serverTrust`. WebKit refuses untrusted
+    /// certificates outright, so its pages are never ``PageSecurity/Level/broken``.
+    public var security: PageSecurity {
+        PageSecurity.webKit(url: webView.url, committedURL: committedURL,
+                            hasOnlySecureContent: webView.hasOnlySecureContent, serverTrust: webView.serverTrust)
     }
 
     /// A crash only: WebKit tells neither why its content process ended nor, publicly, that a
@@ -410,6 +431,11 @@ extension WebKitPage: WKNavigationDelegate, WKUIDelegate {
         delegate?.pageProblemDidChange(self)
         // Its loads end with it.
         delegate?.pageStateDidChange(self)
+    }
+
+    public func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        committedURL = webView.url
+        delegate?.pageSecurityDidChange(self)
     }
 
     public func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {

@@ -51,6 +51,13 @@ Limitations in `WKWebView` and `WKWebExtension` that block or shape Axo features
 - **Reproduction:** run `while (true) {}` in a page, then click it; no public `WKWebView` or delegate call reports anything.
 - **For now:** WebKit pages report only a crash, with no code (so the page shows no Show Details), and never a hang. Handling the termination also stops WebKit reloading the page by itself, which it does only for delegates that don't implement it, so a process WebKit ends for memory or CPU (a hidden tab's, often on iPhone) leaves its tab "stopped" until Reload. UI testing mode ends a page's process through AxoInspector's `WebContentProcess` (`_webProcessIdentifier`, private) to test what Axo shows. Chromium, the Mac's engine, reports crashes with their code, running out of memory, and hangs.
 
+## WebKit pages are never "Not Private"
+
+- **Found:** November 2026, macOS 27 SDK (Xcode 27).
+- **Need:** show a page whose certificate isn't trusted as "Not Private" once the person chose to visit it anyway (#96, #178), as Chromium does.
+- **What happens:** WebKit refuses an untrusted certificate unless the navigation delegate accepts it in `webView(_:didReceive:completionHandler:)`, and Axo's doesn't, so its pages are either secure (`hasOnlySecureContent` with a `serverTrust`) or not secure (plain http, or https showing http content). There's no public flag for a page whose certificate was accepted anyway.
+- **For now:** WebKit pages show the lock or the struck-through lock, never the red chip; the certificate warning page itself is Chromium's (and, with #178, Axo's).
+
 ## `runtime.onInstalled` doesn't fire
 
 - **Found:** October 2026, macOS 27 SDK (Xcode 27).

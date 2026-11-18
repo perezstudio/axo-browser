@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 35
+#define AXO_ENGINE_API_VERSION 36
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -416,6 +416,9 @@ NS_SWIFT_UI_ACTOR
 /// its sad tab or "Page unresponsive" dialog here; neither shows in a host app. It comes on a later
 /// turn, so read `problem` then; it may be unchanged.
 - (void)pageProblemDidChange:(id<AXOPage>)page NS_SWIFT_NAME(pageProblemDidChange(_:));
+/// The page's connection security changed (`security`, `certificateChain`): a navigation, mixed
+/// content, or a certificate error.
+- (void)pageSecurityDidChange:(id<AXOPage>)page NS_SWIFT_NAME(pageSecurityDidChange(_:));
 /// The page asked to be shown: `window.focus()` after the person clicks one of its notifications,
 /// or a service worker's `clients.focus()`, which pages can only do after something the person did;
 /// but Chrome also asks when the page enters full screen, for a media session's "raise", and when
@@ -501,6 +504,19 @@ typedef NS_ENUM(NSInteger, AXOPageProblem) {
   /// It stopped responding to input (Chrome's "Page unresponsive" dialog): `-waitForResponse`
   /// gives it more time, and `-reload` ends its renderer and loads it again.
   AXOPageProblemUnresponsive,
+};
+
+/// How secure the page's connection is, as Chrome's address bar shows it.
+typedef NS_ENUM(NSInteger, AXOPageSecurity) {
+  /// Nothing to show: a page that isn't on the web (`about:`, `data:`, a file), or none yet.
+  AXOPageSecurityNone = 0,
+  /// https with a valid certificate and nothing loaded over plain http.
+  AXOPageSecuritySecure,
+  /// Not secure: plain http, or https showing content loaded over http.
+  AXOPageSecurityNotSecure,
+  /// https whose certificate has an error the person chose to visit anyway, or that ran content
+  /// loaded over http.
+  AXOPageSecurityBroken,
 };
 
 /// One tab's page: a Chromium `WebContents` and its view.
@@ -601,6 +617,14 @@ NS_SWIFT_UI_ACTOR
 /// Gives a page that stopped responding more time, as the dialog's Wait does. Does nothing
 /// otherwise.
 - (void)waitForResponse;
+/// How secure the page's connection is (Chrome's `security_state::GetSecurityLevel`).
+@property(nonatomic, readonly) AXOPageSecurity security;
+/// The certificates the page's server sent, the site's first (`SecCertificateRef`s), or empty for a
+/// page without a secure connection.
+@property(nonatomic, readonly) NSArray* certificateChain;
+/// Whether the page's certificate has an error (one Chrome warned about and the person chose to
+/// visit anyway), as opposed to a page that's broken only for running content loaded over http.
+@property(nonatomic, readonly) BOOL certificateHasError;
 /// The page's docked DevTools, or `nil` while it's closed. Show it filling the area the page had,
 /// with the page's view on top at `-devToolsPageFrameInBounds:`: DevTools draws its own divider and
 /// dock-side menu around the page, and changes the page's place as the person drags or docks it to

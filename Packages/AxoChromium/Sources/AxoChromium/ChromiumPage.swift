@@ -207,6 +207,26 @@ final class ChromiumPage: NSObject, EnginePage {
         page?.waitForResponse()
     }
 
+    // MARK: Connection security (#96)
+
+    var security: PageSecurity {
+        // As on WebKit, only web pages have a connection to show: Chrome counts a data: page as
+        // not secure, which the address bar would call "plain http".
+        guard let page, let scheme = page.url?.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+            return PageSecurity()
+        }
+        let level: PageSecurity.Level = switch page.security {
+        case .secure: .secure
+        case .notSecure: .notSecure
+        case .broken: .broken
+        default: .none
+        }
+        // The engine hands over SecCertificateRefs.
+        let certificates = page.certificateChain.map { $0 as! SecCertificate }
+        return PageSecurity(level: level, certificates: level == .none ? [] : certificates,
+                            hasCertificateError: level == .broken && page.certificateHasError)
+    }
+
     /// Lays out the page and its docked DevTools in ``view``: DevTools fills it, and the page
     /// sits on top where DevTools puts it (DevTools draws its own divider and dock-side menu
     /// around the page). Without DevTools, the page fills ``view``. Frames and autoresizing
@@ -475,6 +495,11 @@ extension ChromiumPage: AXOPageDelegate {
     /// The page's renderer crashed or stopped responding, or it works again.
     func pageProblemDidChange(_ page: any AXOPage) {
         delegate?.pageProblemDidChange(self)
+    }
+
+    /// The page's connection security changed.
+    func pageSecurityDidChange(_ page: any AXOPage) {
+        delegate?.pageSecurityDidChange(self)
     }
 
     /// A page this one opened (`window.open`, `target="_blank"`), already loading and connected

@@ -609,6 +609,22 @@ final class AxoUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: unmuted, evaluatedWith: speaker)], timeout: 5), .completed)
     }
 
+    /// A page with nothing to say about its connection (a data: page) shows no lock and no
+    /// "Not secure" in the address's value (#96); the states themselves are covered by model tests
+    /// and the engine's script, since UI tests load no web pages.
+    @MainActor
+    func testADataPageShowsNoConnectionIndicator() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        AxoUITests.openPage("data:text/html,<title>Quiet</title>", in: app)
+        XCTAssertTrue(sidebar.staticTexts["Quiet"].waitForExistence(timeout: 10))
+        let pill = app.descendants(matching: .any)["sidebarAddressBar"]
+        XCTAssertTrue(pill.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["connectionButton"].exists)
+        XCTAssertFalse((pill.value as? String)?.hasPrefix("Not ") == true)
+    }
+
     /// Resting the pointer on a tab's row shows its card beside the sidebar, with its title and
     /// address, never over the row; it goes once the pointer leaves (#76).
     @MainActor
