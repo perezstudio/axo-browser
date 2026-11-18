@@ -165,6 +165,7 @@ struct SidebarSections: View {
                     SidebarTabRow(model: model, tab: tab, panes: data.splitPanes[tab.id],
                                   isSelected: data.holdsSelection(tab.id))
                         .tag(PinnedItem.tab(tab.id))
+                        .sidebarSelectionHighlight(data.holdsSelection(tab.id) && model.selectedFolderID == nil)
                         .sidebarMoveActions(model: model, item: .tab(tab.id))
                 }
             }
@@ -459,6 +460,27 @@ struct TabContextMenu: View {
     }
 }
 
+extension View {
+    /// Draws the selected row's highlight. With `.reorderable` rows (#77), the sidebar list
+    /// still selects but no longer draws its selection, so rows draw it themselves: the
+    /// rounded, inset fill the list drew, in the sidebar's own color scheme (a Space's dark
+    /// theme gets a light fill).
+    func sidebarSelectionHighlight(_ isSelected: Bool) -> some View {
+        listRowBackground(
+            RoundedRectangle(cornerRadius: SidebarSelection.cornerRadius)
+                .fill(isSelected ? AnyShapeStyle(.primary.opacity(SidebarSelection.opacity)) : AnyShapeStyle(.clear))
+                .padding(.horizontal, SidebarSelection.inset)
+        )
+    }
+}
+
+/// The selected sidebar row's highlight, as the list drew it before rows became reorderable.
+enum SidebarSelection {
+    static let cornerRadius: CGFloat = 6
+    static let inset: CGFloat = 10
+    static let opacity: Double = 0.1
+}
+
 /// One level of the pinned section: folders (expandable) and pinned tabs, reorderable.
 struct PinnedLevel: View {
     let model: BrowserModel
@@ -478,9 +500,10 @@ struct PinnedLevel: View {
         ForEach(nodes) { node in
             switch node {
             case .tab(let tab):
-                SidebarTabRow(model: model, tab: tab, panes: splitPanes[tab.id],
-                              isSelected: selectedTabID.map { holdsSelection(tab, $0) } ?? false)
+                let isSelected = selectedTabID.map { holdsSelection(tab, $0) } ?? false
+                SidebarTabRow(model: model, tab: tab, panes: splitPanes[tab.id], isSelected: isSelected)
                     .tag(PinnedItem.tab(tab.id))
+                    .sidebarSelectionHighlight(isSelected && model.selectedFolderID == nil)
                     .sidebarMoveActions(model: model, item: .tab(tab.id))
             case .folder(let folder, let children):
                 DisclosureGroup(isExpanded: Binding(
@@ -494,6 +517,7 @@ struct PinnedLevel: View {
                     Label(folder.name, systemImage: folder.isExpanded ? "folder" : "folder.fill")
                         .lineLimit(1)
                         .tag(PinnedItem.folder(folder.id))
+                        .sidebarSelectionHighlight(model.selectedFolderID == folder.id)
                         // The name is the label, so the value can add the item count.
                         .accessibilityLabel(folder.name)
                         .accessibilityValue(children.count == 1 ? "1 item" : "\(children.count) items")
