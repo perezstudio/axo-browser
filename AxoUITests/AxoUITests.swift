@@ -257,7 +257,8 @@ final class AxoUITests: XCTestCase {
         let window = app.windows.firstMatch
         let first = window.menuItems["First"]
         XCTAssertTrue(first.waitForExistence(timeout: 5))
-        let titles = window.menus.firstMatch.menuItems.allElementsBoundByIndex.map(\.title)
+        // Without the menu's own items that have no title (separators).
+        let titles = window.menus.firstMatch.menuItems.allElementsBoundByIndex.map(\.title).filter { !$0.isEmpty }
         XCTAssertEqual(titles, ["Second", "First"], "The nearest page first")
         first.click()
         XCTAssertTrue(sidebar.staticTexts["First"].waitForExistence(timeout: 10))
@@ -285,7 +286,7 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Second"].waitForExistence(timeout: 10))
         back.rightClick()
         XCTAssertTrue(window.menuItems["First"].waitForExistence(timeout: 5))
-        XCTAssertEqual(window.menus.firstMatch.menuItems.allElementsBoundByIndex.map(\.title), ["First"])
+        XCTAssertEqual(window.menus.firstMatch.menuItems.allElementsBoundByIndex.map(\.title).filter { !$0.isEmpty }, ["First"])
         app.typeKey(.escape, modifierFlags: [])
     }
 
