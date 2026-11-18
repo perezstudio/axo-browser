@@ -96,7 +96,7 @@ The boards: Page tools, Page context menu, Prompts and extensions toolbar, Split
 - [ ] **Page context menu (#173).** Built on Chromium (`PageMenu.entries`); check its items and order against the board for page, link, image, selected text, and text field, and add what's missing (Open in Peek and in Split View for links, Summarize Page).
 - [ ] **Prompts.** Built; check permission prompts, JavaScript dialogs, external-app questions, and extension prompts against the board's layout and wording.
 - [ ] **Split view and Peek, side panels, DevTools.** Built; check each against its board (Peek's card, the split's focused pane and resize handle, the side panel's header and divider, DevTools docked in the page's area, which follows from the layered page). Fix differences in one PR per board.
-- [ ] **Connection security and certificate details (#96).** The pill's Not Secure mark and the certificate details; shared with Phase 6's warnings.
+- [x] **Connection security and certificate details (#96).** The pill and the field above the page show a lock for a secure page, a struck-through lock for one that isn't (plain http, or https showing http content), and a red "Not Private" chip for an untrusted certificate, as the error pages board draws them (the Page tools board has none); each opens the connection's details (the board's wording, who issued the certificate, Show Certificate in macOS's own view, and Site Settings). Search terms keep their magnifying glass. Shared with Phase 6's warnings (#178).
 
 ## Phase 5: Settings and the Extensions window
 

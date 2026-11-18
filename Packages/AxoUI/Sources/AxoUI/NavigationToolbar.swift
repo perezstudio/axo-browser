@@ -121,6 +121,9 @@ struct AddressBar: View {
 
     var body: some View {
         HStack(spacing: 6) {
+            if let indicator = model.connectionIndicator {
+                ConnectionButton(model: model, indicator: indicator)
+            }
             AddressField(model: model)
             SiteSettingsButton(model: model)
         }

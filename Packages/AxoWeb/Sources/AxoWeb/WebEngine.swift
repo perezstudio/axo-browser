@@ -184,6 +184,10 @@ public protocol EnginePage: AnyObject {
     /// Gives a page that stopped responding more time; the engine reports it again if it still
     /// doesn't respond. Does nothing otherwise.
     func waitForResponse()
+
+    /// How secure the page's connection is, and its server's certificates (#96). Engines report
+    /// changes through ``EnginePageDelegate/pageSecurityDidChange(_:)``.
+    var security: PageSecurity { get }
 }
 
 extension EnginePage {
@@ -195,12 +199,45 @@ extension EnginePage {
     public var problem: PageProblem? { nil }
     /// Does nothing, for engines that can't tell a page stopped responding.
     public func waitForResponse() {}
+    /// Nothing known, for engines that can't tell.
+    public var security: PageSecurity { PageSecurity() }
     public func discard() -> Bool { false }
     public func loadIfDiscarded() {}
     public var isDiscarded: Bool { false }
     public func toggleDevTools() -> Bool { false }
     public func showDevToolsConsole() -> Bool { false }
     public var hasDevTools: Bool { false }
+}
+
+/// How secure a page's connection is (#96), as the address bar shows it, with the certificates
+/// its server sent.
+public struct PageSecurity: Equatable, @unchecked Sendable {
+    // @unchecked: SecCertificate is an immutable Core Foundation object, safe to share.
+
+    public enum Level: Hashable, Sendable {
+        /// Nothing to show: not a web page (`about:`, `data:`, a file), this Mac, or no page yet.
+        case none
+        /// https with a valid certificate and nothing loaded over plain http.
+        case secure
+        /// Plain http, or https showing content loaded over http.
+        case notSecure
+        /// https whose certificate isn't trusted (on Chromium, visited anyway; see
+        /// ``PageSecurity/hasCertificateError``), or that ran content loaded over http.
+        case broken
+    }
+
+    public var level: Level
+    /// The server's certificates, the site's first; empty without a secure connection.
+    public var certificates: [SecCertificate]
+    /// Whether the certificate itself has an error, as opposed to a page that's broken only for
+    /// running content loaded over http.
+    public var hasCertificateError: Bool
+
+    public init(level: Level = .none, certificates: [SecCertificate] = [], hasCertificateError: Bool = false) {
+        self.level = level
+        self.certificates = certificates
+        self.hasCertificateError = hasCertificateError
+    }
 }
 
 /// Why a page stopped working (#75), as Chrome's sad tab and "Page unresponsive" dialog tell.
@@ -314,6 +351,8 @@ public protocol EnginePageDelegate: AnyObject {
     func pageMediaDidChange(_ page: any EnginePage)
     /// The page stopped working, or works again. Read ``EnginePage/problem``.
     func pageProblemDidChange(_ page: any EnginePage)
+    /// The page's connection security or certificates changed. Read ``EnginePage/security``.
+    func pageSecurityDidChange(_ page: any EnginePage)
 }
 
 /// A page another page opened, already loading, with its opener (`window.opener`) and the
@@ -340,4 +379,40 @@ public struct OpenedPage {
         self.url = url
         self.kind = kind
     }
+}
+
+extension PageSecurity {
+    /// A WebKit page's security: https whose content all came over https is secure, with the
+    /// server's certificates; https showing http content, or plain http (but not this Mac), isn't.
+    /// Only for the page that committed: while another loads (`url` differs from `committedURL`),
+    /// the content and trust are still the old page's, so there's nothing to show yet.
+    static func webKit(url: URL?, committedURL: URL?, hasOnlySecureContent: Bool, serverTrust: SecTrust?) -> PageSecurity {
+        guard let url, url == committedURL, let scheme = url.scheme?.lowercased() else { return PageSecurity() }
+        switch scheme {
+        case "https":
+            let certificates = serverTrust.flatMap { SecTrustCopyCertificateChain($0) as? [SecCertificate] } ?? []
+            return PageSecurity(level: hasOnlySecureContent ? .secure : .notSecure, certificates: certificates)
+        case "http":
+            return PageSecurity(level: isThisMac(url) ? .none : .notSecure)
+        default:
+            return PageSecurity()
+        }
+    }
+
+    /// Whether the page is served from this Mac, which needs no encryption: `localhost` and its
+    /// subdomains, and loopback addresses (127.0.0.0/8, ::1), not names that only start like one.
+    static func isThisMac(_ url: URL) -> Bool {
+        guard var host = url.host(percentEncoded: false)?.lowercased() else { return false }
+        if host.hasSuffix(".") { host.removeLast() }
+        if host == "localhost" || host.hasSuffix(".localhost") { return true }
+        if host == "::1" || host == "[::1]" { return true }
+        let parts = host.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 4, parts.allSatisfy({ !$0.isEmpty && $0.count <= 3 && $0.allSatisfy(\.isASCIIDigit) }),
+              parts.allSatisfy({ (Int($0) ?? 256) <= 255 }) else { return false }
+        return parts[0] == "127"
+    }
+}
+
+private extension Character {
+    var isASCIIDigit: Bool { ("0"..."9").contains(self) }
 }
