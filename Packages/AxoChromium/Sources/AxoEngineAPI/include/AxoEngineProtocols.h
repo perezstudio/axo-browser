@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 33
+#define AXO_ENGINE_API_VERSION 34
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -405,6 +405,12 @@ NS_SWIFT_UI_ACTOR
 /// `chrome.tabs.discard`, or memory pressure). It comes on a later turn, and only while the page
 /// is still discarded. The page loads again when shown, or with `-loadIfDiscarded`.
 - (void)pageWasDiscarded:(id<AXOPage>)page;
+/// The page started or stopped playing sound (`isPlayingAudio`), or was muted or unmuted
+/// (`audioMuted`). Chrome reports a page as playing for a few seconds after its sound stops.
+- (void)pageAudioStateDidChange:(id<AXOPage>)page NS_SWIFT_NAME(pageAudioStateDidChange(_:));
+/// The page started or stopped using the camera, the microphone, the screen, or the person's
+/// location (`capture`).
+- (void)pageCaptureDidChange:(id<AXOPage>)page NS_SWIFT_NAME(pageCaptureDidChange(_:));
 /// The page asked to be shown: `window.focus()` after the person clicks one of its notifications,
 /// or a service worker's `clients.focus()`, which pages can only do after something the person did;
 /// but Chrome also asks when the page enters full screen, for a media session's "raise", and when
@@ -465,6 +471,19 @@ NS_SWIFT_UI_ACTOR
            size:(NSSize)size
    inBackground:(BOOL)inBackground NS_SWIFT_NAME(page(_:didOpen:url:popup:size:inBackground:));
 @end
+
+/// What a page uses that the person should see at a glance, as Chrome's tab strip shows it.
+typedef NS_OPTIONS(NSUInteger, AXOPageCapture) {
+  AXOPageCaptureNone = 0,
+  /// The camera.
+  AXOPageCaptureCamera = 1 << 0,
+  /// The microphone.
+  AXOPageCaptureMicrophone = 1 << 1,
+  /// The screen, a window, or a tab, shared through `getDisplayMedia()`.
+  AXOPageCaptureScreen = 1 << 2,
+  /// The person's location (Geolocation).
+  AXOPageCaptureLocation = 1 << 3,
+};
 
 /// One tab's page: a Chromium `WebContents` and its view.
 NS_SWIFT_UI_ACTOR
@@ -548,6 +567,12 @@ NS_SWIFT_UI_ACTOR
 /// Whether the page has DevTools open, docked or in a window of its own. Keep such a page alive
 /// (don't hibernate it) while it does.
 @property(nonatomic, readonly) BOOL hasDevTools;
+/// Whether the page plays sound now (Chrome's `WebContents::IsCurrentlyAudible`), muted or not.
+@property(nonatomic, readonly) BOOL isPlayingAudio;
+/// Whether the page's sound is muted. It stays muted across its navigations, until set again.
+@property(nonatomic) BOOL audioMuted;
+/// What the page uses now: the camera, the microphone, the screen, or the person's location.
+@property(nonatomic, readonly) AXOPageCapture capture;
 /// The page's docked DevTools, or `nil` while it's closed. Show it filling the area the page had,
 /// with the page's view on top at `-devToolsPageFrameInBounds:`: DevTools draws its own divider and
 /// dock-side menu around the page, and changes the page's place as the person drags or docks it to

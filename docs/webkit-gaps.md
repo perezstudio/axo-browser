@@ -35,6 +35,14 @@ Limitations in `WKWebView` and `WKWebExtension` that block or shape Axo features
 - **Reproduction:** load a page with `<video src="clip.mov" controls>` in a window and, after `loadedmetadata`, check `video.webkitSupportsPresentationMode('picture-in-picture')`.
 - **For now:** AxoInspector's `PictureInPicture.enable(in:)` sets the private preference behind a `responds(to:)` check. Element fullscreen is public (`WKPreferences.isElementFullscreenEnabled`) but off by default, and AxoWeb turns it on.
 
+## Sound, screen sharing, and location in use have no public API
+
+- **Found:** November 2026, macOS 27 SDK (Xcode 27).
+- **Need:** show in a tab's row that its page plays sound, with a speaker that mutes it (#71), and that it uses the camera, microphone, screen, or location (#74), as Safari's tabs do.
+- **What happens:** `WKWebView` reports the camera and microphone publicly (`cameraCaptureState`, `microphoneCaptureState`, key-value observable), but whether a page plays sound and muting it are private (`_isPlayingAudio`, `_mediaMutedState`, `_setPageMuted:`), screen sharing (`getDisplayMedia()`) shows only in the private `_mediaCaptureState`, and location in use isn't exposed at all.
+- **Reproduction:** load a page that plays an `AudioContext` tone after a click; no public `WKWebView` property changes.
+- **For now:** on the Mac, AxoInspector's `PageAudio` uses the private sound calls behind `responds(to:)` checks; WebKit there runs only in test runs, so screen sharing through `_mediaCaptureState` wasn't added. The iPhone and iPad apps ship through the App Store and use no private API, so they show the camera and microphone but no sound, mute, screen sharing, or location. Chromium, the Mac's engine, reports all of them.
+
 ## `runtime.onInstalled` doesn't fire
 
 - **Found:** October 2026, macOS 27 SDK (Xcode 27).

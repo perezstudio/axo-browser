@@ -162,7 +162,6 @@ struct SidebarSections: View {
                 SidebarTabRow(model: model, tab: tab, panes: data.splitPanes[tab.id],
                               isSelected: data.holdsSelection(tab.id))
                     .tag(PinnedItem.tab(tab.id))
-                    .contextMenu { TabContextMenu(model: model, tab: tab) }
                     .sidebarMoveActions(model: model, item: .tab(tab.id))
             }
             .onMove { source, destination in
@@ -242,8 +241,17 @@ struct SidebarTabRow: View {
                         Button("Go to Pinned Page") { goHome() }
                     }
                     Button(closeTitle) { close() }
+                    if media.hasSound {
+                        Button(media.muteTitle) { toggleMute() }
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+            // Sound and devices sit where the close button appears (the Tab row states board):
+            // the dot gives way to the close button, and the speaker, last, never moves, so the
+            // pointer heading for it never lands on Close.
+            if !media.capture.isEmpty, !isHovering {
+                TabCaptureDot(media: media)
+            }
             if isHovering {
                 // A borderless button in a List row gets its click without selecting the row
                 // first; the square is drawn in its label.
@@ -256,6 +264,9 @@ struct SidebarTabRow: View {
                 // Shown only under the pointer; VoiceOver and the keyboard also get the row's
                 // action, which is always there.
                 .accessibilityIdentifier("tabRowCloseButton")
+            }
+            if media.hasSound {
+                TabMuteButton(media: media) { toggleMute() }
             }
             // A pinned tab away from its pinned page shows it at a glance, as in Arc, with a
             // control that goes back (#73). Last in the row, so the close button appearing on
@@ -274,6 +285,9 @@ struct SidebarTabRow: View {
         // (hibernated ones included).
         .contentShape(.rect)
         .onHover { isHovering = $0 }
+        // Here rather than on the list's row, so the menu gets the sound it shows from the row,
+        // which redraws when it changes.
+        .contextMenu { TabContextMenu(model: model, tab: tab, media: media) }
     }
 
     @ViewBuilder
@@ -282,12 +296,22 @@ struct SidebarTabRow: View {
             SplitRow(panes: panes, favicon: model.favicon(for:),
                      isLoading: panes.contains { model.isTabLoading($0.id) },
                      // Dimmed only when every pane is unloaded.
-                     isDimmed: panes.allSatisfy { model.isTabDimmed($0.id, isSelected: isSelected) })
+                     isDimmed: panes.allSatisfy { model.isTabDimmed($0.id, isSelected: isSelected) },
+                     media: media)
         } else {
             TabRow(tab: tab, favicon: model.favicon(for: tab),
-                   isLoading: model.isTabLoading(tab.id), isDimmed: model.isTabDimmed(tab.id, isSelected: isSelected))
+                   isLoading: model.isTabLoading(tab.id), isDimmed: model.isTabDimmed(tab.id, isSelected: isSelected),
+                   media: media)
         }
     }
+
+    /// The row's tabs: a split's panes, or the tab.
+    private var rowTabIDs: [AxoCore.Tab.ID] { panes?.map(\.id) ?? model.muteTargets(for: tab.id) }
+
+    /// What the row's pages play and use (#71, #74), for a split all its panes'.
+    private var media: PageMedia { model.tabMedia(rowTabIDs) }
+
+    private func toggleMute() { model.toggleMuted(rowTabIDs) }
 
     /// Whether the row is a pinned tab away from its pinned page. A split row shows its panes
     /// instead.
@@ -311,6 +335,7 @@ struct SplitRow: View {
     let favicon: (AxoCore.Tab) -> PlatformImage?
     var isLoading = false
     var isDimmed = false
+    var media = PageMedia()
 
     var body: some View {
         Label {
@@ -337,7 +362,7 @@ struct SplitRow: View {
         }
         .lineLimit(1)
         // Only when there's state to tell: a value replaces the text a row exposes.
-        .modifier(StateValue(description: TabRow.stateDescription(isLoading: isLoading, isDimmed: isDimmed)))
+        .modifier(StateValue(description: TabRow.stateDescription(isLoading: isLoading, isDimmed: isDimmed, media: media)))
         .help(panes.map(TabRow.displayTitle(for:)).joined(separator: "\n"))
         .accessibilityLabel("Split view: " + panes.map(TabRow.displayTitle(for:)).formatted(.list(type: .and)))
         .accessibilityIdentifier("splitRow")
@@ -348,8 +373,15 @@ struct SplitRow: View {
 struct TabContextMenu: View {
     let model: BrowserModel
     let tab: AxoCore.Tab
+    /// What the row's pages play, from the row, which redraws when it changes (a menu reading it
+    /// itself can show it stale).
+    var media = PageMedia()
 
     var body: some View {
+        if media.hasSound {
+            Button(media.muteTitle) { model.toggleMuted(model.muteTargets(for: tab.id)) }
+            Divider()
+        }
         if let split = model.split(of: tab.id) {
             Button("Separate Split View") {
                 model.selectSidebarItem(.tab(tab.id))
@@ -419,7 +451,6 @@ struct PinnedLevel: View {
                 SidebarTabRow(model: model, tab: tab, panes: splitPanes[tab.id],
                               isSelected: selectedTabID.map { holdsSelection(tab, $0) } ?? false)
                     .tag(PinnedItem.tab(tab.id))
-                    .contextMenu { TabContextMenu(model: model, tab: tab) }
                     .sidebarMoveActions(model: model, item: .tab(tab.id))
             case .folder(let folder, let children):
                 DisclosureGroup(isExpanded: Binding(
@@ -523,6 +554,9 @@ struct TabRow: View {
     /// Whether it has no live page: the icon fades and the title turns secondary, which keeps
     /// it readable in light and dark mode.
     var isDimmed = false
+    /// What its page plays and uses (#71, #74), for its accessibility value; the row's speaker
+    /// and dot show it.
+    var media = PageMedia()
 
     /// How faded a dimmed row's icon is.
     static let dimmedIconOpacity = 0.5
@@ -553,15 +587,16 @@ struct TabRow: View {
         // The title is the label, so a value can add state without replacing it.
         .accessibilityLabel(Self.displayTitle(for: tab))
         .accessibilityValue(Self.stateDescription(
-            isLoading: isLoading, isDimmed: isDimmed, isAwayFromHome: tab.hasLeftHome))
+            isLoading: isLoading, isDimmed: isDimmed, isAwayFromHome: tab.hasLeftHome, media: media))
         .accessibilityIdentifier("tabRow")
     }
 
-    /// The row's state for VoiceOver: "Loading", "Unloaded", and "Away from pinned page", as
-    /// they apply.
-    static func stateDescription(isLoading: Bool, isDimmed: Bool, isAwayFromHome: Bool = false) -> String {
-        [isLoading ? "Loading" : nil, isDimmed ? "Unloaded" : nil, isAwayFromHome ? "Away from pinned page" : nil]
-            .compactMap(\.self)
+    /// The row's state for VoiceOver: "Loading", "Unloaded", "Away from pinned page", "Playing
+    /// audio" or "Muted", and the devices it uses, as they apply.
+    static func stateDescription(isLoading: Bool, isDimmed: Bool, isAwayFromHome: Bool = false,
+                                 media: PageMedia = PageMedia()) -> String {
+        ([isLoading ? "Loading" : nil, isDimmed ? "Unloaded" : nil, isAwayFromHome ? "Away from pinned page" : nil]
+            .compactMap(\.self) + media.stateDescription)
             .joined(separator: ", ")
     }
 

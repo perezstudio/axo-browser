@@ -179,6 +179,12 @@ public struct BrowserCommands: Commands {
                 Task { await model.makeCurrentPagePinnedHome(id) }
             }
             .disabled(model?.selectedTab?.hasLeftHome != true || model?.selectedFolderID != nil)
+            // The page showing, a favorite's too; for a split, the selected pane.
+            Button(model?.shownTabMedia.muteTitle ?? "Mute Tab") {
+                guard let model, let id = model.shownTab?.id else { return }
+                model.toggleMuted(model.muteTargets(for: id))
+            }
+            .disabled(model?.shownTabMedia.hasSound != true)
             Button("Duplicate Tab") {
                 guard let model, let id = model.tabForTabActions?.id else { return }
                 Task { await model.duplicateTab(id) }

@@ -90,6 +90,23 @@ public final class FakePage: EnginePage {
     public let profileID: Profile.ID
     public weak var delegate: (any EnginePageDelegate)?
     public let view = PlatformView()
+    /// The sound and devices it reports (#71, #74); ``simulateMedia(_:)`` changes them as an
+    /// engine would.
+    public private(set) var media = PageMedia()
+    /// How many times it was muted or unmuted.
+    public private(set) var muteRequests: [Bool] = []
+
+    public func setAudioMuted(_ muted: Bool) {
+        muteRequests.append(muted)
+        media.isMuted = muted
+    }
+
+    /// Reports `media` as the engine would, keeping the muted state the page was given.
+    public func simulateMedia(isPlayingAudio: Bool? = nil, capture: PageCapture? = nil) {
+        if let isPlayingAudio { media.isPlayingAudio = isPlayingAudio }
+        if let capture { media.capture = capture }
+        delegate?.pageMediaDidChange(self)
+    }
     /// Whether the page reports developer tools open.
     public var hasDevTools = false
 

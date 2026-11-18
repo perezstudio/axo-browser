@@ -210,6 +210,10 @@ enum AppEnvironment {
             // Picture in picture for web video (private WebKit preference, in AxoInspector).
             PictureInPicture.enable(in: configuration)
         }
+        // Sound in pages and muting them (#71, private WebKit API, in AxoInspector).
+        if PageAudio.isAvailable, let webKit = pool.engine as? WebKitEngine {
+            webKit.audio = PageAudio()
+        }
         manager.configureExtensionWebViews = { WebInspector.enableDeveloperTools(in: $0) }
         extensionManager = manager
         Task {

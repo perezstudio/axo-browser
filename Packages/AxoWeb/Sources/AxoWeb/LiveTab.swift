@@ -40,7 +40,10 @@ final class LiveTab: EnginePageDelegate {
         self.pool = pool
         self.lastUsed = lastUsed
         page.delegate = self
+        // A tab muted before it hibernated, or before its page was replaced, stays muted.
+        if pool.mutedTabs.contains(tabID) { page.setAudioMuted(true) }
         syncState()
+        state.media = page.media
     }
 
     /// Copies the page's state into ``state``, reporting URL and title changes to the pool.
@@ -82,6 +85,20 @@ final class LiveTab: EnginePageDelegate {
         pool?.loadFavicon(for: tabID)
         finishedLoads += 1
         pool?.refreshPageColors(of: self)
+    }
+
+    func pageMediaDidChange(_ page: any EnginePage) {
+        let media = page.media
+        guard state.media != media else { return }
+        // Muting changed by the engine itself (an extension, say) lasts like the person's.
+        if media.isMuted != state.media.isMuted { pool?.pageChangedMuting(media.isMuted, tabID: tabID) }
+        state.media = media
+    }
+
+    /// Whether the page plays sound (unmuted) or uses a device, so hibernating it would end a
+    /// song or a call, as Chrome never discards such tabs on its own.
+    var isInUse: Bool {
+        (state.media.isPlayingAudio && !state.media.isMuted) || !state.media.capture.isEmpty
     }
 
     func pageWantsToBeShown(_ page: any EnginePage) {

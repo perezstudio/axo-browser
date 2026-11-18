@@ -577,6 +577,38 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Got ArrowDown"].waitForExistence(timeout: 5), "Arrow keys go to the page too")
     }
 
+    /// A tab playing sound shows a speaker at its row's end, which mutes it, as the Tabs menu
+    /// unmutes it (#71), and its row's value tells VoiceOver. The page plays a faint tone once clicked
+    /// (pages need a click to play sound).
+    @MainActor
+    func testMutingATabFromItsSpeaker() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        AxoUITests.openPage("data:text/html,<title>Tone</title><body style='height:100vh'><script>addEventListener('click', () => { const c = new AudioContext(); const o = c.createOscillator(); const g = c.createGain(); g.gain.value = 0.001; o.connect(g).connect(c.destination); o.start(); document.title = 'Tone on' })</script>", in: app)
+        XCTAssertTrue(sidebar.staticTexts["Tone"].waitForExistence(timeout: 10))
+        let speaker = sidebar.buttons["tabMuteButton"]
+        XCTAssertFalse(speaker.exists, "No speaker before the page plays sound")
+
+        app.webViews.firstMatch.click()
+        XCTAssertTrue(sidebar.staticTexts["Tone on"].waitForExistence(timeout: 10))
+        XCTAssertTrue(speaker.waitForExistence(timeout: 10), "Playing sound shows the speaker")
+        XCTAssertEqual(speaker.label, "Mute Tab")
+        let row = sidebar.descendants(matching: .any).matching(identifier: "tabRow").element(boundBy: 0)
+        XCTAssertTrue((row.value as? String)?.contains("Playing audio") == true)
+
+        speaker.click()
+        let muted = NSPredicate(format: "label == 'Unmute Tab'")
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: muted, evaluatedWith: speaker)], timeout: 5), .completed)
+        XCTAssertTrue((row.value as? String)?.contains("Muted") == true)
+
+        // The Tabs menu unmutes the shown tab too.
+        app.menuBars.menuBarItems["Tabs"].click()
+        app.menuBars.menuItems["Unmute Tab"].click()
+        let unmuted = NSPredicate(format: "label == 'Mute Tab'")
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: unmuted, evaluatedWith: speaker)], timeout: 5), .completed)
+    }
+
     /// Settings › General moves the navigation bar from the sidebar to the page's control bar at
     /// the top of the page's area (#170), where ⌘L still focuses the address field, and which
     /// takes the window's controls and Show Sidebar while the sidebar is hidden. (UI testing keeps

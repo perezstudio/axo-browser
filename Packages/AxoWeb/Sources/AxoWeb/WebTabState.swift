@@ -29,6 +29,8 @@ public final class WebTabState {
     /// The colors the current page offers for the toolbar (its `theme-color`, or the color at its
     /// top), read each time it finishes loading; `nil` before that, or when a load fails.
     public internal(set) var pageColors: PageColors?
+    /// Whether the page plays sound, is muted, and what it uses (#71, #74), for its tab's row.
+    public internal(set) var media = PageMedia()
 
     init() {}
 }

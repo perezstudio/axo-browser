@@ -174,6 +174,23 @@ final class ChromiumPage: NSObject, EnginePage {
 
     var hasDevTools: Bool { page?.hasDevTools ?? false }
 
+    // MARK: Sound and devices (#71, #74)
+
+    var media: PageMedia {
+        guard let page else { return PageMedia() }
+        let capture = page.capture
+        var devices: PageCapture = []
+        if capture.contains(.camera) { devices.insert(.camera) }
+        if capture.contains(.microphone) { devices.insert(.microphone) }
+        if capture.contains(.screen) { devices.insert(.screen) }
+        if capture.contains(.location) { devices.insert(.location) }
+        return PageMedia(isPlayingAudio: page.isPlayingAudio, isMuted: page.audioMuted, capture: devices)
+    }
+
+    func setAudioMuted(_ muted: Bool) {
+        page?.audioMuted = muted
+    }
+
     /// Lays out the page and its docked DevTools in ``view``: DevTools fills it, and the page
     /// sits on top where DevTools puts it (DevTools draws its own divider and dock-side menu
     /// around the page). Without DevTools, the page fills ``view``. Frames and autoresizing
@@ -427,6 +444,16 @@ extension ChromiumPage: AXOPageDelegate {
 
     func pageWasDiscarded(_ page: any AXOPage) {
         delegate?.pageWasDiscarded(self)
+    }
+
+    /// The page started or stopped playing sound, or was muted or unmuted.
+    func pageAudioStateDidChange(_ page: any AXOPage) {
+        delegate?.pageMediaDidChange(self)
+    }
+
+    /// The page started or stopped using the camera, microphone, screen, or location.
+    func pageCaptureDidChange(_ page: any AXOPage) {
+        delegate?.pageMediaDidChange(self)
     }
 
     /// A page this one opened (`window.open`, `target="_blank"`), already loading and connected
