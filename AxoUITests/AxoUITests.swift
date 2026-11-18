@@ -757,7 +757,8 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(spoken.hasPrefix("data:text/html"), "Got \(spoken)")
         XCTAssertGreaterThanOrEqual(card.frame.minX, row.frame.maxX - 1, "Beside the row, never over it")
 
-        app.descendants(matching: .any)["webContent"].hover()
+        // Over the page by position: the hosted Mac's WebKit pages aren't in the tree.
+        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.5)).hover()
         XCTAssertTrue(card.waitForNonExistence(timeout: 5), "It goes when the pointer leaves")
 
         // With tabs at the top, below the tab.
