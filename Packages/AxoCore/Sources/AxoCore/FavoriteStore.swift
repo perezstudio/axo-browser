@@ -156,11 +156,19 @@ public final class FavoriteStore: Sendable {
     /// ID (and so its live web view).
     @discardableResult
     public func moveToPinned(_ id: Favorite.ID, in spaceID: Space.ID) async throws -> Tab {
+        try await moveToTab(id, in: spaceID, pinned: true)
+    }
+
+    /// Turns a favorite into a tab at the end of a Space's pinned section or, with `pinned` false,
+    /// its tabs section (#77), keeping its ID (and so its live web view), in one write.
+    @discardableResult
+    public func moveToTab(_ id: Favorite.ID, in spaceID: Space.ID, pinned: Bool) async throws -> Tab {
         try await database.writer.write { db in
             guard let favorite = try Favorite.fetchOne(db, id: id) else { throw FavoriteError.favoriteNotFound(id) }
             guard try Space.exists(db, id: spaceID) else { throw TabStoreError.spaceNotFound(spaceID) }
-            let sortKey = try TabStore.sortKey(for: .end, in: spaceID, pinned: true, folder: nil, excluding: nil, db)
-            let tab = Tab(id: id, spaceID: spaceID, url: favorite.url, title: favorite.title, sortKey: sortKey, isPinned: true, homeURL: favorite.url)
+            let sortKey = try TabStore.sortKey(for: .end, in: spaceID, pinned: pinned, folder: nil, excluding: nil, db)
+            let tab = Tab(id: id, spaceID: spaceID, url: favorite.url, title: favorite.title, sortKey: sortKey,
+                          isPinned: pinned, homeURL: pinned ? favorite.url : nil)
             // The tab first, so the favorite's home icon stays (the database deletes it with
             // the favorite only when no pinned tab has its ID).
             try tab.insert(db)

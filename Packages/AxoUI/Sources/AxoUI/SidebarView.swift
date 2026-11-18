@@ -144,29 +144,36 @@ struct SidebarSections: View {
     let model: BrowserModel
     let data: SpaceSidebarPreview
 
+    /// Whether this is the shown Space's live page, whose rows drag and take drops (#77).
+    private var isLive: Bool { data.space.id == model.space?.id }
+
     var body: some View {
         // The Space's name, between the favorites and Pinned, styled like a tab row (#171).
         Section {
             SpaceNameRow(model: model, space: data.space, canDelete: model.spaces.count > 1)
+                // With nothing pinned there's no Pinned section to drop into: this row takes it.
+                .pinDropTarget(model: model, isEnabled: data.pinnedTree.isEmpty && data.space.id == model.space?.id)
         }
         if !data.pinnedTree.isEmpty {
             Section("Pinned") {
                 PinnedLevel(model: model, nodes: data.pinnedTree, parent: nil, splitPanes: data.splitPanes,
-                            selectedTabID: data.selectedTabID)
+                            selectedTabID: data.selectedTabID, isLive: isLive)
             }
             .accessibilityIdentifier("pinnedSection")
         }
         Section {
-            ForEach(data.rows) { row in
-                let tab = leader(of: row)
+            // As pinned nodes, so one reorder container moves rows between the sections (#77).
+            let rowTabs = data.rows.map(leader(of:))
+            ForEach(rowTabs) { tab in
                 SidebarTabRow(model: model, tab: tab, panes: data.splitPanes[tab.id],
                               isSelected: data.holdsSelection(tab.id))
                     .tag(PinnedItem.tab(tab.id))
+                    .sidebarDraggable(.tab(tab.id), isEnabled: isLive)
+                    .sidebarRowDropTarget(model: model, collection: .tabs, item: .tab(tab.id), isEnabled: isLive)
                     .sidebarMoveActions(model: model, item: .tab(tab.id))
             }
-            .onMove { source, destination in
-                Task { await model.moveTabs(fromOffsets: source, toOffset: destination, pinned: false) }
-            }
+            // Rows drag between Pinned, folders, the tabs section, and Favorites (#77).
+            .sidebarDropTarget(model: model, collection: .tabs, items: rowTabs.map { .tab($0.id) }, isEnabled: isLive)
         }
     }
 
@@ -466,6 +473,8 @@ struct PinnedLevel: View {
     var splitPanes: [AxoCore.Tab.ID: [AxoCore.Tab]] = [:]
     /// The tab the page's Space shows, whose row (or split's row) holds the selection.
     var selectedTabID: AxoCore.Tab.ID?
+    /// Whether this is the shown Space's live page, whose rows drag and take drops (#77).
+    var isLive = false
 
     /// Whether `tab`'s row holds the selection: it's the selected tab, or its split has it.
     private func holdsSelection(_ tab: AxoCore.Tab, _ selected: AxoCore.Tab.ID) -> Bool {
@@ -479,6 +488,8 @@ struct PinnedLevel: View {
                 SidebarTabRow(model: model, tab: tab, panes: splitPanes[tab.id],
                               isSelected: selectedTabID.map { holdsSelection(tab, $0) } ?? false)
                     .tag(PinnedItem.tab(tab.id))
+                    .sidebarDraggable(.tab(tab.id), isEnabled: isLive)
+                    .sidebarRowDropTarget(model: model, collection: .pinned(parent), item: .tab(tab.id), isEnabled: isLive)
                     .sidebarMoveActions(model: model, item: .tab(tab.id))
             case .folder(let folder, let children):
                 DisclosureGroup(isExpanded: Binding(
@@ -487,11 +498,12 @@ struct PinnedLevel: View {
                 )) {
                     // Type-erased because the view contains itself.
                     AnyView(PinnedLevel(model: model, nodes: children, parent: folder.id, splitPanes: splitPanes,
-                                        selectedTabID: selectedTabID))
+                                        selectedTabID: selectedTabID, isLive: isLive))
                 } label: {
                     Label(folder.name, systemImage: folder.isExpanded ? "folder" : "folder.fill")
                         .lineLimit(1)
                         .tag(PinnedItem.folder(folder.id))
+                        .sidebarDraggable(.folder(folder.id), isEnabled: isLive)
                         // The name is the label, so the value can add the item count.
                         .accessibilityLabel(folder.name)
                         .accessibilityValue(children.count == 1 ? "1 item" : "\(children.count) items")
@@ -501,12 +513,12 @@ struct PinnedLevel: View {
                         .sidebarMoveActions(model: model, item: .folder(folder.id))
                         .accessibilityIdentifier("folderRow")
                         .contextMenu { FolderContextMenu(model: model, folder: folder) }
+                        .folderDropTarget(model: model, folder: folder)
                 }
             }
         }
-        .onMove { source, destination in
-            Task { await model.movePinnedItems(fromOffsets: source, toOffset: destination, in: parent) }
-        }
+        // Rows drag between Pinned, folders, the tabs section, and Favorites (#77).
+        .sidebarDropTarget(model: model, collection: .pinned(parent), items: nodes.map(\.item), isEnabled: isLive)
     }
 }
 

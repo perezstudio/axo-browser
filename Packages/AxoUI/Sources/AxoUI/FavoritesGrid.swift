@@ -115,7 +115,13 @@ private struct FavoriteTile: View {
         }
         .draggable(favorite.id.uuidString)
         .dropDestination(for: String.self) { items, _ in
-            guard let dragged = items.first.flatMap(UUID.init(uuidString:)), dragged != favorite.id else { return false }
+            guard let text = items.first else { return false }
+            // A sidebar row (#77): its tab becomes a favorite in this tile's place.
+            if case .tab(let tabID)? = SidebarDragPayload.item(from: text) {
+                Task { await model.dropTabOnFavorites(tabID, before: favorite.id) }
+                return true
+            }
+            guard let dragged = UUID(uuidString: text), dragged != favorite.id else { return false }
             Task { await drop(dragged) }
             return true
         }

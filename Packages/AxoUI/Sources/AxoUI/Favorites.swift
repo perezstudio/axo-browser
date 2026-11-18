@@ -65,11 +65,12 @@ extension BrowserModel {
         }
     }
 
-    /// Turns a favorite into a pinned tab of the current Space, keeping its page.
-    public func moveFavoriteToPinned(_ id: Favorite.ID) async {
+    /// Turns a favorite into a pinned tab of the current Space (or, with `pinned` false, a tab
+    /// in its tabs section), keeping its page.
+    public func moveFavoriteToPinned(_ id: Favorite.ID, pinned: Bool = true) async {
         guard let space else { return }
         do {
-            try await store.favorites.moveToPinned(id, in: space.id)
+            try await store.favorites.moveToTab(id, in: space.id, pinned: pinned)
             tabs = try await store.tabs(in: space.id)
             favorites.removeAll { $0.id == id }
             onTabEvent?(.opened(id))

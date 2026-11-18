@@ -8,6 +8,12 @@
 import AppKit
 import XCTest
 
+/// Where `testTheSelectedRowIsHighlighted` reads a row's shade: past the highlight's 10 pt inset,
+/// before the row's icon.
+enum SidebarHighlightProbe {
+    static let x: CGFloat = 14
+}
+
 final class AxoUITests: XCTestCase {
 
     override class func setUp() {
@@ -634,6 +640,110 @@ final class AxoUITests: XCTestCase {
         app.menuBars.menuItems["Unmute Tab"].click()
         let unmuted = NSPredicate(format: "label == 'Mute Tab'")
         XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: unmuted, evaluatedWith: speaker)], timeout: 5), .completed)
+    }
+
+    /// Dragging rows between sections (#77): a tab into Pinned and back out, into a folder, and
+    /// a favorite out of Favorites into the tabs section and into Pinned.
+    /// The selected row is highlighted, and the highlight follows a click: SwiftUI 27's
+    /// reorderable rows (tried for #77) stopped the sidebar list drawing its selection.
+    @MainActor
+    func testTheSelectedRowIsHighlighted() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        AxoUITests.openPage(page("First"), in: app)
+        XCTAssertTrue(sidebar.staticTexts["First"].waitForExistence(timeout: 10))
+        AxoUITests.openPage(page("Second"), in: app)
+        XCTAssertTrue(sidebar.staticTexts["Second"].waitForExistence(timeout: 10))
+        let window = app.windows.firstMatch
+        app.descendants(matching: .any)["sidebarAddressBar"].hover() // Away from the rows.
+
+        // Just inside the highlight's leading edge, before the row's icon.
+        func shade(of title: String) -> Double {
+            let row = sidebar.staticTexts[title].frame
+            let point = CGPoint(x: sidebar.frame.minX - window.frame.minX + SidebarHighlightProbe.x,
+                                y: row.midY - window.frame.minY)
+            let color = AxoUITests.color(at: point, in: window)
+            return (color.red + color.green + color.blue) / 3
+        }
+        let deadline = Date().addingTimeInterval(5)
+        while abs(shade(of: "Second") - shade(of: "First")) < 0.03, Date() < deadline { usleep(200_000) }
+        XCTAssertGreaterThan(abs(shade(of: "Second") - shade(of: "First")), 0.03, "The selected row, Second, is highlighted")
+
+        sidebar.staticTexts["First"].click()
+        app.descendants(matching: .any)["sidebarAddressBar"].hover()
+        let moved = Date().addingTimeInterval(5)
+        while abs(shade(of: "First") - shade(of: "Second")) < 0.03, Date() < moved { usleep(200_000) }
+        XCTAssertGreaterThan(abs(shade(of: "First") - shade(of: "Second")), 0.03, "The highlight follows the click")
+
+        let shot = XCTAttachment(screenshot: window.screenshot())
+        shot.name = "Selected row"
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+
+    @MainActor
+    func testDraggingRowsBetweenSections() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        for name in ["Alpha", "Beta", "Gamma", "Delta"] {
+            AxoUITests.openPage("data:text/html,<title>\(name)</title>", in: app)
+            XCTAssertTrue(sidebar.staticTexts[name].waitForExistence(timeout: 10))
+        }
+        let pinned = sidebar.descendants(matching: .any)["pinnedSection"]
+        // The Pinned section's identifier lands on each pinned row (replacing `tabRow`), not on a
+        // container around them, so a row is pinned when it shows but isn't a `tabRow`.
+        func isPinned(_ name: String) -> Bool {
+            sidebar.staticTexts[name].exists
+                && !sidebar.descendants(matching: .any).matching(identifier: "tabRow")
+                    .matching(NSPredicate(format: "label == %@", name)).firstMatch.exists
+        }
+        func wait(_ what: String, until condition: @escaping () -> Bool) {
+            let deadline = Date().addingTimeInterval(10)
+            while !condition(), Date() < deadline { usleep(100_000) }
+            XCTAssertTrue(condition(), what)
+        }
+
+        // Pin Alpha from the keyboard, then drag Beta onto it: it's pinned there.
+        sidebar.staticTexts["Alpha"].click()
+        app.typeKey("p", modifierFlags: [.command, .control])
+        XCTAssertTrue(pinned.waitForExistence(timeout: 5))
+        sidebar.staticTexts["Beta"].click(forDuration: 0.6, thenDragTo: sidebar.staticTexts["Alpha"])
+        wait("Beta is pinned") { isPinned("Beta") }
+
+        // And back out, onto Gamma in the tabs section.
+        sidebar.staticTexts["Beta"].click(forDuration: 0.6, thenDragTo: sidebar.staticTexts["Gamma"])
+        wait("Beta is unpinned") { !isPinned("Beta") && sidebar.staticTexts["Beta"].exists }
+
+        // Into a folder: Alpha goes into a new folder, then Beta onto the folder.
+        sidebar.staticTexts["Alpha"].click()
+        app.menuBars.menuBarItems["Tabs"].click()
+        app.menuBars.menuItems["Move to Folder"].hover()
+        app.menuBars.menuItems["New Folder…"].click()
+        let nameField = app.textFields["nameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.typeText("Work\n")
+        // By its name and item count: the Pinned section's identifier replaces `folderRow` too.
+        let folder = sidebar.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == 'Work' AND value ENDSWITH 'item' OR label == 'Work' AND value ENDSWITH 'items'")).firstMatch
+        XCTAssertTrue(folder.waitForExistence(timeout: 5))
+        sidebar.staticTexts["Beta"].click(forDuration: 0.6, thenDragTo: folder)
+        wait("Beta is in the folder") { (folder.value as? String) == "2 items" }
+
+        // A favorite out of Favorites, into the tabs section and then into Pinned.
+        sidebar.staticTexts["Gamma"].rightClick()
+        app.windows.firstMatch.menuItems["Add to Favorites"].click()
+        let tile = app.buttons["favoriteTile"]
+        XCTAssertTrue(tile.waitForExistence(timeout: 5))
+        tile.click(forDuration: 0.6, thenDragTo: sidebar.staticTexts["Delta"])
+        wait("Gamma is a tab again") { !tile.exists && sidebar.staticTexts["Gamma"].exists && !isPinned("Gamma") }
+
+        sidebar.staticTexts["Gamma"].rightClick()
+        app.windows.firstMatch.menuItems["Add to Favorites"].click()
+        XCTAssertTrue(tile.waitForExistence(timeout: 5))
+        tile.click(forDuration: 0.6, thenDragTo: folder)
+        wait("Gamma is pinned") { !tile.exists && isPinned("Gamma") }
     }
 
     /// A page that can't be reached shows Axo's Can't Connect page in its place, and Go Back
