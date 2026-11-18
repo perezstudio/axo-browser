@@ -135,14 +135,18 @@ struct TabPreviewLayer: View {
         ZStack {
             if let preview = model.tabPreview {
                 GeometryReader { geometry in
-                    // Rows report their frames in the window's coordinates, and this layer draws
-                    // from the window's top-left (it ignores the safe area), so the anchor is used
-                    // as is. Its reported origin isn't where it draws with tabs at the top (it
-                    // said 40 pt down while drawing from the top), which put the card over the tab.
+                    // Rows give their frames in the window's content view (``TabPreviewFrame``),
+                    // and this layer covers that view from its top-left corner (it ignores the
+                    // safe area), so the anchor is used as is.
                     let anchor = preview.anchor
                     TabPreviewCard(preview: preview)
                         .onGeometryChange(for: CGSize.self) { $0.size } action: { cardSize = $0 }
-                        .offset(Self.offset(for: anchor, edge: preview.edge, card: cardSize, in: geometry.size))
+                        // Placed by padding, not `.offset`: an offset moves only the drawing, so
+                        // the card's accessibility frame (what VoiceOver and UI tests see) stayed
+                        // 40 pt from where it's drawn.
+                        .padding(.leading, Self.offset(for: anchor, edge: preview.edge, card: cardSize, in: geometry.size).width)
+                        .padding(.top, Self.offset(for: anchor, edge: preview.edge, card: cardSize, in: geometry.size).height)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
                 .transition(.opacity)
                 .allowsHitTesting(false)
@@ -248,11 +252,69 @@ struct TabPreviewCard: View {
     }
 }
 
-/// A row's frame, held by reference so updating it (every frame while the sidebar scrolls)
-/// doesn't redraw the row.
+/// Where a row is, for its card (#76): read from AppKit when the card shows, in its window's
+/// content view (top-left origin), held by reference so nothing about it redraws the row.
+/// SwiftUI's `.global` frames didn't line up between the sidebar's split view column, the tab
+/// bar's scroll view, and the card's layer (a top tab's card covered the tab), while AppKit
+/// gives every view's place in the one window.
 @MainActor
 final class TabPreviewFrame {
-    var rect = CGRect.zero
+    #if os(macOS)
+    /// The row's own AppKit view, placed behind it (``View/tabPreviewAnchor(_:)``).
+    weak var view: NSView?
+    #endif
+
+    /// The row's frame in its window's content view, top-left origin; zero before it's on screen.
+    var rect: CGRect {
+        #if os(macOS)
+        Self.windowFrame(of: view)
+        #else
+        .zero
+        #endif
+    }
+
+    #if os(macOS)
+    /// `view`'s frame in its window's content view, top-left origin.
+    static func windowFrame(of view: NSView?) -> CGRect {
+        guard let view, let content = view.window?.contentView else { return .zero }
+        let frame = content.convert(view.convert(view.bounds, to: nil), from: nil)
+        return content.isFlipped ? frame : CGRect(x: frame.minX, y: content.bounds.height - frame.maxY,
+                                                   width: frame.width, height: frame.height)
+    }
+    #endif
+}
+
+#if os(macOS)
+/// An empty AppKit view behind a row that tells its ``TabPreviewFrame`` where the row is. It
+/// takes no clicks.
+private struct TabPreviewAnchorView: NSViewRepresentable {
+    let frame: TabPreviewFrame
+
+    func makeNSView(context: Context) -> NSView {
+        let view = PassThroughView()
+        frame.view = view
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        frame.view = view
+    }
+
+    private final class PassThroughView: NSView {
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    }
+}
+#endif
+
+extension View {
+    /// Lets `frame` find this row in its window when its card shows (#76).
+    func tabPreviewAnchor(_ frame: TabPreviewFrame) -> some View {
+        #if os(macOS)
+        background(TabPreviewAnchorView(frame: frame))
+        #else
+        self
+        #endif
+    }
 }
 
 /// A pinned tab's pinned page for VoiceOver (#73), when it's away from it.
