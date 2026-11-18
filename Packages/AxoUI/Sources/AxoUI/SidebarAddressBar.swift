@@ -93,7 +93,7 @@ struct SidebarAddressBar: View {
             .help(address ?? "Search or enter address")
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Address")
-            .accessibilityValue(notSecurePrefix + (address ?? ""))
+            .accessibilityValue((model.connectionIndicator?.addressPrefix ?? "") + (address ?? ""))
             .accessibilityHint(model.editsAddressInSidebar ? "Edits the address" : "Edits the address in the command bar")
             .accessibilityAddTraits(.isButton)
             .accessibilityAction { model.editAddress() }
@@ -108,9 +108,13 @@ struct SidebarAddressBar: View {
             .accessibilityIdentifier("sidebarAddressBar")
     }
 
-    /// "Not secure, " before the address for VoiceOver, on a plain-http site.
-    private var notSecurePrefix: String {
-        AddressDisplay.shown(for: model.shownPageURL)?.kind == .notSecure ? "Not secure, " : ""
+
+    /// The connection's indicator on the pill. Search terms on a secure search page keep their
+    /// magnifying glass instead, so they can't pass for a site's name; a search page that isn't
+    /// secure or private shows that instead.
+    private var pillIndicator: ConnectionIndicator? {
+        let indicator = model.connectionIndicator
+        return AddressDisplay.shown(for: model.shownPageURL)?.kind == .search && indicator == .secure ? nil : indicator
     }
 
     /// The pill: the site, the loading line, and, while hovered, the trailing buttons.
@@ -128,6 +132,14 @@ struct SidebarAddressBar: View {
         .overlay(alignment: .bottom) { LoadingLine(page: model.selectedPage) }
         .clipShape(.rect(cornerRadius: FavoritesLayout.tileCornerRadius))
         .addressBarShadow(raised: isEditing)
+        // The connection's lock or chip (#96) is its own button over the leading end, outside the
+        // pill's single element, so VoiceOver and the keyboard reach it.
+        .overlay(alignment: .leading) {
+            if model.addressBarNotice == nil, let indicator = pillIndicator {
+                ConnectionButton(model: model, indicator: indicator)
+                    .padding(.leading, 10)
+            }
+        }
         // The hover buttons sit over the text's trailing end, so the site never moves.
         .overlay(alignment: .trailing) {
             if isHovering, model.shownPageURL != nil {
@@ -182,16 +194,12 @@ struct SidebarAddressBar: View {
     private var addressLabel: some View {
         let shown = AddressDisplay.shown(for: model.shownPageURL, fullAddress: showsFullAddress)
         return HStack(spacing: 5) {
-            switch shown?.kind {
-            case .notSecure?:
-                Image(systemName: "lock.slash")
-                    .foregroundStyle(.secondary)
-                    .help("Not Secure: this page's connection isn't encrypted")
-            case .search?:
+            if let indicator = pillIndicator {
+                // Room for the connection button over this end.
+                Color.clear.frame(width: indicator == .notPrivate ? 92 : 16, height: 1)
+            } else if shown?.kind == .search {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
-            default:
-                EmptyView()
             }
             Text(verbatim: shown?.text ?? "Search or enter address")
                 .foregroundStyle(shown == nil ? .secondary : .primary)

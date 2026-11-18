@@ -123,6 +123,15 @@ public final class FakePage: EnginePage {
         delegate?.pageProblemDidChange(self)
     }
 
+    /// Its connection security (#96); ``simulateSecurity(_:)`` changes it as an engine would.
+    public private(set) var security = PageSecurity()
+
+    /// Reports `security` as an engine would.
+    public func simulateSecurity(_ security: PageSecurity) {
+        self.security = security
+        delegate?.pageSecurityDidChange(self)
+    }
+
     /// Changes `problem` without reporting it, as when an engine misses a report.
     public func changeProblemQuietly(_ problem: PageProblem?) {
         self.problem = problem
@@ -190,6 +199,8 @@ public final class FakePage: EnginePage {
 
     /// Commits a navigation to `url` and tells the delegate.
     public func navigate(to url: URL, title: String) {
+        // A new page has no security until its engine reports it (#96).
+        security = PageSecurity()
         self.url = url
         self.title = title
         delegate?.pageStateDidChange(self)
@@ -392,4 +403,13 @@ public final class FakeContextMenu: PageContextMenu {
     public func lookUpSelection() { performed.append("look up") }
     public func perform(_ item: PageContextMenuItem) { performed.append("item \(item.title)") }
     public func closed(followingLink url: URL?) { closedLink = .some(url) }
+}
+
+extension PageSecurity {
+    /// A self-signed certificate ("Axo Test Site", public part only), for tests of what shows a
+    /// page's certificates.
+    public static let testCertificate: SecCertificate = {
+        let der = Data(base64Encoded: "MIICEzCCAboCCQCJOpEx6U6H7jAKBggqhkjOPQQDAjAYMRYwFAYDVQQDDA1BeG8gVGVzdCBTaXRlMB4XDTI2MTExODAyMzIxMVoXDTM2MTExNTAyMzIxMVowGDEWMBQGA1UEAwwNQXhvIFRlc3QgU2l0ZTCCAUswggEDBgcqhkjOPQIBMIH3AgEBMCwGByqGSM49AQECIQD/////AAAAAQAAAAAAAAAAAAAAAP///////////////zBbBCD/////AAAAAQAAAAAAAAAAAAAAAP///////////////AQgWsY12Ko6k+ez671VdpiGvGUdBrDMU7D2O848PifSYEsDFQDEnTYIhucEk2pmeOETnSa3gZ9+kARBBGsX0fLhLEJH+Lzm5WOkQPJ3A32BLeszoPShOUXYmMKWT+NC4v4af5uO5+tKfA+eFivOM1drMV7Oy7ZAaDe/UfUCIQD/////AAAAAP//////////vOb6racXnoTzucrC/GMlUQIBAQNCAAT9+4dE6Yfj0gxd8/wqgrDUOHrwbWhDvwE2UiibJLPfgp6Rorhum031EXSCQp/yIlb7835UO07p7/+kRsy+rQtoMAoGCCqGSM49BAMCA0cAMEQCIF8Hk+L/Sids5JlGL6c54bjHTjYqasQ9TITWrSzxpBkQAiB/1RjL/zhUspx0xMo7Rk2YkBuqTY1mMCuLiHiFF+lpzw==")!
+        return SecCertificateCreateWithData(nil, der as CFData)!
+    }()
 }

@@ -42,6 +42,10 @@ public final class BrowserModel {
     public internal(set) var peek: Peek?
     /// Pages open in mini windows (links from other apps), oldest first.
     public internal(set) var miniWindows: [MiniWindow] = []
+    /// Whether the shown page's connection details show, from the address bar's lock (#96).
+    public var isShowingConnectionInfo = false
+    /// Shows certificates in macOS's own view; tests record instead.
+    @ObservationIgnored public var showCertificates: ([SecCertificate]) -> Void = { CertificateViewer.show($0) }
     /// The hover card showing for a tab row, if any (#76, `TabPreviews.swift`).
     public internal(set) var tabPreview: TabPreview?
     /// The rows the pointer rests on, while their card is coming or showing.
@@ -824,6 +828,7 @@ public final class BrowserModel {
     /// Shows the tab with `id`, or nothing if `id` is `nil`.
     public func select(_ id: AxoCore.Tab.ID?) {
         hideTabPreview()
+        if id != selectedTabID { isShowingConnectionInfo = false }
         if id != selectedTabID, isFindBarVisible {
             closeFindBar()
         }

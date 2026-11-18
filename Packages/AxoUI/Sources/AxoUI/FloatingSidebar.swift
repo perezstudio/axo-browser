@@ -63,7 +63,7 @@ struct FloatingSidebar: View {
     /// Whether something the sidebar shows is open, so the card stays while it is (and comes in
     /// for it, when it opened from a menu): its popovers and sheets, or editing the address in it.
     static func isHolding(_ model: BrowserModel) -> Bool {
-        model.isShowingDownloads || model.isShowingSiteSettings || model.isShowingSummary
+        model.isShowingDownloads || model.isShowingSiteSettings || model.isShowingSummary || model.isShowingConnectionInfo
             || model.isCreatingSpace || model.themeEditing != nil || model.spaceToRename != nil
             || model.namingRequest != nil || model.isShowingArchive || model.pendingExtensionInstall != nil
             || model.isShowingExtensions || model.importSession != nil || model.customizationDraft != nil
