@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 36
+#define AXO_ENGINE_API_VERSION 37
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -419,6 +419,9 @@ NS_SWIFT_UI_ACTOR
 /// The page's connection security changed (`security`, `certificateChain`): a navigation, mixed
 /// content, or a certificate error.
 - (void)pageSecurityDidChange:(id<AXOPage>)page NS_SWIFT_NAME(pageSecurityDidChange(_:));
+/// The page committed an error page or a warning (Chrome's net error page or security
+/// interstitial), or a page again (`loadErrorCode`, `warning`). It comes on a later turn.
+- (void)pageErrorDidChange:(id<AXOPage>)page NS_SWIFT_NAME(pageErrorDidChange(_:));
 /// The page asked to be shown: `window.focus()` after the person clicks one of its notifications,
 /// or a service worker's `clients.focus()`, which pages can only do after something the person did;
 /// but Chrome also asks when the page enters full screen, for a media session's "raise", and when
@@ -517,6 +520,21 @@ typedef NS_ENUM(NSInteger, AXOPageSecurity) {
   /// https whose certificate has an error the person chose to visit anyway, or that ran content
   /// loaded over http.
   AXOPageSecurityBroken,
+};
+
+/// The warning Chrome shows in place of a page (a security interstitial), for the host app to
+/// show its own over it.
+typedef NS_ENUM(NSInteger, AXOPageWarning) {
+  /// No warning.
+  AXOPageWarningNone = 0,
+  /// The site's certificate isn't trusted (Chrome's "Your connection is not private").
+  AXOPageWarningCertificate,
+  /// Google Safe Browsing lists the site as deceptive (phishing).
+  AXOPageWarningDeceptiveSite,
+  /// Google Safe Browsing lists the site as harmful: malware or unwanted software.
+  AXOPageWarningHarmfulSite,
+  /// Another warning Chrome shows (a captive portal, a wrong clock, https-only mode).
+  AXOPageWarningOther,
 };
 
 /// One tab's page: a Chromium `WebContents` and its view.
@@ -625,6 +643,24 @@ NS_SWIFT_UI_ACTOR
 /// Whether the page's certificate has an error (one Chrome warned about and the person chose to
 /// visit anyway), as opposed to a page that's broken only for running content loaded over http.
 @property(nonatomic, readonly) BOOL certificateHasError;
+/// The network error of the page's last committed main-frame load (Chrome's error page shows),
+/// as Chromium's code (`net::Error`, such as -105 for a name that didn't resolve); 0 for a page
+/// that loaded, or a warning (see `warning`).
+@property(nonatomic, readonly) NSInteger loadErrorCode;
+/// Chromium's name for `loadErrorCode`, such as `ERR_NAME_NOT_RESOLVED`; nil without one.
+@property(nonatomic, readonly, nullable) NSString* loadErrorName;
+/// The address that failed to load, or the warning is about; nil without one.
+@property(nonatomic, readonly, nullable) NSURL* loadErrorURL;
+/// The warning showing in place of the page, if any.
+@property(nonatomic, readonly) AXOPageWarning warning;
+/// Whether the warning lets the person go on to the site: not for a certificate error Chrome
+/// never allows skipping (HSTS, pinning).
+@property(nonatomic, readonly) BOOL warningAllowsVisiting;
+/// Leaves the warning, as its "Back to safety" does: back to the page before, or a new tab's page.
+- (void)leaveWarning;
+/// Goes on to the site despite the warning, as its "Proceed" does; does nothing when
+/// `warningAllowsVisiting` is NO.
+- (void)visitDespiteWarning;
 /// The page's docked DevTools, or `nil` while it's closed. Show it filling the area the page had,
 /// with the page's view on top at `-devToolsPageFrameInBounds:`: DevTools draws its own divider and
 /// dock-side menu around the page, and changes the page's place as the person drags or docks it to

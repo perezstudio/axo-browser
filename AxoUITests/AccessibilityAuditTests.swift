@@ -217,6 +217,17 @@ final class AccessibilityAuditTests: XCTestCase {
         try audit(app, "tab hover card")
     }
 
+    /// Axo's Can't Connect page (#178), for a port on this Mac nothing listens on.
+    @MainActor
+    func testAuditCantConnectPage() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        AxoUITests.openPage("http://127.0.0.1:\(try AxoUITests.closedPort())/", in: app)
+        XCTAssertTrue(app.descendants(matching: .any)["pageLoadError"].waitForExistence(timeout: 15))
+        try audit(app, "Can't Connect page")
+    }
+
     /// First run's steps (#175): the welcome and setting up the first Space (nothing to import
     /// in UI testing mode's empty folder).
     @MainActor

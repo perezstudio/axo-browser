@@ -120,6 +120,9 @@ public final class WebViewPool {
     /// Called when a tab's page stops working or works again (#75), with its problem (`nil` once
     /// it works), after the tab's ``WebTabState/problem`` changed.
     public var onPageProblem: ((Tab.ID, PageProblem?) -> Void)?
+    /// Called when a tab's page shows a failed load or a warning, or neither again (#178), after
+    /// the tab's ``WebTabState/loadError`` or ``WebTabState/warning`` changed.
+    public var onPageError: ((Tab.ID) -> Void)?
     /// Called when a tab's page asks to fill the screen, or to stop (Chromium's
     /// `element.requestFullscreen()`).
     public var onPageFullscreen: ((Tab.ID, Bool) -> Void)?
@@ -389,7 +392,7 @@ public final class WebViewPool {
         while let taking = liveTab.snapshotTask { await taking.value }
         guard live[tabID] === liveTab else { return nil }
         if liveTab.snapshotVersion == liveTab.contentVersion, let snapshot = liveTab.snapshot { return snapshot }
-        guard !liveTab.page.isLoading, liveTab.state.problem == nil else { return nil }
+        guard !liveTab.page.isLoading, !liveTab.state.isCovered else { return nil }
         if isVisible(tabID) { return await PageSnapshot.capture(liveTab.page) }
         let version = liveTab.contentVersion
         liveTab.snapshotTask = Task { @MainActor in
@@ -515,7 +518,7 @@ public final class WebViewPool {
     /// page that stopped working (#75), whose picture is blank or frozen.
     private func refreshSnapshot(of liveTab: LiveTab) {
         guard liveTab.snapshotTask == nil, liveTab.snapshotVersion != liveTab.contentVersion,
-              !liveTab.page.isLoading, liveTab.state.problem == nil else { return }
+              !liveTab.page.isLoading, !liveTab.state.isCovered else { return }
         let version = liveTab.contentVersion
         liveTab.snapshotTask = Task { [weak self] in
             let snapshot = await PageSnapshot.capture(liveTab.page)
@@ -562,7 +565,7 @@ public final class WebViewPool {
         while let taking = liveTab.snapshotTask { await taking.value }
         // A page that stopped working draws nothing worth keeping (#75), so its earlier snapshot
         // stays; it loads again when it wakes.
-        if liveTab.state.problem == nil,
+        if !liveTab.state.isCovered,
            liveTab.snapshot == nil || liveTab.snapshotVersion != liveTab.contentVersion {
             let version = liveTab.contentVersion
             if let captured = await PageSnapshot.capture(liveTab.page) {
