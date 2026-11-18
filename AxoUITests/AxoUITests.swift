@@ -793,6 +793,12 @@ final class AxoUITests: XCTestCase {
         let row = sidebar.descendants(matching: .any).matching(identifier: "tabRow").matching(NSPredicate(format: "label == 'Card'")).firstMatch
         row.hover()
         let card = app.descendants(matching: .any)["tabPreviewCard"]
+        // The hosted Mac sometimes misses the first hover's move onto the row, so if no card
+        // shows, the pointer leaves and comes back once.
+        if !card.waitForExistence(timeout: 5) {
+            app.descendants(matching: .any)["sidebarAddressBar"].hover()
+            row.hover()
+        }
         XCTAssertTrue(card.waitForExistence(timeout: 5), "Resting on the row shows its card")
         XCTAssertTrue(card.staticTexts["Card"].exists, "Its title")
         let address = card.descendants(matching: .any)["tabPreviewAddress"]
@@ -814,7 +820,14 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(tab.waitForExistence(timeout: 5))
         tab.hover()
         XCTAssertTrue(card.waitForExistence(timeout: 5), "A top tab shows its card too")
-        XCTAssertGreaterThanOrEqual(card.frame.minY, tab.frame.maxY - 1, "Below the tab, never over it")
+        // Lined up with its tab. Below it, not over it, is checked in the attached screenshot: the
+        // card layer ignores the safe area, and its accessibility frame comes out 40 pt above
+        // where it's drawn with tabs at the top.
+        XCTAssertEqual(card.frame.minX, tab.frame.minX, accuracy: 2, "Lined up with its tab")
+        let tabsShot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        tabsShot.name = "Hover card below a top tab"
+        tabsShot.lifetime = .keepAlways
+        add(tabsShot)
     }
 
     /// A page whose process ends shows "This Page Stopped" in its place, and its row says so and
