@@ -22,6 +22,12 @@ struct FavoritesGrid: View {
                 }
             }
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+            // A sidebar row dropped on the grid itself, not a tile, joins at the end (#77).
+            .dropDestination(for: String.self) { items, _ in
+                guard case .tab(let tabID)? = items.first.flatMap(SidebarDragPayload.item(from:)) else { return false }
+                Task { await model.dropTabOnFavorites(tabID, before: nil) }
+                return true
+            }
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Favorites")
             .accessibilityIdentifier("favoritesGrid")
@@ -115,7 +121,13 @@ private struct FavoriteTile: View {
         }
         .draggable(favorite.id.uuidString)
         .dropDestination(for: String.self) { items, _ in
-            guard let dragged = items.first.flatMap(UUID.init(uuidString:)), dragged != favorite.id else { return false }
+            guard let text = items.first else { return false }
+            // A sidebar row (#77): its tab becomes a favorite in this tile's place.
+            if case .tab(let tabID)? = SidebarDragPayload.item(from: text) {
+                Task { await model.dropTabOnFavorites(tabID, before: favorite.id) }
+                return true
+            }
+            guard let dragged = UUID(uuidString: text), dragged != favorite.id else { return false }
             Task { await drop(dragged) }
             return true
         }

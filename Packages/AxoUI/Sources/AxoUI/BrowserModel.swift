@@ -46,6 +46,8 @@ public final class BrowserModel {
     public var isShowingConnectionInfo = false
     /// Shows certificates in macOS's own view; tests record instead.
     @ObservationIgnored public var showCertificates: ([SecCertificate]) -> Void = { CertificateViewer.show($0) }
+    /// The sidebar drop being applied, so the next waits for it (#77).
+    @ObservationIgnored var sidebarMoveTask: Task<Void, Never>?
     /// The hover card showing for a tab row, if any (#76, `TabPreviews.swift`).
     public internal(set) var tabPreview: TabPreview?
     /// The rows the pointer rests on, while their card is coming or showing.
@@ -1207,7 +1209,8 @@ public final class BrowserModel {
     /// Moves a tab or folder to the end of a folder (or the top level when `folder` is `nil`).
     /// Moving an unpinned tab pins it.
     public func move(_ item: PinnedItem, toFolder folder: Folder.ID?) async {
-        let anchor = PinnedNode.items(at: folder, in: pinnedTree).last { $0 != item }
+        // After a split's row means after its last pane, never between its panes.
+        let anchor = PinnedNode.items(at: folder, in: pinnedTree).last { $0 != item }.map(anchorAfterRow)
         await changeFolders("Axo couldn't move that.") {
             try await self.store.movePinnedItem(item, into: folder, after: anchor)
         }
@@ -1223,7 +1226,7 @@ public final class BrowserModel {
         let moving = remaining.remove(at: sourceIndex)
         let insertIndex = destination > sourceIndex ? destination - 1 : destination
         guard insertIndex != sourceIndex else { return }
-        let anchor = insertIndex == 0 ? nil : remaining[insertIndex - 1]
+        let anchor = insertIndex == 0 ? nil : anchorAfterRow(remaining[insertIndex - 1])
         await changeFolders("Axo couldn't move that.") {
             try await self.store.movePinnedItem(moving, into: parent, after: anchor)
         }

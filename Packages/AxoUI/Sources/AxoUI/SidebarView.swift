@@ -148,6 +148,8 @@ struct SidebarSections: View {
         // The Space's name, between the favorites and Pinned, styled like a tab row (#171).
         Section {
             SpaceNameRow(model: model, space: data.space, canDelete: model.spaces.count > 1)
+                // With nothing pinned there's no Pinned section to drop into: this row takes it.
+                .pinDropTarget(model: model, isEnabled: data.pinnedTree.isEmpty && data.space.id == model.space?.id)
         }
         if !data.pinnedTree.isEmpty {
             Section("Pinned") {
@@ -157,16 +159,16 @@ struct SidebarSections: View {
             .accessibilityIdentifier("pinnedSection")
         }
         Section {
-            ForEach(data.rows) { row in
-                let tab = leader(of: row)
-                SidebarTabRow(model: model, tab: tab, panes: data.splitPanes[tab.id],
-                              isSelected: data.holdsSelection(tab.id))
-                    .tag(PinnedItem.tab(tab.id))
-                    .sidebarMoveActions(model: model, item: .tab(tab.id))
+            // As pinned nodes, so one reorder container moves rows between the sections (#77).
+            ForEach(data.rows.map { PinnedNode.tab(leader(of: $0)) }) { node in
+                if case .tab(let tab) = node {
+                    SidebarTabRow(model: model, tab: tab, panes: data.splitPanes[tab.id],
+                                  isSelected: data.holdsSelection(tab.id))
+                        .tag(PinnedItem.tab(tab.id))
+                        .sidebarMoveActions(model: model, item: .tab(tab.id))
+                }
             }
-            .onMove { source, destination in
-                Task { await model.moveTabs(fromOffsets: source, toOffset: destination, pinned: false) }
-            }
+            .reorderable(collectionID: SidebarCollection.tabs)
         }
     }
 
@@ -501,12 +503,11 @@ struct PinnedLevel: View {
                         .sidebarMoveActions(model: model, item: .folder(folder.id))
                         .accessibilityIdentifier("folderRow")
                         .contextMenu { FolderContextMenu(model: model, folder: folder) }
+                        .folderDropTarget(model: model, folder: folder)
                 }
             }
         }
-        .onMove { source, destination in
-            Task { await model.movePinnedItems(fromOffsets: source, toOffset: destination, in: parent) }
-        }
+        .reorderable(collectionID: SidebarCollection.pinned(parent))
     }
 }
 
