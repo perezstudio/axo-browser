@@ -63,23 +63,31 @@ final class AxoUITests: XCTestCase {
         return app
     }
 
-    /// A port on this Mac nothing listens on (bound, then closed), so a load there is refused
-    /// without leaving the Mac.
+    /// A port on this Mac nothing listens on, so a load there is refused without leaving the
+    /// Mac. The UI test runner is sandboxed and can't listen on a port itself, so it tries random
+    /// high ports until a connection to one is refused. Where the sandbox refuses the connection
+    /// too, it can't check, and takes a random high port (a listener there is very unlikely).
     static func closedPort() throws -> UInt16 {
-        let socket = Darwin.socket(AF_INET, SOCK_STREAM, 0)
-        guard socket >= 0 else { throw XCTSkip("No socket for a closed port") }
-        defer { close(socket) }
-        var address = sockaddr_in()
-        address.sin_family = sa_family_t(AF_INET)
-        address.sin_addr.s_addr = inet_addr("127.0.0.1")
-        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
-        let bound = withUnsafeMutablePointer(to: &address) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                Darwin.bind(socket, $0, length) == 0 && getsockname(socket, $0, &length) == 0
+        for _ in 0..<50 {
+            let port = UInt16.random(in: 49_152...65_000)
+            let socket = Darwin.socket(AF_INET, SOCK_STREAM, 0)
+            guard socket >= 0 else { continue }
+            defer { close(socket) }
+            var address = sockaddr_in()
+            address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+            address.sin_family = sa_family_t(AF_INET)
+            address.sin_addr.s_addr = inet_addr("127.0.0.1")
+            address.sin_port = port.bigEndian
+            let connected = withUnsafePointer(to: &address) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                    connect(socket, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+                }
+            }
+            if connected != 0, errno == ECONNREFUSED || errno == EPERM || errno == EACCES {
+                return port
             }
         }
-        guard bound else { throw XCTSkip("No closed port") }
-        return UInt16(bigEndian: address.sin_port)
+        throw XCTSkip("No closed port")
     }
 
     /// Opens `address` in a new tab through the command bar (⌘T). It types into the command
