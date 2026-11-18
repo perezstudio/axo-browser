@@ -137,6 +137,8 @@ public struct BrowserWindow: View {
                     .disabled(model.firstRun != nil)
                     .accessibilityHidden(model.firstRun != nil)
             }
+            // A tab row's hover card (#76), over everything but first run, taking no clicks.
+            TabPreviewLayer(model: model)
             // First run (#175), over the whole window until it's done.
             if let firstRun = model.firstRun {
                 FirstRunView(model: model, firstRun: firstRun)

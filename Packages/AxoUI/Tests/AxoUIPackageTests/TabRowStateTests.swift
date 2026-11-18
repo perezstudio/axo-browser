@@ -94,27 +94,27 @@ struct TabRowStateTests {
         #expect(model.rowHoldsSelection(row), "The split's row stands for both panes")
     }
 
-    /// A pinned tab away from its pinned page names both pages in its tooltip (#73); on its
-    /// pinned page, or unpinned, only its title.
-    @Test func awayFromItsPinnedPageTheTooltipNamesBothPages() {
+    /// A pinned tab away from its pinned page names that page on its hover card (#73, #76); on
+    /// its pinned page, or unpinned, there's no note.
+    @Test func awayFromItsPinnedPageTheCardNamesThePinnedPage() throws {
         var tab = AxoCore.Tab(id: UUID(), spaceID: UUID(), url: URL(string: "https://news.example/story")!,
                               title: "A Story", sortKey: "a", isPinned: true,
                               homeURL: URL(string: "https://start.example/")!)
         #expect(tab.hasLeftHome)
-        #expect(TabRow.tooltip(for: tab) == "A Story\nPinned page: start.example")
+        #expect(TabRow.pinnedPageNote(for: tab) == "Pinned page: start.example")
         #expect(TabRow.stateDescription(isLoading: false, isDimmed: false, isAwayFromHome: tab.hasLeftHome) == "Away from pinned page")
 
         let markup = String(repeating: "<p>pond</p>", count: 100)
         var dataPage = tab
         dataPage.homeURL = URL(string: "data:text/html,\(markup)")!
-        let shown = TabRow.tooltip(for: dataPage)
+        let shown = try #require(TabRow.pinnedPageNote(for: dataPage))
         #expect(shown.count < 120, "A page without a site shows only the start of its address")
-        #expect(shown.hasPrefix("A Story\nPinned page: data:text/html,"))
+        #expect(shown.hasPrefix("Pinned page: data:text/html,"))
 
         tab.url = URL(string: "https://start.example/")!
-        #expect(TabRow.tooltip(for: tab) == "A Story", "On its pinned page")
+        #expect(TabRow.pinnedPageNote(for: tab) == nil, "On its pinned page")
         tab.isPinned = false
         tab.url = URL(string: "https://news.example/story")!
-        #expect(TabRow.tooltip(for: tab) == "A Story", "Not pinned")
+        #expect(TabRow.pinnedPageNote(for: tab) == nil, "Not pinned")
     }
 }

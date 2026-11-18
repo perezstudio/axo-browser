@@ -18,7 +18,10 @@ extension WebKitSuites {
             // Only a guard against hangs: other tests' web views share the main thread, so a load can
             // take many seconds on a busy machine.
             let deadline = ContinuousClock.now + .seconds(60)
-            while webView.isLoading || webView.title != "Video" {
+            // The title, not the end of loading: on CI's virtual Mac the page stays loading while
+            // its video does, which can be never there. The script below waits for the video
+            // itself, with its own limit.
+            while webView.title != "Video" {
                 try #require(ContinuousClock.now < deadline, "The page didn't load")
                 try await Task.sleep(for: .milliseconds(25))
             }

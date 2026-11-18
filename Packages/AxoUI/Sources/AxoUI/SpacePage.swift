@@ -43,6 +43,13 @@ struct SpacePage: View {
             }
         }
         .focused(focusedList, equals: space.id)
+        // No hover card (#76), nor its picture, while the rows move under the pointer.
+        .onScrollPhaseChange { _, phase in
+            // A hidden page's scrolling stopping still counts, so the flag can't stick.
+            if isShown || !phase.isScrolling { model.setSidebarScrolling(phase.isScrolling) }
+        }
+        // Switching to tabs at the top mid-scroll mustn't leave the flag set either.
+        .onDisappear { if isShown { model.setSidebarScrolling(false) } }
         // The shown page's list is the sidebar UI tests and VoiceOver find, as before the pages.
         .accessibilityIdentifier(isShown ? "sidebar" : "")
         // Named here rather than by the split view's column, so the floating sidebar's copy

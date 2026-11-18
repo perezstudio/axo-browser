@@ -269,6 +269,7 @@ public final class WebViewPool {
         // The page live under another ID (adopted under a new one) moves, without closing.
         for (otherID, other) in live where other.page === page {
             other.snapshotTask?.cancel()
+            other.snapshotTask = nil
             live[otherID] = nil
             awaitingAdoption[otherID] = nil
         }
@@ -373,6 +374,36 @@ public final class WebViewPool {
     /// capture one.
     public func snapshot(for tabID: Tab.ID) -> Data? {
         hibernated[tabID]?.snapshot
+    }
+
+    /// A picture of the tab's page for its hover preview card (#76), as JPEG: a hibernated tab's
+    /// snapshot, or a live page's current one. A hidden page whose snapshot is out of date is
+    /// snapshotted now, and the snapshot kept, for when it hibernates. A page showing is pictured
+    /// without keeping it, so hiding it still takes the snapshot hibernation uses, with whatever
+    /// changed since. A page that's loading or stopped working (#75) offers nothing rather than a
+    /// picture of the page before (as hibernation never keeps one). A tab with no page has none:
+    /// no page is ever made just for a picture.
+    public func previewSnapshot(for tabID: Tab.ID) async -> Data? {
+        if let hibernated = hibernated[tabID] { return hibernated.snapshot }
+        guard let liveTab = live[tabID] else { return nil }
+        while let taking = liveTab.snapshotTask { await taking.value }
+        guard live[tabID] === liveTab else { return nil }
+        if liveTab.snapshotVersion == liveTab.contentVersion, let snapshot = liveTab.snapshot { return snapshot }
+        guard !liveTab.page.isLoading, liveTab.state.problem == nil else { return nil }
+        if isVisible(tabID) { return await PageSnapshot.capture(liveTab.page) }
+        let version = liveTab.contentVersion
+        liveTab.snapshotTask = Task { @MainActor in
+            let captured = await PageSnapshot.capture(liveTab.page)
+            // Whoever cancelled it cleared the handle, which may be a newer capture's by now.
+            guard !Task.isCancelled else { return }
+            liveTab.snapshotTask = nil
+            if let captured {
+                liveTab.snapshot = captured
+                liveTab.snapshotVersion = version
+            }
+        }
+        while let taking = liveTab.snapshotTask { await taking.value }
+        return liveTab.snapshotVersion == version ? liveTab.snapshot : nil
     }
 
     /// The IDs of every tab with a live page.
@@ -488,8 +519,9 @@ public final class WebViewPool {
         let version = liveTab.contentVersion
         liveTab.snapshotTask = Task { [weak self] in
             let snapshot = await PageSnapshot.capture(liveTab.page)
-            liveTab.snapshotTask = nil
+            // Whoever cancelled it cleared the handle, which may be a newer capture's by now.
             guard !Task.isCancelled else { return }
+            liveTab.snapshotTask = nil
             if let snapshot {
                 liveTab.snapshot = snapshot
                 liveTab.snapshotVersion = version
@@ -822,7 +854,10 @@ extension WebViewPool: WebEngineDelegate {
         guard let tabID = tabID(of: page) else { return }
         // The engine already closed the page; forget it without closing it again.
         awaitingAdoption[tabID] = nil
-        live.removeValue(forKey: tabID)?.snapshotTask?.cancel()
+        if let removed = live.removeValue(forKey: tabID) {
+            removed.snapshotTask?.cancel()
+            removed.snapshotTask = nil
+        }
         hibernated.removeValue(forKey: tabID)?.kept?.page.delegate = nil
         visibleCounts[tabID] = nil
         onEngineClosedTab?(tabID)

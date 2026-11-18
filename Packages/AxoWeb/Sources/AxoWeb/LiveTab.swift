@@ -67,6 +67,7 @@ final class LiveTab: EnginePageDelegate {
     /// Stops the page and detaches it so it can be deallocated.
     func tearDown() {
         snapshotTask?.cancel()
+        snapshotTask = nil
         colorsTask?.cancel()
         page.delegate = nil
         page.close()
