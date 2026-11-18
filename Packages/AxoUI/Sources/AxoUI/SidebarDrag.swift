@@ -158,6 +158,18 @@ extension View {
     }
 }
 
+extension View {
+    /// Lets a tab's row take a drop onto itself (#77): a row from elsewhere, or a favorite,
+    /// lands just before it in its section. The section's insert only takes drops between rows.
+    func sidebarRowDropTarget(model: BrowserModel, collection: SidebarCollection, item: PinnedItem,
+                              isEnabled: Bool) -> some View {
+        dropDestination(for: String.self, isEnabled: isEnabled) { texts, _ in
+            guard let text = texts.first, SidebarDragPayload.item(from: text) != item else { return }
+            Task { await model.receiveSidebarDrop(text, to: collection, before: item) }
+        }
+    }
+}
+
 extension DynamicViewContent {
     /// Makes one section's rows (a pinned level or the tabs section) reorderable, and lets it
     /// take rows dragged from the other sections and favorites dropped in (#77), at the drop

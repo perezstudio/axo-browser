@@ -169,6 +169,7 @@ struct SidebarSections: View {
                               isSelected: data.holdsSelection(tab.id))
                     .tag(PinnedItem.tab(tab.id))
                     .sidebarDraggable(.tab(tab.id), isEnabled: isLive)
+                    .sidebarRowDropTarget(model: model, collection: .tabs, item: .tab(tab.id), isEnabled: isLive)
                     .sidebarMoveActions(model: model, item: .tab(tab.id))
             }
             // Rows drag between Pinned, folders, the tabs section, and Favorites (#77).
@@ -488,6 +489,7 @@ struct PinnedLevel: View {
                               isSelected: selectedTabID.map { holdsSelection(tab, $0) } ?? false)
                     .tag(PinnedItem.tab(tab.id))
                     .sidebarDraggable(.tab(tab.id), isEnabled: isLive)
+                    .sidebarRowDropTarget(model: model, collection: .pinned(parent), item: .tab(tab.id), isEnabled: isLive)
                     .sidebarMoveActions(model: model, item: .tab(tab.id))
             case .folder(let folder, let children):
                 DisclosureGroup(isExpanded: Binding(
