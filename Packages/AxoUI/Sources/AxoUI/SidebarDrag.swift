@@ -178,12 +178,7 @@ extension DynamicViewContent {
     /// the selected row.
     func sidebarDropTarget(model: BrowserModel, collection: SidebarCollection, items: [PinnedItem],
                            isEnabled: Bool) -> some DynamicViewContent {
-        onMove(perform: isEnabled ? { source, destination in
-            let moving = source.compactMap { items.indices.contains($0) ? items[$0] : nil }
-            let before = SidebarDrop.target(before: destination, in: items, moving: moving)
-            Task { await model.moveSidebarItems(moving, to: collection, before: before) }
-        } : nil)
-        .onInsert(of: [.utf8PlainText]) { index, providers in
+        onInsert(of: [.utf8PlainText]) { index, providers in
             guard isEnabled else { return }
             let before = SidebarDrop.target(before: index, in: items, moving: [])
             for provider in providers {
