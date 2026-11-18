@@ -45,6 +45,7 @@ final class LiveTab: EnginePageDelegate {
         syncState()
         state.media = page.media
         state.problem = page.problem
+        state.security = page.security
     }
 
     /// Copies the page's state into ``state``, reporting URL and title changes to the pool.
@@ -56,7 +57,13 @@ final class LiveTab: EnginePageDelegate {
         let url = page.url
         let title = page.title
         guard url != state.url || title != state.title else { return }
-        if url != state.url { contentVersion += 1 }
+        if url != state.url {
+            contentVersion += 1
+            // A new address's security comes with it (none until its page commits), never the
+            // old page's lock (#96).
+            let security = page.security
+            if state.security != security { state.security = security }
+        }
         state.url = url
         state.title = title
         if let url {
@@ -99,6 +106,11 @@ final class LiveTab: EnginePageDelegate {
         // Muting changed by the engine itself (an extension, say) lasts like the person's.
         if media.isMuted != state.media.isMuted { pool?.pageChangedMuting(media.isMuted, tabID: tabID) }
         state.media = media
+    }
+
+    func pageSecurityDidChange(_ page: any EnginePage) {
+        let security = page.security
+        if state.security != security { state.security = security }
     }
 
     func pageProblemDidChange(_ page: any EnginePage) {

@@ -34,6 +34,8 @@ public final class WebTabState {
     /// Whether the page stopped working, and why (#75), for its tab's row and the page's place;
     /// `nil` while it works.
     public internal(set) var problem: PageProblem?
+    /// How secure the page's connection is, and its certificates (#96), for the address bar.
+    public internal(set) var security = PageSecurity()
 
     init() {}
 }

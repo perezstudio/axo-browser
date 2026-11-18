@@ -300,6 +300,17 @@ public final class FakePage: NSObject, AXOPage {
     public func waitForResponse() {
         waitsForResponse += 1
     }
+    /// Connection security (#96); ``simulateSecurity(_:certificates:)`` reports a change.
+    public private(set) var security: AXOPageSecurity = .none
+    public private(set) var certificateChain: [Any] = []
+    public private(set) var certificateHasError = false
+    public func simulateSecurity(_ security: AXOPageSecurity, certificates: [SecCertificate] = [],
+                                 certificateHasError: Bool = false) {
+        self.security = security
+        certificateChain = certificates
+        self.certificateHasError = certificateHasError
+        delegate?.pageSecurityDidChange?(self)
+    }
     public var devToolsPageWidth: CGFloat = 600
     public private(set) var devToolsLayoutBounds: [NSRect] = []
     public func devToolsPageFrame(inBounds bounds: NSRect) -> NSRect {

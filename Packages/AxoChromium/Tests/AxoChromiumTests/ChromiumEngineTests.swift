@@ -444,6 +444,41 @@ struct ChromiumEngineTests {
         #expect(pool.state(for: tab.id)?.problem == nil)
     }
 
+    @Test func connectionSecurityAndCertificatesReachTheTab() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine)
+        let tab = Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial)
+        pool.page(for: tab, profileID: profileID)
+        let fake = try #require(FakePage.made.first)
+
+        fake.url = URL(string: "https://bank.example/")!
+        fake.simulateSecurity(.broken, certificates: [Self.testCertificate], certificateHasError: true)
+        #expect(pool.state(for: tab.id)?.security
+                == PageSecurity(level: .broken, certificates: [Self.testCertificate], hasCertificateError: true))
+        fake.simulateSecurity(.broken, certificates: [Self.testCertificate])
+        #expect(pool.state(for: tab.id)?.security.hasCertificateError == false, "Broken for http content only")
+        fake.simulateSecurity(.secure, certificates: [Self.testCertificate])
+        #expect(pool.state(for: tab.id)?.security.level == .secure)
+        fake.simulateSecurity(.notSecure)
+        #expect(pool.state(for: tab.id)?.security == PageSecurity(level: .notSecure))
+        // A page with nothing to show passes on no certificates, whatever the engine sent.
+        fake.simulateSecurity(.none, certificates: [Self.testCertificate])
+        #expect(pool.state(for: tab.id)?.security == PageSecurity())
+        // Chrome calls a data: page not secure; it isn't on the web, so there's nothing to show.
+        fake.url = URL(string: "data:text/html,hi")!
+        fake.simulateSecurity(.notSecure)
+        #expect(pool.state(for: tab.id)?.security == PageSecurity())
+    }
+
+    /// A self-signed certificate ("Axo Test Site", public part only), as the engine would hand
+    /// over.
+    static let testCertificate: SecCertificate = {
+        SecCertificateCreateWithData(nil, Data(base64Encoded: "MIICEzCCAboCCQCJOpEx6U6H7jAKBggqhkjOPQQDAjAYMRYwFAYDVQQDDA1BeG8gVGVzdCBTaXRlMB4XDTI2MTExODAyMzIxMVoXDTM2MTExNTAyMzIxMVowGDEWMBQGA1UEAwwNQXhvIFRlc3QgU2l0ZTCCAUswggEDBgcqhkjOPQIBMIH3AgEBMCwGByqGSM49AQECIQD/////AAAAAQAAAAAAAAAAAAAAAP///////////////zBbBCD/////AAAAAQAAAAAAAAAAAAAAAP///////////////AQgWsY12Ko6k+ez671VdpiGvGUdBrDMU7D2O848PifSYEsDFQDEnTYIhucEk2pmeOETnSa3gZ9+kARBBGsX0fLhLEJH+Lzm5WOkQPJ3A32BLeszoPShOUXYmMKWT+NC4v4af5uO5+tKfA+eFivOM1drMV7Oy7ZAaDe/UfUCIQD/////AAAAAP//////////vOb6racXnoTzucrC/GMlUQIBAQNCAAT9+4dE6Yfj0gxd8/wqgrDUOHrwbWhDvwE2UiibJLPfgp6Rorhum031EXSCQp/yIlb7835UO07p7/+kRsy+rQtoMAoGCCqGSM49BAMCA0cAMEQCIF8Hk+L/Sids5JlGL6c54bjHTjYqasQ9TITWrSzxpBkQAiB/1RjL/zhUspx0xMo7Rk2YkBuqTY1mMCuLiHiFF+lpzw==")! as CFData)!
+    }()
+
     @Test func aPagesFilePickerReachesThePoolAsARequest() async throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)
