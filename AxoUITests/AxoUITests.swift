@@ -257,7 +257,8 @@ final class AxoUITests: XCTestCase {
         let window = app.windows.firstMatch
         let first = window.menuItems["First"]
         XCTAssertTrue(first.waitForExistence(timeout: 5))
-        let titles = window.menus.firstMatch.menuItems.allElementsBoundByIndex.map(\.title)
+        // Without the menu's own items that have no title (separators).
+        let titles = window.menus.firstMatch.menuItems.allElementsBoundByIndex.map(\.title).filter { !$0.isEmpty }
         XCTAssertEqual(titles, ["Second", "First"], "The nearest page first")
         first.click()
         XCTAssertTrue(sidebar.staticTexts["First"].waitForExistence(timeout: 10))
@@ -285,7 +286,7 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Second"].waitForExistence(timeout: 10))
         back.rightClick()
         XCTAssertTrue(window.menuItems["First"].waitForExistence(timeout: 5))
-        XCTAssertEqual(window.menus.firstMatch.menuItems.allElementsBoundByIndex.map(\.title), ["First"])
+        XCTAssertEqual(window.menus.firstMatch.menuItems.allElementsBoundByIndex.map(\.title).filter { !$0.isEmpty }, ["First"])
         app.typeKey(.escape, modifierFlags: [])
     }
 
@@ -738,8 +739,8 @@ final class AxoUITests: XCTestCase {
 
     /// Dragging rows between sections (#77): a tab into Pinned and back out, into a folder, and
     /// a favorite out of Favorites into the tabs section and into Pinned.
-    /// The selected row is highlighted (rows draw it themselves since they became reorderable,
-    /// #77, which stopped the list drawing its selection), and the highlight follows a click.
+    /// The selected row is highlighted, and the highlight follows a click: SwiftUI 27's
+    /// reorderable rows (tried for #77) stopped the sidebar list drawing its selection.
     @MainActor
     func testTheSelectedRowIsHighlighted() throws {
         let app = launchApp()

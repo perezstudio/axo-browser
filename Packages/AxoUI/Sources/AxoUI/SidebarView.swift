@@ -144,6 +144,9 @@ struct SidebarSections: View {
     let model: BrowserModel
     let data: SpaceSidebarPreview
 
+    /// Whether this is the shown Space's live page, whose rows drag and take drops (#77).
+    private var isLive: Bool { data.space.id == model.space?.id }
+
     var body: some View {
         // The Space's name, between the favorites and Pinned, styled like a tab row (#171).
         Section {
@@ -154,22 +157,22 @@ struct SidebarSections: View {
         if !data.pinnedTree.isEmpty {
             Section("Pinned") {
                 PinnedLevel(model: model, nodes: data.pinnedTree, parent: nil, splitPanes: data.splitPanes,
-                            selectedTabID: data.selectedTabID)
+                            selectedTabID: data.selectedTabID, isLive: isLive)
             }
             .accessibilityIdentifier("pinnedSection")
         }
         Section {
             // As pinned nodes, so one reorder container moves rows between the sections (#77).
-            ForEach(data.rows.map { PinnedNode.tab(leader(of: $0)) }) { node in
-                if case .tab(let tab) = node {
-                    SidebarTabRow(model: model, tab: tab, panes: data.splitPanes[tab.id],
-                                  isSelected: data.holdsSelection(tab.id))
-                        .tag(PinnedItem.tab(tab.id))
-                        .sidebarSelectionHighlight(data.holdsSelection(tab.id) && model.selectedFolderID == nil)
-                        .sidebarMoveActions(model: model, item: .tab(tab.id))
-                }
+            let rowTabs = data.rows.map(leader(of:))
+            ForEach(rowTabs) { tab in
+                SidebarTabRow(model: model, tab: tab, panes: data.splitPanes[tab.id],
+                              isSelected: data.holdsSelection(tab.id))
+                    .tag(PinnedItem.tab(tab.id))
+                    .sidebarDraggable(.tab(tab.id), isEnabled: isLive)
+                    .sidebarMoveActions(model: model, item: .tab(tab.id))
             }
-            .reorderable(collectionID: SidebarCollection.tabs)
+            // Rows drag between Pinned, folders, the tabs section, and Favorites (#77).
+            .sidebarDropTarget(model: model, collection: .tabs, items: rowTabs.map { .tab($0.id) }, isEnabled: isLive)
         }
     }
 
@@ -460,27 +463,6 @@ struct TabContextMenu: View {
     }
 }
 
-extension View {
-    /// Draws the selected row's highlight. With `.reorderable` rows (#77), the sidebar list
-    /// still selects but no longer draws its selection, so rows draw it themselves: the
-    /// rounded, inset fill the list drew, in the sidebar's own color scheme (a Space's dark
-    /// theme gets a light fill).
-    func sidebarSelectionHighlight(_ isSelected: Bool) -> some View {
-        listRowBackground(
-            RoundedRectangle(cornerRadius: SidebarSelection.cornerRadius)
-                .fill(isSelected ? AnyShapeStyle(.primary.opacity(SidebarSelection.opacity)) : AnyShapeStyle(.clear))
-                .padding(.horizontal, SidebarSelection.inset)
-        )
-    }
-}
-
-/// The selected sidebar row's highlight, as the list drew it before rows became reorderable.
-enum SidebarSelection {
-    static let cornerRadius: CGFloat = 6
-    static let inset: CGFloat = 10
-    static let opacity: Double = 0.1
-}
-
 /// One level of the pinned section: folders (expandable) and pinned tabs, reorderable.
 struct PinnedLevel: View {
     let model: BrowserModel
@@ -490,6 +472,8 @@ struct PinnedLevel: View {
     var splitPanes: [AxoCore.Tab.ID: [AxoCore.Tab]] = [:]
     /// The tab the page's Space shows, whose row (or split's row) holds the selection.
     var selectedTabID: AxoCore.Tab.ID?
+    /// Whether this is the shown Space's live page, whose rows drag and take drops (#77).
+    var isLive = false
 
     /// Whether `tab`'s row holds the selection: it's the selected tab, or its split has it.
     private func holdsSelection(_ tab: AxoCore.Tab, _ selected: AxoCore.Tab.ID) -> Bool {
@@ -500,10 +484,10 @@ struct PinnedLevel: View {
         ForEach(nodes) { node in
             switch node {
             case .tab(let tab):
-                let isSelected = selectedTabID.map { holdsSelection(tab, $0) } ?? false
-                SidebarTabRow(model: model, tab: tab, panes: splitPanes[tab.id], isSelected: isSelected)
+                SidebarTabRow(model: model, tab: tab, panes: splitPanes[tab.id],
+                              isSelected: selectedTabID.map { holdsSelection(tab, $0) } ?? false)
                     .tag(PinnedItem.tab(tab.id))
-                    .sidebarSelectionHighlight(isSelected && model.selectedFolderID == nil)
+                    .sidebarDraggable(.tab(tab.id), isEnabled: isLive)
                     .sidebarMoveActions(model: model, item: .tab(tab.id))
             case .folder(let folder, let children):
                 DisclosureGroup(isExpanded: Binding(
@@ -512,12 +496,12 @@ struct PinnedLevel: View {
                 )) {
                     // Type-erased because the view contains itself.
                     AnyView(PinnedLevel(model: model, nodes: children, parent: folder.id, splitPanes: splitPanes,
-                                        selectedTabID: selectedTabID))
+                                        selectedTabID: selectedTabID, isLive: isLive))
                 } label: {
                     Label(folder.name, systemImage: folder.isExpanded ? "folder" : "folder.fill")
                         .lineLimit(1)
                         .tag(PinnedItem.folder(folder.id))
-                        .sidebarSelectionHighlight(model.selectedFolderID == folder.id)
+                        .sidebarDraggable(.folder(folder.id), isEnabled: isLive)
                         // The name is the label, so the value can add the item count.
                         .accessibilityLabel(folder.name)
                         .accessibilityValue(children.count == 1 ? "1 item" : "\(children.count) items")
@@ -531,7 +515,8 @@ struct PinnedLevel: View {
                 }
             }
         }
-        .reorderable(collectionID: SidebarCollection.pinned(parent))
+        // Rows drag between Pinned, folders, the tabs section, and Favorites (#77).
+        .sidebarDropTarget(model: model, collection: .pinned(parent), items: nodes.map(\.item), isEnabled: isLive)
     }
 }
 

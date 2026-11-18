@@ -8,23 +8,6 @@ nonisolated public enum SidebarCollection: Hashable, Sendable {
     case tabs
 }
 
-/// What a sidebar row's drag carries (#77): its item, and as text (`tab:<id>` or
-/// `folder:<id>`) for views that take text, such as Favorites' tiles.
-nonisolated struct SidebarDragItem: Transferable, Identifiable, Sendable {
-    let id: PinnedItem
-
-    static var transferRepresentation: some TransferRepresentation {
-        ProxyRepresentation(exporting: \SidebarDragItem.text)
-    }
-
-    var text: String {
-        switch id {
-        case .tab(let tabID): "tab:\(tabID.uuidString)"
-        case .folder(let folderID): "folder:\(folderID.uuidString)"
-        }
-    }
-}
-
 extension BrowserModel {
     /// Moves rows where a drag put them (#77): into a level of the pinned section (pinning tabs)
     /// or the tabs section (unpinning them), before `target` or at the end. A split moves as one,
@@ -152,6 +135,14 @@ extension BrowserModel {
 /// What a sidebar row's drag carries to other views (Favorites, a folder), as text: `tab:<id>`
 /// or `folder:<id>`. A favorite's tile drags its bare ID.
 enum SidebarDragPayload {
+    /// The text a row's drag carries.
+    static func text(for item: PinnedItem) -> String {
+        switch item {
+        case .tab(let id): "tab:\(id.uuidString)"
+        case .folder(let id): "folder:\(id.uuidString)"
+        }
+    }
+
     static func item(from string: String) -> PinnedItem? {
         if string.hasPrefix("tab:") { return UUID(uuidString: String(string.dropFirst(4))).map(PinnedItem.tab) }
         if string.hasPrefix("folder:") { return UUID(uuidString: String(string.dropFirst(7))).map(PinnedItem.folder) }
@@ -160,30 +151,58 @@ enum SidebarDragPayload {
 }
 
 extension View {
-    /// Makes a sidebar list's rows draggable between its sections (#77): pinned levels, folders,
-    /// and the tabs section, in one reorder container; rows carry their ID to Favorites; and a
-    /// favorite dropped in becomes a tab at the drop point.
-    func sidebarReordering(model: BrowserModel, isEnabled: Bool) -> some View {
-        reorderContainer(for: PinnedNode.self, in: SidebarCollection.self) { difference in
+    /// Makes a sidebar row draggable (#77): it carries its ID as text (``SidebarDragPayload``)
+    /// to the other sections, folders, Favorites, and the Space dots.
+    func sidebarDraggable(_ item: PinnedItem, isEnabled: Bool) -> some View {
+        itemProvider(isEnabled ? { NSItemProvider(object: SidebarDragPayload.text(for: item) as NSString) } : nil)
+    }
+}
+
+extension DynamicViewContent {
+    /// Makes one section's rows (a pinned level or the tabs section) reorderable, and lets it
+    /// take rows dragged from the other sections and favorites dropped in (#77), at the drop
+    /// point. Rows use the list's own move and insert, not SwiftUI 27's reorderable
+    /// containers: with those, the sidebar list stopped selecting rows on a click and drawing
+    /// the selected row.
+    func sidebarDropTarget(model: BrowserModel, collection: SidebarCollection, items: [PinnedItem],
+                           isEnabled: Bool) -> some DynamicViewContent {
+        onMove(perform: isEnabled ? { source, destination in
+            let moving = source.compactMap { items.indices.contains($0) ? items[$0] : nil }
+            let before = SidebarDrop.target(before: destination, in: items, moving: moving)
+            Task { await model.moveSidebarItems(moving, to: collection, before: before) }
+        } : nil)
+        .onInsert(of: [.utf8PlainText]) { index, providers in
             guard isEnabled else { return }
-            let before: PinnedItem? = switch difference.destination.position {
-            case .before(let item): item
-            case .end: nil
+            let before = SidebarDrop.target(before: index, in: items, moving: [])
+            for provider in providers {
+                _ = provider.loadTransferable(type: String.self) { result in
+                    guard let text = try? result.get() else { return }
+                    Task { @MainActor in await model.receiveSidebarDrop(text, to: collection, before: before) }
+                }
             }
-            Task { await model.moveSidebarItems(difference.sources, to: difference.destination.collectionID, before: before) }
         }
-        .dragContainer(for: SidebarDragItem.self) { (item: PinnedItem) in
-            isEnabled ? [SidebarDragItem(id: item)] : []
-        }
-        .dropDestination(for: String.self, isEnabled: isEnabled) { items, session in
-            guard let favorite = items.first.flatMap(UUID.init(uuidString:)),
-                  model.favorites.contains(where: { $0.id == favorite }) else { return }
-            let destination = session.reorderDestination(for: PinnedNode.self, in: SidebarCollection.self)
-            let before: PinnedItem? = switch destination?.position {
-            case .before(let item): item
-            default: nil
-            }
-            Task { await model.moveFavoriteToSidebar(favorite, to: destination?.collectionID ?? .tabs, before: before) }
+    }
+}
+
+/// Where a drop lands in one section of the sidebar (#77).
+enum SidebarDrop {
+    /// The row a drop at `index` goes before: the first row from `index` on that isn't being
+    /// moved (dropping a row on its own place keeps it there), or nil for the end.
+    static func target(before index: Int, in items: [PinnedItem], moving: [PinnedItem]) -> PinnedItem? {
+        guard index >= 0 else { return nil }
+        return items.dropFirst(index).first { !moving.contains($0) }
+    }
+}
+
+extension BrowserModel {
+    /// A drop into a section of the sidebar from elsewhere (#77): a row from another section
+    /// (`tab:<id>` or `folder:<id>`) moves there, and a favorite (its bare ID) becomes a tab
+    /// there. Other text is ignored.
+    func receiveSidebarDrop(_ text: String, to collection: SidebarCollection, before target: PinnedItem?) async {
+        if let item = SidebarDragPayload.item(from: text) {
+            await moveSidebarItems([item], to: collection, before: target)
+        } else if let favorite = UUID(uuidString: text), favorites.contains(where: { $0.id == favorite }) {
+            await moveFavoriteToSidebar(favorite, to: collection, before: target)
         }
     }
 }
