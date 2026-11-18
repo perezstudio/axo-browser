@@ -624,7 +624,12 @@ final class AxoUITests: XCTestCase {
         let row = sidebar.descendants(matching: .any).matching(identifier: "tabRow").matching(NSPredicate(format: "label == 'Card'")).firstMatch
         row.hover()
         let card = app.descendants(matching: .any)["tabPreviewCard"]
-        XCTAssertTrue(card.waitForExistence(timeout: 5), "Resting on the row shows its card")
+        let appeared = card.waitForExistence(timeout: 5)
+        let sidebarShot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        sidebarShot.name = "Sidebar card: row \(row.frame), card exists \(appeared), window \(app.windows.firstMatch.frame)"
+        sidebarShot.lifetime = .keepAlways
+        add(sidebarShot)
+        XCTAssertTrue(appeared, "Resting on the row shows its card")
         XCTAssertTrue(card.staticTexts["Card"].exists, "Its title")
         let address = card.descendants(matching: .any)["tabPreviewAddress"]
         XCTAssertTrue(address.exists, "Its address")
