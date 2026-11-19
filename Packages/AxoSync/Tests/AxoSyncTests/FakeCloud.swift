@@ -78,7 +78,9 @@ final class Device {
     }
 
     /// Sends local changes, then fetches everyone else's, like one round of the sync engine.
-    func sync(sendOnly: Bool = false) async throws {
+    /// Returns the names of Spaces that arrived.
+    @discardableResult
+    func sync(sendOnly: Bool = false) async throws -> [String] {
         for change in try await sync.pendingChanges() {
             if change.isDeletion {
                 await cloud.delete(change.id)
@@ -104,14 +106,16 @@ final class Device {
                 }
             }
         }
-        guard !sendOnly else { return }
-        try await fetch()
+        guard !sendOnly else { return [] }
+        return try await fetch()
     }
 
-    /// Fetches changes from the cloud since the last fetch.
-    func fetch() async throws {
+    /// Fetches changes from the cloud since the last fetch. Returns the names of Spaces that
+    /// arrived.
+    @discardableResult
+    func fetch() async throws -> [String] {
         let changes = await cloud.changes(since: position)
         position = changes.position
-        try await sync.applyRemoteChanges(saved: changes.saved, deleted: changes.deleted)
+        return try await sync.applyRemoteChanges(saved: changes.saved, deleted: changes.deleted)
     }
 }

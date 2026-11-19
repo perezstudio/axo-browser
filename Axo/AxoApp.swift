@@ -363,6 +363,7 @@ enum AppEnvironment {
             )
             iCloudSync = sync
             model.iCloudSync = sync
+            sync.onSpacesArrived = { [weak model] names in model?.spacesArrivedThroughSync(names) }
             Task { await sync.refresh() }
             model.browserImporter = BrowserImportBridge(importer: BrowserImporter(store: store, applicationSupport: otherBrowsersFolder))
             return model

@@ -118,8 +118,13 @@ public final class SyncStore: Sendable {
     /// the local change wins and will be sent, carrying the new system fields. Deletions always
     /// apply and drop any pending change to the row. Records whose parent is missing wait, and
     /// are tried again each time changes arrive.
-    public func applyRemoteChanges(saved: [StampedSyncRecord], deleted: [SyncRecordID]) async throws {
+    ///
+    /// - Returns: The names of Spaces that arrived (weren't here before), for telling the
+    ///   person; the sidebar shows them on its own.
+    @discardableResult
+    public func applyRemoteChanges(saved: [StampedSyncRecord], deleted: [SyncRecordID]) async throws -> [String] {
         try await database.writer.write { db in
+            let spacesBefore = try Set(DatabaseValue.fetchAll(db, sql: "SELECT id FROM space"))
             try db.execute(sql: "INSERT INTO syncApplying (flag) VALUES (1)")
             // A pinned tab made a favorite elsewhere, or the reverse, arrives as one record's
             // deletion and the other's save under the same ID. That deletion waits until after
@@ -151,6 +156,9 @@ public final class SyncStore: Sendable {
             }
             try Self.retryParkedRecords(db)
             try db.execute(sql: "DELETE FROM syncApplying")
+            return try Row.fetchAll(db, sql: "SELECT id, name FROM space ORDER BY name")
+                .filter { !spacesBefore.contains($0["id"] as DatabaseValue) }
+                .map { $0["name"] as String }
         }
     }
 
@@ -159,7 +167,7 @@ public final class SyncStore: Sendable {
     /// - Returns: `true` when the local change is later and should be sent again (with the
     ///   server's system fields); `false` when the server's record won and was applied here.
     public func resolveConflict(with server: StampedSyncRecord) async throws -> Bool {
-        try await applyRemoteChanges(saved: [server], deleted: [])
+        _ = try await applyRemoteChanges(saved: [server], deleted: [])
         return try await database.writer.read { db in
             try Self.pendingChange(for: server.record.id, db) != nil
         }

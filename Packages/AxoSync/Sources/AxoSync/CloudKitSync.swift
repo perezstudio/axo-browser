@@ -4,6 +4,42 @@ import os
 import Security
 import Synchronization
 
+/// Why sync stopped or failed, in terms the iCloud pane can act on.
+public enum SyncProblem: Equatable, Sendable {
+    /// No iCloud account is signed in (or it needs signing in again).
+    case signedOut
+    /// The person's iCloud storage is full.
+    case storageFull
+    /// Anything else, with CloudKit's error code and description for Show Details.
+    case other(code: Int, description: String)
+
+    /// The problem an error from CloudKit stands for. Partial failures count as storage full
+    /// if any item failed for that, and as signed out if any failed for that.
+    public static func from(_ error: any Error) -> SyncProblem {
+        guard let error = error as? CKError else {
+            return .other(code: (error as NSError).code, description: error.localizedDescription)
+        }
+        switch error.code {
+        case .quotaExceeded: return .storageFull
+        case .notAuthenticated: return .signedOut
+        case .partialFailure:
+            let codes = (error.partialErrorsByItemID ?? [:]).values.compactMap { ($0 as? CKError)?.code }
+            if codes.contains(.quotaExceeded) { return .storageFull }
+            if codes.contains(.notAuthenticated) { return .signedOut }
+            return .other(code: error.errorCode, description: error.localizedDescription)
+        default:
+            return .other(code: error.errorCode, description: error.localizedDescription)
+        }
+    }
+
+    /// Whether the sync engine retries this on its own (the network, the server being busy),
+    /// so it's worth showing only if it lasts.
+    public var isTransient: Bool {
+        guard case .other(let code, _) = self, let ckCode = CKError.Code(rawValue: code) else { return false }
+        return [.networkUnavailable, .networkFailure, .serviceUnavailable, .requestRateLimited, .zoneBusy].contains(ckCode)
+    }
+}
+
 /// Syncs Axo's sidebar through the person's private iCloud database with `CKSyncEngine`.
 ///
 /// Records live in one zone (``zoneName``). The engine decides when to send and fetch; this
@@ -28,13 +64,26 @@ public final class CloudKitSync: CKSyncEngineDelegate {
     /// Called on the main actor after each fetch or send finishes, with the time, for showing
     /// when Axo last synced.
     private let onSynced: @MainActor @Sendable (Date) -> Void
+    /// Called on the main actor when a send fails for a reason the person may need to act on
+    /// (storage full, signed out), for the iCloud pane.
+    private let onProblem: @MainActor @Sendable (SyncProblem) -> Void
+    /// Called on the main actor with the names of Spaces that arrived from iCloud.
+    private let onSpacesArrived: @MainActor @Sendable ([String]) -> Void
 
     /// Creates a sync over `database`, usually `CKContainer(identifier:).privateCloudDatabase`.
     /// Call ``start()`` to begin.
-    public init(store: SyncStore, database: CKDatabase, onSynced: @escaping @MainActor @Sendable (Date) -> Void = { _ in }) {
+    public init(
+        store: SyncStore,
+        database: CKDatabase,
+        onSynced: @escaping @MainActor @Sendable (Date) -> Void = { _ in },
+        onProblem: @escaping @MainActor @Sendable (SyncProblem) -> Void = { _ in },
+        onSpacesArrived: @escaping @MainActor @Sendable ([String]) -> Void = { _ in }
+    ) {
         self.store = store
         self.database = database
         self.onSynced = onSynced
+        self.onProblem = onProblem
+        self.onSpacesArrived = onSpacesArrived
     }
 
     deinit {
@@ -157,7 +206,8 @@ public final class CloudKitSync: CKSyncEngineDelegate {
             case .fetchedRecordZoneChanges(let changes):
                 let saved = changes.modifications.compactMap { Self.stampedRecord(from: $0.record) }
                 let deleted = changes.deletions.compactMap { Self.syncRecordID(recordID: $0.recordID) }
-                try await store.applyRemoteChanges(saved: saved, deleted: deleted)
+                let arrived = try await store.applyRemoteChanges(saved: saved, deleted: deleted)
+                if !arrived.isEmpty { await onSpacesArrived(arrived) }
             case .sentRecordZoneChanges(let sent):
                 try await handleSentChanges(sent, syncEngine: syncEngine)
             case .didFetchChanges:
@@ -232,8 +282,11 @@ public final class CloudKitSync: CKSyncEngineDelegate {
                 syncEngine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: Self.zoneID))])
                 syncEngine.state.add(pendingRecordZoneChanges: [.saveRecord(recordID)])
             default:
-                // The engine retries network and account problems on its own.
+                // The engine retries network and account problems on its own; storage full and
+                // signed out need the person, so the iCloud pane says so.
                 logger.error("Couldn't save \(id): \(failure.error.localizedDescription)")
+                let problem = SyncProblem.from(failure.error)
+                if !problem.isTransient { await onProblem(problem) }
             }
         }
         // A row that changed again while its earlier change was being sent still needs sending.

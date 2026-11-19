@@ -53,6 +53,23 @@ struct CloudKitMappingTests {
         #expect(CloudKitSync.stampedRecord(from: elsewhere) == nil)
     }
 
+    /// What the iCloud pane shows for CloudKit's errors (#174).
+    @Test func syncProblemsSayWhatThePersonCanDo() {
+        #expect(SyncProblem.from(CKError(.quotaExceeded)) == .storageFull)
+        #expect(SyncProblem.from(CKError(.notAuthenticated)) == .signedOut)
+        let recordID = CKRecord.ID(recordName: "Tab.x")
+        let partial = CKError(.partialFailure, userInfo: [CKPartialErrorsByItemIDKey: [recordID: CKError(.quotaExceeded)]])
+        #expect(SyncProblem.from(partial) == .storageFull)
+        guard case .other(let code, _) = SyncProblem.from(CKError(.serverRejectedRequest)) else {
+            Issue.record("Expected another problem")
+            return
+        }
+        #expect(code == CKError.Code.serverRejectedRequest.rawValue)
+        #expect(!SyncProblem.from(CKError(.serverRejectedRequest)).isTransient)
+        #expect(SyncProblem.from(CKError(.networkUnavailable)).isTransient)
+        #expect(!SyncProblem.storageFull.isTransient)
+    }
+
     @Test func unsignedBuildsDontSync() {
         // Test runners aren't signed with Axo's iCloud entitlement.
         #expect(!CloudKitSync.isAvailable(containerIdentifier: "iCloud.com.perezstudio.Axo"))
