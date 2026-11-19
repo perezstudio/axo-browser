@@ -235,6 +235,19 @@ public final class WebKitPage: NSObject, EnginePage {
     }
 
     public func goBack() { webView.goBack() }
+
+    public var backHistory: [HistoryEntry] {
+        webView.backForwardList.backList.reversed().map { HistoryEntry(title: $0.title ?? "", url: $0.url) }
+    }
+
+    public var forwardHistory: [HistoryEntry] {
+        webView.backForwardList.forwardList.map { HistoryEntry(title: $0.title ?? "", url: $0.url) }
+    }
+
+    public func goToHistoryOffset(_ offset: Int) {
+        guard let item = webView.backForwardList.item(at: offset), offset != 0 else { return }
+        webView.go(to: item)
+    }
     public func goForward() { webView.goForward() }
     public func reload() { webView.reload() }
     public func stopLoading() { webView.stopLoading() }

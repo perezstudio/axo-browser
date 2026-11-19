@@ -206,6 +206,14 @@ public protocol EnginePage: AnyObject {
     /// Tries the failed load again (Try Again): Chromium reloads its error page's entry, which
     /// tries the original request again; others load the failed address.
     func retryFailedLoad()
+
+    /// The pages Back would go to, the nearest first, for Back's history menu (#112).
+    var backHistory: [HistoryEntry] { get }
+    /// The pages Forward would go to, the nearest first.
+    var forwardHistory: [HistoryEntry] { get }
+    /// Goes `offset` entries back (negative) or forward (positive) at once. Does nothing out of
+    /// range.
+    func goToHistoryOffset(_ offset: Int)
 }
 
 extension EnginePage {
@@ -229,6 +237,9 @@ extension EnginePage {
     public func retryFailedLoad() {
         if let url = loadError?.url { load(url) }
     }
+    public var backHistory: [HistoryEntry] { [] }
+    public var forwardHistory: [HistoryEntry] { [] }
+    public func goToHistoryOffset(_ offset: Int) {}
     public func discard() -> Bool { false }
     public func loadIfDiscarded() {}
     public var isDiscarded: Bool { false }
@@ -265,6 +276,17 @@ public struct PageSecurity: Equatable, @unchecked Sendable {
         self.level = level
         self.certificates = certificates
         self.hasCertificateError = hasCertificateError
+    }
+}
+
+/// One page in a tab's back or forward history (#112).
+public struct HistoryEntry: Hashable, Sendable {
+    public var title: String
+    public var url: URL
+
+    public init(title: String, url: URL) {
+        self.title = title
+        self.url = url
     }
 }
 

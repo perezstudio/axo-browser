@@ -233,6 +233,62 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(app.windows.firstMatch.waitForNonExistence(timeout: 5))
     }
 
+    /// Back's history menu (#112): after three pages in one tab, right-clicking Back lists the
+    /// earlier pages, nearest first, and choosing the farthest goes two back at once; Forward's
+    /// menu then lists the later pages and jumps to one. Holding a button (or VoiceOver's Show
+    /// History action) for the same pages in a popover is checked by hand: XCUITest's press
+    /// doesn't reach the button's hold, and it can't run named actions.
+    @MainActor
+    func testBackHistoryMenuJumpsTwoBack() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        AxoUITests.openPage(page("First"), in: app)
+        XCTAssertTrue(sidebar.staticTexts["First"].waitForExistence(timeout: 10))
+        for title in ["Second", "Third"] {
+            app.typeKey("l", modifierFlags: .command)
+            app.typeText(page(title) + "\n")
+            XCTAssertTrue(sidebar.staticTexts[title].waitForExistence(timeout: 10))
+        }
+
+        let back = app.buttons["backButton"]
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: back)
+        waitForExpectations(timeout: 10)
+        back.rightClick()
+        let window = app.windows.firstMatch
+        let first = window.menuItems["First"]
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        // Without the menu's own items that have no title (separators).
+        let titles = window.menus.firstMatch.menuItems.allElementsBoundByIndex.map(\.title).filter { !$0.isEmpty }
+        XCTAssertEqual(titles, ["Second", "First"], "The nearest page first")
+        first.click()
+        XCTAssertTrue(sidebar.staticTexts["First"].waitForExistence(timeout: 10))
+
+        let forward = app.buttons["forwardButton"]
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: forward)
+        waitForExpectations(timeout: 10)
+        forward.rightClick()
+        XCTAssertTrue(window.menuItems["Second"].waitForExistence(timeout: 5))
+        XCTAssertTrue(window.menuItems["Third"].exists)
+        app.typeKey(.escape, modifierFlags: [])
+
+        // Forward's menu goes straight to a later page. (Holding the button for the same pages
+        // in a popover is checked by hand: XCUITest's press doesn't reach the button's hold.)
+        forward.rightClick()
+        let third = window.menuItems["Third"]
+        XCTAssertTrue(third.waitForExistence(timeout: 5))
+        third.click()
+        XCTAssertTrue(sidebar.staticTexts["Third"].waitForExistence(timeout: 10))
+
+        // A plain click still goes one page, and the menu reads the history afresh.
+        back.click()
+        XCTAssertTrue(sidebar.staticTexts["Second"].waitForExistence(timeout: 10))
+        back.rightClick()
+        XCTAssertTrue(window.menuItems["First"].waitForExistence(timeout: 5))
+        XCTAssertEqual(window.menus.firstMatch.menuItems.allElementsBoundByIndex.map(\.title).filter { !$0.isEmpty }, ["First"])
+        app.typeKey(.escape, modifierFlags: [])
+    }
+
     /// New Tab (⌘T; the sidebar's top row has no button for it, as on the board, #67) and a
     /// second tab: the sidebar lists both, and selecting one shows it.
     @MainActor
@@ -705,15 +761,24 @@ final class AxoUITests: XCTestCase {
             XCTAssertTrue(condition(), what)
         }
 
+        // Before each drag the pointer leaves the rows and the dragged row must take clicks: the
+        // previous drag leaves the pointer on a row, whose hover card (#76) can show meanwhile.
+        func drag(_ source: XCUIElement, to target: XCUIElement) {
+            app.descendants(matching: .any)["sidebarAddressBar"].hover()
+            let deadline = Date().addingTimeInterval(5)
+            while !source.isHittable, Date() < deadline { usleep(100_000) }
+            source.click(forDuration: 0.6, thenDragTo: target)
+        }
+
         // Pin Alpha from the keyboard, then drag Beta onto it: it's pinned there.
         sidebar.staticTexts["Alpha"].click()
         app.typeKey("p", modifierFlags: [.command, .control])
         XCTAssertTrue(pinned.waitForExistence(timeout: 5))
-        sidebar.staticTexts["Beta"].click(forDuration: 0.6, thenDragTo: sidebar.staticTexts["Alpha"])
+        drag(sidebar.staticTexts["Beta"], to: sidebar.staticTexts["Alpha"])
         wait("Beta is pinned") { isPinned("Beta") }
 
         // And back out, onto Gamma in the tabs section.
-        sidebar.staticTexts["Beta"].click(forDuration: 0.6, thenDragTo: sidebar.staticTexts["Gamma"])
+        drag(sidebar.staticTexts["Beta"], to: sidebar.staticTexts["Gamma"])
         wait("Beta is unpinned") { !isPinned("Beta") && sidebar.staticTexts["Beta"].exists }
 
         // Into a folder: Alpha goes into a new folder, then Beta onto the folder.
@@ -728,7 +793,7 @@ final class AxoUITests: XCTestCase {
         let folder = sidebar.descendants(matching: .any)
             .matching(NSPredicate(format: "label == 'Work' AND value ENDSWITH 'item' OR label == 'Work' AND value ENDSWITH 'items'")).firstMatch
         XCTAssertTrue(folder.waitForExistence(timeout: 5))
-        sidebar.staticTexts["Beta"].click(forDuration: 0.6, thenDragTo: folder)
+        drag(sidebar.staticTexts["Beta"], to: folder)
         wait("Beta is in the folder") { (folder.value as? String) == "2 items" }
 
         // A favorite out of Favorites, into the tabs section and then into Pinned.
@@ -736,13 +801,13 @@ final class AxoUITests: XCTestCase {
         app.windows.firstMatch.menuItems["Add to Favorites"].click()
         let tile = app.buttons["favoriteTile"]
         XCTAssertTrue(tile.waitForExistence(timeout: 5))
-        tile.click(forDuration: 0.6, thenDragTo: sidebar.staticTexts["Delta"])
+        drag(tile, to: sidebar.staticTexts["Delta"])
         wait("Gamma is a tab again") { !tile.exists && sidebar.staticTexts["Gamma"].exists && !isPinned("Gamma") }
 
         sidebar.staticTexts["Gamma"].rightClick()
         app.windows.firstMatch.menuItems["Add to Favorites"].click()
         XCTAssertTrue(tile.waitForExistence(timeout: 5))
-        tile.click(forDuration: 0.6, thenDragTo: folder)
+        drag(tile, to: folder)
         wait("Gamma is pinned") { !tile.exists && isPinned("Gamma") }
     }
 

@@ -416,6 +416,21 @@ public final class WebViewPool {
 
     // MARK: Navigation
 
+    /// The tab's back history, the nearest first (#112); empty without a live page.
+    public func backHistory(for tabID: Tab.ID) -> [HistoryEntry] {
+        live[tabID]?.page.backHistory ?? []
+    }
+
+    /// The tab's forward history, the nearest first.
+    public func forwardHistory(for tabID: Tab.ID) -> [HistoryEntry] {
+        live[tabID]?.page.forwardHistory ?? []
+    }
+
+    /// Goes `offset` entries back (negative) or forward in the tab's history at once.
+    public func goToHistoryOffset(_ offset: Int, in tabID: Tab.ID) {
+        live[tabID]?.page.goToHistoryOffset(offset)
+    }
+
     /// Loads `url` in the tab's live page. Does nothing if the tab isn't live.
     public func load(_ url: URL, in tabID: Tab.ID) {
         live[tabID]?.page.load(url)

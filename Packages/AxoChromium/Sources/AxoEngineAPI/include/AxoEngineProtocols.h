@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 37
+#define AXO_ENGINE_API_VERSION 38
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -578,6 +578,14 @@ NS_SWIFT_UI_ACTOR
 - (void)loadURL:(NSURL*)url;
 - (void)goBack;
 - (void)goForward;
+/// The pages Back would go to, the nearest first, each `@{@"title": NSString, @"url": NSURL}`
+/// (the title may be empty), for the Back button's history menu.
+@property(nonatomic, readonly) NSArray<NSDictionary<NSString*, id>*>* backHistory;
+/// The pages Forward would go to, the nearest first, as `backHistory`.
+@property(nonatomic, readonly) NSArray<NSDictionary<NSString*, id>*>* forwardHistory;
+/// Goes `offset` entries back (negative) or forward (positive) in the page's history at once, as
+/// choosing a page from the history menu does. Does nothing when it's out of range.
+- (void)goToHistoryOffset:(NSInteger)offset;
 /// Loads the page again. A page that stopped responding has its renderer ended first.
 - (void)reload;
 - (void)stopLoading;

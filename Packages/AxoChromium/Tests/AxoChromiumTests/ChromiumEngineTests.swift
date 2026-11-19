@@ -1007,6 +1007,31 @@ struct ChromiumEngineTests {
         #expect(fake.backs == 1 && fake.forwards == 1)
     }
 
+    @Test func historyMenusReadAndJumpThroughThePagesHistory() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let pool = WebViewPool(engine: engine)
+        let tab = Tab(spaceID: UUID(), url: url, sortKey: SortKey.initial)
+        let page = try #require(pool.page(for: tab, profileID: profileID) as? ChromiumPage)
+        let fake = try #require(FakePage.made.first)
+        let one = try #require(URL(string: "https://one.example/"))
+        let two = try #require(URL(string: "https://two.example/"))
+        let three = try #require(URL(string: "https://three.example/"))
+        fake.backHistory = [["title": "Two", "url": two], ["title": "", "url": one], ["title": "No address"]]
+        fake.forwardHistory = [["title": "Three", "url": three]]
+
+        #expect(page.backHistory == [HistoryEntry(title: "Two", url: two), HistoryEntry(title: "", url: one),
+                                     HistoryEntry(title: "No address", url: URL(string: "about:blank")!)],
+                "Nearest first, every entry kept so each one's place is its offset")
+        #expect(page.forwardHistory == [HistoryEntry(title: "Three", url: three)])
+        #expect(pool.backHistory(for: tab.id) == page.backHistory)
+        pool.goToHistoryOffset(-2, in: tab.id)
+        pool.goToHistoryOffset(1, in: tab.id)
+        #expect(fake.historyOffsets == [-2, 1])
+    }
+
     @Test func devToolsDocksInThePagesViewBesideThePage() throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)

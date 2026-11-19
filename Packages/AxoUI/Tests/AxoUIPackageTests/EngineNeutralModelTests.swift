@@ -48,6 +48,27 @@ struct EngineNeutralModelTests {
         #expect(page.navigation == ["back", "reload"])
     }
 
+    @Test func historyMenusListAndJumpThroughTheSelectedTabsHistory() async throws {
+        let page = try await openPage(URL(string: "https://example.com/three")!)
+        let one = HistoryEntry(title: "One", url: URL(string: "https://example.com/one")!)
+        let two = HistoryEntry(title: "", url: URL(string: "https://example.com/two")!)
+        let four = HistoryEntry(title: "Four", url: URL(string: "https://example.com/four")!)
+        page.backHistory = [two, one]
+        page.forwardHistory = [four]
+
+        #expect(model.history(.back) == [two, one], "Nearest first")
+        #expect(model.history(.forward) == [four])
+        #if os(macOS) // The history list is the Mac's chrome.
+        #expect(HistoryList.title(of: two) == "https://example.com/two", "No title shows the address")
+        let long = HistoryEntry(title: String(repeating: "a", count: 10_000), url: URL(string: "https://example.com/")!)
+        #expect(HistoryList.title(of: long).count == HistoryList.maxLength, "A page's long title is cut")
+        #endif
+        model.goToHistory(.back, index: 1)
+        model.goToHistory(.forward, index: 0)
+        model.goToHistory(.back, index: -1)
+        #expect(page.navigation == ["offset -2", "offset 1"], "Two back, one forward, nothing out of range")
+    }
+
     @Test func theLinkStatusFollowsTheShownPage() async throws {
         let first = try await openPage(URL(string: "https://example.com/")!)
         let firstID = try #require(model.selectedTabID)

@@ -225,6 +225,13 @@ public final class FakePage: NSObject, AXOPage {
     public private(set) var forwards = 0
     public func goBack() { backs += 1 }
     public func goForward() { forwards += 1 }
+    /// The back and forward history the page reports (#112), nearest first, as the engine's
+    /// dictionaries.
+    public var backHistory: [[String: Any]] = []
+    public var forwardHistory: [[String: Any]] = []
+    /// The history jumps Axo asked for.
+    public private(set) var historyOffsets: [Int] = []
+    public func go(toHistoryOffset offset: Int) { historyOffsets.append(offset) }
     public func reload() {}
     public func stopLoading() {}
     public private(set) var finds: [(text: String, backwards: Bool)] = []

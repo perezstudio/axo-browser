@@ -325,6 +325,12 @@ public final class FakePage: EnginePage {
     public func goForward() { navigation.append("forward") }
     /// Records the reload.
     public func reload() { navigation.append("reload") }
+
+    /// Its back and forward history (#112), as tests set them, nearest first.
+    public var backHistory: [HistoryEntry] = []
+    public var forwardHistory: [HistoryEntry] = []
+    /// Records the jump as "offset N".
+    public func goToHistoryOffset(_ offset: Int) { navigation.append("offset \(offset)") }
     public func stopLoading() { navigation.append("stop") }
 
     public func find(_ text: String, backwards: Bool) async -> Bool {
