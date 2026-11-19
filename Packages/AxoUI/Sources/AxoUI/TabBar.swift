@@ -393,7 +393,26 @@ private struct TopTab: View {
         (panes ?? [tab]).allSatisfy { model.isTabDimmed($0.id, isSelected: isSelected) }
     }
 
+    // The body is split into parts the compiler type-checks one at a time: as one expression it
+    // ran out of time on CI's slower Mac.
     var body: some View {
+        accessibleButton
+            .overlay(alignment: .trailing) { indicators }
+        .onHover { hovering in
+            isHovering = hovering
+            if hovering {
+                model.beginTabPreview(tabIDs, anchor: frame.rect, edge: .bottom)
+            } else {
+                model.endTabPreview(tabIDs)
+            }
+        }
+        .onDisappear { model.endTabPreview(tabIDs) }
+        .contextMenu { TabContextMenu(model: model, tab: tab, media: media) }
+    }
+
+
+    /// The tab's button.
+    private var button: some View {
         Button {
             model.select(tab.id)
             // A click hands keyboard focus to the page, as a sidebar row's does; Full Keyboard
@@ -428,6 +447,11 @@ private struct TopTab: View {
             .background(background)
             .contentShape(.rect)
         }
+    }
+
+    /// The button as one tab for VoiceOver, with its actions.
+    private var accessibleButton: some View {
+        button
         .buttonStyle(.plain)
         .fixedSize(horizontal: true, vertical: false)
         // The tab as drawn, before the slot it's centered in, so its card (#76) lines up with it.
@@ -456,7 +480,10 @@ private struct TopTab: View {
             Task { await model.setPinned(!tab.isPinned, tabID: tab.id) }
         }
         .accessibilityIdentifier("topTab")
-        .overlay(alignment: .trailing) {
+    }
+
+    /// The speaker, the device dot, the warning, and (on hover) the close button, over the tab's end.
+    private var indicators: some View {
             HStack(spacing: 2) {
                 // As in a sidebar row: the dot gives way to the close button.
                 if !media.capture.isEmpty, !isHovering {
@@ -480,17 +507,6 @@ private struct TopTab: View {
                 }
             }
             .padding(.trailing, 5)
-        }
-        .onHover { hovering in
-            isHovering = hovering
-            if hovering {
-                model.beginTabPreview(tabIDs, anchor: frame.rect, edge: .bottom)
-            } else {
-                model.endTabPreview(tabIDs)
-            }
-        }
-        .onDisappear { model.endTabPreview(tabIDs) }
-        .contextMenu { TabContextMenu(model: model, tab: tab, media: media) }
     }
 
     /// The tab's pages: a split's panes, or the tab.
