@@ -34,6 +34,10 @@ jobs:
           sudo xcode-select -s "$XCODE"
           xcodebuild -version
 
+      # How the embed phase signs the engine (#61), against a stand-in engine and codesign.
+      - name: Test the engine's signing
+        run: scripts/tests/test_embed_chromium_engine.sh
+
       # The project signs with the person's team, which the runner doesn't have, so sign to run
       # locally (ad hoc). Debug uses Axo.entitlements, which needs no provisioning profile.
       - name: Build for testing

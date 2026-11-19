@@ -53,7 +53,7 @@ Set on November 14, 2026. The goal is a Mac build people can test day to day: th
 11. #77, then #78: dragging in the sidebar and to another Space; then what's left of #81.
 12. #122, #121, #123: the command bar; then #112, history menus on Back and Forward.
 13. #85, then #133, #132, #131, #130, #174, #110, #173: Settings in a sidebar layout and the panes and panels that go in it.
-14. #61 and #180: a signed, notarized DMG with the engine, and Sparkle updates. Signing and notarizing need the owner's Developer ID and credentials, which never go in the repo; the work here is the scripts and the updater, and the owner runs the signing.
+14. #61 and #180: a signed, notarized DMG with the engine, and Sparkle updates. Signing and notarizing need the owner's Developer ID and credentials, which never go in the repo; the work here is the scripts and the updater, and the owner runs the signing. The packaging scripts are in (`scripts/package-release.sh`, `docs/releasing.md`); passkeys and Chrome's keychain groups wait on Apple granting the passkey entitlement and an engine build with Axo's team and bundle ID.
 
 After user testing starts: Phase 9 (iPhone and iPad), #177, #179, #83 and #46, #87, and the remaining Phase 2 and Chromium items.
 

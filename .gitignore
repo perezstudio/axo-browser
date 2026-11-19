@@ -6,6 +6,9 @@ xcuserdata/
 DerivedData/
 *.xcuserstate
 
+# Release DMGs, manifests, and logs (scripts/package-release.sh)
+build/
+
 # Swift Package Manager
 .build/
 .swiftpm/
