@@ -41,6 +41,23 @@ struct SyncStoreTests {
         #expect(try await iPad.sync.pendingChanges().isEmpty, "Changes from iCloud aren't sent back")
     }
 
+    /// Spaces that arrive are reported by name, for VoiceOver (#174); renames, Spaces already
+    /// here, and other records aren't.
+    @Test func spacesThatArriveAreReportedByName() async throws {
+        let (space, _, _) = try await makeSidebar()
+        try await mac.sync()
+        #expect(try await iPad.sync() == ["Home"])
+        #expect(try await iPad.sync().isEmpty, "Nothing new")
+
+        let reading = try await mac.tabs.createSpace(name: "Reading", profileID: space.profileID)
+        try await mac.tabs.renameSpace(id: space.id, to: "Personal")
+        try await mac.sync()
+        #expect(try await iPad.sync() == ["Reading"], "Only the new Space, not the renamed one")
+        try await mac.tabs.createFolder(named: "Later", in: reading.id)
+        try await mac.sync()
+        #expect(try await iPad.sync().isEmpty, "A folder isn't a Space")
+    }
+
     @Test func movesAndRenamesFollowButPageChangesDont() async throws {
         let (space, folder, tab) = try await makeSidebar()
         try await mac.sync()
