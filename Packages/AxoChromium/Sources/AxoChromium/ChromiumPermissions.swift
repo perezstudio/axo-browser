@@ -24,6 +24,15 @@ extension ChromiumEngine {
 }
 
 extension ChromiumEngine {
+    /// Sets what sites without an answer get for notifications or the clipboard in Chrome, as
+    /// Axo's Website Permissions default says (#133); applied once the profile is in use.
+    public func setDefaultPermission(_ kind: PermissionKind, decision: PermissionDecision?, profileID: Profile.ID) {
+        guard kind.lastsInEngine, readyProfileIsAllowed(profileID) else { return }
+        defaultPermissions[profileID, default: [:]][kind] = .some(decision)
+        guard isFollowing(profileID) else { return }
+        readyProfile(profileID)?.setDefaultPermission(kind, decision: decision)
+    }
+
     /// Replaces the profile's lasting answers in Chrome with Axo's, clearing any Chrome has that
     /// Axo doesn't (a site Chrome revoked or blocked on its own). Like the others, applied once
     /// the profile is in use.
@@ -62,5 +71,20 @@ extension AXOProfile {
         case nil: .ask
         }
         setPermission(kind, origin: url, setting: setting)
+    }
+
+    func setDefaultPermission(_ kind: PermissionKind, decision: PermissionDecision?) {
+        let engineKind: AXOPermissionKind
+        switch kind {
+        case .notifications: engineKind = .notifications
+        case .clipboard: engineKind = .clipboard
+        case .camera, .microphone, .cameraAndMicrophone, .location: return
+        }
+        let setting: AXOPermissionSetting = switch decision {
+        case .allow: .allow
+        case .deny: .block
+        case nil: .ask
+        }
+        setDefaultPermission(engineKind, setting: setting)
     }
 }

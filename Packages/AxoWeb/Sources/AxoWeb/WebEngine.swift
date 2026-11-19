@@ -43,6 +43,10 @@ public protocol WebEngine: AnyObject {
     /// Replaces every lasting answer the engine keeps for a profile with `answers`, forgetting any
     /// it has that Axo doesn't (Axo's are the ones that count).
     func replaceLastingPermissions(_ answers: [LastingPermission], profileID: Profile.ID)
+    /// Sets what sites without an answer of their own get for a kind the engine keeps answers
+    /// for itself (``PermissionKind/lastsInEngine``), or `nil` to ask (#133). Engines that ask
+    /// every time (WebKit) ignore it; Axo answers those from its own defaults.
+    func setDefaultPermission(_ kind: PermissionKind, decision: PermissionDecision?, profileID: Profile.ID)
     /// The kinds of permission the engine asks Axo about. Site Settings offers only these.
     var askedPermissionKinds: Set<PermissionKind> { get }
 }
@@ -51,6 +55,7 @@ extension WebEngine {
     public func setWindowPages(_ pages: [any EnginePage], active: (any EnginePage)?, profileID: Profile.ID) {}
     public func setLastingPermission(_ kind: PermissionKind, origin: PageOrigin, decision: PermissionDecision?, profileID: Profile.ID) {}
     public func replaceLastingPermissions(_ answers: [LastingPermission], profileID: Profile.ID) {}
+    public func setDefaultPermission(_ kind: PermissionKind, decision: PermissionDecision?, profileID: Profile.ID) {}
     public var askedPermissionKinds: Set<PermissionKind> { [.camera, .microphone, .cameraAndMicrophone, .location] }
 }
 
@@ -175,6 +180,10 @@ public protocol EnginePage: AnyObject {
     var media: PageMedia { get }
     /// Mutes the page's sound, or unmutes it.
     func setAudioMuted(_ muted: Bool)
+    /// Stops the page using the camera, the microphone, or location, for when the person's
+    /// answer for its site changes to deny (#133). Engines stop what they can (WebKit: the camera
+    /// and microphone); the screen isn't stopped this way.
+    func stopCapture(_ kinds: PageCapture)
 
     /// Whether the page stopped working, and why (#75): its content process crashed or ran out of
     /// memory, or it stopped responding. A crash lasts until the page loads again (``reload()``,
@@ -221,6 +230,8 @@ extension EnginePage {
     public var media: PageMedia { PageMedia() }
     /// Does nothing, for engines that can't mute.
     public func setAudioMuted(_ muted: Bool) {}
+    /// Does nothing, for engines that can't stop capture.
+    public func stopCapture(_ kinds: PageCapture) {}
     /// Nothing known, for engines that can't tell.
     public var problem: PageProblem? { nil }
     /// Does nothing, for engines that can't tell a page stopped responding.

@@ -405,6 +405,16 @@ final class AccessibilityAuditTests: XCTestCase {
         AxoUITests.selectSettingsPane("profiles", in: app)
         XCTAssertTrue(app.textFields["profileNameField"].waitForExistence(timeout: 5))
         try audit(app, "profiles")
+        // Website Permissions, in the profile's details (#133).
+        let cameraRow = app.descendants(matching: .any)["websitePermission-camera"]
+        if cameraRow.waitForExistence(timeout: 5) {
+            cameraRow.click()
+            XCTAssertTrue(app.descendants(matching: .any)["websitePermissionsSheet"].waitForExistence(timeout: 5))
+            try audit(app, "website permissions")
+            app.typeKey(.escape, modifierFlags: [])
+        } else {
+            XCTFail("The profile's Website Permissions rows are missing")
+        }
 
         AxoUITests.selectSettingsPane("spaces", in: app)
         XCTAssertTrue(app.textFields["spaceNameSettingsField"].waitForExistence(timeout: 5))

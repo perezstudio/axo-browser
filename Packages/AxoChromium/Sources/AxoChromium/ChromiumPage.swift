@@ -204,6 +204,17 @@ final class ChromiumPage: NSObject, EnginePage {
         page?.audioMuted = muted
     }
 
+    /// Chrome stops the page's streams when its site's permission turns to blocked
+    /// (`AXOPage stopCapture:`).
+    func stopCapture(_ kinds: PageCapture) {
+        var capture: AXOPageCapture = []
+        if kinds.contains(.camera) { capture.insert(.camera) }
+        if kinds.contains(.microphone) { capture.insert(.microphone) }
+        if kinds.contains(.location) { capture.insert(.location) }
+        guard !capture.isEmpty else { return }
+        page?.stopCapture(capture)
+    }
+
     // MARK: Crashed and unresponsive pages (#75)
 
     var problem: PageProblem? {

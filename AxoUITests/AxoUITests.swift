@@ -2154,6 +2154,42 @@ final class AxoUITests: XCTestCase {
         app.buttons["resetSiteSettings"].click()
         expectation(for: NSPredicate(format: "value == %@", "Ask"), evaluatedWith: camera)
         waitForExpectations(timeout: 5)
+
+        // Website Permissions (#133): from Site Settings to the site in Settings › Profiles.
+        camera.click()
+        app.menuItems["Don't Allow"].click()
+        expectation(for: NSPredicate(format: "value == %@", "Don't Allow"), evaluatedWith: camera)
+        waitForExpectations(timeout: 5)
+        app.buttons["manageWebsitePermissions"].click()
+        let sheet = app.descendants(matching: .any)["websitePermissionsSheet"]
+        XCTAssertTrue(sheet.waitForExistence(timeout: 10), "Settings opens on the site's camera answers")
+        let shot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        shot.name = "Website Permissions from Site Settings"
+        shot.lifetime = .keepAlways
+        add(shot)
+        // The site's switch: off is Don't Allow.
+        let row = sheet.descendants(matching: .any).matching(identifier: "websitePermissionSwitch").firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(row.label.hasPrefix("Camera for 127.0.0.1"), row.label)
+        XCTAssertEqual(row.value as? Int, 0)
+        row.click()
+        expectation(for: NSPredicate(format: "value == 1"), evaluatedWith: row)
+        waitForExpectations(timeout: 5)
+        sheet.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Remove 127.0.0.1'")).firstMatch.click()
+        XCTAssertTrue(row.waitForNonExistence(timeout: 5), "Removed: the site asks again")
+
+        let deny = sheet.radioButtons["Don't Allow"]
+        XCTAssertTrue(deny.exists, "The camera's default is Ask or Don't Allow, never Allow")
+        XCTAssertFalse(sheet.radioButtons["Allow"].exists)
+        deny.click()
+        expectation(for: NSPredicate(format: "value == 1"), evaluatedWith: deny)
+        waitForExpectations(timeout: 5)
+
+        let newSite = sheet.textFields["websitePermissionNewSite"]
+        newSite.click()
+        newSite.typeText("not a site")
+        sheet.buttons["websitePermissionAddAllow"].click()
+        XCTAssertTrue(sheet.staticTexts["Enter a website's address, such as meet.example.com."].waitForExistence(timeout: 5))
     }
 
     /// Summarize Page shows a summary of the page's text in a popover. UI tests use a

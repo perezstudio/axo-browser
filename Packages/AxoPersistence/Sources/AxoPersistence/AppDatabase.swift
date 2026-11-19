@@ -450,6 +450,17 @@ public final class AppDatabase: Sendable {
             }
             try db.create(index: "commandChoice_on_profileID_lastChosenAt", on: "commandChoice", columns: ["profileID", "lastChosenAt"])
         }
+        // Website Permissions' defaults (#133): what sites that haven't been answered get for each
+        // kind, per profile. No row is Ask. Like the answers themselves, they stay on this device.
+        migrator.registerMigration("v19-site-permission-defaults") { db in
+            try db.create(table: "sitePermissionDefault") { t in
+                t.column("profileID", .blob).notNull()
+                    .references("profile", onDelete: .cascade)
+                t.column("kind", .text).notNull()
+                t.column("decision", .text).notNull()
+                t.primaryKey(["profileID", "kind"])
+            }
+        }
 
         return migrator
     }

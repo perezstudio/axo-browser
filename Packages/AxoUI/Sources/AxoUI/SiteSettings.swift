@@ -34,6 +34,16 @@ final class SitePermissionAdapter: PermissionDecisionStore {
         }
     }
 
+    /// What a page uses for a saved kind, for stopping it when the answer becomes deny.
+    static func capture(for kind: SitePermission.Kind) -> PageCapture {
+        switch kind {
+        case .camera: .camera
+        case .microphone: .microphone
+        case .location: .location
+        case .notifications, .clipboard: []
+        }
+    }
+
     /// The request kind that keeps a saved kind's answer in the engine, if the engine keeps one.
     static func lastingKind(for kind: SitePermission.Kind) -> PermissionKind? {
         switch kind {
@@ -43,9 +53,12 @@ final class SitePermissionAdapter: PermissionDecisionStore {
         }
     }
 
+    /// The site's own answer, or the profile's default for sites without one (#133), for each
+    /// kind the request covers; `nil` asks.
     func savedDecision(for kind: PermissionKind, origin: PageOrigin, profileID: Profile.ID) async -> PermissionDecision? {
         let saved = (try? await store.decisions(origin: origin.serialized, profileID: profileID)) ?? [:]
-        let answers = Self.kinds(for: kind).map { saved[$0] }
+        let defaults = (try? await store.defaults(profileID: profileID)) ?? [:]
+        let answers = Self.kinds(for: kind).map { saved[$0] ?? defaults[$0] }
         if answers.contains(.deny) { return .deny }
         if answers.allSatisfy({ $0 == .allow }) { return .allow }
         return nil
@@ -73,11 +86,13 @@ extension BrowserModel {
     public func refreshSiteSettings() async {
         guard let origin = siteSettingsOrigin, let profileID = space?.profileID else {
             sitePermissions = [:]
+            siteDefaults = [:]
             siteExternalApps = []
             siteExternalAppTitles = [:]
             return
         }
         sitePermissions = (try? await store.sitePermissions.decisions(origin: origin.serialized, profileID: profileID)) ?? [:]
+        siteDefaults = (try? await store.sitePermissions.defaults(profileID: profileID)) ?? [:]
         siteExternalApps = (try? await store.externalAppPermissions.schemes(origin: origin.serialized, profileID: profileID)) ?? []
         siteExternalAppTitles = Dictionary(uniqueKeysWithValues: siteExternalApps.map { ($0, externalAppTitle(for: $0)) })
     }
@@ -100,10 +115,7 @@ extension BrowserModel {
     /// Saves an answer for the selected page's site, or forgets it (`nil`) so the site asks again.
     public func setSitePermission(_ decision: SitePermission.Decision?, for kind: SitePermission.Kind) async {
         guard let origin = siteSettingsOrigin, let profileID = space?.profileID else { return }
-        try? await store.sitePermissions.setDecision(decision, for: [kind], origin: origin.serialized, profileID: profileID)
-        if let lasting = SitePermissionAdapter.lastingKind(for: kind) {
-            pool.setLastingPermission(lasting, origin: origin, decision: decision.map { $0 == .allow ? .allow : .deny }, profileID: profileID)
-        }
+        await applyWebsitePermission(decision, for: kind, origin: origin, profileID: profileID)
         await refreshSiteSettings()
     }
 
@@ -124,6 +136,15 @@ extension BrowserModel {
     func syncLastingPermissions(profileID only: Profile.ID? = nil) async {
         guard let saved = try? await store.sitePermissions.all([.notifications, .clipboard]) else { return }
         let profileIDs = if let only { [only] } else { await profiles().map(\.id) }
+        // The profiles' defaults for those kinds too (#133); clearing website data resets Chrome's.
+        let defaults = (try? await store.sitePermissions.allDefaults([.notifications, .clipboard])) ?? []
+        for profileID in profileIDs {
+            for kind in [SitePermission.Kind.notifications, .clipboard] {
+                guard let lasting = SitePermissionAdapter.lastingKind(for: kind) else { continue }
+                let decision = defaults.first { $0.profileID == profileID && $0.kind == kind }?.decision
+                pool.setDefaultPermission(lasting, decision: decision.map { $0 == .allow ? .allow : .deny }, profileID: profileID)
+            }
+        }
         for profileID in profileIDs {
             let answers = saved.filter { $0.profileID == profileID }.compactMap { permission -> LastingPermission? in
                 guard let kind = SitePermissionAdapter.lastingKind(for: permission.kind),
@@ -173,6 +194,10 @@ struct SiteSettingsButton: View {
 /// clipboard, each Ask, Allow, or Don't Allow; and the apps it may open without asking.
 struct SiteSettingsView: View {
     let model: BrowserModel
+    #if os(macOS)
+    @Environment(\.openSettings) private var openSettings
+    @AppStorage(SettingsView.paneStorageKey) private var settingsPane: SettingsPane = .general
+    #endif
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -185,7 +210,8 @@ struct SiteSettingsView: View {
                         get: { model.sitePermissions[kind] },
                         set: { decision in Task { await model.setSitePermission(decision, for: kind) } }
                     )) {
-                        Text("Ask").tag(SitePermission.Decision?.none)
+                        // Without an answer of its own, the profile's default decides (#133).
+                        Text(Self.defaultTitle(model.siteDefaults[kind])).tag(SitePermission.Decision?.none)
                         Text("Allow").tag(SitePermission.Decision?.some(.allow))
                         Text("Don't Allow").tag(SitePermission.Decision?.some(.deny))
                     }
@@ -213,8 +239,16 @@ struct SiteSettingsView: View {
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("siteExternalApps")
             }
+            #if os(macOS)
+            Button("Manage Website Permissions…") {
+                model.manageWebsitePermissions()
+                settingsPane = .profiles
+                openSettings()
+            }
+            .accessibilityIdentifier("manageWebsitePermissions")
+            #endif
             HStack {
-                Text("Changes apply the next time the site asks.")
+                Text("Don't Allow stops the site using it now.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -233,6 +267,15 @@ struct SiteSettingsView: View {
         .frame(width: 320)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("siteSettings")
+    }
+
+    /// What a site without an answer of its own gets, as its row says it.
+    static func defaultTitle(_ decision: SitePermission.Decision?) -> String {
+        switch decision {
+        case nil: "Ask"
+        case .allow: "Allow (Default)"
+        case .deny: "Don't Allow (Default)"
+        }
     }
 
     static func title(for kind: SitePermission.Kind) -> String {

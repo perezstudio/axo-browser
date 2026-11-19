@@ -46,7 +46,15 @@ struct ProfileSettings: View {
                 ContentUnavailableView("No Profile Selected", systemImage: "person.crop.circle", description: Text("Choose a profile to see its settings."))
             }
         }
-        .onAppear { if selection == nil { selection = model.space?.profileID } }
+        .onAppear {
+            if let asked = model.websitePermissionsRequest?.profileID { selection = asked }
+            if selection == nil { selection = model.space?.profileID }
+        }
+        // Site Settings' Manage Website Permissions… shows its profile (#133); the profile's
+        // section then opens the site and clears the request.
+        .onChange(of: model.websitePermissionsRequest?.id) {
+            if let asked = model.websitePermissionsRequest?.profileID { selection = asked }
+        }
         .sheet(isPresented: $isAdding) {
             NewProfileSheet(model: model) { selection = $0.id }
         }
@@ -99,6 +107,7 @@ private struct ProfileDetail: View {
                     }
                 }
             }
+            WebsitePermissionsSection(model: model, profileID: profile.id)
             Section("Website Data") {
                 Text("Cookies, logins, and site data for this profile's Spaces. Other profiles keep their own.")
                     .font(.callout)
