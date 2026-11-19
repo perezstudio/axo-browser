@@ -437,8 +437,12 @@ public final class BrowserModel {
                 self.pool.load(url, in: sourceID)
             } else if self.tabs.first(where: { $0.id == sourceID })?.isPinned == true {
                 self.openPeek(url, from: sourceID)
-            } else {
+            } else if self.tabs.contains(where: { $0.id == sourceID }) {
                 Task { await self.openTab(url: url, at: .after(sourceID)) }
+            } else {
+                // Not one of the Space's tabs (a favorite's page, #234): after them all, as New
+                // Tab does; there's no tab to follow.
+                Task { await self.openTab(url: url) }
             }
         }
         // Right-clicks in pages whose engine leaves the menu to Axo (Chromium) get Axo's menu.

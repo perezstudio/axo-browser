@@ -16,18 +16,22 @@ extension BrowserModel {
         case .popup(let size):
             showEnginePopupWindow(EnginePopupWindow(page: opened.page, profileID: space.profileID, size: size))
         case .tab(let inBackground):
-            let source = tabs.first { $0.id == sourceID }
-            guard let source, !source.isPinned, peek?.tab.id != sourceID else {
+            if let source = tabs.first(where: { $0.id == sourceID }), !source.isPinned, peek?.tab.id != sourceID {
+                let position: TabPosition = source.folderID == nil ? .after(source.id) : .end
+                Task { await adoptOpenedPage(opened, at: position, selecting: !inBackground, in: space) }
+            } else if favorites.contains(where: { $0.id == sourceID }) {
+                // A favorite's page (#234): favorites aren't the Space's tabs, so the new tab goes
+                // at the end of them, as New Tab does, keeping its opener.
+                Task { await adoptOpenedPage(opened, at: .end, selecting: !inBackground, in: space) }
+            } else {
+                // A pinned tab's link goes to Peek; Peek's and a mini window's stay in them.
                 opened.page.close()
                 pool.onOpenInNewTab?(opened.url, sourceID)
-                return
             }
-            Task { await adoptOpenedPage(opened, after: source, selecting: !inBackground, in: space) }
         }
     }
 
-    private func adoptOpenedPage(_ opened: OpenedPage, after source: AxoCore.Tab, selecting: Bool, in space: Space) async {
-        let position: TabPosition = source.folderID == nil ? .after(source.id) : .end
+    private func adoptOpenedPage(_ opened: OpenedPage, at position: TabPosition, selecting: Bool, in space: Space) async {
         do {
             let tab = try await store.openTab(url: opened.url, title: opened.page.title, in: space.id, at: position)
             pool.adopt(opened.page, as: tab, profileID: space.profileID)
