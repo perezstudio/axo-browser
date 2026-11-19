@@ -2381,7 +2381,7 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(window.staticTexts["Axo Helper"].waitForExistence(timeout: 5))
 
         // A switch-style toggle is exposed as a checkbox on macOS.
-        let on = window.checkBoxes["extensionOnSwitch"]
+        let on = window.descendants(matching: .any)["extensionOnSwitch"]
         XCTAssertTrue(on.waitForExistence(timeout: 5))
         on.click()
         XCTAssertTrue(button.waitForNonExistence(timeout: 10))

@@ -554,23 +554,26 @@ private struct ExtensionDetails: View {
     var body: some View {
         Form {
             Section {
-                HStack(spacing: 12) {
-                    ExtensionSymbol(icon: toolbarItem?.icon, size: 32)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(item.name).font(.title3.weight(.semibold)).accessibilityAddTraits(.isHeader)
-                        Text(item.isUnpacked ? "Unpacked (developer mode)" : "Installed package")
-                            .font(.callout).foregroundStyle(.secondary)
+                // The row is its on switch, as Pin to Toolbar's is: the form draws a switch
+                // with the icon and name as its label (a switch with a hidden label beside them
+                // came out as a checkbox VoiceOver couldn't press).
+                Toggle(isOn: Binding(
+                    get: { item.isEnabled },
+                    set: { on in change { try await $0.setEnabled(on, extensionID: item.id, profileID: $1) } }
+                )) {
+                    HStack(spacing: 12) {
+                        ExtensionSymbol(icon: toolbarItem?.icon, size: 32)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.name).font(.title3.weight(.semibold))
+                            Text(item.isUnpacked ? "Unpacked (developer mode)" : "Installed package")
+                                .font(.callout).foregroundStyle(.secondary)
+                        }
                     }
-                    Spacer()
-                    // The switch says whether it's on; its (hidden) label says what it turns on.
-                    Toggle(item.name, isOn: Binding(
-                        get: { item.isEnabled },
-                        set: { on in change { try await $0.setEnabled(on, extensionID: item.id, profileID: $1) } }
-                    ))
-                    .toggleStyle(.switch)
-                    .labelsHidden()
-                    .accessibilityIdentifier("extensionOnSwitch")
                 }
+                .toggleStyle(.switch)
+                // The switch says whether it's on; the label says what it turns on.
+                .accessibilityLabel(item.name)
+                .accessibilityIdentifier("extensionOnSwitch")
                 if let error = item.loadError {
                     Label("Couldn’t load: \(error)", systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.red)
@@ -600,13 +603,16 @@ private struct ExtensionDetails: View {
                 }
             }
             Section("Site Access") {
-                Picker("Site access for \(item.name)", selection: Binding(
+                Picker("Site access", selection: Binding(
                     get: { item.reachesAllRequestedSites },
                     set: { all in change { try await $0.setReachesAllRequestedSites(all, extensionID: item.id, profileID: $1) } }
                 )) {
                     Text("All requested sites").tag(true)
                     Text("When you click it").tag(false)
                 }
+                // Both choices on screen, as the board shows them (a pop-up button here had no
+                // action VoiceOver could press).
+                .pickerStyle(.radioGroup)
                 if !item.listsAccess {
                     // The engine doesn't say yet; never claim it asks for nothing.
                 } else if item.lines.isEmpty {
