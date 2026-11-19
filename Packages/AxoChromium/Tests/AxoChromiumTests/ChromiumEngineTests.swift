@@ -805,6 +805,21 @@ struct ChromiumEngineTests {
         engine.uninstallExtension("abc", profileID: profileID)
         #expect(profile.enabledChanges.map(\.0) == ["abc"] && profile.enabledChanges.map(\.1) == [true])
         #expect(profile.uninstalled == ["abc"])
+
+        // An update waiting for new permissions, and Chrome's other reasons (#130).
+        profile.extensions = [
+            FakeExtension(identifier: "upd", name: "Updated", isEnabled: false, disableReasons: [.newPermissions, .byPerson],
+                          addedAPIPermissions: ["bookmarks"], addedHostPermissions: ["https://*.example.com/*"]),
+            FakeExtension(identifier: "bad", name: "Damaged", isEnabled: false, disableReasons: .other),
+            FakeExtension(identifier: "off", name: "Off", isEnabled: false, disableReasons: .byPerson),
+        ]
+        let listed = Dictionary(uniqueKeysWithValues: engine.extensions(profileID: profileID).map { ($0.id, $0) })
+        #expect(listed["upd"]?.newPermissions == ChromiumPermissionRequest(apis: ["bookmarks"], hosts: ["https://*.example.com/*"]))
+        #expect(listed["upd"]?.isOffForOtherReason == false)
+        #expect(listed["bad"]?.newPermissions == nil && listed["bad"]?.isOffForOtherReason == true)
+        #expect(listed["off"]?.newPermissions == nil && listed["off"]?.isOffForOtherReason == false)
+        engine.approveNewPermissions(forExtension: "upd", profileID: profileID)
+        #expect(profile.approvedPermissions == ["upd"])
     }
 
     @Test func clickingAButtonReturnsItsPopup() async throws {

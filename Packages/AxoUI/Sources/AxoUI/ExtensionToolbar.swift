@@ -202,6 +202,9 @@ public protocol ExtensionToolbarProviding: AnyObject {
     func setPinned(_ pinned: Bool, extensionID: String, profileID: Profile.ID)
     /// Moves a pinned extension to `index` among the pinned buttons.
     func movePinned(extensionID: String, to index: Int, profileID: Profile.ID)
+    /// A profile's extensions an update turned off until the person allows its new access
+    /// (#130), which the Extensions menu lists. Reading this from a view must make it update.
+    func extensionsAwaitingApproval(profileID: Profile.ID) -> [WaitingExtension]
     /// Clicks a button: the extension shows its popup or handles the click.
     func performAction(extensionID: String, profileID: Profile.ID, tabID: AxoCore.Tab.ID?)
     /// The keyboard shortcuts of a profile's extensions. Reading this from a view must make the
@@ -216,7 +219,20 @@ public protocol ExtensionToolbarProviding: AnyObject {
     func inspectPopup(extensionID: String, profileID: Profile.ID, tabID: AxoCore.Tab.ID?)
 }
 
+/// An extension waiting for the person to allow its update's new access.
+public struct WaitingExtension: Identifiable, Equatable, Sendable {
+    public var id: String
+    public var name: String
+
+    public init(id: String, name: String) {
+        self.id = id
+        self.name = name
+    }
+}
+
 extension ExtensionToolbarProviding {
+    /// None, for engines whose updates never wait for approval.
+    public func extensionsAwaitingApproval(profileID: Profile.ID) -> [WaitingExtension] { [] }
     /// No popup inspector, for providers whose engine can't inspect popups.
     public var canInspectPopups: Bool { false }
     /// Does nothing, for providers whose engine can't inspect popups.
@@ -277,8 +293,9 @@ struct ExtensionToolbarButtons: View {
                     ExtensionButtonActions(model: model, provider: provider, item: item, pinned: pinned, profileID: profileID)
                 }
             }
-            if !all.isEmpty {
-                ExtensionsMenu(model: model, provider: provider, items: all, profileID: profileID)
+            let waiting = provider.extensionsAwaitingApproval(profileID: profileID)
+            if !all.isEmpty || !waiting.isEmpty {
+                ExtensionsMenu(model: model, provider: provider, items: all, waiting: waiting, profileID: profileID)
                     // Popups of extensions without a button of their own open from the menu's button.
                     .background(PopoverAnchor { view in
                         let shownIDs = Set(shown.map(\.id))
@@ -334,10 +351,19 @@ private struct ExtensionsMenu: View {
     let model: BrowserModel
     let provider: any ExtensionToolbarProviding
     let items: [ExtensionToolbarItem]
+    /// Extensions waiting for their update's new access to be allowed.
+    let waiting: [WaitingExtension]
     let profileID: Profile.ID
 
     var body: some View {
         Menu {
+            if !waiting.isEmpty {
+                Section("Turned Off by an Update") {
+                    ForEach(waiting) { item in
+                        Button("Review “\(item.name)”…") { model.showExtensions(profileID: profileID, selecting: item.id) }
+                    }
+                }
+            }
             Section {
                 ForEach(items) { item in
                     Button(item.badge.isEmpty ? item.label : "\(item.label) (\(item.badge))") {
@@ -361,13 +387,20 @@ private struct ExtensionsMenu: View {
         } label: {
             Label("Extensions", systemImage: "puzzlepiece.extension")
                 .labelStyle(.iconOnly)
+                // A dot while an update waits for the person (#130).
+                .overlay(alignment: .topTrailing) {
+                    if !waiting.isEmpty {
+                        Circle().fill(.orange).frame(width: 6, height: 6).offset(x: 2, y: -2)
+                    }
+                }
         }
         // As the tab bar's folder menus: a button VoiceOver can press, named for itself.
         .menuStyle(.button)
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
-        .help("Extensions")
+        .help(waiting.isEmpty ? "Extensions" : "Extensions: an update needs your approval")
         .accessibilityLabel("Extensions")
+        .accessibilityValue(waiting.isEmpty ? "" : (waiting.count == 1 ? "1 extension needs your approval" : "\(waiting.count) extensions need your approval"))
         .accessibilityIdentifier("extensionsMenuButton")
     }
 }

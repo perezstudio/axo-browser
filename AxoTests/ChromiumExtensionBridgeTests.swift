@@ -569,6 +569,38 @@ struct ChromiumExtensionBridgeTests {
         #expect(items.map(\.isPinned) == [true, true, false])
     }
 
+    /// An update that asks for more access waits for the person (#130): the window describes
+    /// only the new access, the Extensions menu lists it, VoiceOver hears when one starts
+    /// waiting, and allowing it goes to the engine.
+    @Test func updatesAskingForMoreAccessWaitForApproval() async throws {
+        var said: [String] = []
+        model.announce = { said.append($0) }
+        await model.openTab(url: URL(string: "https://example.com/")!)
+        let profile = try #require(FakeProfile.made[profileID])
+        #expect(engine.isFollowing(profileID))
+        profile.extensions = [FakeExtension(identifier: "a", name: "Alpha")]
+        profile.onExtensionsChange?()
+        #expect(bridge.extensionsAwaitingApproval(profileID: profileID).isEmpty)
+
+        profile.extensions = [
+            FakeExtension(identifier: "a", name: "Alpha", isEnabled: false, disableReasons: .newPermissions, addedAPIPermissions: ["bookmarks"]),
+            FakeExtension(identifier: "b", name: "Beta", isEnabled: false, disableReasons: .other),
+        ]
+        profile.onExtensionsChange?()
+        #expect(said == ["Alpha was turned off: its update asks for more access"])
+        #expect(bridge.extensionsAwaitingApproval(profileID: profileID) == [WaitingExtension(id: "a", name: "Alpha")])
+        let listed = Dictionary(uniqueKeysWithValues: await bridge.installedExtensions(profileID: profileID).map { ($0.id, $0) })
+        #expect(listed["a"]?.newAccess == PermissionDescriptions.lines(permissions: ["bookmarks"], matchPatterns: []))
+        #expect(listed["a"]?.newAccess?.isEmpty == false)
+        #expect(listed["b"]?.newAccess == nil && listed["b"]?.isBlocked == true)
+        // Still waiting: not announced again.
+        profile.onExtensionsChange?()
+        #expect(said.count == 1)
+
+        await model.approveNewAccess("a", name: "Alpha", profileID: profileID)
+        #expect(profile.approvedPermissions == ["a"])
+    }
+
     /// Extensions installed before pins came had buttons; they're pinned once per profile, and
     /// an extension unpinned afterwards stays unpinned at later launches.
     @Test func existingExtensionsArePinnedOncePerProfile() async throws {

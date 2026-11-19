@@ -66,7 +66,10 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
         model.extensionToolbar = self
         model.extensionManagement = self
         model.developerTools = self
-        engine.onExtensionsChange = { [weak self] _ in self?.revision += 1 }
+        engine.onExtensionsChange = { [weak self] profileID in
+            self?.revision += 1
+            self?.announceNewlyWaiting(profileID: profileID)
+        }
         // Chrome's prompts (permissions, uninstalls, what to share) are Axo's alerts.
         engine.onExtensionPrompt = { [weak self] prompt, _, answer in
             guard let self else {
@@ -144,6 +147,37 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
         }
         pinnedOnce.insert(profileID.uuidString)
         settings.set(pinnedOnce.sorted(), forKey: Self.pinnedOnceKey)
+    }
+
+    // MARK: Updates waiting for approval (#130)
+
+    /// Each profile's extensions last seen waiting for their update's new access, so only ones
+    /// that start waiting are announced; a profile's first look only records them.
+    @ObservationIgnored private var waitingByProfile: [Profile.ID: Set<String>] = [:]
+
+    /// Tells VoiceOver when an update turns an extension off until the person allows its new
+    /// access; the Extensions menu and window show it too.
+    private func announceNewlyWaiting(profileID: Profile.ID) {
+        guard engine.isFollowing(profileID) else { return }
+        let waiting = engine.extensions(profileID: profileID).filter { $0.newPermissions != nil }
+        let ids = Set(waiting.map(\.id))
+        defer { waitingByProfile[profileID] = ids }
+        guard let previous = waitingByProfile[profileID] else { return }
+        for item in waiting where !previous.contains(item.id) {
+            model?.announce("\(item.name) was turned off: its update asks for more access")
+        }
+    }
+
+    func extensionsAwaitingApproval(profileID: Profile.ID) -> [WaitingExtension] {
+        _ = revision
+        guard engine.isFollowing(profileID) else { return [] }
+        return engine.extensions(profileID: profileID).filter { $0.newPermissions != nil }.map {
+            WaitingExtension(id: $0.id, name: $0.name)
+        }
+    }
+
+    func approveNewAccess(_ extensionID: String, profileID: Profile.ID) async throws {
+        engine.approveNewPermissions(forExtension: extensionID, profileID: profileID)
     }
 
     // MARK: History
@@ -489,7 +523,9 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
                 id: $0.id, name: $0.name, version: $0.version, isEnabled: $0.isEnabled, isUnpacked: $0.isUnpacked,
                 reachesAllRequestedSites: true, lines: [], listsAccess: false, loadError: nil,
                 allowsUserScripts: $0.usesUserScripts ? $0.userScriptsAllowed : nil,
-                isPinned: $0.isPinned
+                isPinned: $0.isPinned,
+                newAccess: $0.newPermissions.map { PermissionDescriptions.lines(permissions: $0.apis, matchPatterns: $0.hosts) },
+                isBlocked: $0.isOffForOtherReason
             )
         }
     }

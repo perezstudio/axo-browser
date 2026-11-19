@@ -14,6 +14,7 @@ final class FakeExtensionManagement: ExtensionManaging {
     var preparedProfiles: [Profile.ID] = []
     var confirmedProfiles: [Profile.ID] = []
     var uninstalledProfiles: [Profile.ID] = []
+    var approved: [(String, Profile.ID)] = []
     var installed: [ExtensionSummary] = []
 
     struct Failure: Error, LocalizedError {
@@ -38,6 +39,7 @@ final class FakeExtensionManagement: ExtensionManaging {
     func setEnabled(_ enabled: Bool, extensionID: String, profileID: Profile.ID) async throws {}
     func setReachesAllRequestedSites(_ all: Bool, extensionID: String, profileID: Profile.ID) async throws {}
     func inspectBackgroundPage(_ extensionID: String, profileID: Profile.ID) async -> Bool { true }
+    func approveNewAccess(_ extensionID: String, profileID: Profile.ID) async throws { approved.append((extensionID, profileID)) }
 }
 
 /// Toolbar buttons with pins kept in memory, as WebKit's bridge keeps them.
@@ -136,7 +138,17 @@ struct ExtensionPinningTests {
         #expect(summary(unpacked: true, pinned: true).stateDescription == "Unpacked · On · Pinned")
         #expect(summary(error: "No manifest").stateDescription == "Couldn’t load")
         #expect(summary(error: "No manifest").needsAttention)
+        #expect(summary(error: "No manifest").attentionIsError)
         #expect(!summary().needsAttention)
+        // An update waiting for new access (#130): a question, not an error.
+        var waiting = summary(enabled: false, pinned: true)
+        waiting.newAccess = ["Read and change your bookmarks"]
+        #expect(waiting.stateDescription == "Off · Asks for more access")
+        #expect(waiting.needsAttention && !waiting.attentionIsError)
+        var blocked = summary(enabled: false)
+        blocked.isBlocked = true
+        #expect(blocked.stateDescription == "Off · Can’t be turned on")
+        #expect(!blocked.needsAttention)
     }
 
     @Test func shortcutsShowTheirKeysAsMenusDo() {
@@ -216,6 +228,15 @@ struct ExtensionManagementTests {
         #expect(fake.uninstalledProfiles != [model.space?.profileID])
         #expect(model.pendingExtensionRemoval == nil)
         #expect(said.messages.last == "Removed uBlock Origin Lite from Work")
+    }
+
+    @Test func allowingAnUpdatesNewAccessTurnsItOnAndSaysSo() async throws {
+        let profileID = try #require(model.space?.profileID)
+        let revision = model.extensionsRevision
+        await model.approveNewAccess("ub", name: "uBlock Origin Lite", profileID: profileID)
+        #expect(fake.approved.map(\.0) == ["ub"] && fake.approved.map(\.1) == [profileID])
+        #expect(said.messages.last == "Turned on uBlock Origin Lite with its new access")
+        #expect(model.extensionsRevision > revision)
     }
 
     @Test func removingFromAProfileThatWentSaysSoAndRemovesNothing() async throws {

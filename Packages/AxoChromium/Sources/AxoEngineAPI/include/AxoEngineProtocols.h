@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 39
+#define AXO_ENGINE_API_VERSION 40
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -24,6 +24,17 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol AXOWindow;
 @protocol AXOWindowDelegate;
 @protocol AXOExtension;
+
+/// Why an extension is off (`AXOExtension.disableReasons`).
+typedef NS_OPTIONS(NSUInteger, AXOExtensionDisableReason) {
+  AXOExtensionDisableReasonNone = 0,
+  /// The person turned it off.
+  AXOExtensionDisableReasonByPerson = 1 << 0,
+  /// An update asks for permissions it wasn't granted.
+  AXOExtensionDisableReasonNewPermissions = 1 << 1,
+  /// Any of Chrome's other reasons (corrupted, blocklisted, unsupported, policy).
+  AXOExtensionDisableReasonOther = 1 << 2,
+};
 @protocol AXOExtensionAction;
 @protocol AXOExtensionPopup;
 @protocol AXOExtensionCommand;
@@ -155,9 +166,17 @@ NS_SWIFT_UI_ACTOR
 - (void)setUserScriptsAllowed:(BOOL)allowed forExtension:(NSString*)extensionID
     NS_SWIFT_NAME(setUserScriptsAllowed(_:forExtension:));
 
-/// Turns an extension on or off.
+/// Turns an extension on or off. Turning it on clears only the person's own reason: one an
+/// update turned off for new permissions stays off until `approveNewPermissionsForExtension:`,
+/// and Chrome's other reasons stay too.
 - (void)setExtension:(NSString*)extensionID enabled:(BOOL)enabled
     NS_SWIFT_NAME(setExtension(_:enabled:));
+
+/// Grants an extension the permissions an update asked for and turns it on, as accepting
+/// Chrome's re-enable prompt does (`GrantPermissionsAndEnableExtension`). Does nothing for one
+/// that isn't waiting for that.
+- (void)approveNewPermissionsForExtension:(NSString*)extensionID
+    NS_SWIFT_NAME(approveNewPermissions(forExtension:));
 
 /// Uninstalls an extension and deletes its data.
 - (void)uninstallExtension:(NSString*)extensionID;
@@ -766,6 +785,16 @@ NS_SWIFT_UI_ACTOR
 @property(nonatomic, readonly) BOOL userScriptsAllowed;
 /// Whether it's pinned to the toolbar (`pinnedExtensionIDs`), on or not.
 @property(nonatomic, readonly, getter=isPinned) BOOL pinned;
+/// Why it's off, if it is: turned off by the person, by an update that asks for permissions it
+/// wasn't granted (Chrome's DISABLE_PERMISSIONS_INCREASE, until `approveNewPermissionsForExtension:`),
+/// or for another of Chrome's reasons (corrupted, blocklisted, unsupported), which turning it on
+/// doesn't clear.
+@property(nonatomic, readonly) AXOExtensionDisableReason disableReasons;
+/// For an extension an update turned off for new permissions, the API permissions it asks for
+/// that it wasn't granted (manifest names such as "bookmarks"); empty otherwise.
+@property(nonatomic, readonly) NSArray<NSString*>* addedAPIPermissions;
+/// The same for sites (match patterns such as "https://*.example.com/*").
+@property(nonatomic, readonly) NSArray<NSString*>* addedHostPermissions;
 @end
 
 /// An extension's toolbar button for one page.

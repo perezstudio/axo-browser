@@ -140,6 +140,12 @@ public final class FakeProfile: NSObject, AXOProfile {
     public var pinnedExtensionIDs: [String] = []
     /// The pins Axo set, in order.
     public private(set) var pinChanges: [(String, Bool)] = []
+    /// The extensions whose new permissions Axo approved, in order.
+    public private(set) var approvedPermissions: [String] = []
+    public func approveNewPermissions(forExtension extensionID: String) {
+        approvedPermissions.append(extensionID)
+        onExtensionsChange?()
+    }
     public func setExtension(_ extensionID: String, pinned: Bool) {
         pinChanges.append((extensionID, pinned))
         pinnedExtensionIDs.removeAll { $0 == extensionID }
@@ -407,9 +413,15 @@ public final class FakeExtension: NSObject, AXOExtension {
     public let isEnabled: Bool, isUnpacked: Bool
     public let usesUserScripts: Bool, userScriptsAllowed: Bool
     public var isPinned: Bool
+    public var disableReasons: AXOExtensionDisableReason
+    public var addedAPIPermissions: [String]
+    public var addedHostPermissions: [String]
 
-    public init(identifier: String, name: String, version: String = "1.0", isEnabled: Bool = true, isUnpacked: Bool = true, usesUserScripts: Bool = false, userScriptsAllowed: Bool = false, isPinned: Bool = false) {
+    public init(identifier: String, name: String, version: String = "1.0", isEnabled: Bool = true, isUnpacked: Bool = true, usesUserScripts: Bool = false, userScriptsAllowed: Bool = false, isPinned: Bool = false, disableReasons: AXOExtensionDisableReason = [], addedAPIPermissions: [String] = [], addedHostPermissions: [String] = []) {
         self.isPinned = isPinned
+        self.disableReasons = disableReasons
+        self.addedAPIPermissions = addedAPIPermissions
+        self.addedHostPermissions = addedHostPermissions
         self.identifier = identifier
         self.name = name
         self.version = version
