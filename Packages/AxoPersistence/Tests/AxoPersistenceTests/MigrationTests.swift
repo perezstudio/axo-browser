@@ -383,6 +383,26 @@ struct MigrationTests {
         }
     }
 
+    @Test func v19PermissionDefaultsAreOnePerKindGoWithTheirProfileAndDontSync() throws {
+        let queue = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(queue, upTo: "v18-command-bar-ranking")
+        let profileID = UUID()
+        try queue.write { db in
+            try db.execute(sql: "INSERT INTO profile (id, name) VALUES (?, 'Default')", arguments: [profileID])
+            try db.execute(sql: "DELETE FROM syncChange")
+        }
+        try AppDatabase.migrator.migrate(queue)
+        try queue.write { db in
+            let insert = "INSERT INTO sitePermissionDefault (profileID, kind, decision) VALUES (?, ?, ?)"
+            try db.execute(sql: insert, arguments: [profileID, "camera", "deny"])
+            try db.execute(sql: insert, arguments: [profileID, "location", "allow"])
+            #expect(throws: DatabaseError.self) { try db.execute(sql: insert, arguments: [profileID, "camera", "allow"]) }
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM syncChange") == 0, "Not synced")
+            try db.execute(sql: "DELETE FROM profile")
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM sitePermissionDefault") == 0, "They go with their profile")
+        }
+    }
+
     @Test func v14FavoritesBelongToAProfileAndSync() throws {
         let database = try AppDatabase.makeInMemory()
         let profileID = UUID(), favoriteID = UUID()

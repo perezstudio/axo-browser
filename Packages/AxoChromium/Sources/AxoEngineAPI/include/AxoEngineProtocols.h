@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 40
+#define AXO_ENGINE_API_VERSION 41
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -273,6 +273,12 @@ NS_SWIFT_UI_ACTOR
 /// and Chrome's holds on sites that dismissed prompts (embargoes), so the app can set its own
 /// answers afresh (at launch), leaving none that only Chrome knows.
 - (void)clearLastingPermissions;
+/// Sets what sites that haven't been answered get for notifications or the clipboard (Chrome's
+/// default content setting): Ask (Chrome's own default), Allow, or Block, which Chrome then
+/// answers without asking. Sites with their own answer (`setPermission:origin:setting:`) keep it.
+/// Does nothing for other kinds, which the app answers each time they're asked.
+- (void)setDefaultPermission:(AXOPermissionKind)kind
+                     setting:(AXOPermissionSetting)setting NS_SWIFT_NAME(setDefaultPermission(_:setting:));
 
 /// Called with each change an extension makes to the bookmarks. Apply it to the app's data and
 /// set the tree again; a change the app can't make is undone by that.
@@ -675,6 +681,10 @@ NS_SWIFT_UI_ACTOR
 @property(nonatomic) BOOL audioMuted;
 /// What the page uses now: the camera, the microphone, the screen, or the person's location.
 @property(nonatomic, readonly) AXOPageCapture capture;
+/// Stops the page's site using the camera, the microphone, or location, as revoking the
+/// permission in Chrome does (its streams and watches end), for when the app's answer for the
+/// site changes to deny. The page's next request asks again. The screen isn't stopped.
+- (void)stopCapture:(AXOPageCapture)kinds NS_SWIFT_NAME(stopCapture(_:));
 /// Whether the page stopped working, and why. A crash lasts until the page loads again
 /// (`-reload`, or another address), not responding until it responds again.
 @property(nonatomic, readonly) AXOPageProblem problem;

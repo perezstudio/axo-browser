@@ -110,6 +110,9 @@ public final class ChromiumEngine: WebEngine {
     /// Each profile's lasting permission answers (notifications, the clipboard) from Axo's site
     /// settings, given to the engine once the profile is in use; `nil` clears one.
     var lastingPermissions: [Profile.ID: [LastingPermissionKey: PermissionDecision?]] = [:]
+    /// Each profile's defaults for kinds Chrome keeps answers for (#133), given to the engine once
+    /// the profile is in use; `nil` is Ask.
+    var defaultPermissions: [Profile.ID: [PermissionKind: PermissionDecision?]] = [:]
     /// Profiles whose lasting answers in Chrome are cleared before Axo's are given, once in use.
     var clearsLastingPermissions: Set<Profile.ID> = []
     /// Profiles whose data was removed. They're never loaded again, so a late call can't bring
@@ -269,6 +272,9 @@ public final class ChromiumEngine: WebEngine {
             }
             for (key, decision) in lastingPermissions[profileID] ?? [:] {
                 profile.setLastingPermission(key, decision: decision)
+            }
+            for (kind, decision) in defaultPermissions[profileID] ?? [:] {
+                profile.setDefaultPermission(kind, decision: decision)
             }
             profile.onExtensionPrompt = { [weak self] prompt, answer in
                 guard let handler = self?.onExtensionPrompt else {

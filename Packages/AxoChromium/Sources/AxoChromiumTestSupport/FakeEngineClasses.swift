@@ -114,6 +114,11 @@ public final class FakeProfile: NSObject, AXOProfile {
     public func setPermission(_ kind: AXOPermissionKind, origin: URL, setting: AXOPermissionSetting) {
         permissionSettings.append((kind, origin, setting))
     }
+    /// The defaults Axo set, in order: kind and setting.
+    public private(set) var defaultPermissionSettings: [(kind: AXOPermissionKind, setting: AXOPermissionSetting)] = []
+    public func setDefaultPermission(_ kind: AXOPermissionKind, setting: AXOPermissionSetting) {
+        defaultPermissionSettings.append((kind, setting))
+    }
     /// How many times Axo cleared every lasting answer.
     public private(set) var lastingPermissionClears = 0
     public func clearLastingPermissions() {
@@ -314,6 +319,12 @@ public final class FakePage: NSObject, AXOPage {
         didSet { if audioMuted != oldValue { delegate?.pageAudioStateDidChange?(self) } }
     }
     public var capture: AXOPageCapture = []
+    /// The capture Axo asked the page to stop, in order.
+    public private(set) var stopCaptureRequests: [AXOPageCapture] = []
+    public func stopCapture(_ kinds: AXOPageCapture) {
+        stopCaptureRequests.append(kinds)
+        capture.subtract(kinds)
+    }
     public func simulateMedia(isPlayingAudio: Bool? = nil, capture: AXOPageCapture? = nil) {
         if let isPlayingAudio {
             self.isPlayingAudio = isPlayingAudio

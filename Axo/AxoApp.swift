@@ -15,6 +15,8 @@ import AxoSync
 import AxoUI
 import AxoWeb
 import AppIntents
+import AVFoundation
+import CoreLocation
 import CoreSpotlight
 import Foundation
 import SwiftUI
@@ -261,6 +263,8 @@ enum AppEnvironment {
             model.defaultBrowser = SystemDefaultBrowser()
             // Not in test runs either, so a test run never shows macOS's location prompt.
             model.locationAuthorization = SystemLocationAuthorization()
+            // Website Permissions says when macOS keeps Axo from a device (#133).
+            model.isBlockedBySystem = SystemPermissionStatus.isBlocked
             model.pageSummarizer = SystemPageSummarizer()
             model.externalApps = SystemExternalApps()
             // First run shows once, for a browser with nothing in it yet (#175).
@@ -521,6 +525,20 @@ final class SystemLocationAuthorization: LocationAuthorizing {
 
     func requestIfNeeded() {
         authorization.requestIfNeeded()
+    }
+}
+
+/// Whether macOS keeps Axo from the camera, microphone, or location, for Website Permissions
+/// (#133). Reading the status never asks.
+enum SystemPermissionStatus {
+    @MainActor
+    static func isBlocked(_ kind: SitePermission.Kind) -> Bool {
+        switch kind {
+        case .camera: [.denied, .restricted].contains(AVCaptureDevice.authorizationStatus(for: .video))
+        case .microphone: [.denied, .restricted].contains(AVCaptureDevice.authorizationStatus(for: .audio))
+        case .location: [.denied, .restricted].contains(CLLocationManager().authorizationStatus)
+        case .notifications, .clipboard: false
+        }
     }
 }
 

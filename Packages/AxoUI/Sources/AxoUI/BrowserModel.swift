@@ -250,6 +250,13 @@ public final class BrowserModel {
     public internal(set) var pendingExtensionInstall: ExtensionInstallPrompt?
     /// The profile ``pendingExtensionInstall`` goes to.
     @ObservationIgnored var pendingExtensionInstallProfileID: Profile.ID?
+    /// The site the Website Permissions pane shows first, when Site Settings opened it (#133).
+    public var websitePermissionsFocus: PageOrigin?
+    /// The profile the Website Permissions pane shows; `nil` for the shown Space's.
+    public var websitePermissionsProfileID: Profile.ID?
+    /// Whether macOS keeps Axo from a device a kind needs (camera, microphone, location), for the
+    /// pane to say so. Set by the app; tests leave it saying no.
+    @ObservationIgnored public var isBlockedBySystem: @MainActor (SitePermission.Kind) -> Bool = { _ in false }
     /// Whether the Extensions window is open.
     public var isShowingExtensions = false
     /// The profile whose extensions the Extensions window shows; `nil` for the shown Space's.

@@ -2154,6 +2154,37 @@ final class AxoUITests: XCTestCase {
         app.buttons["resetSiteSettings"].click()
         expectation(for: NSPredicate(format: "value == %@", "Ask"), evaluatedWith: camera)
         waitForExpectations(timeout: 5)
+
+        // Website Permissions (#133): from Site Settings to the site in Settings › Profiles.
+        camera.click()
+        app.menuItems["Don't Allow"].click()
+        expectation(for: NSPredicate(format: "value == %@", "Don't Allow"), evaluatedWith: camera)
+        waitForExpectations(timeout: 5)
+        app.buttons["manageWebsitePermissions"].click()
+        let sheet = app.descendants(matching: .any)["websitePermissionsSheet"]
+        XCTAssertTrue(sheet.waitForExistence(timeout: 10), "Settings opens on the site's camera answers")
+        let row = sheet.popUpButtons.matching(NSPredicate(format: "label == %@", "Camera for 127.0.0.1:9")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertEqual(row.value as? String, "Don't Allow")
+        row.click()
+        app.menuItems["Allow"].click()
+        expectation(for: NSPredicate(format: "value == %@", "Allow"), evaluatedWith: row)
+        waitForExpectations(timeout: 5)
+        sheet.buttons["Remove 127.0.0.1:9"].click()
+        XCTAssertTrue(row.waitForNonExistence(timeout: 5), "Removed: the site asks again")
+
+        let defaultAnswer = sheet.popUpButtons["websitePermissionDefault"]
+        XCTAssertEqual(defaultAnswer.value as? String, "Ask")
+        defaultAnswer.click()
+        app.menuItems["Don't Allow"].click()
+        expectation(for: NSPredicate(format: "value == %@", "Don't Allow"), evaluatedWith: defaultAnswer)
+        waitForExpectations(timeout: 5)
+
+        let newSite = sheet.textFields["websitePermissionNewSite"]
+        newSite.click()
+        newSite.typeText("not a site")
+        sheet.buttons["websitePermissionAdd"].click()
+        XCTAssertTrue(sheet.staticTexts["Enter a website's address, such as meet.example.com."].waitForExistence(timeout: 5))
     }
 
     /// Summarize Page shows a summary of the page's text in a popover. UI tests use a
