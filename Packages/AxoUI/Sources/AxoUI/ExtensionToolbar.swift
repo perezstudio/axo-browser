@@ -362,8 +362,12 @@ private struct ExtensionsMenu: View {
             Label("Extensions", systemImage: "puzzlepiece.extension")
                 .labelStyle(.iconOnly)
         }
+        // As the tab bar's folder menus: a button VoiceOver can press, named for itself.
+        .menuStyle(.button)
+        .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .help("Extensions")
+        .accessibilityLabel("Extensions")
         .accessibilityIdentifier("extensionsMenuButton")
     }
 }

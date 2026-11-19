@@ -503,13 +503,12 @@ private struct ExtensionListRow: View {
             Spacer(minLength: 0)
             if item.needsAttention {
                 Circle().fill(.red).frame(width: 7, height: 7)
+                    .accessibilityLabel("Needs attention")
             }
         }
         .padding(.vertical, 2)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(item.name)
-        .accessibilityValue(item.needsAttention ? "\(item.stateDescription), needs attention" : item.stateDescription)
-        .accessibilityIdentifier("extensionListRow")
+        // The list's own row reads its texts (name, state, and the dot); an element made here
+        // had no role the audit knew.
     }
 }
 
@@ -563,14 +562,13 @@ private struct ExtensionDetails: View {
                             .font(.callout).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Toggle("On", isOn: Binding(
+                    // The switch says whether it's on; its (hidden) label says what it turns on.
+                    Toggle(item.name, isOn: Binding(
                         get: { item.isEnabled },
                         set: { on in change { try await $0.setEnabled(on, extensionID: item.id, profileID: $1) } }
                     ))
                     .toggleStyle(.switch)
                     .labelsHidden()
-                    // The switch says whether it's on; the label says what it turns on.
-                    .accessibilityLabel(item.name)
                     .accessibilityIdentifier("extensionOnSwitch")
                 }
                 if let error = item.loadError {
@@ -602,14 +600,13 @@ private struct ExtensionDetails: View {
                 }
             }
             Section("Site Access") {
-                Picker("Site access", selection: Binding(
+                Picker("Site access for \(item.name)", selection: Binding(
                     get: { item.reachesAllRequestedSites },
                     set: { all in change { try await $0.setReachesAllRequestedSites(all, extensionID: item.id, profileID: $1) } }
                 )) {
                     Text("All requested sites").tag(true)
                     Text("When you click it").tag(false)
                 }
-                .accessibilityLabel("Site access for \(item.name)")
                 if !item.listsAccess {
                     // The engine doesn't say yet; never claim it asks for nothing.
                 } else if item.lines.isEmpty {

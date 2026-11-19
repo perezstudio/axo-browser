@@ -104,6 +104,7 @@ struct ExtensionPinningTests {
         #expect(pins.isPinned("c", profileID: profile))
     }
 
+    #if os(macOS)
     @Test func thePickerListsTheSpacesProfileFirst() {
         let home = Profile(id: UUID(), name: "Default"), work = Profile(id: UUID(), name: "Work"), kids = Profile(id: UUID(), name: "Kids")
         #expect(ExtensionsView.pickerOrder([home, work, kids], first: kids.id).map(\.name) == ["Kids", "Default", "Work"])
@@ -123,6 +124,7 @@ struct ExtensionPinningTests {
         #expect(ExtensionToolbarButtons.shownCount(of: unpinned, limit: limit) == 1)
         #expect(ExtensionToolbarButtons.shownCount(of: [], limit: limit) == 0)
     }
+    #endif
 
     @Test func statesSayWhatAnExtensionIsDoing() {
         func summary(enabled: Bool = true, unpacked: Bool = false, pinned: Bool = false, error: String? = nil) -> ExtensionSummary {
@@ -144,6 +146,7 @@ struct ExtensionPinningTests {
         #expect(all.keysDescription == "⌃⌥⇧⌘1")
     }
 
+    #if os(macOS)
     @Test func theWindowsSearchMatchesNamesInOrder() {
         func summary(_ name: String) -> ExtensionSummary {
             ExtensionSummary(id: name, name: name, version: "1", isEnabled: true, isUnpacked: false, reachesAllRequestedSites: true, lines: [], loadError: nil)
@@ -153,6 +156,7 @@ struct ExtensionPinningTests {
         #expect(ExtensionsView.filtered(all, query: " dark ").map(\.name) == ["Dark Reader"])
         #expect(ExtensionsView.filtered(all, query: "zzz").isEmpty)
     }
+    #endif
 }
 
 @MainActor
