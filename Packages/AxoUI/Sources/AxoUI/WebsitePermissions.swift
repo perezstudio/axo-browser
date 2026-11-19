@@ -248,7 +248,6 @@ struct WebsitePermissionsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
     @State private var newSite = ""
-    @State private var newSiteDecision: SitePermission.Decision = .allow
     @State private var invalidSite = false
     @State private var isConfirmingRemoveAll = false
 
@@ -288,6 +287,9 @@ struct WebsitePermissionsSheet: View {
                         }
                         Text("Don't Allow").tag(SitePermission.Decision?.some(.deny))
                     }
+                    // Every choice on screen (a pop-up in this sheet had no action VoiceOver
+                    // could press, as in the Extensions window).
+                    .pickerStyle(.radioGroup)
                     .accessibilityLabel("\(title) for other websites")
                     .accessibilityIdentifier("websitePermissionDefault")
                     if model.isBlockedBySystem(kind) {
@@ -312,19 +314,16 @@ struct WebsitePermissionsSheet: View {
                 Section {
                     HStack {
                         TextField("Add a website", text: $newSite, prompt: Text("meet.example.com"))
-                            .onSubmit(addSite)
                             .accessibilityLabel("Website to add")
                             .accessibilityIdentifier("websitePermissionNewSite")
-                        Picker("Answer", selection: $newSiteDecision) {
-                            Text("Allow").tag(SitePermission.Decision.allow)
-                            Text("Don't Allow").tag(SitePermission.Decision.deny)
-                        }
-                        .labelsHidden()
-                        .fixedSize()
-                        .accessibilityLabel("Answer for the website to add")
-                        Button("Add", action: addSite)
+                        Button("Allow") { addSite(.allow) }
                             .disabled(newSite.trimmingCharacters(in: .whitespaces).isEmpty)
-                            .accessibilityIdentifier("websitePermissionAdd")
+                            .accessibilityLabel("Allow the website")
+                            .accessibilityIdentifier("websitePermissionAddAllow")
+                        Button("Don't Allow") { addSite(.deny) }
+                            .disabled(newSite.trimmingCharacters(in: .whitespaces).isEmpty)
+                            .accessibilityLabel("Don't allow the website")
+                            .accessibilityIdentifier("websitePermissionAddDeny")
                     }
                     if invalidSite {
                         Text("Enter a website's address, such as meet.example.com.")
@@ -363,23 +362,22 @@ struct WebsitePermissionsSheet: View {
         let origin = URL(string: answer.origin).flatMap(PageOrigin.init(url:))
         let site = origin?.displayName ?? answer.origin
         return HStack {
-            Text(site)
-                .lineLimit(1)
-                .truncationMode(.head)
-            Spacer()
-            Picker("\(title) for \(site)", selection: Binding(
-                get: { answer.decision },
-                set: { decision in
+            // On means Allow. The switch is labeled with the site, so VoiceOver reads "Camera for
+            // meet.example.com, on".
+            Toggle(isOn: Binding(
+                get: { answer.decision == .allow },
+                set: { allowed in
                     guard let origin else { return }
-                    Task { await model.setWebsitePermission(decision, for: kind, origin: origin, profileID: profileID) }
+                    Task { await model.setWebsitePermission(allowed ? .allow : .deny, for: kind, origin: origin, profileID: profileID) }
                 }
             )) {
-                Text("Allow").tag(SitePermission.Decision.allow)
-                Text("Don't Allow").tag(SitePermission.Decision.deny)
+                Text(site)
+                    .lineLimit(1)
+                    .truncationMode(.head)
             }
-            .labelsHidden()
-            .fixedSize()
+            .toggleStyle(.switch)
             .accessibilityLabel("\(title) for \(site)")
+            .accessibilityIdentifier("websitePermissionSwitch")
             Button("Remove") {
                 guard let origin else { return }
                 Task { await model.setWebsitePermission(nil, for: kind, origin: origin, profileID: profileID) }
@@ -390,10 +388,10 @@ struct WebsitePermissionsSheet: View {
         .accessibilityIdentifier("websitePermissionRow")
     }
 
-    private func addSite() {
+    private func addSite(_ decision: SitePermission.Decision) {
         let text = newSite
         Task {
-            if await model.addWebsitePermission(text, decision: newSiteDecision, for: kind, profileID: profileID) {
+            if await model.addWebsitePermission(text, decision: decision, for: kind, profileID: profileID) {
                 newSite = ""
                 invalidSite = false
             } else {
