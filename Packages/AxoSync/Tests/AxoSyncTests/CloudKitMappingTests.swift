@@ -57,17 +57,34 @@ struct CloudKitMappingTests {
     @Test func syncProblemsSayWhatThePersonCanDo() {
         #expect(SyncProblem.from(CKError(.quotaExceeded)) == .storageFull)
         #expect(SyncProblem.from(CKError(.notAuthenticated)) == .signedOut)
-        let recordID = CKRecord.ID(recordName: "Tab.x")
-        let partial = CKError(.partialFailure, userInfo: [CKPartialErrorsByItemIDKey: [recordID: CKError(.quotaExceeded)]])
+        #expect(SyncProblem.from(CKError(.accountTemporarilyUnavailable)) == .signedOut)
+        let recordID = CKRecord.ID(recordName: "Tab.x"), other = CKRecord.ID(recordName: "Tab.y")
+        // Saves in a zone are atomic: one record over quota fails the rest with batchRequestFailed.
+        let partial = CKError(.partialFailure, userInfo: [CKPartialErrorsByItemIDKey: [
+            other: CKError(.batchRequestFailed), recordID: CKError(.quotaExceeded),
+        ]])
         #expect(SyncProblem.from(partial) == .storageFull)
-        guard case .other(let code, _) = SyncProblem.from(CKError(.serverRejectedRequest)) else {
-            Issue.record("Expected another problem")
-            return
-        }
-        #expect(code == CKError.Code.serverRejectedRequest.rawValue)
+        #expect(SyncProblem.from(CKError(.serverRejectedRequest))
+                == .other(domain: CKErrorDomain, code: CKError.Code.serverRejectedRequest.rawValue, description: CKError(.serverRejectedRequest).localizedDescription))
         #expect(!SyncProblem.from(CKError(.serverRejectedRequest)).isTransient)
-        #expect(SyncProblem.from(CKError(.networkUnavailable)).isTransient)
+        for code in [CKError.Code.networkUnavailable, .operationCancelled, .batchRequestFailed, .serverResponseLost, .limitExceeded] {
+            #expect(SyncProblem.from(CKError(code)).isTransient, "\(code)")
+        }
         #expect(!SyncProblem.storageFull.isTransient)
+        // Another domain's code 6 isn't CloudKit's serviceUnavailable.
+        let sqlite = NSError(domain: "SQLite", code: 6)
+        #expect(!SyncProblem.from(sqlite).isTransient)
+    }
+
+    /// One send's failures: storage full wins, then signed out, then the first lasting one.
+    @Test func theWorstProblemOfASendIsShown() {
+        let lasting = SyncProblem.other(domain: CKErrorDomain, code: CKError.Code.serverRejectedRequest.rawValue, description: "No")
+        let transient = SyncProblem.from(CKError(.batchRequestFailed))
+        #expect(SyncProblem.worst([transient, lasting, .signedOut, .storageFull]) == .storageFull)
+        #expect(SyncProblem.worst([transient, lasting, .signedOut]) == .signedOut)
+        #expect(SyncProblem.worst([transient, lasting]) == lasting)
+        #expect(SyncProblem.worst([transient]) == nil)
+        #expect(SyncProblem.worst([]) == nil)
     }
 
     @Test func unsignedBuildsDontSync() {

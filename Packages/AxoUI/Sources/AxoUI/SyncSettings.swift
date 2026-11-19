@@ -6,6 +6,8 @@ public enum SyncPause: Equatable, Sendable {
     case signedOut
     /// The person's iCloud storage is full.
     case storageFull
+    /// Screen Time or a management profile keeps Axo from iCloud on this Mac.
+    case restricted
 }
 
 /// Where iCloud sync stands, for the iCloud pane in Settings (#174), as the iCloud sync board
@@ -53,7 +55,7 @@ struct SyncSettings: View {
     /// What syncs through iCloud.
     static let syncedItems = "Profiles, Spaces and their themes, folders, pinned tabs, and favorites"
     /// What stays on this Mac.
-    static let localItems = "Open tabs, history, website data and logins, site permissions, and extensions"
+    static let localItems = "Open tabs, history, website data and logins, site permissions, extensions, link rules, site customizations, and settings"
 
     var body: some View {
         Form {
@@ -100,13 +102,17 @@ struct SyncSettings: View {
                         .font(.headline)
                         .accessibilityAddTraits(.isHeader)
                         .accessibilityIdentifier("syncStatusTitle")
-                    Text(Self.message(for: status))
-                        .foregroundStyle(.secondary)
-                        .accessibilityIdentifier("syncStatus")
+                    // Redrawn each minute, so "Last synced" stays true while the pane is open.
+                    TimelineView(.everyMinute) { _ in
+                        Text(Self.message(for: status))
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("syncStatus")
+                    }
                 }
                 Spacer(minLength: 0)
                 if status == .settingUp {
-                    ProgressView().controlSize(.small).accessibilityLabel("Setting up")
+                    // The title already says it; VoiceOver doesn't need it twice.
+                    ProgressView().controlSize(.small).accessibilityHidden(true)
                 }
             }
             actions(for: status)
@@ -130,14 +136,18 @@ struct SyncSettings: View {
         case .paused(.storageFull):
             Button("Manage Storage…") { sync.openStorageSettings() }
                 .accessibilityIdentifier("syncStorageButton")
+        case .paused(.restricted):
+            EmptyView()
         case .failed(let details):
             HStack {
                 Button("Try Again") { Task { await sync.syncNow() } }
                     .accessibilityIdentifier("syncTryAgainButton")
                 Button(showsDetails ? "Hide Details" : "Show Details") { showsDetails.toggle() }
+                    .accessibilityIdentifier("syncDetailsButton")
             }
             if showsDetails {
                 Text(details)
+                    .accessibilityIdentifier("syncDetails")
                     .font(.callout.monospaced())
                     .textSelection(.enabled)
                     .foregroundStyle(.secondary)
@@ -163,13 +173,14 @@ struct SyncSettings: View {
     static func message(for status: SyncStatus) -> String {
         switch status {
         case .unavailable: "This copy of Axo can't use iCloud. Official releases can."
-        case .off: "Turn it on to keep your Spaces the same on your Mac, iPhone, and iPad."
+        case .off: "Turn it on to keep your Spaces the same on your other Macs."
         case .settingUp: "Bringing your Spaces together with the ones in iCloud. Spaces from both sides are kept; nothing is replaced."
         case .upToDate(nil): "Waiting for the first sync."
         case .upToDate(let date?):
             "Last synced \(date.formatted(.relative(presentation: .named, unitsStyle: .wide)))."
         case .paused(.signedOut): "You're signed out of iCloud. Sign in to keep syncing; everything stays on this Mac meanwhile."
         case .paused(.storageFull): "Your iCloud storage is full, so changes here aren't reaching your other devices."
+        case .paused(.restricted): "Screen Time or your organization keeps Axo from using iCloud on this Mac."
         case .failed: "Axo couldn't sync with iCloud. It tries again on its own."
         }
     }

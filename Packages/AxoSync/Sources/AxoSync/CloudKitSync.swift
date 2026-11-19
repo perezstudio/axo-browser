@@ -6,38 +6,66 @@ import Synchronization
 
 /// Why sync stopped or failed, in terms the iCloud pane can act on.
 public enum SyncProblem: Equatable, Sendable {
-    /// No iCloud account is signed in (or it needs signing in again).
+    /// No iCloud account is signed in, or it needs signing in again.
     case signedOut
     /// The person's iCloud storage is full.
     case storageFull
-    /// Anything else, with CloudKit's error code and description for Show Details.
-    case other(code: Int, description: String)
+    /// Anything else, with the error's domain, code, and description for Show Details.
+    case other(domain: String, code: Int, description: String)
 
-    /// The problem an error from CloudKit stands for. Partial failures count as storage full
-    /// if any item failed for that, and as signed out if any failed for that.
+    /// The problem an error stands for. A partial failure counts as storage full if any item
+    /// failed for that, then as signed out.
     public static func from(_ error: any Error) -> SyncProblem {
         guard let error = error as? CKError else {
-            return .other(code: (error as NSError).code, description: error.localizedDescription)
+            let error = error as NSError
+            return .other(domain: error.domain, code: error.code, description: error.localizedDescription)
         }
         switch error.code {
         case .quotaExceeded: return .storageFull
-        case .notAuthenticated: return .signedOut
+        case .notAuthenticated, .accountTemporarilyUnavailable: return .signedOut
         case .partialFailure:
-            let codes = (error.partialErrorsByItemID ?? [:]).values.compactMap { ($0 as? CKError)?.code }
-            if codes.contains(.quotaExceeded) { return .storageFull }
-            if codes.contains(.notAuthenticated) { return .signedOut }
-            return .other(code: error.errorCode, description: error.localizedDescription)
+            let problems = (error.partialErrorsByItemID ?? [:]).values.map(from)
+            return worst(problems) ?? .other(domain: CKErrorDomain, code: error.errorCode, description: error.localizedDescription)
         default:
-            return .other(code: error.errorCode, description: error.localizedDescription)
+            return .other(domain: CKErrorDomain, code: error.errorCode, description: error.localizedDescription)
         }
     }
 
-    /// Whether the sync engine retries this on its own (the network, the server being busy),
-    /// so it's worth showing only if it lasts.
-    public var isTransient: Bool {
-        guard case .other(let code, _) = self, let ckCode = CKError.Code(rawValue: code) else { return false }
-        return [.networkUnavailable, .networkFailure, .serviceUnavailable, .requestRateLimited, .zoneBusy].contains(ckCode)
+    /// The problem to show among several (one send's failed records): storage full, then
+    /// signed out, then the first other one that isn't transient.
+    public static func worst(_ problems: [SyncProblem]) -> SyncProblem? {
+        if problems.contains(.storageFull) { return .storageFull }
+        if problems.contains(.signedOut) { return .signedOut }
+        return problems.first { !$0.isTransient }
     }
+
+    /// Whether the sync engine deals with this on its own (the network, the server being busy,
+    /// an operation cancelled or failed with the rest of its batch), so it isn't the person's
+    /// to act on.
+    public var isTransient: Bool {
+        guard case .other(let domain, let code, _) = self, domain == CKErrorDomain,
+              let ckCode = CKError.Code(rawValue: code) else { return false }
+        let transient: [CKError.Code] = [
+            .networkUnavailable, .networkFailure, .serviceUnavailable, .requestRateLimited, .zoneBusy,
+            .operationCancelled, .batchRequestFailed, .serverResponseLost, .limitExceeded,
+        ]
+        return transient.contains(ckCode)
+    }
+}
+
+/// What ``CloudKitSync`` reports to the app, for the iCloud pane and VoiceOver.
+public enum SyncEngineEvent: Equatable, Sendable {
+    /// A fetch finished.
+    case fetched(Date)
+    /// A send finished, with the problem its records failed for, if any the person can act on.
+    /// A send whose records failed still finishes, so only one with no problem means changes
+    /// reached iCloud.
+    case sent(Date, problem: SyncProblem?)
+    /// Sync starts over with the account (signed in, switched, or Axo's zone was deleted): the
+    /// first sync runs again.
+    case startedOver
+    /// Spaces that arrived from iCloud after the first sync, by name.
+    case spacesArrived([String])
 }
 
 /// Syncs Axo's sidebar through the person's private iCloud database with `CKSyncEngine`.
@@ -61,29 +89,17 @@ public final class CloudKitSync: CKSyncEngineDelegate {
     private let observation = Mutex<Task<Void, Never>?>(nil)
     private let logger = Logger(subsystem: "com.perezstudio.Axo", category: "Sync")
 
-    /// Called on the main actor after each fetch or send finishes, with the time, for showing
-    /// when Axo last synced.
-    private let onSynced: @MainActor @Sendable (Date) -> Void
-    /// Called on the main actor when a send fails for a reason the person may need to act on
-    /// (storage full, signed out), for the iCloud pane.
-    private let onProblem: @MainActor @Sendable (SyncProblem) -> Void
-    /// Called on the main actor with the names of Spaces that arrived from iCloud.
-    private let onSpacesArrived: @MainActor @Sendable ([String]) -> Void
+    /// Called on the main actor with what happened (``SyncEngineEvent``).
+    private let onEvent: @MainActor @Sendable (SyncEngineEvent) -> Void
+    /// The problems the current send's records failed for, reported when it finishes.
+    private let sendProblems = Mutex<[SyncProblem]>([])
 
     /// Creates a sync over `database`, usually `CKContainer(identifier:).privateCloudDatabase`.
     /// Call ``start()`` to begin.
-    public init(
-        store: SyncStore,
-        database: CKDatabase,
-        onSynced: @escaping @MainActor @Sendable (Date) -> Void = { _ in },
-        onProblem: @escaping @MainActor @Sendable (SyncProblem) -> Void = { _ in },
-        onSpacesArrived: @escaping @MainActor @Sendable ([String]) -> Void = { _ in }
-    ) {
+    public init(store: SyncStore, database: CKDatabase, onEvent: @escaping @MainActor @Sendable (SyncEngineEvent) -> Void = { _ in }) {
         self.store = store
         self.database = database
-        self.onSynced = onSynced
-        self.onProblem = onProblem
-        self.onSpacesArrived = onSpacesArrived
+        self.onEvent = onEvent
     }
 
     deinit {
@@ -166,6 +182,7 @@ public final class CloudKitSync: CKSyncEngineDelegate {
     /// Starts over with the current account: forgets iCloud bookkeeping, makes sure the zone
     /// exists, and runs the first sync again after the next fetch.
     private func startOver(_ syncEngine: CKSyncEngine) async throws {
+        await onEvent(.startedOver)
         observation.withLock { task in
             task?.cancel()
             task = nil
@@ -206,8 +223,10 @@ public final class CloudKitSync: CKSyncEngineDelegate {
             case .fetchedRecordZoneChanges(let changes):
                 let saved = changes.modifications.compactMap { Self.stampedRecord(from: $0.record) }
                 let deleted = changes.deletions.compactMap { Self.syncRecordID(recordID: $0.recordID) }
+                // The first sync brings everything; only Spaces after it count as arriving.
+                let announces = try await store.hasFinishedFirstSync()
                 let arrived = try await store.applyRemoteChanges(saved: saved, deleted: deleted)
-                if !arrived.isEmpty { await onSpacesArrived(arrived) }
+                if announces, !arrived.isEmpty { await onEvent(.spacesArrived(arrived)) }
             case .sentRecordZoneChanges(let sent):
                 try await handleSentChanges(sent, syncEngine: syncEngine)
             case .didFetchChanges:
@@ -215,9 +234,15 @@ public final class CloudKitSync: CKSyncEngineDelegate {
                     try await store.finishFirstSync()
                     startSending(with: syncEngine)
                 }
-                await onSynced(Date())
+                await onEvent(.fetched(Date()))
+            case .willSendChanges:
+                sendProblems.withLock { $0 = [] }
             case .didSendChanges:
-                await onSynced(Date())
+                let problems = sendProblems.withLock { problems in
+                    defer { problems = [] }
+                    return problems
+                }
+                await onEvent(.sent(Date(), problem: SyncProblem.worst(problems)))
             default:
                 break
             }
@@ -286,7 +311,7 @@ public final class CloudKitSync: CKSyncEngineDelegate {
                 // signed out need the person, so the iCloud pane says so.
                 logger.error("Couldn't save \(id): \(failure.error.localizedDescription)")
                 let problem = SyncProblem.from(failure.error)
-                if !problem.isTransient { await onProblem(problem) }
+                sendProblems.withLock { $0.append(problem) }
             }
         }
         // A row that changed again while its earlier change was being sent still needs sending.

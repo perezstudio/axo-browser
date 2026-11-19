@@ -21,6 +21,7 @@ struct SyncSettingsTests {
         #expect(SyncSettings.title(for: .paused(.signedOut)) == "Paused")
         #expect(SyncSettings.message(for: .paused(.signedOut)).contains("signed out of iCloud"))
         #expect(SyncSettings.message(for: .paused(.storageFull)).contains("storage is full"))
+        #expect(SyncSettings.message(for: .paused(.restricted)).contains("Screen Time"))
         #expect(SyncSettings.title(for: .failed(details: "x")) == "Couldn’t Sync")
         #expect(SyncSettings.message(for: .failed(details: "x")).contains("tries again on its own"))
         // Problems stand out; the rest don't.
@@ -32,6 +33,7 @@ struct SyncSettingsTests {
         #expect(SyncSettings.syncedItems.contains("favorites"))
         #expect(SyncSettings.syncedItems.contains("themes"))
         #expect(SyncSettings.localItems.contains("history") && SyncSettings.localItems.contains("extensions"))
+        #expect(SyncSettings.localItems.contains("link rules") && SyncSettings.localItems.contains("settings"))
     }
 
     /// A Space arriving through iCloud is announced, with no notice (decision 2 in ui-plan.md).
