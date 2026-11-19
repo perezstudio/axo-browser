@@ -99,6 +99,15 @@ struct ExtensionPinningTests {
         #expect(pins.pinnedIDs(among: ids + ["d"], profileID: profile) == ["b", "a", "d"])
         // Each profile keeps its own.
         #expect(pins.pinnedIDs(among: ids, profileID: other) == ["a", "b", "c"])
+        // A removed extension installed again starts pinned, as a new install does.
+        pins.forget("c", profileID: profile)
+        #expect(pins.isPinned("c", profileID: profile))
+    }
+
+    @Test func thePickerListsTheSpacesProfileFirst() {
+        let home = Profile(id: UUID(), name: "Default"), work = Profile(id: UUID(), name: "Work"), kids = Profile(id: UUID(), name: "Kids")
+        #expect(ExtensionsView.pickerOrder([home, work, kids], first: kids.id).map(\.name) == ["Kids", "Default", "Work"])
+        #expect(ExtensionsView.pickerOrder([home, work], first: nil).map(\.name) == ["Default", "Work"])
     }
 
     @Test func onlyPinnedExtensionsGetButtonsAndTheMenuTakesOnePlace() {
@@ -203,6 +212,15 @@ struct ExtensionManagementTests {
         #expect(fake.uninstalledProfiles != [model.space?.profileID])
         #expect(model.pendingExtensionRemoval == nil)
         #expect(said.messages.last == "Removed uBlock Origin Lite from Work")
+    }
+
+    @Test func removingFromAProfileThatWentSaysSoAndRemovesNothing() async throws {
+        model.askToRemoveExtension("ub", name: "uBlock Origin Lite", profileID: UUID())
+        let removal = try #require(model.pendingExtensionRemoval)
+        await model.removeExtension(removal)
+        #expect(fake.uninstalled.isEmpty)
+        #expect(model.alertMessage == "Axo couldn't remove uBlock Origin Lite. Its profile was deleted.")
+        #expect(!said.messages.contains { $0.hasPrefix("Removed") })
     }
 
     @Test func theWindowOpensOnAProfileAndInstallsThere() async throws {

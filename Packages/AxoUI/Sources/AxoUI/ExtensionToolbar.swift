@@ -101,6 +101,12 @@ public final class ExtensionPins {
         order[profileID] = shown
     }
 
+    /// Forgets a removed extension, so installing it again starts pinned, as a new install does.
+    public func forget(_ extensionID: String, profileID: Profile.ID) {
+        unpinned[profileID]?.remove(extensionID)
+        order[profileID]?.removeAll { $0 == extensionID }
+    }
+
     /// Moves a pinned extension to `index` among the pinned ones.
     public func move(_ extensionID: String, to index: Int, among ids: [String], profileID: Profile.ID) {
         var shown = pinnedIDs(among: ids, profileID: profileID)
@@ -342,11 +348,11 @@ private struct ExtensionsMenu: View {
             }
             Section("Pinned to the Toolbar") {
                 ForEach(items) { item in
-                    Toggle(item.label, isOn: Binding(
+                    // Named for what it does: menus read an item's title, not an accessibility label.
+                    Toggle("Pin \(item.label)", isOn: Binding(
                         get: { item.isPinned },
                         set: { model.setExtensionPinned($0, extensionID: item.id, name: item.label, profileID: profileID) }
                     ))
-                    .accessibilityLabel("Pin \(item.label) to the Toolbar")
                 }
             }
             Section {

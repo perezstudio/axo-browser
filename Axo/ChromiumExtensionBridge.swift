@@ -52,6 +52,8 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
     @ObservationIgnored private let settings: UserDefaults?
     /// The profiles last listed, for pinning their existing extensions once the engine is ready.
     @ObservationIgnored private var knownProfileIDs: [Profile.ID] = []
+    /// Profiles whose existing extensions were pinned (``pinnedOnceKey``), read once.
+    @ObservationIgnored private lazy var pinnedOnce = Set(settings?.stringArray(forKey: Self.pinnedOnceKey) ?? [])
 
     /// The settings key listing profiles whose extensions were pinned once.
     static let pinnedOnceKey = "extensionsPinnedOnce"
@@ -121,21 +123,27 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
 
     // MARK: Pins
 
-    /// Pins every extension of each known profile once, the first time the engine is ready
-    /// after pins came (#131): before then every extension had a button, and Chrome keeps new
-    /// installs pinned but not ones from before. Profiles are remembered in ``settings``.
+    /// Pins every extension of each known profile in use once, after pins came (#131): before
+    /// then every extension had a button, and Chrome keeps new installs pinned but not ones from
+    /// before. Profiles are remembered in ``settings``. Only profiles the engine already has
+    /// loaded count, since asking another would load it; the rest are done when they're first
+    /// shown (``toolbarItems(profileID:tabID:)``).
     func pinExistingExtensionsOnce() {
-        guard let settings, engine.state == .ready else { return }
-        var done = Set(settings.stringArray(forKey: Self.pinnedOnceKey) ?? [])
-        var changed = false
-        for profileID in knownProfileIDs where !done.contains(profileID.uuidString) {
-            for item in engine.extensions(profileID: profileID) where !item.isPinned {
-                engine.setExtension(item.id, pinned: true, profileID: profileID)
-            }
-            done.insert(profileID.uuidString)
-            changed = true
+        for profileID in knownProfileIDs { pinExistingExtensions(of: profileID) }
+    }
+
+    /// Whether a profile's existing extensions still need pinning once.
+    private func needsPinningOnce(_ profileID: Profile.ID) -> Bool {
+        settings != nil && !pinnedOnce.contains(profileID.uuidString)
+    }
+
+    private func pinExistingExtensions(of profileID: Profile.ID) {
+        guard let settings, needsPinningOnce(profileID), engine.state == .ready, engine.isFollowing(profileID) else { return }
+        for item in engine.extensions(profileID: profileID) where !item.isPinned {
+            engine.setExtension(item.id, pinned: true, profileID: profileID)
         }
-        if changed { settings.set(done.sorted(), forKey: Self.pinnedOnceKey) }
+        pinnedOnce.insert(profileID.uuidString)
+        settings.set(pinnedOnce.sorted(), forKey: Self.pinnedOnceKey)
     }
 
     // MARK: History
@@ -217,6 +225,11 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
 
     func toolbarItems(profileID: Profile.ID, tabID: AxoCore.Tab.ID?) -> [ExtensionToolbarItem] {
         _ = revision
+        // A profile shown for the first time since pins came: pin what it had, after this read
+        // (the pins come back through onExtensionsChange).
+        if needsPinningOnce(profileID) {
+            Task { [weak self] in self?.pinExistingExtensions(of: profileID) }
+        }
         let items = engine.toolbarButtons(profileID: profileID, page: page(for: tabID)).map {
             ExtensionToolbarItem(
                 id: $0.extensionID, label: $0.title, icon: $0.icon, badge: $0.badge, isEnabled: $0.isEnabled, hasPopup: $0.hasPopup
@@ -474,7 +487,7 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
             // Chrome grants the sites an extension asks for when it installs.
             ExtensionSummary(
                 id: $0.id, name: $0.name, version: $0.version, isEnabled: $0.isEnabled, isUnpacked: $0.isUnpacked,
-                reachesAllRequestedSites: true, lines: [], loadError: nil,
+                reachesAllRequestedSites: true, lines: [], listsAccess: false, loadError: nil,
                 allowsUserScripts: $0.usesUserScripts ? $0.userScriptsAllowed : nil,
                 isPinned: $0.isPinned
             )

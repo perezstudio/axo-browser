@@ -738,6 +738,7 @@ final class ExtensionBridge: ExtensionBrowsing, ExtensionToolbarProviding, Exten
 
     func uninstall(_ extensionID: String, profileID: Profile.ID) async throws {
         try await manager.uninstall(extensionID, profileID: profileID)
+        pins.forget(extensionID, profileID: profileID)
     }
 
     func installedExtensions(profileID: Profile.ID) async -> [ExtensionSummary] {

@@ -579,9 +579,13 @@ struct ChromiumExtensionBridgeTests {
         profile.extensions = [FakeExtension(identifier: "a", name: "Alpha"), FakeExtension(identifier: "b", name: "Beta")]
         profile.pinnedExtensionIDs = ["b"]
 
+        // A profile nothing has shown yet isn't loaded just for this.
+        let work = try await store.createProfile(name: "Work")
         let pinning = ChromiumExtensionBridge(model: model, engine: engine, store: store, settings: settings)
         try await waitUntil { profile.pinnedExtensionIDs == ["b", "a"] }
         #expect(settings.stringArray(forKey: ChromiumExtensionBridge.pinnedOnceKey) == [profileID.uuidString])
+        #expect(!engine.isFollowing(work.id), "Work wasn't loaded")
+        #expect(FakeProfile.made[work.id] == nil)
 
         profile.setExtension("a", pinned: false)
         pinning.pinExistingExtensionsOnce()

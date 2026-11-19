@@ -2409,11 +2409,11 @@ final class AxoUITests: XCTestCase {
         let menu = app.descendants(matching: .any)["extensionsMenuButton"]
         XCTAssertTrue(menu.waitForExistence(timeout: 5), "Every extension is in the Extensions menu")
         menu.click()
-        // The first item runs it; the one in Pinned to the Toolbar pins it.
-        let items = app.windows.firstMatch.menuItems.matching(NSPredicate(format: "title == 'Axo Helper'"))
-        XCTAssertTrue(items.firstMatch.waitForExistence(timeout: 5))
-        XCTAssertEqual(items.count, 2)
-        items.element(boundBy: 1).click()
+        // One item runs it; "Pin Axo Helper" in Pinned to the Toolbar pins it.
+        XCTAssertTrue(app.menuItems["Axo Helper"].waitForExistence(timeout: 5), "It runs from the menu")
+        let pin = app.menuItems["Pin Axo Helper"]
+        XCTAssertTrue(pin.exists)
+        pin.click()
         XCTAssertTrue(button.waitForExistence(timeout: 10), "Pinned again")
     }
 

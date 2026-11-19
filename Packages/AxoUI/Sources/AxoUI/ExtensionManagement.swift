@@ -34,6 +34,9 @@ public struct ExtensionSummary: Identifiable, Equatable, Sendable {
     public var reachesAllRequestedSites: Bool
     /// What it can do now, in plain language.
     public var lines: [String]
+    /// Whether ``lines`` says what it can do; `false` when the engine doesn't report it, so an
+    /// empty list doesn't claim it asks for nothing.
+    public var listsAccess: Bool
     /// Why it couldn't load, if it couldn't.
     public var loadError: String?
     /// For an extension that runs user scripts (`chrome.userScripts`, as script managers do),
@@ -42,8 +45,9 @@ public struct ExtensionSummary: Identifiable, Equatable, Sendable {
     /// Whether it's pinned to the toolbar.
     public var isPinned: Bool
 
-    public init(id: String, name: String, version: String, isEnabled: Bool, isUnpacked: Bool, reachesAllRequestedSites: Bool, lines: [String], loadError: String?, allowsUserScripts: Bool? = nil, isPinned: Bool = false) {
+    public init(id: String, name: String, version: String, isEnabled: Bool, isUnpacked: Bool, reachesAllRequestedSites: Bool, lines: [String], listsAccess: Bool = true, loadError: String?, allowsUserScripts: Bool? = nil, isPinned: Bool = false) {
         self.isPinned = isPinned
+        self.listsAccess = listsAccess
         self.allowsUserScripts = allowsUserScripts
         self.id = id
         self.name = name
@@ -214,6 +218,11 @@ extension BrowserModel {
     public func removeExtension(_ removal: ExtensionRemoval) async {
         if pendingExtensionRemoval == removal { pendingExtensionRemoval = nil }
         guard let management = extensionManagement else { return }
+        // The profile went (deleted, or through iCloud) while the person was asked.
+        guard allProfiles.contains(where: { $0.id == removal.profileID }) else {
+            alertMessage = "Axo couldn't remove \(removal.name). Its profile was deleted."
+            return
+        }
         do {
             try await management.uninstall(removal.extensionID, profileID: removal.profileID)
             announce("Removed \(removal.name) from \(removal.profileName)")
@@ -307,6 +316,14 @@ struct ExtensionsView: View {
 
     private var profileID: Profile.ID? { model.shownExtensionsProfileID }
 
+    /// Whether the window shows the shown Space's profile, whose pages and toolbar are on screen.
+    private var isShowingSpacesProfile: Bool { profileID != nil && profileID == model.space?.profileID }
+
+    /// The profiles in the picker: the shown Space's first, then the rest in their order.
+    static func pickerOrder(_ profiles: [Profile], first: Profile.ID?) -> [Profile] {
+        profiles.filter { $0.id == first } + profiles.filter { $0.id != first }
+    }
+
     /// What makes the list read again.
     private struct RefreshKey: Equatable {
         var profileID: Profile.ID?
@@ -333,7 +350,9 @@ struct ExtensionsView: View {
                     Text("Add Chrome extensions from the Chrome Web Store, or from a .crx file or an unpacked folder.")
                 } actions: {
                     Button("Install from File…") { model.chooseExtensionToInstall() }
-                    Button("Chrome Web Store") { openWebStore() }
+                    if isShowingSpacesProfile {
+                        Button("Chrome Web Store") { openWebStore() }
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -362,7 +381,9 @@ struct ExtensionsView: View {
             model.extensionsSelection = nil
         }
         .alert(model.pendingExtensionRemoval?.title ?? "", item: Binding(get: { model.pendingExtensionRemoval }, set: { model.pendingExtensionRemoval = $0 })) { removal in
+            // Cancel is the default, so Return never deletes an extension's data.
             Button("Cancel", role: .cancel) {}
+                .keyboardShortcut(.defaultAction)
             Button("Remove", role: .destructive) { Task { await model.removeExtension(removal) } }
         } message: { _ in
             Text("Its data in this profile is deleted. Other profiles keep their own extensions.")
@@ -384,7 +405,7 @@ struct ExtensionsView: View {
                     get: { profileID },
                     set: { model.extensionsProfileID = $0; selection = nil }
                 )) {
-                    ForEach(model.allProfiles) { profile in
+                    ForEach(Self.pickerOrder(model.allProfiles, first: model.space?.profileID)) { profile in
                         Text(profile.name).tag(Profile.ID?.some(profile.id))
                     }
                 }
@@ -393,9 +414,12 @@ struct ExtensionsView: View {
                 .accessibilityIdentifier("extensionsProfilePicker")
             }
             Button("Install from File…") { model.chooseExtensionToInstall() }
-            Button("Chrome Web Store") { openWebStore() }
+            // The store installs into the shown Space's profile, so it's offered only for that one.
+            if isShowingSpacesProfile {
+                Button("Chrome Web Store") { openWebStore() }
+            }
+            // No Return shortcut: Return in the search field would close the window. Esc closes it.
             Button("Done") { dismiss() }
-                .keyboardShortcut(.defaultAction)
         }
         .padding(.horizontal, 16)
         .frame(height: 52)
@@ -433,9 +457,11 @@ struct ExtensionsView: View {
         }
     }
 
+    /// An extension's toolbar icon, read for the shown tab, so only for the shown Space's
+    /// profile: another profile's buttons would be read for a page that isn't its own.
     private func icon(for extensionID: String) -> PlatformImage? {
-        guard let profileID else { return nil }
-        return model.extensionToolbar?.toolbarItems(profileID: profileID, tabID: nil).first { $0.id == extensionID }?.icon
+        guard isShowingSpacesProfile, let profileID else { return nil }
+        return model.extensionToolbar?.toolbarItems(profileID: profileID, tabID: model.selectedTabID).first { $0.id == extensionID }?.icon
     }
 
     private func openWebStore() {
@@ -515,8 +541,11 @@ private struct ExtensionDetails: View {
     let refresh: () async -> Void
     @Environment(\.dismiss) private var dismiss
 
+    /// Its toolbar button for the shown tab, only for the shown Space's profile: another
+    /// profile's extension must never run (Inspect Popup) on a page of this one.
     private var toolbarItem: ExtensionToolbarItem? {
-        model.extensionToolbar?.toolbarItems(profileID: profileID, tabID: model.selectedTabID).first { $0.id == item.id }
+        guard profileID == model.space?.profileID else { return nil }
+        return model.extensionToolbar?.toolbarItems(profileID: profileID, tabID: model.selectedTabID).first { $0.id == item.id }
     }
 
     private var shortcuts: [ExtensionShortcut] {
@@ -530,7 +559,7 @@ private struct ExtensionDetails: View {
                     ExtensionSymbol(icon: toolbarItem?.icon, size: 32)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(item.name).font(.title3.weight(.semibold)).accessibilityAddTraits(.isHeader)
-                        Text(item.isUnpacked ? "Unpacked (developer mode)" : "From the Chrome Web Store")
+                        Text(item.isUnpacked ? "Unpacked (developer mode)" : "Installed package")
                             .font(.callout).foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -581,7 +610,9 @@ private struct ExtensionDetails: View {
                     Text("When you click it").tag(false)
                 }
                 .accessibilityLabel("Site access for \(item.name)")
-                if item.lines.isEmpty {
+                if !item.listsAccess {
+                    // The engine doesn't say yet; never claim it asks for nothing.
+                } else if item.lines.isEmpty {
                     Text("It doesn't ask for any special access.").foregroundStyle(.secondary)
                 } else {
                     ForEach(item.lines, id: \.self) { line in
@@ -628,7 +659,7 @@ private struct ExtensionDetails: View {
             }
             Section("About") {
                 LabeledContent("Version", value: item.version)
-                LabeledContent("Source", value: item.isUnpacked ? "Unpacked folder" : "Chrome Web Store")
+                LabeledContent("Source", value: item.isUnpacked ? "Unpacked folder" : "Package")
             }
             Section {
                 Button("Remove…", role: .destructive) {
