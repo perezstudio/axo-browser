@@ -106,12 +106,13 @@ struct SitePermissionStoreTests {
         var changes = permissions.observe(profileID: profileID).makeAsyncIterator()
         #expect(try await changes.next() == SitePermissionSnapshot(answers: [], defaults: [:]))
         try await permissions.setDefault(.deny, for: .location, profileID: profileID)
+        // A few values at most: a regression fails here rather than hanging.
         var snapshot = try await changes.next()
-        while snapshot?.defaults.isEmpty == true { snapshot = try await changes.next() }
+        for _ in 0..<3 where snapshot?.defaults.isEmpty == true { snapshot = try await changes.next() }
         #expect(snapshot?.defaults == [.location: .deny])
         try await permissions.setDecision(.allow, for: [.location], origin: meet, profileID: profileID)
         snapshot = try await changes.next()
-        while snapshot?.answers.isEmpty == true { snapshot = try await changes.next() }
+        for _ in 0..<3 where snapshot?.answers.isEmpty == true { snapshot = try await changes.next() }
         #expect(snapshot?.answers.map(\.origin) == [meet])
     }
 }

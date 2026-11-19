@@ -2,6 +2,19 @@ import AxoCore
 import AxoWeb
 import Foundation
 
+/// What Site Settings' Manage Website Permissions… asks Settings › Profiles to show (#133): a
+/// profile, and a site in it. A new one each time, so asking again for the same site counts.
+public struct WebsitePermissionsRequest: Equatable, Sendable {
+    public var id = UUID()
+    public var profileID: Profile.ID
+    public var origin: PageOrigin
+
+    public init(profileID: Profile.ID, origin: PageOrigin) {
+        self.profileID = profileID
+        self.origin = origin
+    }
+}
+
 /// Website Permissions in Settings › Profiles (#133): every site's answer for a kind, per profile, and
 /// what sites without one get. Changes apply now: the engine's copy follows for kinds it keeps
 /// itself, and a site's pages stop using the camera, microphone, or location when it's denied.
@@ -17,14 +30,28 @@ extension BrowserModel {
     }
 
     /// A site the person typed, as an origin: `https://` is assumed without a scheme, and only
-    /// http and https sites with a host count. `nil` for anything else.
-    public static func websiteOrigin(from text: String) -> PageOrigin? {
+    /// http and https sites with a whole host count (no empty labels, as in `meet.` or `.com`).
+    /// Notifications and the clipboard only reach secure sites, so those take only them. `nil`
+    /// for anything else.
+    public static func websiteOrigin(from text: String, for kind: SitePermission.Kind? = nil) -> PageOrigin? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !trimmed.contains(" ") else { return nil }
         let withScheme = trimmed.contains("://") ? trimmed : "https://\(trimmed)"
         guard let url = URL(string: withScheme), url.user == nil, url.password == nil,
-              let host = url.host(), host.contains(".") || host == "localhost" || host.contains(":") else { return nil }
-        return PageOrigin(url: url)
+              let host = url.host(), let origin = PageOrigin(url: url) else { return nil }
+        let isAddress = host.contains(":") || host.allSatisfy { $0.isNumber || $0 == "." }
+        if !isAddress {
+            let labels = host.split(separator: ".", omittingEmptySubsequences: false)
+            guard labels.count >= 2 || host == "localhost", !labels.contains(where: \.isEmpty) else { return nil }
+        }
+        if let kind, SitePermissionAdapter.lastingKind(for: kind) != nil, !origin.isPotentiallyTrustworthy { return nil }
+        return origin
+    }
+
+    /// Whether a kind may default to Allow. Not the camera, microphone, or location: every site
+    /// (iframes and ads too) would get them without asking, which Chrome refuses as a default too.
+    public static func allowsAllowDefault(_ kind: SitePermission.Kind) -> Bool {
+        SitePermissionAdapter.lastingKind(for: kind) != nil
     }
 
     /// Saves a site's answer for a kind, or forgets it (`nil`), and applies it now: the engine's
@@ -35,8 +62,20 @@ extension BrowserModel {
         if let lasting = SitePermissionAdapter.lastingKind(for: kind) {
             pool.setLastingPermission(lasting, origin: origin, decision: decision.map { $0 == .allow ? .allow : .deny }, profileID: profileID)
         }
-        if decision == .deny {
-            pool.stopCapture(SitePermissionAdapter.capture(for: kind), origin: origin, profileID: profileID)
+        await stopCaptureWhereDenied(kind, profileID: profileID)
+    }
+
+    /// Stops pages using a kind's device wherever the profile's answer is now deny: a site's own
+    /// answer, or the default for sites without one. After any change to answers or defaults.
+    func stopCaptureWhereDenied(_ kind: SitePermission.Kind, profileID: Profile.ID) async {
+        let capture = SitePermissionAdapter.capture(for: kind)
+        guard !capture.isEmpty else { return }
+        let fallback = (try? await store.sitePermissions.defaults(profileID: profileID))?[kind]
+        for origin in pool.liveOrigins(profileID: profileID) {
+            let own = try? await store.sitePermissions.decision(kind, origin: origin.serialized, profileID: profileID)
+            if (own ?? fallback) == .deny {
+                pool.stopCapture(capture, origin: origin, profileID: profileID)
+            }
         }
     }
 
@@ -56,7 +95,7 @@ extension BrowserModel {
     /// website, for the pane to say so.
     @discardableResult
     public func addWebsitePermission(_ text: String, decision: SitePermission.Decision, for kind: SitePermission.Kind, profileID: Profile.ID) async -> Bool {
-        guard let origin = Self.websiteOrigin(from: text) else { return false }
+        guard let origin = Self.websiteOrigin(from: text, for: kind) else { return false }
         await setWebsitePermission(decision, for: kind, origin: origin, profileID: profileID)
         return true
     }
@@ -70,13 +109,16 @@ extension BrowserModel {
                 pool.setLastingPermission(lasting, origin: origin, decision: nil, profileID: profileID)
             }
         }
+        await stopCaptureWhereDenied(kind, profileID: profileID)
         announce("Removed every website's \(SiteSettingsView.title(for: kind).lowercased()) answer")
         if siteSettingsOrigin != nil { await refreshSiteSettings() }
     }
 
     /// Sets what sites without an answer get for a kind, or `nil` to ask, and says so.
     public func setWebsitePermissionDefault(_ decision: SitePermission.Decision?, for kind: SitePermission.Kind, profileID: Profile.ID) async {
+        guard decision != .allow || Self.allowsAllowDefault(kind) else { return }
         try? await store.sitePermissions.setDefault(decision, for: kind, profileID: profileID)
+        await stopCaptureWhereDenied(kind, profileID: profileID)
         if let lasting = SitePermissionAdapter.lastingKind(for: kind) {
             pool.setDefaultPermission(lasting, decision: decision.map { $0 == .allow ? .allow : .deny }, profileID: profileID)
         }
@@ -91,9 +133,14 @@ extension BrowserModel {
     /// Asks Settings › Profiles to show the selected page's site in its profile's Website
     /// Permissions, from Site Settings (which then opens Settings).
     public func manageWebsitePermissions() {
-        websitePermissionsFocus = siteSettingsOrigin
-        websitePermissionsProfileID = space?.profileID
+        guard let origin = siteSettingsOrigin, let profileID = space?.profileID else { return }
+        websitePermissionsRequest = WebsitePermissionsRequest(profileID: profileID, origin: origin)
         isShowingSiteSettings = false
+    }
+
+    /// The kind Settings opens for a requested site: one it has an answer for, or the first.
+    static func kindToShow(for origin: PageOrigin, in snapshot: SitePermissionSnapshot, kinds: [SitePermission.Kind]) -> SitePermission.Kind? {
+        kinds.first { kind in snapshot.answers.contains { $0.kind == kind && $0.origin == origin.serialized } } ?? kinds.first
     }
 }
 
@@ -107,6 +154,8 @@ struct WebsitePermissionsSection: View {
     let model: BrowserModel
     let profileID: Profile.ID
     @State private var snapshot = SitePermissionSnapshot(answers: [], defaults: [:])
+    /// Whether the first snapshot arrived, so a requested site opens on a kind it answered.
+    @State private var hasLoaded = false
     @State private var editing: WebsitePermissionsSheet.Editing?
 
     /// A row's summary: how many sites answered, and what other websites get.
@@ -145,32 +194,36 @@ struct WebsitePermissionsSection: View {
         } header: {
             Text("Website Permissions")
         } footer: {
+            // The section's work hangs off its footer, one view, so it runs once rather than
+            // per row.
             Text("Each profile keeps its own answers. They stay on this Mac and don't sync through iCloud.")
                 .foregroundStyle(.secondary)
-        }
-        .task(id: profileID) { await follow() }
-        .onAppear(perform: showFocus)
-        .onChange(of: model.websitePermissionsFocus) { showFocus() }
-        .sheet(item: $editing) { editing in
-            WebsitePermissionsSheet(model: model, profileID: profileID, kind: editing.kind, initialQuery: editing.query, snapshot: snapshot)
+                .task(id: profileID) { await follow() }
+                .onChange(of: model.websitePermissionsRequest?.id) { showRequest() }
+                .sheet(item: $editing) { editing in
+                    WebsitePermissionsSheet(model: model, profileID: profileID, kind: editing.kind, initialQuery: editing.query, snapshot: snapshot)
+                }
         }
     }
 
-    /// Opens the sheet for the site Site Settings asked about: on a kind it has an answer for,
-    /// searched for its host.
-    private func showFocus() {
-        guard model.websitePermissionsProfileID == profileID || model.websitePermissionsProfileID == nil,
-              let origin = model.websitePermissionsFocus else { return }
-        model.websitePermissionsFocus = nil
-        let kinds = model.websitePermissionKinds
-        let answered = kinds.first { kind in snapshot.answers.contains { $0.kind == kind && $0.origin == origin.serialized } }
-        editing = .init(kind: answered ?? kinds.first ?? .camera, query: origin.host)
+    /// Opens the sheet for the site Site Settings asked about, once this profile's answers are
+    /// read: on a kind it has an answer for, searched for its host. The request is then done.
+    private func showRequest() {
+        guard hasLoaded, let request = model.websitePermissionsRequest, request.profileID == profileID else { return }
+        model.websitePermissionsRequest = nil
+        guard let kind = BrowserModel.kindToShow(for: request.origin, in: snapshot, kinds: model.websitePermissionKinds) else { return }
+        editing = .init(kind: kind, query: request.origin.host)
     }
 
     private func follow() async {
+        hasLoaded = false
         do {
             for try await next in model.store.sitePermissions.observe(profileID: profileID) {
                 snapshot = next
+                if !hasLoaded {
+                    hasLoaded = true
+                    showRequest()
+                }
             }
         } catch {}
     }
@@ -201,6 +254,17 @@ struct WebsitePermissionsSheet: View {
 
     private var title: String { SiteSettingsView.title(for: kind) }
 
+    /// The device a kind uses, in a sentence.
+    static func deviceName(_ kind: SitePermission.Kind) -> String {
+        switch kind {
+        case .camera: "the camera"
+        case .microphone: "the microphone"
+        case .location: "your location"
+        case .notifications: "notifications"
+        case .clipboard: "the clipboard"
+        }
+    }
+
     /// The kind's answers matching the search, by origin.
     static func shownAnswers(_ answers: [SitePermission], kind: SitePermission.Kind, query: String) -> [SitePermission] {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
@@ -211,18 +275,23 @@ struct WebsitePermissionsSheet: View {
         VStack(spacing: 0) {
             Form {
                 Section {
+                    Text(title)
+                        .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
                     Picker("When other websites ask", selection: Binding(
                         get: { snapshot.defaults[kind] },
                         set: { decision in Task { await model.setWebsitePermissionDefault(decision, for: kind, profileID: profileID) } }
                     )) {
                         Text("Ask").tag(SitePermission.Decision?.none)
-                        Text("Allow").tag(SitePermission.Decision?.some(.allow))
+                        if BrowserModel.allowsAllowDefault(kind) {
+                            Text("Allow").tag(SitePermission.Decision?.some(.allow))
+                        }
                         Text("Don't Allow").tag(SitePermission.Decision?.some(.deny))
                     }
                     .accessibilityLabel("\(title) for other websites")
                     .accessibilityIdentifier("websitePermissionDefault")
                     if model.isBlockedBySystem(kind) {
-                        Label("Axo can't use the \(title.lowercased()) on this Mac. Allow it in System Settings › Privacy & Security.",
+                        Label("Axo can't use \(Self.deviceName(kind)) on this Mac. Allow it in System Settings › Privacy & Security.",
                               systemImage: "exclamationmark.triangle")
                             .foregroundStyle(.secondary)
                     }
@@ -276,7 +345,6 @@ struct WebsitePermissionsSheet: View {
             .padding(16)
         }
         .frame(width: 480, height: 520)
-        .navigationTitle(title)
         .onAppear { query = initialQuery }
         .confirmationDialog("Remove every website's \(title.lowercased()) answer?", isPresented: $isConfirmingRemoveAll) {
             Button("Remove All", role: .destructive) {

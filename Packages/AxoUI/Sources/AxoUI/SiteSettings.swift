@@ -86,11 +86,13 @@ extension BrowserModel {
     public func refreshSiteSettings() async {
         guard let origin = siteSettingsOrigin, let profileID = space?.profileID else {
             sitePermissions = [:]
+            siteDefaults = [:]
             siteExternalApps = []
             siteExternalAppTitles = [:]
             return
         }
         sitePermissions = (try? await store.sitePermissions.decisions(origin: origin.serialized, profileID: profileID)) ?? [:]
+        siteDefaults = (try? await store.sitePermissions.defaults(profileID: profileID)) ?? [:]
         siteExternalApps = (try? await store.externalAppPermissions.schemes(origin: origin.serialized, profileID: profileID)) ?? []
         siteExternalAppTitles = Dictionary(uniqueKeysWithValues: siteExternalApps.map { ($0, externalAppTitle(for: $0)) })
     }
@@ -192,8 +194,10 @@ struct SiteSettingsButton: View {
 /// clipboard, each Ask, Allow, or Don't Allow; and the apps it may open without asking.
 struct SiteSettingsView: View {
     let model: BrowserModel
+    #if os(macOS)
     @Environment(\.openSettings) private var openSettings
     @AppStorage(SettingsView.paneStorageKey) private var settingsPane: SettingsPane = .general
+    #endif
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -206,7 +210,8 @@ struct SiteSettingsView: View {
                         get: { model.sitePermissions[kind] },
                         set: { decision in Task { await model.setSitePermission(decision, for: kind) } }
                     )) {
-                        Text("Ask").tag(SitePermission.Decision?.none)
+                        // Without an answer of its own, the profile's default decides (#133).
+                        Text(Self.defaultTitle(model.siteDefaults[kind])).tag(SitePermission.Decision?.none)
                         Text("Allow").tag(SitePermission.Decision?.some(.allow))
                         Text("Don't Allow").tag(SitePermission.Decision?.some(.deny))
                     }
@@ -234,14 +239,16 @@ struct SiteSettingsView: View {
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("siteExternalApps")
             }
+            #if os(macOS)
             Button("Manage Website Permissions…") {
                 model.manageWebsitePermissions()
                 settingsPane = .profiles
                 openSettings()
             }
             .accessibilityIdentifier("manageWebsitePermissions")
+            #endif
             HStack {
-                Text("Don't Allow stops the camera and microphone if the site is using them.")
+                Text("Don't Allow stops the site using it now.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -260,6 +267,15 @@ struct SiteSettingsView: View {
         .frame(width: 320)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("siteSettings")
+    }
+
+    /// What a site without an answer of its own gets, as its row says it.
+    static func defaultTitle(_ decision: SitePermission.Decision?) -> String {
+        switch decision {
+        case nil: "Ask"
+        case .allow: "Allow (Default)"
+        case .deny: "Don't Allow (Default)"
+        }
     }
 
     static func title(for kind: SitePermission.Kind) -> String {

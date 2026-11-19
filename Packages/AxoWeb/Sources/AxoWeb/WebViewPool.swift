@@ -767,6 +767,11 @@ public final class WebViewPool {
         engine.setDefaultPermission(kind, decision: decision, profileID: profileID)
     }
 
+    /// The sites of a profile's open pages, for stopping the ones whose answer is now deny.
+    public func liveOrigins(profileID: Profile.ID) -> Set<PageOrigin> {
+        Set(live.values.filter { $0.profileID == profileID }.compactMap { $0.page.url.flatMap(PageOrigin.init(url:)) })
+    }
+
     /// Stops pages of a site in a profile using the camera, the microphone, or location, for
     /// when the person's answer for the site changes to deny (#133): the site's open tabs,
     /// showing or hidden. Returns how many pages were asked to stop.

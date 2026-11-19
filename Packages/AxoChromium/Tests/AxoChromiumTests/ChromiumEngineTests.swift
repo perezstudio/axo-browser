@@ -364,6 +364,42 @@ struct ChromiumEngineTests {
         #expect(profile.permissionSettings.last?.setting == .ask, "Cleared at once for a profile in use")
     }
 
+    /// Website Permissions' defaults (#133) reach Chrome once the profile is in use, only for
+    /// the kinds Chrome keeps; a cleared default is Ask.
+    @Test func defaultsReachAProfileOnceItsInUse() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        engine.setDefaultPermission(.notifications, decision: .deny, profileID: profileID)
+        engine.setDefaultPermission(.camera, decision: .deny, profileID: profileID)
+        #expect(FakeProfile.made[profileID] == nil, "A profile nothing uses isn't loaded for its defaults")
+
+        _ = engine.extensions(profileID: profileID)
+        let profile = try #require(FakeProfile.made[profileID])
+        #expect(profile.defaultPermissionSettings.map(\.kind) == [.notifications], "Not the camera, which Axo answers")
+        #expect(profile.defaultPermissionSettings.first?.setting == .block)
+        engine.setDefaultPermission(.clipboard, decision: .allow, profileID: profileID)
+        engine.setDefaultPermission(.notifications, decision: nil, profileID: profileID)
+        #expect(profile.defaultPermissionSettings.suffix(2).map(\.kind) == [.clipboard, .notifications])
+        #expect(profile.defaultPermissionSettings.suffix(2).map(\.setting) == [.allow, .ask])
+    }
+
+    /// Stopping a page's capture asks Chrome for the camera, microphone, and location, never
+    /// the screen.
+    @Test func stoppingCaptureNamesTheDevices() throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        engine.start()
+        scheduled.run()
+        let page = engine.makePage(profileID: profileID)
+        let fake = try #require(FakePage.made.last)
+        page.stopCapture([.camera, .screen])
+        page.stopCapture([.screen])
+        page.stopCapture([.microphone, .location])
+        #expect(fake.stopCaptureRequests == [.camera, [.microphone, .location]], "The screen alone asks nothing")
+    }
+
     @Test func replacingLastingAnswersClearsChromesOwnFirst() throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)

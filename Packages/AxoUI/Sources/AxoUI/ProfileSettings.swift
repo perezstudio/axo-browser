@@ -47,12 +47,13 @@ struct ProfileSettings: View {
             }
         }
         .onAppear {
-            if let asked = model.websitePermissionsProfileID { selection = asked }
+            if let asked = model.websitePermissionsRequest?.profileID { selection = asked }
             if selection == nil { selection = model.space?.profileID }
         }
-        // Site Settings' Manage Website Permissions… shows its profile (#133).
-        .onChange(of: model.websitePermissionsProfileID) {
-            if let asked = model.websitePermissionsProfileID { selection = asked }
+        // Site Settings' Manage Website Permissions… shows its profile (#133); the profile's
+        // section then opens the site and clears the request.
+        .onChange(of: model.websitePermissionsRequest?.id) {
+            if let asked = model.websitePermissionsRequest?.profileID { selection = asked }
         }
         .sheet(isPresented: $isAdding) {
             NewProfileSheet(model: model) { selection = $0.id }

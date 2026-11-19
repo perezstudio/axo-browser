@@ -531,12 +531,16 @@ final class SystemLocationAuthorization: LocationAuthorizing {
 /// Whether macOS keeps Axo from the camera, microphone, or location, for Website Permissions
 /// (#133). Reading the status never asks.
 enum SystemPermissionStatus {
+    /// One manager for reading location's status, made the first time it's read (only outside
+    /// test runs).
+    @MainActor private static let locationManager = CLLocationManager()
+
     @MainActor
     static func isBlocked(_ kind: SitePermission.Kind) -> Bool {
         switch kind {
         case .camera: [.denied, .restricted].contains(AVCaptureDevice.authorizationStatus(for: .video))
         case .microphone: [.denied, .restricted].contains(AVCaptureDevice.authorizationStatus(for: .audio))
-        case .location: [.denied, .restricted].contains(CLLocationManager().authorizationStatus)
+        case .location: [.denied, .restricted].contains(locationManager.authorizationStatus)
         case .notifications, .clipboard: false
         }
     }

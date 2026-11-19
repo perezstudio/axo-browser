@@ -250,10 +250,9 @@ public final class BrowserModel {
     public internal(set) var pendingExtensionInstall: ExtensionInstallPrompt?
     /// The profile ``pendingExtensionInstall`` goes to.
     @ObservationIgnored var pendingExtensionInstallProfileID: Profile.ID?
-    /// The site the Website Permissions pane shows first, when Site Settings opened it (#133).
-    public var websitePermissionsFocus: PageOrigin?
-    /// The profile the Website Permissions pane shows; `nil` for the shown Space's.
-    public var websitePermissionsProfileID: Profile.ID?
+    /// Site Settings' Manage Website Permissions… (#133): the profile and site Settings ›
+    /// Profiles shows, until it has.
+    public var websitePermissionsRequest: WebsitePermissionsRequest?
     /// Whether macOS keeps Axo from a device a kind needs (camera, microphone, location), for the
     /// pane to say so. Set by the app; tests leave it saying no.
     @ObservationIgnored public var isBlockedBySystem: @MainActor (SitePermission.Kind) -> Bool = { _ in false }
@@ -280,6 +279,8 @@ public final class BrowserModel {
     public var isShowingSiteSettings = false
     /// The saved permission answers for the selected page's site, while Site Settings is open.
     public internal(set) var sitePermissions: [SitePermission.Kind: SitePermission.Decision] = [:]
+    /// The profile's defaults, for Site Settings to say what a site without an answer gets.
+    public internal(set) var siteDefaults: [SitePermission.Kind: SitePermission.Decision] = [:]
     /// The kinds of links to other apps (schemes, such as `zoommtg`) Site Settings' site may open
     /// without asking.
     public internal(set) var siteExternalApps: [String] = []

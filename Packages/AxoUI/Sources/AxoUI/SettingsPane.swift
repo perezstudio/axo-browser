@@ -1,8 +1,8 @@
 import Foundation
 
 /// A pane of Axo's Settings window, in the order its sidebar lists them (the Settings board's:
-/// General, Profiles, Spaces, Link Routing, Site Customizations, iCloud). Search (#132) and
-/// Website Permissions (#133) join when they're built.
+/// General, Profiles, Spaces, Link Routing, Site Customizations, iCloud). Search (#132) joins
+/// when it's built; Website Permissions (#133) is in each profile's details, as the board draws it.
 ///
 /// The raw value is what Settings remembers as the last pane used, so keep existing ones stable.
 nonisolated public enum SettingsPane: String, CaseIterable, Identifiable, Sendable {

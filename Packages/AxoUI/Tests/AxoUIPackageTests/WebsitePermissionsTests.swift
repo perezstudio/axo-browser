@@ -99,9 +99,15 @@ struct WebsitePermissionsTests {
         #expect(BrowserModel.websiteOrigin(from: " meet.example.com ")?.serialized == "https://meet.example.com")
         #expect(BrowserModel.websiteOrigin(from: "http://localhost:3000/room")?.serialized == "http://localhost:3000")
         #expect(BrowserModel.websiteOrigin(from: "HTTPS://Meet.Example.com:443")?.serialized == "https://meet.example.com")
-        for invalid in ["", "meet", "ftp://example.com", "file:///Users", "javascript:alert(1)", "two words.com", "https://user:pw@example.com"] {
+        for invalid in ["", "meet", "meet.", ".com", "a..b.com", "ftp://example.com", "file:///Users", "javascript:alert(1)",
+                        "two words.com", "https://user:pw@example.com"] {
             #expect(BrowserModel.websiteOrigin(from: invalid) == nil, "\(invalid)")
         }
+        #expect(BrowserModel.websiteOrigin(from: "192.168.1.20:8080")?.serialized == "https://192.168.1.20:8080")
+        // Notifications and the clipboard reach only secure sites.
+        #expect(BrowserModel.websiteOrigin(from: "http://news.example.com", for: .notifications) == nil)
+        #expect(BrowserModel.websiteOrigin(from: "http://localhost:3000", for: .notifications) != nil)
+        #expect(BrowserModel.websiteOrigin(from: "http://news.example.com", for: .camera) != nil)
         #expect(await model.addWebsitePermission("zoom.example.com", decision: .deny, for: .microphone, profileID: profileID))
         #expect(!(await model.addWebsitePermission("not a site", decision: .deny, for: .microphone, profileID: profileID)))
         #expect(try await store.sitePermissions.permissions(.microphone, profileID: profileID).map(\.origin) == ["https://zoom.example.com"])
@@ -140,8 +146,64 @@ struct WebsitePermissionsTests {
         _ = try await openPage(URL(string: "https://meet.example.com/room")!)
         model.isShowingSiteSettings = true
         model.manageWebsitePermissions()
-        #expect(model.websitePermissionsFocus == meet)
-        #expect(model.websitePermissionsProfileID == profileID)
+        let first = try #require(model.websitePermissionsRequest)
+        #expect(first.origin == meet && first.profileID == profileID)
         #expect(!model.isShowingSiteSettings)
+        // Asking again for the same site is a new request, so Settings shows it again.
+        model.manageWebsitePermissions()
+        #expect(model.websitePermissionsRequest?.id != first.id)
+    }
+
+    /// Settings opens on a kind the site has an answer for, not just the first.
+    @Test func theRequestedSiteOpensOnAKindItAnswered() {
+        let snapshot = SitePermissionSnapshot(answers: [
+            SitePermission(profileID: UUID(), origin: meet.serialized, kind: .location, decision: .deny),
+        ], defaults: [:])
+        let kinds: [SitePermission.Kind] = [.camera, .microphone, .location]
+        #expect(BrowserModel.kindToShow(for: meet, in: snapshot, kinds: kinds) == .location)
+        #expect(BrowserModel.kindToShow(for: PageOrigin(scheme: "https", host: "other.example"), in: snapshot, kinds: kinds) == .camera)
+    }
+
+    /// A default that becomes deny, or an answer removed under a deny default, stops what the
+    /// site is using; a site allowed on its own keeps it.
+    @Test func whatTheDefaultDeniesStopsToo() async throws {
+        let page = try await openPage(URL(string: "https://meet.example.com/room")!)
+        page.simulateMedia(capture: [.camera])
+        let allowed = try await openPage(URL(string: "https://allowed.example.com/")!)
+        allowed.simulateMedia(capture: [.camera])
+        await model.setWebsitePermission(.allow, for: .camera, origin: PageOrigin(scheme: "https", host: "allowed.example.com"), profileID: profileID)
+        await model.setWebsitePermission(.allow, for: .camera, origin: meet, profileID: profileID)
+
+        await model.setWebsitePermissionDefault(.deny, for: .camera, profileID: profileID)
+        #expect(page.stopCaptureRequests.isEmpty, "Its own Allow wins over the default")
+        await model.setWebsitePermission(nil, for: .camera, origin: meet, profileID: profileID)
+        #expect(page.stopCaptureRequests == [.camera], "Removed: the default denies it now")
+        #expect(allowed.stopCaptureRequests.isEmpty)
+        await model.removeAllWebsitePermissions(for: .camera, profileID: profileID)
+        #expect(allowed.stopCaptureRequests == [.camera], "Remove All under a deny default stops the rest")
+    }
+
+    /// Every site, iframes and ads included, would get the device without asking.
+    @Test func theCameraMicrophoneAndLocationNeverDefaultToAllow() async throws {
+        #expect(!BrowserModel.allowsAllowDefault(.camera) && !BrowserModel.allowsAllowDefault(.location))
+        #expect(BrowserModel.allowsAllowDefault(.notifications))
+        await model.setWebsitePermissionDefault(.allow, for: .camera, profileID: profileID)
+        #expect(try await store.sitePermissions.defaults(profileID: profileID).isEmpty)
+    }
+
+    @Test func siteSettingsSaysWhatTheDefaultGives() {
+        #expect(SiteSettingsView.defaultTitle(nil) == "Ask")
+        #expect(SiteSettingsView.defaultTitle(.deny) == "Don't Allow (Default)")
+    }
+
+    /// At launch, Chrome gets each profile's notification and clipboard defaults, a cleared one
+    /// as Ask.
+    @Test func launchGivesTheEngineEachProfilesDefaults() async throws {
+        try await store.sitePermissions.setDefault(.deny, for: .notifications, profileID: profileID)
+        let before = engine.defaultPermissions.count
+        await model.syncLastingPermissions()
+        let sent = engine.defaultPermissions.dropFirst(before).filter { $0.profileID == profileID }
+        #expect(sent.first { $0.kind == .notifications }?.decision == .deny)
+        #expect(sent.contains { $0.kind == .clipboard && $0.decision == nil }, "No default is sent as Ask")
     }
 }
