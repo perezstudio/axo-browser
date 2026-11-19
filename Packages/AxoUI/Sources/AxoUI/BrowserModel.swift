@@ -248,8 +248,18 @@ public final class BrowserModel {
     @ObservationIgnored public var extensionManagement: (any ExtensionManaging)?
     /// An extension waiting for the person to agree to add it.
     public internal(set) var pendingExtensionInstall: ExtensionInstallPrompt?
+    /// The profile ``pendingExtensionInstall`` goes to.
+    @ObservationIgnored var pendingExtensionInstallProfileID: Profile.ID?
     /// Whether the Extensions window is open.
     public var isShowingExtensions = false
+    /// The profile whose extensions the Extensions window shows; `nil` for the shown Space's.
+    public var extensionsProfileID: Profile.ID?
+    /// The extension chosen in the Extensions window, if one was asked for (Manage Extension).
+    public var extensionsSelection: String?
+    /// An extension waiting for the person to confirm removing it.
+    public var pendingExtensionRemoval: ExtensionRemoval?
+    /// Bumped when Axo changes an extension (pins, removal), so the Extensions window reads them again.
+    public internal(set) var extensionsRevision = 0
     /// Extension toolbar buttons. Set by the app.
     @ObservationIgnored public var extensionToolbar: (any ExtensionToolbarProviding)?
     /// Called for tab and window events extensions hear about. Set by the app.

@@ -596,6 +596,10 @@ final class ChromiumEngineUITests: XCTestCase {
         app.typeKey("e", modifierFlags: [.command, .shift])
         let window = app.descendants(matching: .any)["extensionsWindow"]
         XCTAssertTrue(window.waitForExistence(timeout: 10))
+        // Inspect is a developer tool (#131).
+        let developerMode = window.checkBoxes["extensionsDeveloperMode"]
+        XCTAssertTrue(developerMode.waitForExistence(timeout: 10))
+        developerMode.click()
         let inspect = window.buttons["Inspect Axo Inspected Background Page"]
         XCTAssertTrue(inspect.waitForExistence(timeout: 10))
         inspect.click()

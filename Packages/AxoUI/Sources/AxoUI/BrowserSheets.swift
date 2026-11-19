@@ -35,6 +35,16 @@ struct BrowserSheets: ViewModifier {
                 }
                 .windowAppearance()
             }
+            // Remove… from an extension's toolbar button; the Extensions window asks its own.
+            .alert(model.pendingExtensionRemoval?.title ?? "", item: Binding(
+                get: { model.isShowingExtensions ? nil : model.pendingExtensionRemoval },
+                set: { if !model.isShowingExtensions { model.pendingExtensionRemoval = $0 } }
+            )) { removal in
+                Button("Cancel", role: .cancel) {}
+                Button("Remove", role: .destructive) { Task { await model.removeExtension(removal) } }
+            } message: { _ in
+                Text("Its data in this profile is deleted. Other profiles keep their own extensions.")
+            }
     }
 
     @ViewBuilder

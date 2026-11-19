@@ -251,6 +251,35 @@ final class AccessibilityAuditTests: XCTestCase {
         try audit(app, "first run's Space setup")
     }
 
+    /// The Extensions window with an extension chosen, its developer tools shown, and the
+    /// Extensions menu's button (#131).
+    @MainActor
+    func testAuditExtensionsWindow() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "AxoAuditExtension-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try """
+        {"name": "Axo Helper", "version": "1.0", "manifest_version": 3, "description": "Audit extension.",
+         "permissions": ["tabs"], "action": {"default_title": "Axo Helper"}}
+        """.write(to: folder.appending(path: "manifest.json"), atomically: true, encoding: .utf8)
+        let app = XCUIApplication()
+        app.launchEnvironment["AXO_UI_TESTING"] = "1"
+        app.launchEnvironment["AXO_UI_TESTING_EXTENSION"] = folder.path
+        app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
+        app.launch()
+        AxoUITests.bringToFront(app)
+        XCTAssertTrue(app.descendants(matching: .any)["extensionsMenuButton"].waitForExistence(timeout: 10))
+        try audit(app, "extensions menu button")
+
+        app.typeKey("e", modifierFlags: [.command, .shift])
+        let window = app.descendants(matching: .any)["extensionsWindow"]
+        XCTAssertTrue(window.waitForExistence(timeout: 10))
+        XCTAssertTrue(window.checkBoxes["extensionOnSwitch"].waitForExistence(timeout: 5))
+        try audit(app, "extensions window")
+        window.checkBoxes["extensionsDeveloperMode"].click()
+        XCTAssertTrue(window.buttons["Inspect Axo Helper Background Page"].waitForExistence(timeout: 5))
+        try audit(app, "extensions window in developer mode")
+    }
+
     @MainActor
     func testAuditEveryScreen() throws {
         let app = launchApp()

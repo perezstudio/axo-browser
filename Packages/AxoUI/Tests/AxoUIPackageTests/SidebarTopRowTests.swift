@@ -45,19 +45,19 @@ struct SidebarTopRowTests {
         #expect(FooterDownloadsButton.value(activeCount: 0, count: 3) == "")
     }
 
-    @Test func theAddressBarShowsAFewExtensionsAndAMenuForTheRest() {
+    @Test func theAddressBarShowsAFewPinnedExtensionsAndTheMenu() {
+        let items = (1...12).map { ExtensionToolbarItem(id: "\($0)", label: "\($0)", icon: nil, badge: "", isEnabled: true) }
         let limit = ExtensionToolbarButtons.addressBarLimit
-        #expect(ExtensionToolbarButtons.split([1, 2], limit: limit) == ([1, 2], []))
-        #expect(ExtensionToolbarButtons.split([1, 2, 3], limit: limit) == ([1, 2, 3], []))
-        // One more than fits: the last button's place goes to the menu, which holds the rest.
-        #expect(ExtensionToolbarButtons.split([1, 2, 3, 4], limit: limit) == ([1, 2], [3, 4]))
-        #expect(ExtensionToolbarButtons.split(Array(1...12), limit: limit).menu.count == 10)
-        #expect(ExtensionToolbarButtons.shownCount(of: 12, limit: limit) == limit)
+        // The last place goes to the Extensions menu, which holds every extension.
+        #expect(ExtensionToolbarButtons.buttons(items, limit: limit).map(\.id) == ["1", "2"])
+        #expect(ExtensionToolbarButtons.shownCount(of: items, limit: limit) == limit)
+        #expect(ExtensionToolbarButtons.shownCount(of: Array(items.prefix(1)), limit: limit) == 2)
     }
 
-    @Test func theToolbarShowsEveryExtension() {
-        #expect(ExtensionToolbarButtons.split(Array(1...12), limit: nil) == (Array(1...12), []))
-        #expect(ExtensionToolbarButtons.shownCount(of: 12, limit: nil) == 12)
+    @Test func theToolbarShowsEveryPinnedExtension() {
+        let items = (1...12).map { ExtensionToolbarItem(id: "\($0)", label: "\($0)", icon: nil, badge: "", isEnabled: true) }
+        #expect(ExtensionToolbarButtons.buttons(items, limit: nil).count == 12)
+        #expect(ExtensionToolbarButtons.shownCount(of: items, limit: nil) == 13)
     }
 
     /// The floating sidebar stays while something it opened shows (#67), so a popover or sheet

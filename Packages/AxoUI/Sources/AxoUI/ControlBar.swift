@@ -133,7 +133,7 @@ struct ControlBar: View {
         return !provider.toolbarItems(profileID: profileID, tabID: model.selectedTabID).isEmpty
     }
 
-    /// Extensions (the first few, and a menu with the rest), Downloads (once there's a download),
+    /// Extensions (the first few pinned ones, and the Extensions menu), Downloads (once there's a download),
     /// and Summarize Page.
     @ViewBuilder
     private var pageTools: some View {

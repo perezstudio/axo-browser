@@ -47,11 +47,20 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
     /// that open their popup themselves (`chrome.action.openPopup`, as 1Password does) open it a
     /// moment after the click, through the engine's popup request.
     @ObservationIgnored private var pendingInspections: [String: Date] = [:]
+    /// Where Axo remembers which profiles' existing extensions it pinned once, when pins came
+    /// (#131); `nil` skips that (tests that don't check it).
+    @ObservationIgnored private let settings: UserDefaults?
+    /// The profiles last listed, for pinning their existing extensions once the engine is ready.
+    @ObservationIgnored private var knownProfileIDs: [Profile.ID] = []
 
-    init(model: BrowserModel, engine: ChromiumEngine, store: TabStore) {
+    /// The settings key listing profiles whose extensions were pinned once.
+    static let pinnedOnceKey = "extensionsPinnedOnce"
+
+    init(model: BrowserModel, engine: ChromiumEngine, store: TabStore, settings: UserDefaults? = nil) {
         self.model = model
         self.engine = engine
         self.store = store
+        self.settings = settings
         model.extensionToolbar = self
         model.extensionManagement = self
         model.developerTools = self
@@ -90,7 +99,9 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
         let previous = engine.onStateChange
         engine.onStateChange = { [weak self] state in
             previous?(state)
-            self?.revision += 1
+            guard let self else { return }
+            revision += 1
+            if state == .ready { pinExistingExtensionsOnce() }
         }
         engine.onBookmarkChange = { [weak self] change, profileID in self?.apply(change, profileID: profileID) }
         engine.onHistoryChange = { [weak self, store] change, profileID in
@@ -101,9 +112,30 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
                 for try await list in store.observeProfiles() {
                     guard let self else { return }
                     followBookmarks(of: Set(list.map(\.id)))
+                    knownProfileIDs = list.map(\.id)
+                    pinExistingExtensionsOnce()
                 }
             } catch {}
         }
+    }
+
+    // MARK: Pins
+
+    /// Pins every extension of each known profile once, the first time the engine is ready
+    /// after pins came (#131): before then every extension had a button, and Chrome keeps new
+    /// installs pinned but not ones from before. Profiles are remembered in ``settings``.
+    func pinExistingExtensionsOnce() {
+        guard let settings, engine.state == .ready else { return }
+        var done = Set(settings.stringArray(forKey: Self.pinnedOnceKey) ?? [])
+        var changed = false
+        for profileID in knownProfileIDs where !done.contains(profileID.uuidString) {
+            for item in engine.extensions(profileID: profileID) where !item.isPinned {
+                engine.setExtension(item.id, pinned: true, profileID: profileID)
+            }
+            done.insert(profileID.uuidString)
+            changed = true
+        }
+        if changed { settings.set(done.sorted(), forKey: Self.pinnedOnceKey) }
     }
 
     // MARK: History
@@ -185,11 +217,21 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
 
     func toolbarItems(profileID: Profile.ID, tabID: AxoCore.Tab.ID?) -> [ExtensionToolbarItem] {
         _ = revision
-        return engine.toolbarButtons(profileID: profileID, page: page(for: tabID)).map {
+        let items = engine.toolbarButtons(profileID: profileID, page: page(for: tabID)).map {
             ExtensionToolbarItem(
                 id: $0.extensionID, label: $0.title, icon: $0.icon, badge: $0.badge, isEnabled: $0.isEnabled, hasPopup: $0.hasPopup
             )
         }
+        return ExtensionToolbarItem.arranged(items, pinnedIDs: engine.pinnedExtensionIDs(profileID: profileID))
+    }
+
+    func setPinned(_ pinned: Bool, extensionID: String, profileID: Profile.ID) {
+        // Chrome keeps pins; the change comes back through onExtensionsChange.
+        engine.setExtension(extensionID, pinned: pinned, profileID: profileID)
+    }
+
+    func movePinned(extensionID: String, to index: Int, profileID: Profile.ID) {
+        engine.movePinnedExtension(extensionID, to: index, profileID: profileID)
     }
 
     func performAction(extensionID: String, profileID: Profile.ID, tabID: AxoCore.Tab.ID?) {
@@ -433,7 +475,8 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
             ExtensionSummary(
                 id: $0.id, name: $0.name, version: $0.version, isEnabled: $0.isEnabled, isUnpacked: $0.isUnpacked,
                 reachesAllRequestedSites: true, lines: [], loadError: nil,
-                allowsUserScripts: $0.usesUserScripts ? $0.userScriptsAllowed : nil
+                allowsUserScripts: $0.usesUserScripts ? $0.userScriptsAllowed : nil,
+                isPinned: $0.isPinned
             )
         }
     }

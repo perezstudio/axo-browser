@@ -70,6 +70,7 @@ struct ChromiumExtensionBridgeTests {
         await model.openTab(url: URL(string: "https://example.com/")!)
         let profile = try #require(FakeProfile.made[profileID])
         profile.actions = [FakeExtensionAction(extensionIdentifier: "abc", title: "Blocker", badgeText: "4")]
+        profile.pinnedExtensionIDs = ["abc"]
 
         let items = bridge.toolbarItems(profileID: profileID, tabID: model.selectedTabID)
         #expect(items == [ExtensionToolbarItem(id: "abc", label: "Blocker", icon: nil, badge: "4", isEnabled: true, hasPopup: true)])
@@ -538,6 +539,56 @@ struct ChromiumExtensionBridgeTests {
         await #expect(throws: ChromiumExtensionError.self) {
             try await bridge.setReachesAllRequestedSites(false, extensionID: "abc", profileID: profileID)
         }
+    }
+
+    /// Pins are Chrome's (#131): buttons follow its pinned order, and pinning goes to the engine.
+    @Test func toolbarButtonsFollowChromesPinsAndPinningGoesToTheEngine() async throws {
+        await model.openTab(url: URL(string: "https://example.com/")!)
+        let profile = try #require(FakeProfile.made[profileID])
+        profile.actions = [
+            FakeExtensionAction(extensionIdentifier: "a", title: "Alpha", badgeText: ""),
+            FakeExtensionAction(extensionIdentifier: "b", title: "Beta", badgeText: ""),
+            FakeExtensionAction(extensionIdentifier: "c", title: "Gamma", badgeText: ""),
+        ]
+        profile.extensions = profile.actions.map { FakeExtension(identifier: $0.extensionIdentifier, name: $0.title) }
+        profile.pinnedExtensionIDs = ["c", "a"]
+
+        var items = bridge.toolbarItems(profileID: profileID, tabID: model.selectedTabID)
+        #expect(items.map(\.id) == ["c", "a", "b"])
+        #expect(items.map(\.isPinned) == [true, true, false])
+        let listed = await bridge.installedExtensions(profileID: profileID)
+        #expect(Dictionary(uniqueKeysWithValues: listed.map { ($0.id, $0.isPinned) }) == ["a": true, "b": false, "c": true])
+
+        model.setExtensionPinned(true, extensionID: "b", name: "Beta", profileID: profileID)
+        model.moveExtensionButton("b", name: "Beta", to: 0, profileID: profileID)
+        model.setExtensionPinned(false, extensionID: "c", name: "Gamma", profileID: profileID)
+        #expect(profile.pinChanges.map(\.0) == ["b", "c"] && profile.pinChanges.map(\.1) == [true, false])
+        #expect(profile.pinMoves.first?.0 == "b" && profile.pinMoves.first?.1 == 0)
+        items = bridge.toolbarItems(profileID: profileID, tabID: model.selectedTabID)
+        #expect(items.map(\.id) == ["b", "a", "c"])
+        #expect(items.map(\.isPinned) == [true, true, false])
+    }
+
+    /// Extensions installed before pins came had buttons; they're pinned once per profile, and
+    /// an extension unpinned afterwards stays unpinned at later launches.
+    @Test func existingExtensionsArePinnedOncePerProfile() async throws {
+        let suite = "AxoTests.pins.\(UUID().uuidString)"
+        let settings = try #require(UserDefaults(suiteName: suite))
+        defer { settings.removePersistentDomain(forName: suite) }
+        let profile = try #require(FakeProfile.made[profileID])
+        profile.extensions = [FakeExtension(identifier: "a", name: "Alpha"), FakeExtension(identifier: "b", name: "Beta")]
+        profile.pinnedExtensionIDs = ["b"]
+
+        let pinning = ChromiumExtensionBridge(model: model, engine: engine, store: store, settings: settings)
+        try await waitUntil { profile.pinnedExtensionIDs == ["b", "a"] }
+        #expect(settings.stringArray(forKey: ChromiumExtensionBridge.pinnedOnceKey) == [profileID.uuidString])
+
+        profile.setExtension("a", pinned: false)
+        pinning.pinExistingExtensionsOnce()
+        #expect(profile.pinnedExtensionIDs == ["b"], "Done once; the person's unpin stays")
+        let later = ChromiumExtensionBridge(model: model, engine: engine, store: store, settings: settings)
+        later.pinExistingExtensionsOnce()
+        #expect(profile.pinnedExtensionIDs == ["b"], "Not again at a later launch")
     }
 }
 
