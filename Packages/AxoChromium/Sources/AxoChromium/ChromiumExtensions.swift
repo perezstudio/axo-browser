@@ -4,6 +4,20 @@ import AxoEngineAPI
 import AxoWeb
 import Foundation
 
+/// Permissions an extension's update asks for that it wasn't granted.
+public struct ChromiumPermissionRequest: Equatable, Sendable {
+    /// API permission names, as manifests write them ("bookmarks").
+    public var apis: [String]
+    /// Site match patterns ("https://*.example.com/*").
+    public var hosts: [String]
+
+    /// Creates a request.
+    public init(apis: [String], hosts: [String]) {
+        self.apis = apis
+        self.hosts = hosts
+    }
+}
+
 /// An installed extension in the Chromium engine.
 public struct ChromiumExtension: Equatable, Sendable {
     /// Chrome's extension ID.
@@ -19,10 +33,18 @@ public struct ChromiumExtension: Equatable, Sendable {
     public var userScriptsAllowed: Bool
     /// Whether it's pinned to the toolbar.
     public var isPinned: Bool
+    /// For one an update turned off because it asks for permissions it wasn't granted, what it
+    /// asks for; `nil` when it isn't waiting for that.
+    public var newPermissions: ChromiumPermissionRequest?
+    /// Whether Chrome turned it off for a reason the person can't clear by turning it on
+    /// (corrupted, blocklisted, unsupported).
+    public var isOffForOtherReason: Bool
 
     /// Creates the description of an extension.
-    public init(id: String, name: String, version: String, isEnabled: Bool, isUnpacked: Bool, usesUserScripts: Bool = false, userScriptsAllowed: Bool = false, isPinned: Bool = false) {
+    public init(id: String, name: String, version: String, isEnabled: Bool, isUnpacked: Bool, usesUserScripts: Bool = false, userScriptsAllowed: Bool = false, isPinned: Bool = false, newPermissions: ChromiumPermissionRequest? = nil, isOffForOtherReason: Bool = false) {
         self.isPinned = isPinned
+        self.newPermissions = newPermissions
+        self.isOffForOtherReason = isOffForOtherReason
         self.id = id
         self.name = name
         self.version = version
@@ -296,7 +318,10 @@ extension ChromiumEngine {
             ChromiumExtension(
                 id: $0.identifier, name: $0.name, version: $0.version, isEnabled: $0.isEnabled, isUnpacked: $0.isUnpacked,
                 usesUserScripts: $0.usesUserScripts, userScriptsAllowed: $0.userScriptsAllowed,
-                isPinned: pinned.contains($0.identifier)
+                isPinned: pinned.contains($0.identifier),
+                newPermissions: $0.disableReasons.contains(.newPermissions)
+                    ? ChromiumPermissionRequest(apis: $0.addedAPIPermissions, hosts: $0.addedHostPermissions) : nil,
+                isOffForOtherReason: $0.disableReasons.contains(.other)
             )
         }
     }
@@ -321,6 +346,13 @@ extension ChromiumEngine {
     /// Turns an extension on or off.
     public func setExtension(_ extensionID: String, enabled: Bool, profileID: Profile.ID) {
         readyProfile(profileID)?.setExtension(extensionID, enabled: enabled)
+    }
+
+    /// Grants an extension the permissions its update asked for and turns it on, as accepting
+    /// Chrome's re-enable prompt does, only if it still asks for exactly `request` (what the
+    /// person was shown) and nothing else keeps it off. Returns whether it did.
+    public func approveNewPermissions(forExtension extensionID: String, request: ChromiumPermissionRequest, profileID: Profile.ID) -> Bool {
+        readyProfile(profileID)?.approveNewPermissions(forExtension: extensionID, apiPermissions: request.apis, hostPermissions: request.hosts) ?? false
     }
 
     /// Gives or takes away an extension's permission to run user scripts (`chrome.userScripts`).
