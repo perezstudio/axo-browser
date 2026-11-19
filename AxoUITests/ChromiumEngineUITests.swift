@@ -454,6 +454,115 @@ final class ChromiumEngineUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Has opener"].waitForExistence(timeout: 15), "A tab connected to the page that opened it")
     }
 
+    /// Links that open a new tab, the ways pages do it: a target="_blank" link, ⌘-click, and a
+    /// window opened blank whose address the page sets afterwards. Each must become a sidebar tab
+    /// showing the link's site. Links point at a closed loopback port, so nothing leaves the
+    /// machine; the tabs show Can't Connect, titled by their host.
+    @MainActor
+    func testNewTabLinksOpenAsTabs() throws {
+        let app = launchChromiumApp()
+        let sidebar = openPage(
+            "<title>Links</title><body style='margin:0'><a id=blank target=_blank href='http://127.0.0.1:9/blank' style='display:block;height:33vh'>Blank</a><a id=plain href='http://127.0.0.1:9/plain' style='display:block;height:33vh'>Plain</a><div id=late style='height:34vh' onclick=\"const w = window.open('about:blank'); w.location = 'http://127.0.0.1:9/late'\">Late</div></body>",
+            titled: "Links", in: app
+        )
+        let window = app.windows.firstMatch
+        let rows = { sidebar.staticTexts.matching(NSPredicate(format: "value == '127.0.0.1' OR label == '127.0.0.1'")).count }
+        func shot(_ name: String) {
+            let attachment = XCTAttachment(screenshot: window.screenshot())
+            attachment.name = name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+
+        // target="_blank": a new tab, selected.
+        // The page takes a moment to take clicks after its title shows.
+        sleep(1)
+        window.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.12)).click()
+        let opened = expectation(for: NSPredicate { _, _ in rows() >= 1 }, evaluatedWith: nil)
+        wait(for: [opened], timeout: 15)
+        shot("After target=_blank")
+        let address = app.descendants(matching: .any)["sidebarAddressBar"]
+        XCTAssertTrue((address.value as? String ?? "").contains("127.0.0.1:9/blank"), "The new tab is selected: \(address.value ?? "none")")
+
+        // Back to the links page; ⌘-click opens in the background.
+        sidebar.staticTexts["Links"].click()
+        XCTAssertTrue(sidebar.staticTexts["Links"].waitForExistence(timeout: 5))
+        sleep(1)
+        XCUIElement.perform(withKeyModifiers: .command) {
+            window.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.45)).click()
+        }
+        let second = expectation(for: NSPredicate { _, _ in rows() >= 2 }, evaluatedWith: nil)
+        wait(for: [second], timeout: 15)
+        shot("After command-click")
+        XCTAssertTrue((address.value as? String ?? "").contains("data:text/html"), "⌘-click stays on the page: \(address.value ?? "none")")
+
+        // A window opened blank, then sent somewhere.
+        window.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.8)).click()
+        let third = expectation(for: NSPredicate { _, _ in rows() >= 3 }, evaluatedWith: nil)
+        wait(for: [third], timeout: 15)
+        shot("After a late window.open")
+        let late = expectation(for: NSPredicate(format: "value CONTAINS '127.0.0.1:9/late'"), evaluatedWith: address)
+        wait(for: [late], timeout: 15)
+    }
+
+    /// X's links: anchors with rel="noopener noreferrer", and window.open with "noopener".
+    @MainActor
+    func testNoopenerLinksOpenAsTabs() throws {
+        let app = launchChromiumApp()
+        let sidebar = openPage(
+            "<title>Noopener</title><body style='margin:0'><a target=_blank rel='noopener noreferrer nofollow' href='http://127.0.0.1:9/anchor' style='display:block;height:50vh'>Anchor</a><div style='height:50vh' onclick=\"window.open('http://127.0.0.1:9/script', '_blank', 'noopener')\">Script</div></body>",
+            titled: "Noopener", in: app
+        )
+        let window = app.windows.firstMatch
+        let address = app.descendants(matching: .any)["sidebarAddressBar"]
+        func shot(_ name: String) {
+            let attachment = XCTAttachment(screenshot: window.screenshot())
+            attachment.name = name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+        sleep(1)
+        window.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.25)).click()
+        let anchor = expectation(for: NSPredicate(format: "value CONTAINS '127.0.0.1:9/anchor'"), evaluatedWith: address)
+        wait(for: [anchor], timeout: 15)
+        shot("After noopener anchor")
+        XCTAssertEqual(app.sheets.count, 0, "No alert")
+        sidebar.staticTexts["Noopener"].click()
+        sleep(2)
+        window.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.75)).click()
+        let script = expectation(for: NSPredicate(format: "value CONTAINS '127.0.0.1:9/script'"), evaluatedWith: address)
+        wait(for: [script], timeout: 15)
+        shot("After noopener window.open")
+        XCTAssertEqual(app.sheets.count, 0, "No alert")
+    }
+
+    /// A new-tab link on a favorite's page opens a tab after the Space's tabs (#234); it showed
+    /// "Axo couldn't open a new tab", since a favorite isn't one of the Space's tabs.
+    @MainActor
+    func testNewTabLinksFromAFavorite() throws {
+        let app = launchChromiumApp()
+        _ = openPage(
+            "<title>Fave</title><body style='margin:0'><a target=_blank href='http://127.0.0.1:9/fromfave' style='display:block;height:100vh'>Go</a></body>",
+            titled: "Fave", in: app
+        )
+        app.menuBars.menuItems["Add to Favorites"].click()
+        let tile = app.buttons["favoriteTile"]
+        XCTAssertTrue(tile.waitForExistence(timeout: 10))
+        tile.click()
+        sleep(2)
+        let window = app.windows.firstMatch
+        window.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.5)).click()
+        let address = app.descendants(matching: .any)["sidebarAddressBar"]
+        let opened = expectation(for: NSPredicate(format: "value CONTAINS '127.0.0.1:9/fromfave'"), evaluatedWith: address)
+        wait(for: [opened], timeout: 15)
+        let attachment = XCTAttachment(screenshot: window.screenshot())
+        attachment.name = "After a favorite's new-tab link"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        XCTAssertEqual(app.sheets.count, 0, "No \"Axo couldn't open a new tab\" alert")
+        XCTAssertTrue(app.descendants(matching: .any)["sidebar"].staticTexts["127.0.0.1"].exists, "A tab in the sidebar")
+    }
+
     /// A link leaving a pinned tab's site opens in Peek, and the pinned tab stays where it was:
     /// Chromium asks Axo before following a link click, as WebKit does. The link points at a
     /// closed loopback port, so nothing leaves the machine.

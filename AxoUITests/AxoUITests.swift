@@ -246,8 +246,15 @@ final class AxoUITests: XCTestCase {
         AxoUITests.openPage(page("First"), in: app)
         XCTAssertTrue(sidebar.staticTexts["First"].waitForExistence(timeout: 10))
         for title in ["Second", "Third"] {
+            // Typed into the field once it has focus: typed at the app as the bar opens, the
+            // first letters can be lost, turning the address into a search.
             app.typeKey("l", modifierFlags: .command)
-            app.typeText(page(title) + "\n")
+            let field = app.textFields["commandField"]
+            XCTAssertTrue(field.waitForExistence(timeout: 5))
+            expectation(for: NSPredicate(format: "hasKeyboardFocus == true"), evaluatedWith: field)
+            waitForExpectations(timeout: 5)
+            field.typeKey("a", modifierFlags: .command)
+            field.typeText(page(title) + "\n")
             XCTAssertTrue(sidebar.staticTexts[title].waitForExistence(timeout: 10))
         }
 

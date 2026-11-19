@@ -26,9 +26,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select the newest Xcode 27
+      - name: Select the newest released Xcode 27
         run: |
-          XCODE="$(ls -d /Applications/Xcode_27*.app | sort -V | tail -1)"
+          # The newest released Xcode 27, never a beta some images also carry: Xcode 27.3 beta
+          # changed hover delivery and glass button sizes, failing UI tests on those runners only.
+          XCODE="$(ls -d /Applications/Xcode_27*.app | grep -vi beta | sort -V | tail -1)"
           sudo xcode-select -s "$XCODE"
           xcodebuild -version
 
@@ -84,9 +86,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select the newest Xcode 27
+      - name: Select the newest released Xcode 27
         run: |
-          XCODE="$(ls -d /Applications/Xcode_27*.app | sort -V | tail -1)"
+          # The newest released Xcode 27, never a beta some images also carry: Xcode 27.3 beta
+          # changed hover delivery and glass button sizes, failing UI tests on those runners only.
+          XCODE="$(ls -d /Applications/Xcode_27*.app | grep -vi beta | sort -V | tail -1)"
           sudo xcode-select -s "$XCODE"
           xcodebuild -version
 

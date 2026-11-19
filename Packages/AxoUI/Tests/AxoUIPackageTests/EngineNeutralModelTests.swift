@@ -613,6 +613,51 @@ struct EngineNeutralModelTests {
         #expect(model.peek?.tab.url == URL(string: "https://example.com/elsewhere")!)
     }
 
+    /// A favorite's page isn't one of the Space's tabs (#234): its new-tab links open a tab
+    /// after the Space's tabs, keeping the page and its opener, instead of failing with "Axo
+    /// couldn't open a new tab". A link it hands Axo by address opens one there too.
+    @Test func aFavoritesNewTabLinksOpenTabs() async throws {
+        let favoritePage = try await openPage(URL(string: "https://example.com/feed")!)
+        let favoriteID = try #require(model.selectedTabID)
+        _ = try await openPage(URL(string: "https://example.com/other")!)
+        await model.addToFavorites(favoriteID)
+        try await waitUntil { model.favorites.contains { $0.id == favoriteID } && !model.tabs.contains { $0.id == favoriteID } }
+        model.select(favoriteID)
+        let profileID = try #require(model.space?.profileID)
+        var openedEvents = 0
+        model.onTabEvent = { if case .opened = $0 { openedEvents += 1 } }
+
+        let opened = FakePage(profileID: profileID)
+        favoritePage.open(opened, url: URL(string: "https://example.com/story")!, as: .tab(inBackground: false))
+        try await waitUntil { openedEvents == 1 }
+        #expect(model.alertMessage == nil)
+        #expect(model.tabs.map(\.url.lastPathComponent) == ["other", "story"], "After the Space's tabs")
+        let storyID = try #require(model.tabs.last?.id)
+        #expect(model.pool.livePage(for: storyID) === opened, "The same page, so window.opener still works")
+        #expect(!opened.isClosed)
+        #expect(model.selectedTabID == storyID)
+
+        // A new-tab request by address (a link the engine opens itself) from the favorite.
+        model.select(favoriteID)
+        model.pool.onOpenInNewTab?(URL(string: "https://example.com/later")!, favoriteID)
+        try await waitUntil { model.tabs.count == 3 }
+        #expect(model.alertMessage == nil)
+        #expect(model.tabs.last?.url.lastPathComponent == "later")
+
+        // A page of another profile (a favorite left behind as the Space moved) can't open a
+        // tab here: it would carry its profile's website data in.
+        let otherProfile = UUID()
+        let stranger = FakePage(profileID: otherProfile)
+        let strangerID = UUID()
+        model.pool.adopt(stranger, as: AxoCore.Tab(id: strangerID, spaceID: try #require(model.space?.id), url: URL(string: "https://example.com/x")!, sortKey: "z"), profileID: otherProfile)
+        let leaked = FakePage(profileID: otherProfile)
+        stranger.open(leaked, url: URL(string: "https://example.com/leak")!, as: .tab(inBackground: false))
+        #expect(leaked.isClosed, "Closed, not adopted under this profile")
+        model.pool.onOpenInNewTab?(URL(string: "https://example.com/leak2")!, strangerID)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(!model.tabs.contains { $0.url.lastPathComponent.hasPrefix("leak") }, "No tab for a page that isn't showing")
+    }
+
     @Test func aPageCanFillTheScreenUntilItOrThePersonStops() async throws {
         let shown = try await openPage(URL(string: "https://example.com/video")!)
         let shownID = try #require(model.selectedTabID)
