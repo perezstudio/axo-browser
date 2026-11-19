@@ -36,6 +36,12 @@ public final class FakeEngine: WebEngine {
         replacedLastingPermissions[profileID] = answers
     }
 
+    /// The defaults the pool set, in order.
+    public private(set) var defaultPermissions: [(kind: PermissionKind, decision: PermissionDecision?, profileID: Profile.ID)] = []
+    public func setDefaultPermission(_ kind: PermissionKind, decision: PermissionDecision?, profileID: Profile.ID) {
+        defaultPermissions.append((kind, decision, profileID))
+    }
+
     /// The kinds this engine asks about: every kind, as Chromium does, unless a test sets others.
     public var askedPermissionKinds = Set(PermissionKind.allCases)
 
@@ -103,6 +109,15 @@ public final class FakePage: EnginePage {
     public func setAudioMuted(_ muted: Bool) {
         muteRequests.append(muted)
         media.isMuted = muted
+    }
+
+    /// The capture it was asked to stop, in order.
+    public private(set) var stopCaptureRequests: [PageCapture] = []
+
+    public func stopCapture(_ kinds: PageCapture) {
+        stopCaptureRequests.append(kinds)
+        media.capture.subtract(kinds)
+        delegate?.pageMediaDidChange(self)
     }
 
     /// Reports `media` as the engine would, keeping the muted state the page was given.

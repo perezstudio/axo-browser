@@ -204,6 +204,17 @@ public final class WebKitPage: NSObject, EnginePage {
         audio?.setMuted(muted, in: webView)
     }
 
+    /// The camera and microphone, through `WKWebView`'s public capture states; WebKit has no
+    /// public way to stop location.
+    public func stopCapture(_ kinds: PageCapture) {
+        if kinds.contains(.camera), webView.cameraCaptureState != .none {
+            webView.setCameraCaptureState(.none, completionHandler: nil)
+        }
+        if kinds.contains(.microphone), webView.microphoneCaptureState != .none {
+            webView.setMicrophoneCaptureState(.none, completionHandler: nil)
+        }
+    }
+
     /// From the address, `hasOnlySecureContent`, and `serverTrust`. WebKit refuses untrusted
     /// certificates outright, so its pages are never ``PageSecurity/Level/broken``.
     public var security: PageSecurity {

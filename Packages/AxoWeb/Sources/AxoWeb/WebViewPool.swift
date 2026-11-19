@@ -760,6 +760,33 @@ public final class WebViewPool {
         engine.setLastingPermission(kind, origin: origin, decision: decision, profileID: profileID)
     }
 
+    /// Sets what sites without an answer get in the engine, for kinds it keeps answers for itself
+    /// (#133). Does nothing for other kinds, which Axo answers from its own defaults.
+    public func setDefaultPermission(_ kind: PermissionKind, decision: PermissionDecision?, profileID: Profile.ID) {
+        guard kind.lastsInEngine else { return }
+        engine.setDefaultPermission(kind, decision: decision, profileID: profileID)
+    }
+
+    /// The sites of a profile's open pages, for stopping the ones whose answer is now deny.
+    public func liveOrigins(profileID: Profile.ID) -> Set<PageOrigin> {
+        Set(live.values.filter { $0.profileID == profileID }.compactMap { $0.page.url.flatMap(PageOrigin.init(url:)) })
+    }
+
+    /// Stops pages of a site in a profile using the camera, the microphone, or location, for
+    /// when the person's answer for the site changes to deny (#133): the site's open tabs,
+    /// showing or hidden. Returns how many pages were asked to stop.
+    @discardableResult
+    public func stopCapture(_ kinds: PageCapture, origin: PageOrigin, profileID: Profile.ID) -> Int {
+        var stopped = 0
+        // Every page of the site, capturing or paused: engines do nothing for one that isn't.
+        for liveTab in live.values where liveTab.profileID == profileID {
+            guard let url = liveTab.page.url, PageOrigin(url: url) == origin else { continue }
+            liveTab.page.stopCapture(kinds)
+            stopped += 1
+        }
+        return stopped
+    }
+
     /// Replaces every lasting answer the engine keeps for a profile with Axo's (at launch, and after
     /// clearing website data, which clears the engine's copy too).
     public func replaceLastingPermissions(_ answers: [LastingPermission], profileID: Profile.ID) {
