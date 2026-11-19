@@ -29,15 +29,91 @@ public struct ExtensionToolbarItem: Identifiable, Equatable {
     /// Whether clicking it opens a popup the button declares. Extensions can also open one
     /// themselves from the click (`chrome.action.openPopup`), so this isn't the only way to have one.
     public var hasPopup: Bool
+    /// Whether it's pinned to the toolbar, with a button of its own; every extension is also in
+    /// the Extensions menu (the puzzle piece).
+    public var isPinned: Bool
 
     /// Creates an item.
-    public init(id: String, label: String, icon: PlatformImage?, badge: String, isEnabled: Bool, hasPopup: Bool = false) {
+    public init(id: String, label: String, icon: PlatformImage?, badge: String, isEnabled: Bool, hasPopup: Bool = false, isPinned: Bool = true) {
+        self.isPinned = isPinned
         self.id = id
         self.label = label
         self.icon = icon
         self.badge = badge
         self.isEnabled = isEnabled
         self.hasPopup = hasPopup
+    }
+}
+
+extension ExtensionToolbarItem {
+    /// `items` as the toolbar shows them: the pinned ones (`pinnedIDs`, in that order) first,
+    /// marked pinned, then the rest by name, marked unpinned.
+    public static func arranged(_ items: [ExtensionToolbarItem], pinnedIDs: [String]) -> [ExtensionToolbarItem] {
+        let order = Dictionary(pinnedIDs.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        var pinned: [ExtensionToolbarItem] = []
+        var others: [ExtensionToolbarItem] = []
+        for var item in items {
+            item.isPinned = order[item.id] != nil
+            if item.isPinned { pinned.append(item) } else { others.append(item) }
+        }
+        pinned.sort { order[$0.id, default: 0] < order[$1.id, default: 0] }
+        others.sort { $0.label.localizedStandardCompare($1.label) == .orderedAscending }
+        return pinned + others
+    }
+}
+
+/// Pins kept in memory for an engine with no pinned state of its own (WebKit, which runs
+/// extensions only in test runs): every extension starts pinned, as new installs do on
+/// Chromium, and pins last until Axo quits.
+@Observable
+public final class ExtensionPins {
+    /// Unpinned extensions, by profile.
+    private var unpinned: [Profile.ID: Set<String>] = [:]
+    /// The order of pinned extensions that were pinned again or moved, by profile; others
+    /// follow in the order they're given.
+    private var order: [Profile.ID: [String]] = [:]
+
+    /// Creates empty pins: everything pinned.
+    public init() {}
+
+    /// The pinned IDs among `ids` (the installed extensions, in their own order), in toolbar order.
+    public func pinnedIDs(among ids: [String], profileID: Profile.ID) -> [String] {
+        let hidden = unpinned[profileID] ?? []
+        let pinned = ids.filter { !hidden.contains($0) }
+        let known = (order[profileID] ?? []).filter { pinned.contains($0) }
+        return known + pinned.filter { !known.contains($0) }
+    }
+
+    /// Whether an extension is pinned.
+    public func isPinned(_ id: String, profileID: Profile.ID) -> Bool {
+        !(unpinned[profileID]?.contains(id) ?? false)
+    }
+
+    /// Pins an extension, at the end of `ids`'s pinned ones, or unpins it.
+    public func setPinned(_ pinned: Bool, extensionID: String, among ids: [String], profileID: Profile.ID) {
+        var shown = pinnedIDs(among: ids, profileID: profileID).filter { $0 != extensionID }
+        if pinned {
+            unpinned[profileID, default: []].remove(extensionID)
+            shown.append(extensionID)
+        } else {
+            unpinned[profileID, default: []].insert(extensionID)
+        }
+        order[profileID] = shown
+    }
+
+    /// Forgets a removed extension, so installing it again starts pinned, as a new install does.
+    public func forget(_ extensionID: String, profileID: Profile.ID) {
+        unpinned[profileID]?.remove(extensionID)
+        order[profileID]?.removeAll { $0 == extensionID }
+    }
+
+    /// Moves a pinned extension to `index` among the pinned ones.
+    public func move(_ extensionID: String, to index: Int, among ids: [String], profileID: Profile.ID) {
+        var shown = pinnedIDs(among: ids, profileID: profileID)
+        guard let from = shown.firstIndex(of: extensionID) else { return }
+        shown.remove(at: from)
+        shown.insert(extensionID, at: min(max(index, 0), shown.count))
+        order[profileID] = shown
     }
 }
 
@@ -63,6 +139,18 @@ public struct ExtensionShortcut: Identifiable, Equatable {
         self.title = title
         self.key = key
         self.modifiers = modifiers
+    }
+}
+
+extension ExtensionShortcut {
+    /// Its keys as menus write them, such as "⇧⌘U".
+    public var keysDescription: String {
+        var text = ""
+        if modifiers.contains(.control) { text += "⌃" }
+        if modifiers.contains(.option) { text += "⌥" }
+        if modifiers.contains(.shift) { text += "⇧" }
+        if modifiers.contains(.command) { text += "⌘" }
+        return text + String(key).uppercased()
     }
 }
 
@@ -105,9 +193,15 @@ extension ExtensionShortcut {
 /// implementation; the app connects them.
 @MainActor
 public protocol ExtensionToolbarProviding: AnyObject {
-    /// The buttons for a profile's extensions, for the given tab. Reading this from a view must
-    /// make the view update when buttons change (an `@Observable` implementation does).
+    /// The buttons for a profile's enabled extensions, for the given tab: the pinned ones first,
+    /// in their order, then the rest (``ExtensionToolbarItem/arranged(_:pinnedIDs:)``). Reading
+    /// this from a view must make the view update when buttons change (an `@Observable`
+    /// implementation does).
     func toolbarItems(profileID: Profile.ID, tabID: AxoCore.Tab.ID?) -> [ExtensionToolbarItem]
+    /// Pins an extension to the toolbar, at the end of the pinned ones, or unpins it.
+    func setPinned(_ pinned: Bool, extensionID: String, profileID: Profile.ID)
+    /// Moves a pinned extension to `index` among the pinned buttons.
+    func movePinned(extensionID: String, to index: Int, profileID: Profile.ID)
     /// Clicks a button: the extension shows its popup or handles the click.
     func performAction(extensionID: String, profileID: Profile.ID, tabID: AxoCore.Tab.ID?)
     /// The keyboard shortcuts of a profile's extensions. Reading this from a view must make the
@@ -135,35 +229,37 @@ extension ExtensionToolbarProviding {
 // Mac only for now; iPhone and iPad have their own chrome.
 #if os(macOS)
 
-/// The extension buttons in the toolbar, or at the right end of the sidebar's address bar,
-/// where only the first few fit and a menu holds the rest (`limit`).
+/// The pinned extensions' buttons in the toolbar, or at the right end of the sidebar's address
+/// bar, where only the first few fit (`limit`), followed by the Extensions menu (a puzzle piece)
+/// that lists every extension, with a pin control for each (#131).
 struct ExtensionToolbarButtons: View {
     let model: BrowserModel
-    /// The most buttons shown, the last of them a menu with the rest; `nil` shows every one
-    /// (the toolbar has its own overflow menu).
+    /// The most buttons shown, the Extensions menu included; `nil` shows every pinned one (the
+    /// toolbar has its own overflow menu).
     var limit: Int?
 
     /// The buttons the sidebar's address bar has room for, the menu included.
     static let addressBarLimit = 3
 
-    /// How many buttons show for `count` extensions, a menu with the rest counted as one.
-    static func shownCount(of count: Int, limit: Int?) -> Int {
-        guard let limit else { return count }
-        return min(count, limit)
+    /// The pinned extensions with buttons of their own, for `limit`: the first pinned ones,
+    /// leaving the last place to the Extensions menu.
+    static func buttons(_ items: [ExtensionToolbarItem], limit: Int?) -> [ExtensionToolbarItem] {
+        let pinned = items.filter(\.isPinned)
+        guard let limit else { return pinned }
+        return Array(pinned.prefix(max(limit - 1, 0)))
     }
 
-    /// The extensions with buttons of their own and those in the menu, for `limit`.
-    static func split<Item>(_ items: [Item], limit: Int?) -> (buttons: [Item], menu: [Item]) {
-        guard let limit, items.count > limit else { return (items, []) }
-        let buttons = max(limit - 1, 0)
-        return (Array(items.prefix(buttons)), Array(items.dropFirst(buttons)))
+    /// How many buttons show for `items`, the Extensions menu counted as one.
+    static func shownCount(of items: [ExtensionToolbarItem], limit: Int?) -> Int {
+        items.isEmpty ? 0 : buttons(items, limit: limit).count + 1
     }
 
     var body: some View {
         if let provider = model.extensionToolbar, let profileID = model.space?.profileID {
             let all = provider.toolbarItems(profileID: profileID, tabID: model.selectedTabID)
-            let (items, overflow) = Self.split(all, limit: limit)
-            ForEach(items) { item in
+            let shown = Self.buttons(all, limit: limit)
+            let pinned = all.filter(\.isPinned)
+            ForEach(shown) { item in
                 Button {
                     provider.performAction(extensionID: item.id, profileID: profileID, tabID: model.selectedTabID)
                 } label: {
@@ -175,41 +271,104 @@ struct ExtensionToolbarButtons: View {
                 .accessibilityIdentifier("extensionButton")
                 .background(PopoverAnchor { model.extensionAnchors[item.id] = $0 })
                 .contextMenu {
-                    if item.isEnabled && provider.canInspectPopups {
-                        Button("Inspect Popup") {
-                            provider.inspectPopup(extensionID: item.id, profileID: profileID, tabID: model.selectedTabID)
-                        }
-                    }
+                    ExtensionButtonActions(model: model, provider: provider, item: item, pinned: pinned, profileID: profileID)
                 }
                 .accessibilityActions {
-                    if item.isEnabled && provider.canInspectPopups {
-                        Button("Inspect Popup") {
-                            provider.inspectPopup(extensionID: item.id, profileID: profileID, tabID: model.selectedTabID)
-                        }
-                    }
+                    ExtensionButtonActions(model: model, provider: provider, item: item, pinned: pinned, profileID: profileID)
                 }
             }
-            if !overflow.isEmpty {
-                Menu {
-                    ForEach(overflow) { item in
-                        Button(item.badge.isEmpty ? item.label : "\(item.label) (\(item.badge))") {
-                            provider.performAction(extensionID: item.id, profileID: profileID, tabID: model.selectedTabID)
-                        }
-                        .disabled(!item.isEnabled)
-                    }
-                } label: {
-                    Label("More Extensions", systemImage: "puzzlepiece.extension")
-                        .labelStyle(.iconOnly)
-                }
-                .menuIndicator(.hidden)
-                .help("More Extensions")
-                .accessibilityIdentifier("moreExtensionsButton")
-                // Their popups open from the menu's button.
-                .background(PopoverAnchor { view in
-                    for item in overflow { model.extensionAnchors[item.id] = view }
-                })
+            if !all.isEmpty {
+                ExtensionsMenu(model: model, provider: provider, items: all, profileID: profileID)
+                    // Popups of extensions without a button of their own open from the menu's button.
+                    .background(PopoverAnchor { view in
+                        let shownIDs = Set(shown.map(\.id))
+                        for item in all where !shownIDs.contains(item.id) { model.extensionAnchors[item.id] = view }
+                    })
             }
         }
+    }
+}
+
+/// What an extension's toolbar button offers in its context menu and to VoiceOver: Unpin, moving
+/// it among the pinned buttons, Manage Extension, Remove, and Inspect Popup.
+private struct ExtensionButtonActions: View {
+    let model: BrowserModel
+    let provider: any ExtensionToolbarProviding
+    let item: ExtensionToolbarItem
+    /// Every pinned extension, in order, including those past the limit.
+    let pinned: [ExtensionToolbarItem]
+    let profileID: Profile.ID
+
+    var body: some View {
+        if item.isEnabled && provider.canInspectPopups {
+            Button("Inspect Popup") {
+                provider.inspectPopup(extensionID: item.id, profileID: profileID, tabID: model.selectedTabID)
+            }
+        }
+        Button("Unpin") {
+            model.setExtensionPinned(false, extensionID: item.id, name: item.label, profileID: profileID)
+        }
+        if let index = pinned.firstIndex(where: { $0.id == item.id }) {
+            if index > 0 {
+                Button("Move Left") {
+                    model.moveExtensionButton(item.id, name: item.label, to: index - 1, profileID: profileID)
+                }
+            }
+            if index < pinned.count - 1 {
+                Button("Move Right") {
+                    model.moveExtensionButton(item.id, name: item.label, to: index + 1, profileID: profileID)
+                }
+            }
+        }
+        Divider()
+        Button("Manage Extension…") { model.showExtensions(profileID: profileID, selecting: item.id) }
+        Button("Remove…", role: .destructive) {
+            model.askToRemoveExtension(item.id, name: item.label, profileID: profileID)
+        }
+    }
+}
+
+/// The Extensions menu (a puzzle piece, as in Chrome and Arc): every enabled extension, which
+/// runs its action or opens its popup, a pin control for each, and Manage Extensions.
+private struct ExtensionsMenu: View {
+    let model: BrowserModel
+    let provider: any ExtensionToolbarProviding
+    let items: [ExtensionToolbarItem]
+    let profileID: Profile.ID
+
+    var body: some View {
+        Menu {
+            Section {
+                ForEach(items) { item in
+                    Button(item.badge.isEmpty ? item.label : "\(item.label) (\(item.badge))") {
+                        provider.performAction(extensionID: item.id, profileID: profileID, tabID: model.selectedTabID)
+                    }
+                    .disabled(!item.isEnabled)
+                }
+            }
+            Section("Pinned to the Toolbar") {
+                ForEach(items) { item in
+                    // Named for what it does: menus read an item's title, not an accessibility label.
+                    Toggle("Pin \(item.label)", isOn: Binding(
+                        get: { item.isPinned },
+                        set: { model.setExtensionPinned($0, extensionID: item.id, name: item.label, profileID: profileID) }
+                    ))
+                }
+            }
+            Section {
+                Button("Manage Extensions…") { model.showExtensions(profileID: profileID) }
+            }
+        } label: {
+            Label("Extensions", systemImage: "puzzlepiece.extension")
+                .labelStyle(.iconOnly)
+        }
+        // As the tab bar's folder menus: a button VoiceOver can press, named for itself.
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .help("Extensions")
+        .accessibilityLabel("Extensions")
+        .accessibilityIdentifier("extensionsMenuButton")
     }
 }
 

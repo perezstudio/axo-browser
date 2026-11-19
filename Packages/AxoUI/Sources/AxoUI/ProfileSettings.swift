@@ -91,7 +91,12 @@ private struct ProfileDetail: View {
             }
             if let extensionCount {
                 Section("Extensions") {
-                    Text(extensionCount == 1 ? "1 extension installed" : "\(extensionCount) extensions installed")
+                    LabeledContent(extensionCount == 1 ? "1 extension installed" : "\(extensionCount) extensions installed") {
+                        // Opens the Extensions window on this profile, from any Space (#131).
+                        Button("Manage Extensions…") { model.showExtensions(profileID: profile.id) }
+                            .accessibilityLabel("Manage \(profile.name)'s Extensions")
+                            .accessibilityIdentifier("manageProfileExtensions")
+                    }
                 }
             }
             Section("Website Data") {

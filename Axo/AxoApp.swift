@@ -330,7 +330,7 @@ enum AppEnvironment {
                         ChromiumSupport.failToLaunch(reason: reason)
                     }
                 }
-                chromiumExtensionBridge = ChromiumExtensionBridge(model: model, engine: chromium, store: store)
+                chromiumExtensionBridge = ChromiumExtensionBridge(model: model, engine: chromium, store: store, settings: settings)
                 // UI tests can preinstall an unpacked extension, as with WebKit.
                 if isUITesting, let path = ProcessInfo.processInfo.environment["AXO_UI_TESTING_EXTENSION"] {
                     let previous = chromium.onStateChange
@@ -645,6 +645,9 @@ final class BrowserImportBridge: BrowserImporting {
 final class ExtensionBridge: ExtensionBrowsing, ExtensionToolbarProviding, ExtensionManaging, DeveloperToolsProviding {
     private weak var model: BrowserModel?
     private let manager: ExtensionManager
+    /// WebKit has no pinned state of its own; WebKit's extensions run only in test runs, so pins
+    /// last until Axo quits (#131).
+    private let pins = ExtensionPins()
 
     init(model: BrowserModel, manager: ExtensionManager) {
         self.model = model
@@ -699,9 +702,20 @@ final class ExtensionBridge: ExtensionBrowsing, ExtensionToolbarProviding, Exten
     // MARK: ExtensionToolbarProviding
 
     func toolbarItems(profileID: Profile.ID, tabID: AxoCore.Tab.ID?) -> [ExtensionToolbarItem] {
-        manager.toolbarActions(for: profileID, tabID: tabID).map {
+        let items = manager.toolbarActions(for: profileID, tabID: tabID).map {
             ExtensionToolbarItem(id: $0.id, label: $0.label, icon: $0.icon, badge: $0.badge, isEnabled: $0.isEnabled)
         }
+        return ExtensionToolbarItem.arranged(items, pinnedIDs: pins.pinnedIDs(among: items.map(\.id), profileID: profileID))
+    }
+
+    func setPinned(_ pinned: Bool, extensionID: String, profileID: Profile.ID) {
+        let ids = manager.toolbarActions(for: profileID, tabID: nil).map(\.id)
+        pins.setPinned(pinned, extensionID: extensionID, among: ids, profileID: profileID)
+    }
+
+    func movePinned(extensionID: String, to index: Int, profileID: Profile.ID) {
+        let ids = manager.toolbarActions(for: profileID, tabID: nil).map(\.id)
+        pins.move(extensionID, to: index, among: ids, profileID: profileID)
     }
 
     func performAction(extensionID: String, profileID: Profile.ID, tabID: AxoCore.Tab.ID?) {
@@ -724,6 +738,7 @@ final class ExtensionBridge: ExtensionBrowsing, ExtensionToolbarProviding, Exten
 
     func uninstall(_ extensionID: String, profileID: Profile.ID) async throws {
         try await manager.uninstall(extensionID, profileID: profileID)
+        pins.forget(extensionID, profileID: profileID)
     }
 
     func installedExtensions(profileID: Profile.ID) async -> [ExtensionSummary] {
@@ -738,7 +753,8 @@ final class ExtensionBridge: ExtensionBrowsing, ExtensionToolbarProviding, Exten
                 isUnpacked: record.isUnpacked,
                 reachesAllRequestedSites: record.siteAccess == .all,
                 lines: manager.grantedDescription(for: record.extensionID, profileID: profileID),
-                loadError: manager.loadErrors[record.extensionID]
+                loadError: manager.loadErrors[record.extensionID],
+                isPinned: pins.isPinned(record.extensionID, profileID: profileID)
             )
         }
     }

@@ -17,9 +17,12 @@ public struct ChromiumExtension: Equatable, Sendable {
     /// that's given.
     public var usesUserScripts: Bool
     public var userScriptsAllowed: Bool
+    /// Whether it's pinned to the toolbar.
+    public var isPinned: Bool
 
     /// Creates the description of an extension.
-    public init(id: String, name: String, version: String, isEnabled: Bool, isUnpacked: Bool, usesUserScripts: Bool = false, userScriptsAllowed: Bool = false) {
+    public init(id: String, name: String, version: String, isEnabled: Bool, isUnpacked: Bool, usesUserScripts: Bool = false, userScriptsAllowed: Bool = false, isPinned: Bool = false) {
+        self.isPinned = isPinned
         self.id = id
         self.name = name
         self.version = version
@@ -288,12 +291,31 @@ extension ChromiumEngine {
     /// A profile's installed extensions.
     public func extensions(profileID: Profile.ID) -> [ChromiumExtension] {
         guard let profile = readyProfile(profileID) else { return [] }
+        let pinned = Set(profile.pinnedExtensionIDs)
         return profile.extensions.map {
             ChromiumExtension(
                 id: $0.identifier, name: $0.name, version: $0.version, isEnabled: $0.isEnabled, isUnpacked: $0.isUnpacked,
-                usesUserScripts: $0.usesUserScripts, userScriptsAllowed: $0.userScriptsAllowed
+                usesUserScripts: $0.usesUserScripts, userScriptsAllowed: $0.userScriptsAllowed,
+                isPinned: pinned.contains($0.identifier)
             )
         }
+    }
+
+    /// The IDs of a profile's extensions pinned to the toolbar, in the toolbar's order, kept in
+    /// Chrome's own pinned state. New installs start pinned.
+    public func pinnedExtensionIDs(profileID: Profile.ID) -> [String] {
+        readyProfile(profileID)?.pinnedExtensionIDs ?? []
+    }
+
+    /// Pins an extension to the toolbar, at the end, or unpins it.
+    public func setExtension(_ extensionID: String, pinned: Bool, profileID: Profile.ID) {
+        readyProfile(profileID)?.setExtension(extensionID, pinned: pinned)
+    }
+
+    /// Moves a pinned extension that's on to `index` in the toolbar's order (among pinned
+    /// extensions that are on).
+    public func movePinnedExtension(_ extensionID: String, to index: Int, profileID: Profile.ID) {
+        readyProfile(profileID)?.movePinnedExtension(extensionID, to: UInt(max(index, 0)))
     }
 
     /// Turns an extension on or off.

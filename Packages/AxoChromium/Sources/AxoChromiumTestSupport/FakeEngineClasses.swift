@@ -136,6 +136,25 @@ public final class FakeProfile: NSObject, AXOProfile {
     public private(set) var userScriptChanges: [(String, Bool)] = []
     public func setUserScriptsAllowed(_ allowed: Bool, forExtension extensionID: String) { userScriptChanges.append((extensionID, allowed)) }
     public func uninstallExtension(_ extensionID: String) { uninstalled.append(extensionID) }
+    /// The pinned extensions, in toolbar order, as Chrome keeps them.
+    public var pinnedExtensionIDs: [String] = []
+    /// The pins Axo set, in order.
+    public private(set) var pinChanges: [(String, Bool)] = []
+    public func setExtension(_ extensionID: String, pinned: Bool) {
+        pinChanges.append((extensionID, pinned))
+        pinnedExtensionIDs.removeAll { $0 == extensionID }
+        if pinned { pinnedExtensionIDs.append(extensionID) }
+        onExtensionsChange?()
+    }
+    /// The moves Axo asked for, in order.
+    public private(set) var pinMoves: [(String, Int)] = []
+    public func movePinnedExtension(_ extensionID: String, to index: UInt) {
+        pinMoves.append((extensionID, Int(index)))
+        guard pinnedExtensionIDs.contains(extensionID) else { return }
+        pinnedExtensionIDs.removeAll { $0 == extensionID }
+        pinnedExtensionIDs.insert(extensionID, at: min(Int(index), pinnedExtensionIDs.count))
+        onExtensionsChange?()
+    }
     /// The extensions whose background Axo inspected, and those that have one to inspect.
     public private(set) var inspectedBackgrounds: [String] = []
     public var extensionsWithBackgrounds: Set<String> = []
@@ -387,8 +406,10 @@ public final class FakeExtension: NSObject, AXOExtension {
     public let identifier: String, name: String, version: String
     public let isEnabled: Bool, isUnpacked: Bool
     public let usesUserScripts: Bool, userScriptsAllowed: Bool
+    public var isPinned: Bool
 
-    public init(identifier: String, name: String, version: String = "1.0", isEnabled: Bool = true, isUnpacked: Bool = true, usesUserScripts: Bool = false, userScriptsAllowed: Bool = false) {
+    public init(identifier: String, name: String, version: String = "1.0", isEnabled: Bool = true, isUnpacked: Bool = true, usesUserScripts: Bool = false, userScriptsAllowed: Bool = false, isPinned: Bool = false) {
+        self.isPinned = isPinned
         self.identifier = identifier
         self.name = name
         self.version = version

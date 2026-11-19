@@ -281,8 +281,9 @@ public final class ChromiumEngine: WebEngine {
         return profile
     }
 
-    /// Whether the profile is in use in the engine.
-    func isFollowing(_ profileID: Profile.ID) -> Bool {
+    /// Whether the profile is in use in the engine (loaded, with its callbacks set). Asking a
+    /// profile that isn't anything through the engine loads it.
+    public func isFollowing(_ profileID: Profile.ID) -> Bool {
         followedProfiles.contains(profileID)
     }
 

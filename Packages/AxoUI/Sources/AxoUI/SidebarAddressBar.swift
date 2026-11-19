@@ -46,8 +46,8 @@ struct SidebarAddressBar: View {
                     PageSummaryView(state: model.pageSummary ?? .loading).windowAppearance()
                 }
         }
-        // Extensions' buttons at the bar's right end, as on the board (#67): the first few, and
-        // a menu with the rest. Each is its own button for VoiceOver and the keyboard, outside
+        // Extensions' buttons at the bar's right end, as on the board (#67): the first few pinned
+        // ones, and the Extensions menu with every one (#131). Each is its own button for VoiceOver and the keyboard, outside
         // the pill's single element. Only while the toolbar is gone, so each extension's
         // popup has one anchor.
         .overlay(alignment: .trailing) {
@@ -65,13 +65,13 @@ struct SidebarAddressBar: View {
 
     /// Whether the extensions' buttons show at the bar's right end.
     private var showsExtensions: Bool {
-        pageToolsInSidebar && !model.isAddressEditedInSidebar && extensionCount > 0
+        pageToolsInSidebar && !model.isAddressEditedInSidebar && !extensionItems.isEmpty
     }
 
-    /// How many extensions have buttons.
-    private var extensionCount: Int {
-        guard let provider = model.extensionToolbar, let profileID = model.space?.profileID else { return 0 }
-        return provider.toolbarItems(profileID: profileID, tabID: model.selectedTabID).count
+    /// The profile's extensions, pinned or not; any one shows the Extensions menu.
+    private var extensionItems: [ExtensionToolbarItem] {
+        guard let provider = model.extensionToolbar, let profileID = model.space?.profileID else { return [] }
+        return provider.toolbarItems(profileID: profileID, tabID: model.selectedTabID)
     }
 
     /// One extension's button.
@@ -80,7 +80,7 @@ struct SidebarAddressBar: View {
     /// The width the extensions' buttons take at the bar's right end, which the address leaves free.
     private var extensionsWidth: CGFloat {
         guard showsExtensions else { return 0 }
-        let shown = ExtensionToolbarButtons.shownCount(of: extensionCount, limit: ExtensionToolbarButtons.addressBarLimit)
+        let shown = ExtensionToolbarButtons.shownCount(of: extensionItems, limit: ExtensionToolbarButtons.addressBarLimit)
         return CGFloat(shown) * (Self.extensionButtonWidth + 2) + 6
     }
 

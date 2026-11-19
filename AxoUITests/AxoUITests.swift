@@ -2381,8 +2381,90 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(window.staticTexts["Axo Helper"].waitForExistence(timeout: 5))
 
         // A switch-style toggle is exposed as a checkbox on macOS.
-        window.checkBoxes.firstMatch.click()
+        let on = window.descendants(matching: .any)["extensionOnSwitch"]
+        XCTAssertTrue(on.waitForExistence(timeout: 5))
+        on.click()
         XCTAssertTrue(button.waitForNonExistence(timeout: 10))
+    }
+
+    /// Unpinning from a button's context menu takes its button away (#131); the Extensions menu
+    /// still lists it and pins it again.
+    @MainActor
+    func testPinningFromTheExtensionsMenuAndAButtonsMenu() throws {
+        let folder = try writeTestExtension(name: "Axo Helper")
+        let app = Self.makeApp()
+        app.launchEnvironment["AXO_UI_TESTING_EXTENSION"] = folder.path
+        app.launch()
+        Self.bringToFront(app)
+        let button = app.buttons.matching(NSPredicate(format: "identifier == 'extensionButton' AND label CONTAINS 'Axo Helper'")).firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 10), "New extensions start pinned")
+
+        // Menus opened from the address pill aren't in the accessibility tree XCUITest reads
+        // (a screenshot shows them open), so items are chosen with the keyboard: Unpin is the
+        // button's first item on WebKit (no Inspect Popup there).
+        button.rightClick()
+        sleep(1)
+        let shot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        shot.name = "Extension button's menu"
+        shot.lifetime = .keepAlways
+        add(shot)
+        app.typeKey(.downArrow, modifierFlags: [])
+        app.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(button.waitForNonExistence(timeout: 10), "Unpinned")
+
+        let menu = app.descendants(matching: .any)["extensionsMenuButton"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 5), "Every extension is in the Extensions menu")
+        menu.click()
+        sleep(1)
+        // The menu: Axo Helper (runs it), then Pinned to the Toolbar's "Pin Axo Helper".
+        app.typeKey(.downArrow, modifierFlags: [])
+        app.typeKey(.downArrow, modifierFlags: [])
+        app.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(button.waitForExistence(timeout: 10), "Pinned again")
+    }
+
+    /// Settings › Profiles opens the Extensions window on a profile the shown Space doesn't use,
+    /// and removing an extension there asks first, naming it and the profile (#131).
+    @MainActor
+    func testRemovingAnotherProfilesExtension() throws {
+        let folder = try writeTestExtension(name: "Axo Helper")
+        let app = Self.makeApp()
+        app.launchEnvironment["AXO_UI_TESTING_EXTENSION"] = folder.path
+        app.launch()
+        Self.bringToFront(app)
+        let button = app.buttons.matching(NSPredicate(format: "identifier == 'extensionButton' AND label CONTAINS 'Axo Helper'")).firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 10))
+
+        // A new profile shows its first Space, so Default is another profile's.
+        app.typeKey(",", modifierFlags: .command)
+        AxoUITests.selectSettingsPane("profiles", in: app)
+        let list = app.outlines["profileList"].exists ? app.outlines["profileList"] : app.tables["profileList"]
+        app.buttons["addProfileButton"].click()
+        let nameField = app.textFields["settingsNewProfileName"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.typeText("Work")
+        let firstSpace = app.textFields["profileFirstSpaceField"]
+        firstSpace.click()
+        firstSpace.typeText("Office")
+        app.buttons["createProfileButton"].click()
+        XCTAssertTrue(list.staticTexts["Work"].waitForExistence(timeout: 5))
+        XCTAssertTrue(button.waitForNonExistence(timeout: 10), "Work has no extensions")
+
+        list.staticTexts["Default"].click()
+        let manage = app.buttons["manageProfileExtensions"]
+        XCTAssertTrue(manage.waitForExistence(timeout: 5))
+        manage.click()
+        let window = app.descendants(matching: .any)["extensionsWindow"]
+        XCTAssertTrue(window.waitForExistence(timeout: 10))
+        XCTAssertEqual(window.popUpButtons["extensionsProfilePicker"].value as? String, "Default")
+        XCTAssertTrue(window.staticTexts["Axo Helper"].waitForExistence(timeout: 5))
+
+        let remove = window.buttons["removeExtension"]
+        XCTAssertTrue(remove.waitForExistence(timeout: 5))
+        remove.click()
+        XCTAssertTrue(app.staticTexts["Remove “Axo Helper” from Default?"].waitForExistence(timeout: 5))
+        app.buttons.matching(NSPredicate(format: "label == 'Remove' OR title == 'Remove'")).firstMatch.click()
+        XCTAssertTrue(window.staticTexts["No Extensions"].waitForExistence(timeout: 10), "Gone from Default")
     }
 
     /// ⌥⌘I opens Axo's Web Inspector for the selected page, docked in the window.

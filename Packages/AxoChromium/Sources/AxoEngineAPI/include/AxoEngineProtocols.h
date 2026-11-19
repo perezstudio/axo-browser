@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 38
+#define AXO_ENGINE_API_VERSION 39
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -161,6 +161,22 @@ NS_SWIFT_UI_ACTOR
 
 /// Uninstalls an extension and deletes its data.
 - (void)uninstallExtension:(NSString*)extensionID;
+
+/// The IDs of the profile's extensions pinned to the toolbar, in their toolbar order, kept in
+/// Chrome's own state (`ToolbarActionsModel`, the `extensions.pinned_extensions` pref), so
+/// `chrome.action.getUserSettings` agrees. Extensions that are off keep their place. Newly
+/// installed extensions start pinned (Chrome's `ExtensionsPinnedByDefault`); updates don't
+/// change it.
+@property(nonatomic, readonly) NSArray<NSString*>* pinnedExtensionIDs;
+
+/// Pins an extension to the toolbar, at the end, or unpins it, as Chrome's puzzle menu does.
+- (void)setExtension:(NSString*)extensionID pinned:(BOOL)pinned
+    NS_SWIFT_NAME(setExtension(_:pinned:));
+
+/// Moves a pinned extension that's on to `index` among the pinned extensions that are on (the
+/// toolbar's order). Does nothing for one that isn't pinned or isn't on.
+- (void)movePinnedExtension:(NSString*)extensionID toIndex:(NSUInteger)index
+    NS_SWIFT_NAME(movePinnedExtension(_:to:));
 /// Opens DevTools for the extension's service worker (started first if it's asleep) or background
 /// page, as Chrome's Extensions page does. It arrives through `onDevToolsWindowOpen`. Returns `NO`
 /// when the extension has neither, or isn't on.
@@ -180,8 +196,8 @@ NS_SWIFT_UI_ACTOR
                     completion:(void (^)(id<AXOExtensionPopup> _Nullable popup))completion
     NS_SWIFT_NAME(performExtensionAction(_:on:window:completion:));
 
-/// Called when extensions are installed, removed, turned on or off, or change their toolbar
-/// buttons (titles, badges, icons).
+/// Called when extensions are installed, removed, turned on or off, pinned, unpinned, or moved,
+/// or change their toolbar buttons (titles, badges, icons).
 @property(nonatomic, copy, nullable) void (^onExtensionsChange)(void);
 
 /// Called when an extension opens its own popup (`chrome.action.openPopup`), as some do when
@@ -748,6 +764,8 @@ NS_SWIFT_UI_ACTOR
 @property(nonatomic, readonly) BOOL usesUserScripts;
 /// Whether that permission is given.
 @property(nonatomic, readonly) BOOL userScriptsAllowed;
+/// Whether it's pinned to the toolbar (`pinnedExtensionIDs`), on or not.
+@property(nonatomic, readonly, getter=isPinned) BOOL pinned;
 @end
 
 /// An extension's toolbar button for one page.
