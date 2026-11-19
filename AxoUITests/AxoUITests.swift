@@ -698,6 +698,44 @@ final class AxoUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: unmuted, evaluatedWith: speaker)], timeout: 5), .completed)
     }
 
+    /// Dragging a tab's row onto another Space's dot moves it there (#78): the notice says where
+    /// it went, and Undo puts it back.
+    @MainActor
+    func testDraggingARowOntoAnotherSpace() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        app.buttons["newSpaceButton"].click()
+        let nameField = app.textFields["spaceNameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.click()
+        nameField.typeText("Work")
+        app.buttons["createSpaceButton"].click()
+        XCTAssertTrue(sidebar.staticTexts["Work"].waitForExistence(timeout: 5))
+        app.typeKey("1", modifierFlags: .control)
+        AxoUITests.openPage(page("Alpha"), in: app)
+        XCTAssertTrue(sidebar.staticTexts["Alpha"].waitForExistence(timeout: 10))
+        AxoUITests.openPage(page("Beta"), in: app)
+        XCTAssertTrue(sidebar.staticTexts["Beta"].waitForExistence(timeout: 10))
+
+        let workDot = app.buttons.matching(identifier: "spaceButton").matching(NSPredicate(format: "label == 'Work'")).firstMatch
+        XCTAssertTrue(workDot.exists)
+        sidebar.staticTexts["Alpha"].click(forDuration: 0.6, thenDragTo: workDot)
+        XCTAssertTrue(sidebar.staticTexts["Alpha"].waitForNonExistence(timeout: 5), "It left this Space")
+        let notice = app.descendants(matching: .any)["notice"]
+        let undo = app.buttons["noticeUndoButton"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 5), "The notice offers Undo")
+        XCTAssertEqual(notice.label, "Moved Alpha to Work")
+        undo.click()
+        XCTAssertTrue(sidebar.staticTexts["Alpha"].waitForExistence(timeout: 5), "Undo brings it back")
+
+        // Dropped there again, it's in Work.
+        sidebar.staticTexts["Alpha"].click(forDuration: 0.6, thenDragTo: workDot)
+        XCTAssertTrue(sidebar.staticTexts["Alpha"].waitForNonExistence(timeout: 5))
+        workDot.click()
+        XCTAssertTrue(sidebar.staticTexts["Alpha"].waitForExistence(timeout: 5), "Shown in Work")
+    }
+
     /// Dragging rows between sections (#77): a tab into Pinned and back out, into a folder, and
     /// a favorite out of Favorites into the tabs section and into Pinned.
     /// The selected row is highlighted, and the highlight follows a click: SwiftUI 27's

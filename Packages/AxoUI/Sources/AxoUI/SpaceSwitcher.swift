@@ -89,12 +89,18 @@ struct SidebarGlassLabelStyle: LabelStyle {
 /// plus the capsule's padding.
 private struct SpaceDots: View {
     let model: BrowserModel
+    /// The Space a dragged row is over (#78), whose dot grows and names it. Any text dragged
+    /// over another of the profile's Spaces counts (a drag's payload can't be read until it
+    /// drops), so a folder or a favorite grows the dot too, and its drop is refused.
+    @State private var dropTargetID: Space.ID?
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
             dots
             ScrollView(.horizontal) { dots }
                 .scrollIndicators(.never)
+                // A dragged row's Space name (#78) shows above the dots, outside the scroll view.
+                .scrollClipDisabled()
                 // As tall as the dots, so the capsule is the buttons' height either way.
                 .frame(height: SpaceDot.height)
         }
@@ -124,8 +130,23 @@ private struct SpaceDots: View {
     private var dots: some View {
         HStack(spacing: 0) {
             ForEach(Array(model.spaces.enumerated()), id: \.element.id) { index, space in
-                SpaceDot(space: space, index: index, isSelected: space.id == model.space?.id) {
+                SpaceDot(space: space, index: index, isSelected: space.id == model.space?.id,
+                         isDropTarget: dropTargetID == space.id) {
                     Task { await model.selectSpace(space.id) }
+                }
+                // A tab row dropped on another of the profile's Spaces moves there (#78).
+                .dropDestination(for: String.self) { items, _ in
+                    guard let id = model.tabToMove(droppedAs: items, to: space.id) else { return false }
+                    Task { await model.moveTab(id, toSpace: space.id) }
+                    return true
+                } isTargeted: { isTargeted in
+                    withAnimation(.snappy(duration: 0.2)) {
+                        if isTargeted, model.spacesToMoveTabsTo.contains(where: { $0.id == space.id }) {
+                            dropTargetID = space.id
+                        } else if dropTargetID == space.id {
+                            dropTargetID = nil
+                        }
+                    }
                 }
                 .contextMenu {
                     Button("Rename…") { model.spaceToRename = space }
@@ -143,6 +164,8 @@ private struct SpaceDot: View {
     let space: Space
     let index: Int
     let isSelected: Bool
+    /// Whether a dragged row is over it (#78): the dot grows and names the Space.
+    var isDropTarget = false
     let action: () -> Void
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
 
@@ -153,7 +176,7 @@ private struct SpaceDot: View {
         Button(action: action) {
             Circle()
                 .fill(fill)
-                .frame(width: isSelected ? 8 : 6, height: isSelected ? 8 : 6)
+                .frame(width: dotSize, height: dotSize)
                 // Not only color: a ring marks the current Space when the person asks for it.
                 .overlay {
                     if isSelected && differentiateWithoutColor {
@@ -164,12 +187,29 @@ private struct SpaceDot: View {
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .overlay(alignment: .bottom) {
+            if isDropTarget {
+                Text(space.name)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                    .fixedSize()
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .glassEffect(.regular, in: .capsule)
+                    .offset(y: -Self.height)
+                    .allowsHitTesting(false)
+                    .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .bottom)))
+                    .accessibilityHidden(true)
+            }
+        }
         .help(index < 9 ? "\(space.name) (⌃\(index + 1))" : space.name)
         .accessibilityLabel(space.name)
         .accessibilityHint(index < 9 ? "Control-\(index + 1)" : "")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("spaceButton")
     }
+
+    private var dotSize: CGFloat { isDropTarget ? 14 : isSelected ? 8 : 6 }
 
     /// The Space's color when it has one (faded when it isn't the current Space), otherwise
     /// the primary color.
