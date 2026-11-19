@@ -151,33 +151,46 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
 
     // MARK: Updates waiting for approval (#130)
 
-    /// Each profile's extensions last seen waiting for their update's new access, so only ones
-    /// that start waiting are announced; a profile's first look only records them.
-    @ObservationIgnored private var waitingByProfile: [Profile.ID: Set<String>] = [:]
+    /// Each profile's extensions waiting for their update's new access, read when the profile's
+    /// extensions change (not on every redraw), so only ones that start waiting are announced.
+    /// A profile is first read without announcing, so ones already waiting at launch are quiet.
+    @ObservationIgnored private var waitingByProfile: [Profile.ID: [WaitingExtension]] = [:]
 
-    /// Tells VoiceOver when an update turns an extension off until the person allows its new
-    /// access; the Extensions menu and window show it too.
+    /// Reads which extensions wait, and tells VoiceOver about ones that just started; the
+    /// Extensions menu and window show them too.
     private func announceNewlyWaiting(profileID: Profile.ID) {
         guard engine.isFollowing(profileID) else { return }
-        let waiting = engine.extensions(profileID: profileID).filter { $0.newPermissions != nil }
-        let ids = Set(waiting.map(\.id))
-        defer { waitingByProfile[profileID] = ids }
-        guard let previous = waitingByProfile[profileID] else { return }
-        for item in waiting where !previous.contains(item.id) {
+        let previous = waitingByProfile[profileID]
+        let waiting = readWaiting(profileID: profileID)
+        guard let previous else { return }
+        let before = Set(previous.map(\.id))
+        for item in waiting where !before.contains(item.id) {
             model?.announce("\(item.name) was turned off: its update asks for more access")
         }
+    }
+
+    @discardableResult
+    private func readWaiting(profileID: Profile.ID) -> [WaitingExtension] {
+        let waiting = engine.extensions(profileID: profileID).filter { $0.newPermissions != nil }.map {
+            WaitingExtension(id: $0.id, name: $0.name)
+        }
+        waitingByProfile[profileID] = waiting
+        return waiting
     }
 
     func extensionsAwaitingApproval(profileID: Profile.ID) -> [WaitingExtension] {
         _ = revision
         guard engine.isFollowing(profileID) else { return [] }
-        return engine.extensions(profileID: profileID).filter { $0.newPermissions != nil }.map {
-            WaitingExtension(id: $0.id, name: $0.name)
-        }
+        if let waiting = waitingByProfile[profileID] { return waiting }
+        // The profile's first look: what's already waiting, recorded without announcing.
+        return readWaiting(profileID: profileID)
     }
 
-    func approveNewAccess(_ extensionID: String, profileID: Profile.ID) async throws {
-        engine.approveNewPermissions(forExtension: extensionID, profileID: profileID)
+    func approveNewAccess(_ extensionID: String, request: ExtensionAccessRequest, profileID: Profile.ID) async throws {
+        let approved = engine.approveNewPermissions(
+            forExtension: extensionID, request: ChromiumPermissionRequest(apis: request.apis, hosts: request.hosts), profileID: profileID
+        )
+        if !approved { throw ChromiumExtensionError.accessChanged }
     }
 
     // MARK: History
@@ -524,7 +537,9 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
                 reachesAllRequestedSites: true, lines: [], listsAccess: false, loadError: nil,
                 allowsUserScripts: $0.usesUserScripts ? $0.userScriptsAllowed : nil,
                 isPinned: $0.isPinned,
-                newAccess: $0.newPermissions.map { PermissionDescriptions.lines(permissions: $0.apis, matchPatterns: $0.hosts) },
+                newAccess: $0.newPermissions.map {
+                    ExtensionAccessRequest(lines: PermissionDescriptions.lines(permissions: $0.apis, matchPatterns: $0.hosts), apis: $0.apis, hosts: $0.hosts)
+                },
                 isBlocked: $0.isOffForOtherReason
             )
         }
@@ -554,6 +569,9 @@ enum ChromiumExtensionError: Error, LocalizedError {
     case siteAccessNotSupported
     /// An install that no prompt described.
     case notPrepared
+    /// What an update asks for changed since the person reviewed it, or something else keeps
+    /// the extension off.
+    case accessChanged
 
     var errorDescription: String? {
         switch self {
@@ -561,6 +579,8 @@ enum ChromiumExtensionError: Error, LocalizedError {
             "The Chromium engine can't change which sites an extension reaches yet."
         case .notPrepared:
             "Axo can only add an extension after showing what it can do."
+        case .accessChanged:
+            "What it asks for changed since you reviewed it, or something else keeps it off. Review it again."
         }
     }
 }

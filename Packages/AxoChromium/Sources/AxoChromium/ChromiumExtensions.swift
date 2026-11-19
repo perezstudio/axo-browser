@@ -349,9 +349,10 @@ extension ChromiumEngine {
     }
 
     /// Grants an extension the permissions its update asked for and turns it on, as accepting
-    /// Chrome's re-enable prompt does. Does nothing for one that isn't waiting for that.
-    public func approveNewPermissions(forExtension extensionID: String, profileID: Profile.ID) {
-        readyProfile(profileID)?.approveNewPermissions(forExtension: extensionID)
+    /// Chrome's re-enable prompt does, only if it still asks for exactly `request` (what the
+    /// person was shown) and nothing else keeps it off. Returns whether it did.
+    public func approveNewPermissions(forExtension extensionID: String, request: ChromiumPermissionRequest, profileID: Profile.ID) -> Bool {
+        readyProfile(profileID)?.approveNewPermissions(forExtension: extensionID, apiPermissions: request.apis, hostPermissions: request.hosts) ?? false
     }
 
     /// Gives or takes away an extension's permission to run user scripts (`chrome.userScripts`).

@@ -818,8 +818,12 @@ struct ChromiumEngineTests {
         #expect(listed["upd"]?.isOffForOtherReason == false)
         #expect(listed["bad"]?.newPermissions == nil && listed["bad"]?.isOffForOtherReason == true)
         #expect(listed["off"]?.newPermissions == nil && listed["off"]?.isOffForOtherReason == false)
-        engine.approveNewPermissions(forExtension: "upd", profileID: profileID)
+        let request = try #require(listed["upd"]?.newPermissions)
+        #expect(engine.approveNewPermissions(forExtension: "upd", request: request, profileID: profileID))
         #expect(profile.approvedPermissions == ["upd"])
+        #expect(profile.approvedRequests.first?.apis == ["bookmarks"] && profile.approvedRequests.first?.hosts == ["https://*.example.com/*"])
+        profile.approvalSucceeds = false
+        #expect(!engine.approveNewPermissions(forExtension: "upd", request: request, profileID: profileID), "The engine's refusal comes back")
     }
 
     @Test func clickingAButtonReturnsItsPopup() async throws {

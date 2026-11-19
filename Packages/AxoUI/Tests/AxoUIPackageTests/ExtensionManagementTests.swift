@@ -39,7 +39,11 @@ final class FakeExtensionManagement: ExtensionManaging {
     func setEnabled(_ enabled: Bool, extensionID: String, profileID: Profile.ID) async throws {}
     func setReachesAllRequestedSites(_ all: Bool, extensionID: String, profileID: Profile.ID) async throws {}
     func inspectBackgroundPage(_ extensionID: String, profileID: Profile.ID) async -> Bool { true }
-    func approveNewAccess(_ extensionID: String, profileID: Profile.ID) async throws { approved.append((extensionID, profileID)) }
+    var refuseApproval = false
+    func approveNewAccess(_ extensionID: String, request: ExtensionAccessRequest, profileID: Profile.ID) async throws {
+        if refuseApproval { throw Failure() }
+        approved.append((extensionID, profileID))
+    }
 }
 
 /// Toolbar buttons with pins kept in memory, as WebKit's bridge keeps them.
@@ -142,7 +146,7 @@ struct ExtensionPinningTests {
         #expect(!summary().needsAttention)
         // An update waiting for new access (#130): a question, not an error.
         var waiting = summary(enabled: false, pinned: true)
-        waiting.newAccess = ["Read and change your bookmarks"]
+        waiting.newAccess = ExtensionAccessRequest(lines: ["Read and change your bookmarks"], apis: ["bookmarks"], hosts: [])
         #expect(waiting.stateDescription == "Off · Asks for more access")
         #expect(waiting.needsAttention && !waiting.attentionIsError)
         var blocked = summary(enabled: false)
@@ -233,10 +237,20 @@ struct ExtensionManagementTests {
     @Test func allowingAnUpdatesNewAccessTurnsItOnAndSaysSo() async throws {
         let profileID = try #require(model.space?.profileID)
         let revision = model.extensionsRevision
-        await model.approveNewAccess("ub", name: "uBlock Origin Lite", profileID: profileID)
+        let request = ExtensionAccessRequest(lines: ["Read and change your bookmarks"], apis: ["bookmarks"], hosts: [])
+        await model.approveNewAccess("ub", name: "uBlock Origin Lite", request: request, profileID: profileID)
         #expect(fake.approved.map(\.0) == ["ub"] && fake.approved.map(\.1) == [profileID])
         #expect(said.messages.last == "Turned on uBlock Origin Lite with its new access")
         #expect(model.extensionsRevision > revision)
+    }
+
+    @Test func aRefusedApprovalSaysSoInsteadOfAnnouncingSuccess() async throws {
+        let profileID = try #require(model.space?.profileID)
+        fake.refuseApproval = true
+        let request = ExtensionAccessRequest(lines: [], apis: ["bookmarks"], hosts: [])
+        await model.approveNewAccess("ub", name: "uBlock Origin Lite", request: request, profileID: profileID)
+        #expect(model.alertMessage?.hasPrefix("Axo couldn't turn on uBlock Origin Lite.") == true)
+        #expect(!said.messages.contains { $0.hasPrefix("Turned on") })
     }
 
     @Test func removingFromAProfileThatWentSaysSoAndRemovesNothing() async throws {

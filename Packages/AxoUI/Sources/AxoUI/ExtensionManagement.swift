@@ -44,14 +44,14 @@ public struct ExtensionSummary: Identifiable, Equatable, Sendable {
     public var allowsUserScripts: Bool?
     /// Whether it's pinned to the toolbar.
     public var isPinned: Bool
-    /// For one an update turned off because it asks for more access, what the new access is, in
-    /// plain language (#130); `nil` when it isn't waiting for that.
-    public var newAccess: [String]?
+    /// For one an update turned off because it asks for more access, what it asks for (#130);
+    /// `nil` when it isn't waiting for that.
+    public var newAccess: ExtensionAccessRequest?
     /// Whether it was turned off for a reason turning it on can't clear (damaged, blocked, or
     /// unsupported).
     public var isBlocked: Bool
 
-    public init(id: String, name: String, version: String, isEnabled: Bool, isUnpacked: Bool, reachesAllRequestedSites: Bool, lines: [String], listsAccess: Bool = true, loadError: String?, allowsUserScripts: Bool? = nil, isPinned: Bool = false, newAccess: [String]? = nil, isBlocked: Bool = false) {
+    public init(id: String, name: String, version: String, isEnabled: Bool, isUnpacked: Bool, reachesAllRequestedSites: Bool, lines: [String], listsAccess: Bool = true, loadError: String?, allowsUserScripts: Bool? = nil, isPinned: Bool = false, newAccess: ExtensionAccessRequest? = nil, isBlocked: Bool = false) {
         self.isPinned = isPinned
         self.newAccess = newAccess
         self.isBlocked = isBlocked
@@ -85,6 +85,23 @@ extension ExtensionSummary {
 
     /// Whether what needs the person is an error (a red dot) rather than a question (orange).
     public var attentionIsError: Bool { loadError != nil }
+}
+
+/// The access an extension's update asks for that it wasn't granted (#130): what the person
+/// is shown, and the engine's own terms, which approving sends back so only that is granted.
+public struct ExtensionAccessRequest: Equatable, Sendable {
+    /// In plain language, as the review sheet lists it.
+    public var lines: [String]
+    /// API permission names, as manifests write them.
+    public var apis: [String]
+    /// Site match patterns.
+    public var hosts: [String]
+
+    public init(lines: [String], apis: [String], hosts: [String]) {
+        self.lines = lines
+        self.apis = apis
+        self.hosts = hosts
+    }
 }
 
 /// An extension the person asked to remove, waiting for them to confirm.
@@ -141,13 +158,14 @@ public protocol ExtensionManaging: AnyObject {
     /// Opens the Web Inspector for an extension's background page, loading it first if needed.
     /// Returns whether it could.
     func inspectBackgroundPage(_ extensionID: String, profileID: Profile.ID) async -> Bool
-    /// Grants an extension the access its update asked for and turns it on (#130).
-    func approveNewAccess(_ extensionID: String, profileID: Profile.ID) async throws
+    /// Grants an extension the access its update asked for and turns it on (#130), only if it
+    /// still asks for exactly `request`; throws when it doesn't, or something else keeps it off.
+    func approveNewAccess(_ extensionID: String, request: ExtensionAccessRequest, profileID: Profile.ID) async throws
 }
 
 extension ExtensionManaging {
     /// Does nothing, for extension systems whose updates never wait for approval.
-    public func approveNewAccess(_ extensionID: String, profileID: Profile.ID) async throws {}
+    public func approveNewAccess(_ extensionID: String, request: ExtensionAccessRequest, profileID: Profile.ID) async throws {}
 
     /// Does nothing, for extension systems without user scripts.
     public func setAllowsUserScripts(_ allowed: Bool, extensionID: String, profileID: Profile.ID) async throws {}
@@ -252,10 +270,10 @@ extension BrowserModel {
     }
 
     /// Grants an extension the access its update asked for, turning it on, and says so (#130).
-    public func approveNewAccess(_ extensionID: String, name: String, profileID: Profile.ID) async {
+    public func approveNewAccess(_ extensionID: String, name: String, request: ExtensionAccessRequest, profileID: Profile.ID) async {
         guard let management = extensionManagement else { return }
         do {
-            try await management.approveNewAccess(extensionID, profileID: profileID)
+            try await management.approveNewAccess(extensionID, request: request, profileID: profileID)
             announce("Turned on \(name) with its new access")
         } catch {
             alertMessage = "Axo couldn't turn on \(name). \(error.localizedDescription)"
@@ -339,8 +357,15 @@ struct ExtensionsView: View {
     @State private var extensions: [ExtensionSummary] = []
     @State private var selection: String?
     @State private var query = ""
-    /// The extension whose new access is being reviewed (#130).
-    @State private var reviewing: ExtensionSummary?
+    /// The extension whose new access is being reviewed, and its profile (#130).
+    @State private var reviewing: AccessReview?
+
+    /// An extension being reviewed in the profile the window showed then.
+    private struct AccessReview: Identifiable {
+        var item: ExtensionSummary
+        var profileID: Profile.ID
+        var id: String { item.id }
+    }
     /// Shows each extension's ID and its Inspect buttons.
     @AppStorage("extensionsDeveloperMode") private var developerMode = false
 
@@ -393,7 +418,7 @@ struct ExtensionsView: View {
                     sidebar.frame(width: 260)
                     Divider()
                     if let item = extensions.first(where: { $0.id == selection }), let profileID {
-                        ExtensionDetails(item: item, model: model, profileID: profileID, developerMode: developerMode, refresh: refresh, review: { reviewing = $0 })
+                        ExtensionDetails(item: item, model: model, profileID: profileID, developerMode: developerMode, refresh: refresh, review: { reviewing = AccessReview(item: $0, profileID: profileID) })
                             .id(item.id)
                     } else {
                         Text("Choose an extension.")
@@ -421,10 +446,8 @@ struct ExtensionsView: View {
         } message: { _ in
             Text("Its data in this profile is deleted. Other profiles keep their own extensions.")
         }
-        .sheet(item: $reviewing) { item in
-            if let profileID {
-                ExtensionAccessReview(item: item, model: model, profileID: profileID)
-            }
+        .sheet(item: $reviewing) { review in
+            ExtensionAccessReview(item: review.item, model: model, profileID: review.profileID)
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("extensionsWindow")
@@ -513,6 +536,12 @@ struct ExtensionsView: View {
         // A newer read may have finished first (another profile chosen meanwhile).
         guard profileID == self.profileID else { return }
         extensions = list
+        // The sheet shows what an update asked for when it opened; if that changed (a newer
+        // update, or it was dealt with elsewhere), it closes rather than show the old request.
+        if let review = reviewing,
+           review.profileID != profileID || list.first(where: { $0.id == review.item.id })?.newAccess != review.item.newAccess {
+            reviewing = nil
+        }
         if let asked = model.extensionsSelection, list.contains(where: { $0.id == asked }) {
             selection = asked
             model.extensionsSelection = nil
@@ -619,6 +648,8 @@ private struct ExtensionDetails: View {
                     }
                 }
                 .toggleStyle(.switch)
+                // Chrome's own reasons keep it off; the text below says why.
+                .disabled(item.isBlocked && item.newAccess == nil)
                 // The switch says whether it's on; the label says what it turns on.
                 .accessibilityLabel(item.name)
                 .accessibilityIdentifier("extensionOnSwitch")
@@ -800,9 +831,9 @@ private struct ExtensionAccessReview: View {
                 .accessibilityAddTraits(.isHeader)
             Text("Its update was turned off until you allow it. With it, it can also:")
                 .foregroundStyle(.secondary)
-            let lines = item.newAccess ?? []
+            let lines = item.newAccess?.lines ?? []
             if lines.isEmpty {
-                Text("Use permissions Axo can’t describe.")
+                Text("Use more of what extensions can do, without a warning Axo shows.")
             } else {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(lines, id: \.self) { line in
@@ -815,7 +846,8 @@ private struct ExtensionAccessReview: View {
                 Spacer()
                 Button("Allow") {
                     dismiss()
-                    Task { await model.approveNewAccess(item.id, name: item.name, profileID: profileID) }
+                    guard let request = item.newAccess else { return }
+                    Task { await model.approveNewAccess(item.id, name: item.name, request: request, profileID: profileID) }
                 }
                 .accessibilityIdentifier("allowExtensionAccess")
                 Button("Keep It Off") { dismiss() }
@@ -825,6 +857,7 @@ private struct ExtensionAccessReview: View {
         }
         .padding(20)
         .frame(width: 420)
+        .onExitCommandIfAvailable { dismiss() }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("extensionAccessReview")
     }

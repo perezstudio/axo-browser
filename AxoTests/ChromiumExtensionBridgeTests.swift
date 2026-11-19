@@ -578,9 +578,13 @@ struct ChromiumExtensionBridgeTests {
         await model.openTab(url: URL(string: "https://example.com/")!)
         let profile = try #require(FakeProfile.made[profileID])
         #expect(engine.isFollowing(profileID))
-        profile.extensions = [FakeExtension(identifier: "a", name: "Alpha")]
-        profile.onExtensionsChange?()
-        #expect(bridge.extensionsAwaitingApproval(profileID: profileID).isEmpty)
+        // One already waiting when the profile is first read isn't announced.
+        profile.extensions = [
+            FakeExtension(identifier: "a", name: "Alpha"),
+            FakeExtension(identifier: "w", name: "Waiting", isEnabled: false, disableReasons: .newPermissions, addedAPIPermissions: ["history"]),
+        ]
+        #expect(bridge.extensionsAwaitingApproval(profileID: profileID) == [WaitingExtension(id: "w", name: "Waiting")])
+        #expect(said.isEmpty)
 
         profile.extensions = [
             FakeExtension(identifier: "a", name: "Alpha", isEnabled: false, disableReasons: .newPermissions, addedAPIPermissions: ["bookmarks"]),
@@ -590,15 +594,23 @@ struct ChromiumExtensionBridgeTests {
         #expect(said == ["Alpha was turned off: its update asks for more access"])
         #expect(bridge.extensionsAwaitingApproval(profileID: profileID) == [WaitingExtension(id: "a", name: "Alpha")])
         let listed = Dictionary(uniqueKeysWithValues: await bridge.installedExtensions(profileID: profileID).map { ($0.id, $0) })
-        #expect(listed["a"]?.newAccess == PermissionDescriptions.lines(permissions: ["bookmarks"], matchPatterns: []))
-        #expect(listed["a"]?.newAccess?.isEmpty == false)
+        #expect(listed["a"]?.newAccess?.lines == PermissionDescriptions.lines(permissions: ["bookmarks"], matchPatterns: []))
+        #expect(listed["a"]?.newAccess?.lines.isEmpty == false)
+        #expect(listed["a"]?.newAccess?.apis == ["bookmarks"])
         #expect(listed["b"]?.newAccess == nil && listed["b"]?.isBlocked == true)
         // Still waiting: not announced again.
         profile.onExtensionsChange?()
         #expect(said.count == 1)
 
-        await model.approveNewAccess("a", name: "Alpha", profileID: profileID)
+        let request = try #require(listed["a"]?.newAccess)
+        await model.approveNewAccess("a", name: "Alpha", request: request, profileID: profileID)
         #expect(profile.approvedPermissions == ["a"])
+        #expect(profile.approvedRequests.first?.apis == ["bookmarks"], "Only what was shown is sent")
+        #expect(said.last == "Turned on Alpha with its new access")
+        // The engine refusing (it asks for something else now) is said, not announced as done.
+        profile.approvalSucceeds = false
+        await model.approveNewAccess("a", name: "Alpha", request: request, profileID: profileID)
+        #expect(model.alertMessage?.contains("changed since you reviewed it") == true)
     }
 
     /// Extensions installed before pins came had buttons; they're pinned once per profile, and

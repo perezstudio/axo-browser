@@ -140,11 +140,16 @@ public final class FakeProfile: NSObject, AXOProfile {
     public var pinnedExtensionIDs: [String] = []
     /// The pins Axo set, in order.
     public private(set) var pinChanges: [(String, Bool)] = []
-    /// The extensions whose new permissions Axo approved, in order.
+    /// The extensions whose new permissions Axo approved, in order, with what it approved.
     public private(set) var approvedPermissions: [String] = []
-    public func approveNewPermissions(forExtension extensionID: String) {
+    public private(set) var approvedRequests: [(apis: [String], hosts: [String])] = []
+    /// Whether approving succeeds (as the engine refuses when the request changed meanwhile).
+    public var approvalSucceeds = true
+    public func approveNewPermissions(forExtension extensionID: String, apiPermissions: [String], hostPermissions: [String]) -> Bool {
         approvedPermissions.append(extensionID)
+        approvedRequests.append((apiPermissions, hostPermissions))
         onExtensionsChange?()
+        return approvalSucceeds
     }
     public func setExtension(_ extensionID: String, pinned: Bool) {
         pinChanges.append((extensionID, pinned))

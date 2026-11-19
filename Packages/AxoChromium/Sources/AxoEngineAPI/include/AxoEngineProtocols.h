@@ -28,11 +28,13 @@ NS_ASSUME_NONNULL_BEGIN
 /// Why an extension is off (`AXOExtension.disableReasons`).
 typedef NS_OPTIONS(NSUInteger, AXOExtensionDisableReason) {
   AXOExtensionDisableReasonNone = 0,
-  /// The person turned it off.
+  /// The person turned it off, or something turning it on undoes (another extension through
+  /// chrome.management, a reload, an external install).
   AXOExtensionDisableReasonByPerson = 1 << 0,
   /// An update asks for permissions it wasn't granted.
   AXOExtensionDisableReasonNewPermissions = 1 << 1,
-  /// Any of Chrome's other reasons (corrupted, blocklisted, unsupported, policy).
+  /// Chrome's own reasons, which turning it on can't clear (corrupted, blocklisted, unsupported,
+  /// policy).
   AXOExtensionDisableReasonOther = 1 << 2,
 };
 @protocol AXOExtensionAction;
@@ -166,17 +168,21 @@ NS_SWIFT_UI_ACTOR
 - (void)setUserScriptsAllowed:(BOOL)allowed forExtension:(NSString*)extensionID
     NS_SWIFT_NAME(setUserScriptsAllowed(_:forExtension:));
 
-/// Turns an extension on or off. Turning it on clears only the person's own reason: one an
-/// update turned off for new permissions stays off until `approveNewPermissionsForExtension:`,
-/// and Chrome's other reasons stay too.
+/// Turns an extension on or off. Turning it on clears what the person may clear, as Chrome's
+/// switch does, but one an update turned off for new permissions stays off until
+/// `approveNewPermissionsForExtension:apiPermissions:hostPermissions:`, and Chrome's own
+/// reasons (`AXOExtensionDisableReasonOther`) stay too.
 - (void)setExtension:(NSString*)extensionID enabled:(BOOL)enabled
     NS_SWIFT_NAME(setExtension(_:enabled:));
 
 /// Grants an extension the permissions an update asked for and turns it on, as accepting
-/// Chrome's re-enable prompt does (`GrantPermissionsAndEnableExtension`). Does nothing for one
-/// that isn't waiting for that.
-- (void)approveNewPermissionsForExtension:(NSString*)extensionID
-    NS_SWIFT_NAME(approveNewPermissions(forExtension:));
+/// Chrome's re-enable prompt does (`GrantPermissionsAndEnableExtension`), only if what it asks
+/// for now is exactly what the person was shown (`addedAPIPermissions`, `addedHostPermissions`;
+/// a newer update may ask for more) and nothing else keeps it off. Returns whether it did.
+- (BOOL)approveNewPermissionsForExtension:(NSString*)extensionID
+                           apiPermissions:(NSArray<NSString*>*)apiPermissions
+                          hostPermissions:(NSArray<NSString*>*)hostPermissions
+    NS_SWIFT_NAME(approveNewPermissions(forExtension:apiPermissions:hostPermissions:));
 
 /// Uninstalls an extension and deletes its data.
 - (void)uninstallExtension:(NSString*)extensionID;
