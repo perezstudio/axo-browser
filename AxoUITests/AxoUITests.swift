@@ -2399,26 +2399,27 @@ final class AxoUITests: XCTestCase {
         let button = app.buttons.matching(NSPredicate(format: "identifier == 'extensionButton' AND label CONTAINS 'Axo Helper'")).firstMatch
         XCTAssertTrue(button.waitForExistence(timeout: 10), "New extensions start pinned")
 
+        // Menus opened from the address pill aren't in the accessibility tree XCUITest reads
+        // (a screenshot shows them open), so items are chosen with the keyboard: Unpin is the
+        // button's first item on WebKit (no Inspect Popup there).
         button.rightClick()
+        sleep(1)
         let shot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
         shot.name = "Extension button's menu"
         shot.lifetime = .keepAlways
         add(shot)
-        // Only the button's menu has these titles (the menu bar's is "Unpin Tab").
-        let unpin = app.menuItems["Unpin"]
-        XCTAssertTrue(unpin.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.menuItems["Manage Extension…"].exists)
-        unpin.click()
-        XCTAssertTrue(button.waitForNonExistence(timeout: 10))
+        app.typeKey(.downArrow, modifierFlags: [])
+        app.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(button.waitForNonExistence(timeout: 10), "Unpinned")
 
         let menu = app.descendants(matching: .any)["extensionsMenuButton"]
         XCTAssertTrue(menu.waitForExistence(timeout: 5), "Every extension is in the Extensions menu")
         menu.click()
-        // One item runs it; "Pin Axo Helper" in Pinned to the Toolbar pins it.
-        XCTAssertTrue(app.menuItems["Axo Helper"].waitForExistence(timeout: 5), "It runs from the menu")
-        let pin = app.menuItems["Pin Axo Helper"]
-        XCTAssertTrue(pin.exists)
-        pin.click()
+        sleep(1)
+        // The menu: Axo Helper (runs it), then Pinned to the Toolbar's "Pin Axo Helper".
+        app.typeKey(.downArrow, modifierFlags: [])
+        app.typeKey(.downArrow, modifierFlags: [])
+        app.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(button.waitForExistence(timeout: 10), "Pinned again")
     }
 
