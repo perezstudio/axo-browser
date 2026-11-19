@@ -119,6 +119,7 @@ struct WebsitePermissionsTests {
         #expect(model.websitePermissionKinds == [.camera, .microphone, .location], "WebKit doesn't ask about the rest")
     }
 
+    #if os(macOS)
     @Test func thePanesSearchMatchesSitesOfTheKind() {
         let answers = [
             SitePermission(profileID: UUID(), origin: "https://meet.example.com", kind: .camera, decision: .allow),
@@ -130,6 +131,8 @@ struct WebsitePermissionsTests {
         #expect(WebsitePermissionsSheet.shownAnswers(answers, kind: .location, query: "news").isEmpty)
     }
 
+    #endif
+    #if os(macOS)
     @Test func eachRowSaysHowManySitesAnsweredAndWhatOthersGet() {
         let profile = UUID()
         let snapshot = SitePermissionSnapshot(answers: [
@@ -142,6 +145,7 @@ struct WebsitePermissionsTests {
         #expect(WebsitePermissionsSection.summary(snapshot, kind: .microphone) == "No websites, others ask")
     }
 
+    #endif
     @Test func siteSettingsOpensThePaneOnItsSite() async throws {
         _ = try await openPage(URL(string: "https://meet.example.com/room")!)
         model.isShowingSiteSettings = true
