@@ -274,6 +274,10 @@ final class AccessibilityAuditTests: XCTestCase {
         let window = app.descendants(matching: .any)["extensionsWindow"]
         XCTAssertTrue(window.waitForExistence(timeout: 10))
         XCTAssertTrue(window.checkBoxes["extensionOnSwitch"].waitForExistence(timeout: 5))
+        let shot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        shot.name = "Extensions window"
+        shot.lifetime = .keepAlways
+        add(shot)
         try audit(app, "extensions window")
         window.checkBoxes["extensionsDeveloperMode"].click()
         XCTAssertTrue(window.buttons["Inspect Axo Helper Background Page"].waitForExistence(timeout: 5))

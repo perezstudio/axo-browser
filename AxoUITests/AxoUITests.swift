@@ -2400,6 +2400,10 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(button.waitForExistence(timeout: 10), "New extensions start pinned")
 
         button.rightClick()
+        let shot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        shot.name = "Extension button's menu"
+        shot.lifetime = .keepAlways
+        add(shot)
         // Only the button's menu has these titles (the menu bar's is "Unpin Tab").
         let unpin = app.menuItems["Unpin"]
         XCTAssertTrue(unpin.waitForExistence(timeout: 5))
