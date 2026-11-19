@@ -439,11 +439,13 @@ public final class BrowserModel {
                 self.openPeek(url, from: sourceID)
             } else if self.tabs.contains(where: { $0.id == sourceID }) {
                 Task { await self.openTab(url: url, at: .after(sourceID)) }
-            } else {
-                // Not one of the Space's tabs (a favorite's page, #234): after them all, as New
-                // Tab does; there's no tab to follow.
+            } else if self.isShownFavorite(sourceID) {
+                // A favorite's page (#234): after the Space's tabs, as New Tab does; there's no
+                // tab to follow.
                 Task { await self.openTab(url: url) }
             }
+            // Anything else is a page that isn't showing (a hidden Space's tab, another profile's
+            // favorite): it doesn't get to open tabs in the shown Space.
         }
         // Right-clicks in pages whose engine leaves the menu to Axo (Chromium) get Axo's menu.
         #if os(macOS)

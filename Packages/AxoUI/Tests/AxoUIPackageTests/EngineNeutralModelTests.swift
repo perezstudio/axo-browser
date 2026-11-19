@@ -643,6 +643,19 @@ struct EngineNeutralModelTests {
         try await waitUntil { model.tabs.count == 3 }
         #expect(model.alertMessage == nil)
         #expect(model.tabs.last?.url.lastPathComponent == "later")
+
+        // A page of another profile (a favorite left behind as the Space moved) can't open a
+        // tab here: it would carry its profile's website data in.
+        let otherProfile = UUID()
+        let stranger = FakePage(profileID: otherProfile)
+        let strangerID = UUID()
+        model.pool.adopt(stranger, as: AxoCore.Tab(id: strangerID, spaceID: try #require(model.space?.id), url: URL(string: "https://example.com/x")!, sortKey: "z"), profileID: otherProfile)
+        let leaked = FakePage(profileID: otherProfile)
+        stranger.open(leaked, url: URL(string: "https://example.com/leak")!, as: .tab(inBackground: false))
+        #expect(leaked.isClosed, "Closed, not adopted under this profile")
+        model.pool.onOpenInNewTab?(URL(string: "https://example.com/leak2")!, strangerID)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(!model.tabs.contains { $0.url.lastPathComponent.hasPrefix("leak") }, "No tab for a page that isn't showing")
     }
 
     @Test func aPageCanFillTheScreenUntilItOrThePersonStops() async throws {
