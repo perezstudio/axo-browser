@@ -78,12 +78,12 @@ final class SearchEngineUITests: XCTestCase {
         // As the profile's engine.
         app.typeKey(",", modifierFlags: .command)
         AxoUITests.selectSettingsPane("profiles", in: app)
-        let picker = app.popUpButtons["profileSearchEnginePicker"]
-        XCTAssertTrue(picker.waitForExistence(timeout: 5))
-        XCTAssertEqual(picker.value as? String, "Google", "Profiles search with Google until they pick another")
-        picker.click()
-        app.menuItems["Local Search"].click()
-        XCTAssertEqual(picker.value as? String, "Local Search")
+        let google = app.radioButtons["Google"]
+        XCTAssertTrue(google.waitForExistence(timeout: 5))
+        XCTAssertEqual(google.value as? Int, 1, "Profiles search with Google until they pick another")
+        app.radioButtons["Local Search"].click()
+        let chosen = NSPredicate(format: "value == 1")
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: chosen, object: app.radioButtons["Local Search"])], timeout: 5), .completed)
         app.typeKey("w", modifierFlags: .command)
 
         AxoUITests.openPage("pond life", in: app)
@@ -99,10 +99,8 @@ final class SearchEngineUITests: XCTestCase {
         let app = launchApp()
         addLocalEngine(in: app, port: try AxoUITests.closedPort())
         AxoUITests.selectSettingsPane("profiles", in: app)
-        let picker = app.popUpButtons["profileSearchEnginePicker"]
-        XCTAssertTrue(picker.waitForExistence(timeout: 5))
-        picker.click()
-        app.menuItems["Local Search"].click()
+        XCTAssertTrue(app.radioButtons["Local Search"].waitForExistence(timeout: 5))
+        app.radioButtons["Local Search"].click()
 
         AxoUITests.selectSettingsPane("search", in: app)
         let edit = app.buttons.matching(identifier: "editSearchEngineButton").matching(NSPredicate(format: "label == 'Edit Local Search'")).firstMatch
@@ -119,7 +117,9 @@ final class SearchEngineUITests: XCTestCase {
         XCTAssertTrue(row.waitForNonExistence(timeout: 5))
 
         AxoUITests.selectSettingsPane("profiles", in: app)
-        XCTAssertTrue(picker.waitForExistence(timeout: 5))
-        XCTAssertEqual(picker.value as? String, "Google")
+        let google = app.radioButtons["Google"]
+        XCTAssertTrue(google.waitForExistence(timeout: 5))
+        let backToGoogle = NSPredicate(format: "value == 1")
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: backToGoogle, object: google)], timeout: 5), .completed)
     }
 }
