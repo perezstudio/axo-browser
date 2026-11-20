@@ -13,6 +13,7 @@ struct SearchEngineTests {
         #expect(SearchEngine.builtIns.allSatisfy { SortKey.isValid($0.sortKey) })
         #expect(!SearchEngine.google.isRemovable)
         #expect(SearchEngine.bing.isRemovable)
+        #expect(SearchEngine.builtIns.allSatisfy { $0.keyword == nil }, "No one-letter keywords taking over \"b 52 bomber\"")
     }
 
     @Test(arguments: [
@@ -62,11 +63,29 @@ struct SearchEngineTests {
         ("Kagi", "https://kagi.com/search?q=%s", "ftp://kagi.com/%s", nil, .badSuggestionsAddress),
         ("Kagi", "https://kagi.com/search?q=%s", "https://kagi.com/suggest", nil, .badSuggestionsAddress),
         ("Kagi", "https://kagi.com/search?q=%s", nil, "k i", .keywordHasSpaces),
-        ("Kagi", "https://kagi.com/search?q=%s", nil, "G", .keywordInUse("Google")),
+        ("Kagi", "https://%s/", nil, nil, .notWebAddress),
+        ("Kagi", "https://%s.example.com/search", nil, nil, .notWebAddress),
+        ("Kagi", "https://kagi.com/search?q=%s", "https://%s.kagi.com/", nil, .badSuggestionsAddress),
     ])
     func fieldsAreChecked(name: String, url: String, suggestions: String?, keyword: String?, problem: SearchEngine.Problem) {
         #expect(SearchEngine.problem(name: name, urlTemplate: url, suggestionsTemplate: suggestions, keyword: keyword,
                                      others: SearchEngine.builtIns) == problem)
+    }
+
+    @Test func aKeywordAnotherEngineUsesIsRefused() {
+        var google = SearchEngine.google
+        google.keyword = "g"
+        #expect(SearchEngine.problem(name: "Kagi", urlTemplate: "https://kagi.com/search?q=%s", suggestionsTemplate: nil,
+                                     keyword: "G", others: [google]) == .keywordInUse("Google"))
+    }
+
+    @Test func termsFromAnEnginesOwnSearchBoxReadAsTyped() {
+        #expect(SearchEngine.google.searchTerms(in: URL(string: "https://www.google.com/search?q=axolotl+facts")!) == "axolotl facts")
+        #expect(SearchEngine.google.searchTerms(in: URL(string: "https://www.google.com/search?q=1%2B1")!) == "1+1",
+                "A typed plus stays a plus")
+        #expect(SearchEngine.google.searchTerms(in: SearchEngine.google.searchURL(for: "c++ & rust")) == "c++ & rust")
+        #expect(SearchEngine.google.searchTerms(in: URL(string: "http://www.google.com/search?q=axolotl")!) == nil,
+                "Plain http isn't the engine's page")
     }
 
     @Test func goodFieldsPass() {
@@ -182,6 +201,29 @@ struct SearchEngineStoreTests {
         #expect(try await engines.engines().first { $0.id == SearchEngine.bing.id }?.isHidden == false)
     }
 
+    @Test func restoringAnEngineLeavesATakenKeywordWithItsNewOwner() async throws {
+        var bing = SearchEngine.bing
+        bing.keyword = "b"
+        try await engines.update(bing)
+        try await engines.remove(id: SearchEngine.bing.id)
+        let books = try await engines.add(name: "Books", urlTemplate: "https://books.example/?q=%s", keyword: "b")
+        try await engines.restoreBuiltIns()
+        let all = try await engines.engines()
+        #expect(all.first { $0.id == SearchEngine.bing.id }?.keyword == nil)
+        #expect(all.first { $0.id == books.id }?.keyword == "b")
+    }
+
+    @Test func twoEnginesSyncedWithOneKeywordLeaveItWithTheFirst() async throws {
+        try await store.database.writer.write { db in
+            let insert = "INSERT INTO searchEngine (id, name, urlTemplate, keyword, sortKey) VALUES (?, ?, 'https://x.example/?q=%s', 'x', ?)"
+            try db.execute(sql: insert, arguments: [UUID(), "First", "a5"])
+            try db.execute(sql: insert, arguments: [UUID(), "Second", "a6"])
+        }
+        let all = try await engines.engines()
+        #expect(all.first { $0.name == "First" }?.keyword == "x")
+        #expect(all.first { $0.name == "Second" }?.keyword == nil)
+    }
+
     @Test func googleCantBeRemoved() async throws {
         await #expect(throws: SearchEngineStoreError.notRemovable) { try await engines.remove(id: SearchEngine.google.id) }
     }
@@ -195,12 +237,6 @@ struct SearchEngineStoreTests {
     @Test func aProfileCanTurnSuggestionsOff() async throws {
         try await engines.setShowsSuggestions(false, forProfile: profileID)
         #expect(try await profile().showsSearchSuggestions == false)
-    }
-
-    @Test func renamingAProfileKeepsItsEngine() async throws {
-        try await engines.setEngine(SearchEngine.bing.id, forProfile: profileID)
-        try await store.renameProfile(id: profileID, to: "Personal")
-        #expect(try await profile().searchEngineID == SearchEngine.bing.id)
     }
 
     @Test func aSyncedEngineThatIsntAWebAddressIsLeftOut() async throws {

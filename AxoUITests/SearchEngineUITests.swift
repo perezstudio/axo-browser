@@ -105,7 +105,7 @@ final class SearchEngineUITests: XCTestCase {
         app.menuItems["Local Search"].click()
 
         AxoUITests.selectSettingsPane("search", in: app)
-        let edit = app.buttons["editSearchEngine.Local Search"]
+        let edit = app.buttons.matching(identifier: "editSearchEngineButton").matching(NSPredicate(format: "label == 'Edit Local Search'")).firstMatch
         XCTAssertTrue(edit.waitForExistence(timeout: 5))
         edit.click()
         app.buttons["removeSearchEngineButton"].click()

@@ -294,7 +294,14 @@ extension CommandResult {
     /// The row's title.
     public var title: String {
         switch self {
-        case .open(let url, let isSearch, let text): isSearch ? "Search for “\(text)”" : url.absoluteString
+        case .open(let url, let isSearch, let text):
+            if isSearch, let engine = KnownSearchEngines.all.first(where: { $0.searchTerms(in: url) != nil }),
+               let terms = engine.searchTerms(in: url) {
+                // Names the engine, so a keyword's engine is plain to see.
+                "Search \(engine.name) for “\(terms)”"
+            } else {
+                isSearch ? "Search for “\(text)”" : url.absoluteString
+            }
         case .tab(let tab): TabRow.displayTitle(for: tab)
         case .action(let action): action.title
         case .history(let item): item.title.isEmpty ? (item.url.host() ?? item.url.absoluteString) : item.title

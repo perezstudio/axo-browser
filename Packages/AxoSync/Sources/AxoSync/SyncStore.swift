@@ -175,14 +175,26 @@ public final class SyncStore: Sendable {
 
     // MARK: Engine state and resets
 
-    /// The sync engine's saved state, if any.
+    /// The record types and fields this version syncs. Raise it when ``SyncRecordType`` or
+    /// ``SyncRecord/fieldNames(for:)`` grows: an older Axo skipped what it didn't know, and
+    /// CloudKit's change token moved past it, so a device that updates fetches everything again.
+    static let schemaVersion: UInt8 = 2
+
+    /// The sync engine's saved state, if any, or `nil` when it was saved by a version that synced
+    /// fewer record types or fields, so the engine fetches everything again.
     public func engineState() async throws -> Data? {
-        try await database.writer.read { db in try Self.setting("engineState", db) }
+        try await database.writer.read { db in
+            guard try Self.setting("schemaVersion", db) == Data([Self.schemaVersion]) else { return nil }
+            return try Self.setting("engineState", db)
+        }
     }
 
     /// Saves the sync engine's state.
     public func saveEngineState(_ data: Data) async throws {
-        try await database.writer.write { db in try Self.setSetting("engineState", data, db) }
+        try await database.writer.write { db in
+            try Self.setSetting("engineState", data, db)
+            try Self.setSetting("schemaVersion", Data([Self.schemaVersion]), db)
+        }
     }
 
     /// Whether this Mac has finished its first sync with the current iCloud account: fetched

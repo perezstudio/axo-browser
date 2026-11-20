@@ -42,21 +42,22 @@ public struct SearchEngine: Hashable, Identifiable, Sendable {
         id: UUID(uuidString: "6F7E0C1A-0000-4000-8000-000000000001")!, name: "Google",
         urlTemplate: "https://www.google.com/search?q=%s",
         suggestionsTemplate: "https://suggestqueries.google.com/complete/search?client=firefox&q=%s",
-        keyword: "g", sortKey: "a0")
+        sortKey: "a0")
     /// Bing.
     public static let bing = SearchEngine(
         id: UUID(uuidString: "6F7E0C1A-0000-4000-8000-000000000002")!, name: "Bing",
         urlTemplate: "https://www.bing.com/search?q=%s",
         suggestionsTemplate: "https://api.bing.com/osjson.aspx?query=%s",
-        keyword: "b", sortKey: "a1")
+        sortKey: "a1")
     /// DuckDuckGo.
     public static let duckDuckGo = SearchEngine(
         id: UUID(uuidString: "6F7E0C1A-0000-4000-8000-000000000003")!, name: "DuckDuckGo",
         urlTemplate: "https://duckduckgo.com/?q=%s",
         suggestionsTemplate: "https://duckduckgo.com/ac/?q=%s&type=list",
-        keyword: "d", sortKey: "a2")
+        sortKey: "a2")
 
-    /// The built-in engines, as they ship.
+    /// The built-in engines, as they ship: with no keywords, since a one-letter keyword would
+    /// take over everyday text ("b 52 bomber", "d day"); people add their own in Settings.
     public static let builtIns: [SearchEngine] = [.google, .bing, .duckDuckGo]
     /// The engine searches use unless a profile picks another.
     public static let `default`: SearchEngine = .google
@@ -81,7 +82,11 @@ public struct SearchEngine: Hashable, Identifiable, Sendable {
 
     /// The results page for `query`.
     public func searchURL(for query: String) -> URL {
-        Self.fill(urlTemplate, with: query) ?? Self.google.searchURL(for: query)
+        // Filling fails only for text that can't be percent-encoded; then the engine's page
+        // without the query, never another engine (which would send the text elsewhere).
+        Self.fill(urlTemplate, with: query)
+            ?? URL(string: urlTemplate.replacingOccurrences(of: "%s", with: ""))
+            ?? URL(string: "about:blank")!
     }
 
     /// The suggestions address for `query`, if the engine has one.
@@ -94,11 +99,15 @@ public struct SearchEngine: Hashable, Identifiable, Sendable {
     public func searchTerms(in url: URL) -> String? {
         guard let template = URLComponents(string: urlTemplate.replacingOccurrences(of: "%s", with: Self.marker)),
               let page = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              page.scheme?.lowercased() == template.scheme?.lowercased(),
               page.host?.lowercased() == template.host?.lowercased(),
               page.path == template.path || (page.path.isEmpty && template.path == "/") || (page.path == "/" && template.path.isEmpty),
               let name = template.queryItems?.first(where: { $0.value?.contains(Self.marker) == true })?.name,
-              let terms = page.queryItems?.first(where: { $0.name == name })?.value,
-              !terms.isEmpty
+              let raw = page.percentEncodedQueryItems?.first(where: { $0.name == name })?.value,
+              // Engines' own search boxes send spaces as "+" (form encoding); a typed plus
+              // arrives encoded (%2B), so it stays a plus.
+              let terms = raw.replacingOccurrences(of: "+", with: "%20").removingPercentEncoding,
+              !terms.trimmingCharacters(in: .whitespaces).isEmpty
         else { return nil }
         return terms
     }
@@ -150,7 +159,10 @@ public struct SearchEngine: Hashable, Identifiable, Sendable {
         guard template.contains("%s"),
               let url = fill(template, with: "test"),
               let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
-              url.host()?.isEmpty == false else { return false }
+              url.host()?.isEmpty == false,
+              // What people type never chooses the site: no %s in the host.
+              let marked = URLComponents(string: template.replacingOccurrences(of: "%s", with: marker)),
+              marked.host?.contains(marker) == false else { return false }
         return true
     }
 
@@ -272,7 +284,15 @@ public final class SearchEngineStore: Sendable {
         let rows = try SearchEngineRecord.fetchAll(db)
         var engines = SearchEngine.builtIns.filter { builtIn in !rows.contains { $0.id == builtIn.id } }
         engines += rows.compactMap { $0.engine() }
-        return engines.sorted { ($0.sortKey, $0.id.uuidString) < ($1.sortKey, $1.id.uuidString) }
+        engines.sort { ($0.sortKey, $0.id.uuidString) < ($1.sortKey, $1.id.uuidString) }
+        // Two visible engines can end up with one keyword (two devices' changes meeting through
+        // sync); the first keeps it, so a keyword always means one engine.
+        var taken: Set<String> = []
+        for index in engines.indices where !engines[index].isHidden {
+            guard let keyword = engines[index].keyword?.lowercased() else { continue }
+            if !taken.insert(keyword).inserted { engines[index].keyword = nil }
+        }
+        return engines
     }
 
     /// Adds a custom engine at the end of the list.
@@ -336,8 +356,12 @@ public final class SearchEngineStore: Sendable {
     /// Brings back the built-in engines that were removed.
     public func restoreBuiltIns() async throws {
         try await database.writer.write { db in
-            for var engine in try Self.engines(db) where engine.isBuiltIn && engine.isHidden {
+            let engines = try Self.engines(db)
+            var taken = Set(engines.filter { !$0.isHidden }.compactMap { $0.keyword?.lowercased() })
+            for var engine in engines where engine.isBuiltIn && engine.isHidden {
                 engine.isHidden = false
+                // A keyword another engine took meanwhile stays with that engine.
+                if let keyword = engine.keyword?.lowercased(), !taken.insert(keyword).inserted { engine.keyword = nil }
                 try SearchEngineRecord(engine).save(db)
             }
         }

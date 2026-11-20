@@ -24,11 +24,20 @@ struct SearchContextTests {
     }
 
     @Test func aKeywordSearchesWithItsEngineWhateverTheDefault() {
-        let search = SearchContext(engine: .google, engines: SearchEngine.builtIns + [kagi])
+        var duckDuckGo = SearchEngine.duckDuckGo
+        duckDuckGo.keyword = "d"
+        let search = SearchContext(engine: .google, engines: [.google, .bing, duckDuckGo, kagi])
         #expect(AddressInput.url(from: "k axolotls", search: search)?.absoluteString == "https://kagi.com/search?q=axolotls")
         #expect(AddressInput.url(from: "d example.com", search: search)?.absoluteString == "https://duckduckgo.com/?q=example.com",
                 "Even text that looks like an address")
-        #expect(search.searchURL(for: "b news").host() == "www.bing.com")
+        #expect(search.searchURL(for: "b news").host() == "www.google.com", "Bing has no keyword")
+        #expect(AddressInput.url(from: "b 52 bomber")?.absoluteString == "https://www.google.com/search?q=b%2052%20bomber",
+                "A fresh install has no keywords to take over everyday text")
+    }
+
+    @Test func theSearchRowNamesTheEngine() {
+        let row = CommandResult.open(SearchEngine.bing.searchURL(for: "pond life"), isSearch: true, text: "b pond life")
+        #expect(row.title == "Search Bing for “pond life”")
     }
 
     @Test func theCommandBarMarksSearchesFromAnyEngine() {

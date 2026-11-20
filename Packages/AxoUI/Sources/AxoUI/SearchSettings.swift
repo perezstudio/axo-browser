@@ -168,7 +168,7 @@ private struct SearchEngineRow: View {
             }
             Button("Edit…", action: edit)
                 .accessibilityLabel("Edit \(engine.name)")
-                .accessibilityIdentifier("editSearchEngine.\(engine.name)")
+                .accessibilityIdentifier("editSearchEngineButton")
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(engine.name)
@@ -206,6 +206,7 @@ struct SearchEngineEditor: View {
     @State private var suggestionsTemplate = ""
     @State private var problem: SearchEngine.Problem?
     @State private var isConfirmingRemoval = false
+    @State private var isSaving = false
 
     private var engine: SearchEngine? {
         if case .edit(let engine) = target { engine } else { nil }
@@ -262,10 +263,15 @@ struct SearchEngineEditor: View {
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button(engine == nil ? "Add" : "Save") { Task { await save() } }
+                    // A second click while saving would add the engine twice.
+                    .disabled(isSaving)
                     .accessibilityIdentifier("saveSearchEngineButton")
             }
         }
-        .confirmationDialog(removalTitle, isPresented: $isConfirmingRemoval) {
+        .alert(removalTitle, isPresented: $isConfirmingRemoval) {
+            // Cancel is the default button, so Return never removes, as for extensions.
+            Button("Cancel", role: .cancel) {}
+                .keyboardShortcut(.defaultAction)
             Button(isBuiltIn ? "Remove" : "Delete", role: .destructive) {
                 guard let engine else { return }
                 dismiss()
@@ -300,6 +306,8 @@ struct SearchEngineEditor: View {
     }
 
     private func save() async {
+        isSaving = true
+        defer { isSaving = false }
         if var engine {
             engine.name = name
             engine.keyword = keyword

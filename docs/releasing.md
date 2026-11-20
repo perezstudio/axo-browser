@@ -13,7 +13,8 @@ Axo ships outside the Mac App Store, as a DMG signed with a Developer ID and not
    ```
 
    It prompts for the Apple ID, team ID, and password and keeps them in the keychain. To use another name, set `AXO_NOTARY_PROFILE`.
-4. **The engine**, built from a clean, committed checkout of axo-chromium next to Axo (or at `AXO_CHROMIUM_OUT`), matching this Axo's engine API header.
+4. **CloudKit's production schema.** iCloud sync's record types and fields are made in the development environment as Debug builds send them; deploy them to production in the CloudKit Console (container `iCloud.com.perezstudio.Axo`) before each Release build that adds one ships, or that build's records are refused. #132 added the `SearchEngine` type and the Profile fields `searchEngineID` and `showsSearchSuggestions`.
+5. **The engine**, built from a clean, committed checkout of axo-chromium next to Axo (or at `AXO_CHROMIUM_OUT`), matching this Axo's engine API header.
 
 ## Making a release
 

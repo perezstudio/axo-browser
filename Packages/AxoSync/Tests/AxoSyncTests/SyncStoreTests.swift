@@ -386,4 +386,14 @@ struct SyncStoreTests {
         #expect(profile.showsSearchSuggestions)
         #expect(profile.searchEngineID == nil)
     }
+
+    @Test func stateFromAVersionThatSyncedLessIsDroppedSoEverythingIsFetchedAgain() async throws {
+        try await mac.sync.saveEngineState(Data([1, 2, 3]))
+        #expect(try await mac.sync.engineState() == Data([1, 2, 3]))
+        // An older Axo saved its state without the schema version.
+        try await mac.tabs.database.writer.write { db in
+            try db.execute(sql: "DELETE FROM syncSetting WHERE key = 'schemaVersion'")
+        }
+        #expect(try await mac.sync.engineState() == nil, "A full fetch picks up search engines it skipped")
+    }
 }

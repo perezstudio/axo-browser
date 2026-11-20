@@ -35,8 +35,10 @@ nonisolated public struct SearchContext: Hashable, Sendable {
 }
 
 /// The engines the browser knows, for code that formats addresses without a model at hand (the
-/// address bar's text, ``AddressDisplay``). ``BrowserModel`` keeps it current; it's only ever
-/// read to recognize a results page, so a moment's lag between windows is harmless.
+/// address bar's text, ``AddressDisplay``, the command bar's search row). ``BrowserModel`` keeps
+/// it current; it's only read to recognize a results page and name its engine, so a moment's lag
+/// between windows is harmless. Every model shares it (one per app in practice; in AxoUI's
+/// parallel tests, the last model's list), so tests of address formatting pass engines in.
 nonisolated enum KnownSearchEngines {
     private static let storage = Mutex<[SearchEngine]>(SearchEngine.builtIns)
 
