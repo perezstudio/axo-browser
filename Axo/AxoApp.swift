@@ -313,6 +313,8 @@ enum AppEnvironment {
             model.isBlockedBySystem = SystemPermissionStatus.isBlocked
             model.pageSummarizer = SystemPageSummarizer()
             model.externalApps = SystemExternalApps()
+            // Search suggestions (#132) go to the engine, carrying nothing of any profile's.
+            model.searchSuggester = NetworkSearchSuggester()
             // First run shows once, for a browser with nothing in it yet (#175).
             model.firstRunRecord = DefaultsFirstRunRecord(defaults: .standard)
         } else {
@@ -328,6 +330,8 @@ enum AppEnvironment {
                 Task { await model?.openTab(url: UITestingExternalApps.openedPage) }
             }
             model.externalApps = externalApps
+            // Test runs never send what's typed anywhere; a stand-in suggests.
+            model.searchSuggester = StandInSearchSuggester()
             // Copy Link writes to a pasteboard of the test run's own, never the person's clipboard.
             model.copyLink = { url in
                 let pasteboard = NSPasteboard(name: TestPasteboard.name)

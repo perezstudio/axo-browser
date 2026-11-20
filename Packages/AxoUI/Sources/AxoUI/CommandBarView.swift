@@ -149,6 +149,8 @@ struct CommandRow: View {
             Image(systemName: "clock")
         case .menuCommand:
             Image(systemName: "filemenu.and.selection")
+        case .suggestion:
+            Image(systemName: "magnifyingglass")
         }
     }
 
@@ -159,6 +161,7 @@ struct CommandRow: View {
         case .action: nil
         case .history(let item): item.url.absoluteString
         case .menuCommand(let command): [command.menuName, command.shortcut].filter { !$0.isEmpty }.joined(separator: ", ")
+        case .suggestion: nil
         }
     }
 }

@@ -343,6 +343,17 @@ struct ProfileSearchSection: View {
             // form fails the accessibility audit ("Action is missing").
             .pickerStyle(.radioGroup)
             .accessibilityIdentifier("profileSearchEnginePicker")
+            let engine = model.searchEngine(forProfile: profile.id)
+            Toggle(isOn: Binding(
+                get: { model.allProfiles.first { $0.id == profile.id }?.showsSearchSuggestions ?? true },
+                set: { shows in Task { await model.setShowsSearchSuggestions(shows, forProfile: profile.id) } }
+            )) {
+                Text("Search suggestions")
+                Text(engine.suggestionsTemplate == nil
+                     ? "\(engine.name) doesn’t offer suggestions."
+                     : "As you type in the command bar or the address bar, what you type is sent to \(engine.name) (or the engine whose keyword you type) for suggestions. Off, nothing is sent until you press Return.")
+            }
+            .accessibilityIdentifier("profileSearchSuggestionsToggle")
             Text("Add and edit search engines in Search.")
                 .font(.callout)
                 .foregroundStyle(.secondary)

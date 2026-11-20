@@ -62,6 +62,7 @@ struct SearchEngineTests {
         ("Kagi", "https://kagi.com/search", nil, nil, .missingQuery),
         ("Kagi", "https://kagi.com/search?q=%s", "ftp://kagi.com/%s", nil, .badSuggestionsAddress),
         ("Kagi", "https://kagi.com/search?q=%s", "https://kagi.com/suggest", nil, .badSuggestionsAddress),
+        ("Kagi", "https://kagi.com/search?q=%s", "http://kagi.com/suggest?q=%s", nil, .badSuggestionsAddress),
         ("Kagi", "https://kagi.com/search?q=%s", nil, "k i", .keywordHasSpaces),
         ("Kagi", "https://%s/", nil, nil, .notWebAddress),
         ("Kagi", "https://%s.example.com/search", nil, nil, .notWebAddress),

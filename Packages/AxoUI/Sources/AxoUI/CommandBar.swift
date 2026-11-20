@@ -114,6 +114,8 @@ public enum CommandResult: Identifiable, Hashable {
     case history(HistoryItem)
     /// Run an item from Axo's menus (#123).
     case menuCommand(MenuCommand)
+    /// Search for the engine's suggestion, at its results page (#132).
+    case suggestion(String, url: URL)
 
     public var id: String {
         switch self {
@@ -122,6 +124,7 @@ public enum CommandResult: Identifiable, Hashable {
         case .action(let action): "action:\(action.rawValue)"
         case .history(let item): "history:\(item.url.absoluteString)"
         case .menuCommand(let command): "menu:\(command.id)"
+        case .suggestion(let text, _): "suggestion:\(text.lowercased())"
         }
     }
 }
@@ -306,6 +309,7 @@ extension CommandResult {
         case .action(let action): action.title
         case .history(let item): item.title.isEmpty ? (item.url.host() ?? item.url.absoluteString) : item.title
         case .menuCommand(let command): command.title
+        case .suggestion(let text, _): text
         }
     }
 
@@ -313,6 +317,7 @@ extension CommandResult {
     var pageURL: URL? {
         switch self {
         case .open(let url, _, _): url
+        case .suggestion(_, let url): url
         case .history(let item): item.url
         case .tab, .action, .menuCommand: nil
         }
@@ -322,6 +327,7 @@ extension CommandResult {
     public var hint: String {
         switch self {
         case .open(_, let isSearch, _): isSearch ? "Search" : "Open"
+        case .suggestion: "Search suggestion"
         case .tab: "Switch to Tab"
         case .action, .menuCommand: "Run"
         case .history: "Open"

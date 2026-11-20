@@ -41,7 +41,7 @@ public struct SearchEngine: Hashable, Identifiable, Sendable {
     public static let google = SearchEngine(
         id: UUID(uuidString: "6F7E0C1A-0000-4000-8000-000000000001")!, name: "Google",
         urlTemplate: "https://www.google.com/search?q=%s",
-        suggestionsTemplate: "https://suggestqueries.google.com/complete/search?client=firefox&q=%s",
+        suggestionsTemplate: "https://suggestqueries.google.com/complete/search?client=firefox&ie=utf-8&oe=utf-8&q=%s",
         sortKey: "a0")
     /// Bing.
     public static let bing = SearchEngine(
@@ -133,7 +133,7 @@ public struct SearchEngine: Hashable, Identifiable, Sendable {
         case notWebAddress
         /// The search URL has no `%s` for the query.
         case missingQuery
-        /// The suggestions URL isn't an http or https address with `%s`.
+        /// The suggestions URL isn't an https address with `%s`.
         case badSuggestionsAddress
         /// The keyword has spaces.
         case keywordHasSpaces
@@ -146,7 +146,7 @@ public struct SearchEngine: Hashable, Identifiable, Sendable {
             case .missingName: "Give the search engine a name."
             case .notWebAddress: "The search URL must start with https:// or http://."
             case .missingQuery: "The search URL needs %s where your search goes."
-            case .badSuggestionsAddress: "The suggestions URL must start with https:// or http:// and contain %s."
+            case .badSuggestionsAddress: "The suggestions URL must start with https:// and contain %s."
             case .keywordHasSpaces: "A keyword can’t have spaces."
             case .keywordInUse(let name): "\(name) already uses that keyword."
             }
@@ -176,7 +176,7 @@ public struct SearchEngine: Hashable, Identifiable, Sendable {
         if !template.contains("%s") { return .missingQuery }
         guard isValidTemplate(template) else { return .notWebAddress }
         if let suggestions = suggestionsTemplate?.trimmingCharacters(in: .whitespacesAndNewlines), !suggestions.isEmpty,
-           !isValidTemplate(suggestions) {
+           !isValidSuggestionsTemplate(suggestions) {
             return .badSuggestionsAddress
         }
         if let keyword = normalizedKeyword(keyword) {
@@ -186,6 +186,12 @@ public struct SearchEngine: Hashable, Identifiable, Sendable {
             }
         }
         return nil
+    }
+
+    /// Checks a suggestions template: as a search template, but https only, since suggestions
+    /// carry what's typed as it's typed.
+    static func isValidSuggestionsTemplate(_ template: String) -> Bool {
+        isValidTemplate(template) && template.lowercased().hasPrefix("https://")
     }
 
     /// A keyword as stored: trimmed, `nil` when empty.
@@ -232,7 +238,7 @@ struct SearchEngineRecord: Codable, FetchableRecord, PersistableRecord {
         // Rows can arrive through sync without passing through Settings' checks, so a custom
         // engine that isn't a web address is left out rather than searched with.
         guard let name, let urlTemplate, SearchEngine.isValidTemplate(urlTemplate) else { return nil }
-        let suggestionsTemplate = suggestionsTemplate.flatMap { SearchEngine.isValidTemplate($0) ? $0 : nil }
+        let suggestionsTemplate = suggestionsTemplate.flatMap { SearchEngine.isValidSuggestionsTemplate($0) ? $0 : nil }
         return SearchEngine(id: id, name: name, urlTemplate: urlTemplate, suggestionsTemplate: suggestionsTemplate,
                             keyword: keyword, isHidden: false, sortKey: sortKey)
     }
