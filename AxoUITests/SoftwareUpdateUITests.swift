@@ -96,7 +96,7 @@ final class SoftwareUpdateUITests: XCTestCase {
     }
 
     /// An update that downloaded in the background says so with a notice whose Restart Now
-    /// installs it, and the Axo menu offers Restart to Update Axo until then.
+    /// installs it, and the Axo menu offers Restart to Update Axo until it installs.
     @MainActor
     func testAnUpdateReadyOnQuitShowsANoticeAndAMenuItem() throws {
         let app = launchApp()
@@ -112,8 +112,10 @@ final class SoftwareUpdateUITests: XCTestCase {
         let restart = app.menuBars.menuItems["Restart to Update Axo"]
         XCTAssertTrue(restart.waitForExistence(timeout: 5))
         restart.click()
+        // The stand-in installs nothing, and Sparkle lets Axo ask again if a page kept it from
+        // quitting, so the item stays until the update installs.
         app.menuBars.menuBarItems["Axo"].click()
-        XCTAssertFalse(app.menuBars.menuItems["Restart to Update Axo"].exists, "Asked to install once, so it's gone")
+        XCTAssertTrue(app.menuBars.menuItems["Restart to Update Axo"].waitForExistence(timeout: 5))
         app.typeKey(.escape, modifierFlags: [])
     }
 }
