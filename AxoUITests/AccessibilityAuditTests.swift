@@ -284,6 +284,24 @@ final class AccessibilityAuditTests: XCTestCase {
         try audit(app, "extensions window in developer mode")
     }
 
+    /// Settings › Search, its editor sheet, and a profile's engine picker (#132).
+    @MainActor
+    func testAuditSearchSettings() throws {
+        let app = launchApp()
+        XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 5))
+        app.typeKey(",", modifierFlags: .command)
+        AxoUITests.selectSettingsPane("search", in: app)
+        XCTAssertTrue(app.buttons["newSearchEngineButton"].waitForExistence(timeout: 5))
+        try audit(app, "search settings")
+        app.buttons["newSearchEngineButton"].click()
+        XCTAssertTrue(app.textFields["searchEngineNameField"].waitForExistence(timeout: 5))
+        try audit(app, "new search engine sheet")
+        app.typeKey(.escape, modifierFlags: [])
+        AxoUITests.selectSettingsPane("profiles", in: app)
+        XCTAssertTrue(app.popUpButtons["profileSearchEnginePicker"].waitForExistence(timeout: 5))
+        try audit(app, "profile search engine")
+    }
+
     @MainActor
     func testAuditEveryScreen() throws {
         let app = launchApp()

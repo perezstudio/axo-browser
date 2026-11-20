@@ -12,7 +12,8 @@ Part of [Axo](../../CLAUDE.md), a native WebKit browser for macOS. See `docs/PLA
 
 | Record | Fields |
 | --- | --- |
-| Profile | name (website data and logins stay on each device) |
+| SearchEngine | name, search URL, suggestions URL, keyword, hidden, sort key (a built-in engine's record holds only its keyword, place, and hidden state) |
+| Profile | name, search engine, whether it shows search suggestions (website data and logins stay on each device) |
 | Favorite | profile, home page, title, sort key |
 | Space | profile, name, sort key, color, icon, theme (JSON) |
 | Folder | Space, parent folder, name, sort key (expanded state stays local) |

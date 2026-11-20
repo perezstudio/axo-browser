@@ -83,7 +83,7 @@ struct CommandLearningTests {
         model.showCommandBar()
         model.setCommandQuery("node.js tutorial")
         guard case .open(let url, _, _) = model.commandResults.first else { Issue.record("A search row comes first"); return }
-        #expect(SearchEngine.isResultsPage(url))
+        #expect(SearchContext.default.isResultsPage(url))
         await model.runCommand(at: 0)
         let tabID = try #require(model.selectedTabID)
         model.pool.onPageChange?(tabID, url, "node.js tutorial - Search")

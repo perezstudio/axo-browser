@@ -403,6 +403,36 @@ struct MigrationTests {
         }
     }
 
+    @Test func v20SearchEnginesSyncAndProfilesKeepTheirChoice() throws {
+        let queue = try DatabaseQueue()
+        try AppDatabase.migrator.migrate(queue, upTo: "v19-site-permission-defaults")
+        let profileID = UUID()
+        try queue.write { db in
+            try db.execute(sql: "INSERT INTO profile (id, name) VALUES (?, 'Default')", arguments: [profileID])
+            try db.execute(sql: "DELETE FROM syncChange")
+        }
+        try AppDatabase.migrator.migrate(queue)
+        try queue.write { db in
+            let row = try #require(try Row.fetchOne(db, sql: "SELECT searchEngineID, showsSearchSuggestions FROM profile"))
+            #expect(row["searchEngineID"] as UUID? == nil, "Existing profiles search with Google")
+            #expect(row["showsSearchSuggestions"] as Bool == true, "and show suggestions")
+
+            let engineID = UUID()
+            try db.execute(sql: "INSERT INTO searchEngine (id, name, urlTemplate, sortKey) VALUES (?, 'Kagi', 'https://kagi.com/search?q=%s', 'a3')",
+                           arguments: [engineID])
+            #expect(try String.fetchOne(db, sql: "SELECT recordType FROM syncChange WHERE recordID = ?", arguments: [engineID]) == "SearchEngine")
+            try db.execute(sql: "UPDATE profile SET searchEngineID = ?", arguments: [engineID])
+            #expect(try String.fetchOne(db, sql: "SELECT recordType FROM syncChange WHERE recordID = ?", arguments: [profileID]) == "Profile",
+                    "A profile's engine syncs")
+            try db.execute(sql: "DELETE FROM syncChange")
+            try db.execute(sql: "UPDATE profile SET showsSearchSuggestions = 0")
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM syncChange WHERE recordID = ?", arguments: [profileID]) == 1,
+                    "So does its suggestions switch")
+            try db.execute(sql: "DELETE FROM searchEngine")
+            #expect(try Bool.fetchOne(db, sql: "SELECT isDeletion FROM syncChange WHERE recordID = ?", arguments: [engineID]) == true)
+        }
+    }
+
     @Test func v14FavoritesBelongToAProfileAndSync() throws {
         let database = try AppDatabase.makeInMemory()
         let profileID = UUID(), favoriteID = UUID()

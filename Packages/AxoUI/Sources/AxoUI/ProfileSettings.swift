@@ -107,6 +107,7 @@ private struct ProfileDetail: View {
                     }
                 }
             }
+            ProfileSearchSection(model: model, profile: profile)
             WebsitePermissionsSection(model: model, profileID: profile.id)
             Section("Website Data") {
                 Text("Cookies, logins, and site data for this profile's Spaces. Other profiles keep their own.")

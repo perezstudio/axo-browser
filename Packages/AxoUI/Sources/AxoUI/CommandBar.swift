@@ -194,10 +194,11 @@ enum CommandRanking {
     static func immediateResults(
         for query: String,
         tabs: [AxoCore.Tab],
-        availableActions: [CommandAction]
+        availableActions: [CommandAction],
+        search: SearchContext = .default
     ) -> [CommandResult] {
         var cache = CommandSearchCache()
-        return immediateResults(for: query, tabs: tabs, availableActions: availableActions, cache: &cache)
+        return immediateResults(for: query, tabs: tabs, availableActions: availableActions, search: search, cache: &cache)
     }
 
     /// Results that don't need the database, narrowing the previous query's matches when the
@@ -211,6 +212,7 @@ enum CommandRanking {
         for query: String,
         tabs: [AxoCore.Tab],
         availableActions: [CommandAction],
+        search: SearchContext = .default,
         cache: inout CommandSearchCache
     ) -> [CommandResult] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -219,9 +221,8 @@ enum CommandRanking {
             return tabs.prefix(maxTabs * 2).map(CommandResult.tab)
         }
         var results: [CommandResult] = []
-        if let url = AddressInput.url(from: trimmed) {
-            let isSearch = url.host() == AddressInput.searchURL.host() && !trimmed.contains(".")
-            results.append(.open(url, isSearch: isSearch, text: trimmed))
+        if let resolved = AddressInput.resolve(trimmed, search: search) {
+            results.append(.open(resolved.url, isSearch: resolved.isSearch, text: trimmed))
         }
         let narrows = cache.canNarrow(to: trimmed, tabs: tabs, actions: availableActions)
         let matchingTabs: [AxoCore.Tab]

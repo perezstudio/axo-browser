@@ -331,4 +331,59 @@ struct SyncStoreTests {
         try await iPad.sync()
         #expect(try await iPad.tabs.favorites.favorites(for: home.profileID).isEmpty)
     }
+
+    // MARK: Search engines (#132)
+
+    @Test func customEnginesHiddenBuiltInsAndAProfilesChoiceSync() async throws {
+        let home = try await mac.tabs.bootstrap()
+        let kagi = try await mac.tabs.searchEngines.add(name: "Kagi", urlTemplate: "https://kagi.com/search?q=%s",
+                                                        suggestionsTemplate: "https://kagi.com/api/autosuggest?q=%s", keyword: "k")
+        try await mac.tabs.searchEngines.remove(id: SearchEngine.bing.id)
+        var google = SearchEngine.google
+        google.keyword = "goo"
+        try await mac.tabs.searchEngines.update(google)
+        try await mac.tabs.searchEngines.setEngine(kagi.id, forProfile: home.profileID)
+        try await mac.tabs.searchEngines.setShowsSuggestions(false, forProfile: home.profileID)
+        try await mac.sync()
+        try await iPad.sync()
+
+        let engines = try await iPad.tabs.searchEngines.engines()
+        let syncedKagi = try #require(engines.first { $0.id == kagi.id })
+        #expect(syncedKagi == kagi)
+        #expect(engines.first { $0.id == SearchEngine.bing.id }?.isHidden == true, "A removed built-in engine stays removed")
+        #expect(engines.first { $0.id == SearchEngine.google.id }?.keyword == "goo")
+        #expect(engines.first { $0.id == SearchEngine.google.id }?.urlTemplate == SearchEngine.google.urlTemplate)
+        let profile = try #require(try await iPad.tabs.profiles().first)
+        #expect(profile.searchEngineID == kagi.id)
+        #expect(!profile.showsSearchSuggestions)
+        #expect(try await iPad.sync.pendingChanges().isEmpty, "Changes from iCloud aren't sent back")
+    }
+
+    @Test func removingAnEngineOneDevicesProfileUsesSendsItBackToGoogle() async throws {
+        let home = try await mac.tabs.bootstrap()
+        let kagi = try await mac.tabs.searchEngines.add(name: "Kagi", urlTemplate: "https://kagi.com/search?q=%s")
+        try await mac.sync()
+        try await iPad.sync()
+        try await iPad.tabs.searchEngines.setEngine(kagi.id, forProfile: home.profileID)
+        try await iPad.sync()
+        try await mac.sync()
+        #expect(try await mac.tabs.profiles().first?.searchEngineID == kagi.id)
+
+        try await mac.tabs.searchEngines.remove(id: kagi.id)
+        try await mac.sync()
+        try await iPad.sync()
+        #expect(try await !iPad.tabs.searchEngines.engines().contains { $0.id == kagi.id })
+        let profile = try #require(try await iPad.tabs.profiles().first)
+        #expect(SearchEngine.engine(for: profile, in: try await iPad.tabs.searchEngines.engines()).id == SearchEngine.google.id)
+        #expect(profile.searchEngineID == nil, "The profile's own change came along")
+    }
+
+    @Test func aProfileFromAnAxoBeforeSearchEnginesShowsSuggestions() async throws {
+        let id = UUID()
+        let record = SyncRecord(id: SyncRecordID(.profile, id), fields: ["name": "Old"], modifiedAt: Date())
+        try await iPad.sync.applyRemoteChanges(saved: [StampedSyncRecord(record: record, systemFields: nil)], deleted: [])
+        let profile = try #require(try await iPad.tabs.profiles().first { $0.id == id })
+        #expect(profile.showsSearchSuggestions)
+        #expect(profile.searchEngineID == nil)
+    }
 }

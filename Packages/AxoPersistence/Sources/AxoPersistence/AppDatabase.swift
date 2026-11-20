@@ -462,6 +462,53 @@ public final class AppDatabase: Sendable {
             }
         }
 
+        // Search engines (#132). Built-in engines (Google, Bing, DuckDuckGo) come from code
+        // (AxoCore's `SearchEngine`), under fixed IDs every device shares; a row here holds a
+        // custom engine, or a built-in one's changes (its keyword, place, or being hidden), whose
+        // `name` and `urlTemplate` stay NULL. Each profile picks an engine (`searchEngineID`, no
+        // foreign key: a built-in engine has no row, and a synced engine can arrive after the
+        // profile; an ID that isn't a visible engine means Google) and whether it shows search
+        // suggestions. Engines and both profile columns sync, so the profile trigger is recreated.
+        migrator.registerMigration("v20-search-engines") { db in
+            try db.create(table: "searchEngine") { t in
+                t.primaryKey("id", .blob)
+                t.column("name", .text)
+                t.column("urlTemplate", .text)
+                t.column("suggestionsTemplate", .text)
+                t.column("keyword", .text)
+                t.column("isHidden", .boolean).notNull().defaults(to: false)
+                t.column("sortKey", .text).notNull()
+            }
+            try db.alter(table: "profile") { t in
+                t.add(column: "searchEngineID", .blob)
+                t.add(column: "showsSearchSuggestions", .boolean).notNull().defaults(to: true)
+            }
+            let now = "strftime('%Y-%m-%d %H:%M:%f', 'now')"
+            let notApplying = "NOT EXISTS (SELECT 1 FROM syncApplying)"
+            func record(_ type: String, _ id: String, deletion: Bool) -> String {
+                """
+                INSERT INTO syncChange (recordType, recordID, isDeletion, changedAt) VALUES ('\(type)', \(id), \(deletion ? 1 : 0), \(now))
+                ON CONFLICT (recordType, recordID) DO UPDATE SET isDeletion = excluded.isDeletion, changedAt = excluded.changedAt;
+                """
+            }
+            func changed(_ columns: [String]) -> String {
+                columns.map { "OLD.\($0) IS NOT NEW.\($0)" }.joined(separator: " OR ")
+            }
+            let engineColumns = changed(["name", "urlTemplate", "suggestionsTemplate", "keyword", "isHidden", "sortKey"])
+            try db.execute(sql: """
+                DROP TRIGGER profile_sync_update;
+                CREATE TRIGGER profile_sync_update AFTER UPDATE ON profile
+                WHEN \(notApplying) AND (\(changed(["name", "searchEngineID", "showsSearchSuggestions"])))
+                BEGIN \(record("Profile", "NEW.id", deletion: false)) END;
+                CREATE TRIGGER searchEngine_sync_insert AFTER INSERT ON searchEngine WHEN \(notApplying)
+                BEGIN \(record("SearchEngine", "NEW.id", deletion: false)) END;
+                CREATE TRIGGER searchEngine_sync_update AFTER UPDATE ON searchEngine WHEN \(notApplying) AND (\(engineColumns))
+                BEGIN \(record("SearchEngine", "NEW.id", deletion: false)) END;
+                CREATE TRIGGER searchEngine_sync_delete AFTER DELETE ON searchEngine WHEN \(notApplying)
+                BEGIN \(record("SearchEngine", "OLD.id", deletion: true)) END;
+                """)
+        }
+
         return migrator
     }
 

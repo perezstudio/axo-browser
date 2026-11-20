@@ -80,7 +80,8 @@ struct AddressDisplayTests {
         #expect(AddressDisplay.text(for: search) == "axolotl facts")
         #expect(text("https://www.google.com/search?q=") == "google.com", "No terms: the site")
         #expect(text("https://www.google.com/preferences?q=x") == "google.com", "Not the results page")
-        #expect(text("https://duckduckgo.com/?q=axolotl") == "duckduckgo.com", "Another engine's results aren't the search page")
+        #expect(text("https://duckduckgo.com/?q=axolotl") == "axolotl", "Every engine's results show their terms (#132)")
+        #expect(text("https://duckduckgo.com/about?q=axolotl") == "duckduckgo.com", "Not another page of the engine's")
         #expect(AddressDisplay.shown(for: search)?.kind == .search, "Marked as a search")
     }
 
