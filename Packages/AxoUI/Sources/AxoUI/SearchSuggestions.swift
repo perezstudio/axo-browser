@@ -43,9 +43,12 @@ nonisolated public enum SearchSuggestions {
         var suggestions: [String] = []
         for case let item as String in items {
             let suggestion = item.trimmingCharacters(in: .whitespacesAndNewlines)
-            // Control and formatting characters (right-to-left overrides) never show.
+            // Control, formatting (right-to-left overrides), and line and paragraph separator
+            // characters never show, nor piles of combining marks.
+            let hidden: Set<Unicode.GeneralCategory> = [.control, .format, .lineSeparator, .paragraphSeparator]
             guard !suggestion.isEmpty, suggestion.count <= maximumQueryLength,
-                  !suggestion.unicodeScalars.contains(where: { $0.properties.generalCategory == .control || $0.properties.generalCategory == .format }),
+                  !suggestion.unicodeScalars.contains(where: { hidden.contains($0.properties.generalCategory) }),
+                  suggestion.unicodeScalars.filter({ $0.properties.generalCategory == .nonspacingMark }).count <= 8,
                   seen.insert(suggestion.lowercased()).inserted else { continue }
             suggestions.append(suggestion)
             if suggestions.count == maximumCount { break }
@@ -63,28 +66,40 @@ extension BrowserModel {
     func requestSearchSuggestions(for query: String) {
         searchSuggestionTask?.cancel()
         searchSuggestionTask = nil
-        guard let suggester = searchSuggester,
-              allProfiles.first(where: { $0.id == space?.profileID })?.showsSearchSuggestions ?? true,
+        guard let suggester = searchSuggester, let profileID = space?.profileID, showsSearchSuggestions(profileID),
               let request = SearchSuggestions.request(for: query, search: searchContext) else { return }
         let sleep = suggestionSleep
         searchSuggestionTask = Task { [weak self] in
             await sleep(SearchSuggestions.debounce)
-            guard !Task.isCancelled, self?.commandQuery == query else { return }
+            guard let self, !Task.isCancelled, self.isStill(query, profileID: profileID, engine: request.engine) else { return }
             guard let data = try? await suggester.suggestionsData(from: request.url) else { return }
-            guard let self, !Task.isCancelled, self.commandQuery == query, self.isCommandBarVisible else { return }
-            let suggestions = SearchSuggestions.parse(data, query: request.query)
-            // Never what's already a row (the typed search itself).
-            let shown = Set(self.commandResults.map(\.id))
-            self.commandResults += suggestions
+            // The answer counts only for the text, profile, engine, and switch it was asked for.
+            guard !Task.isCancelled, self.isStill(query, profileID: profileID, engine: request.engine) else { return }
+            self.commandResults += SearchSuggestions.parse(data, query: request.query)
                 .map { CommandResult.suggestion($0, url: request.engine.searchURL(for: $0)) }
-                .filter { !shown.contains($0.id) }
         }
+    }
+
+    /// Whether a profile shows suggestions. A profile not read yet (just after launch, or while
+    /// the shown Space moves to another profile) counts as off, so nothing is sent against a
+    /// switch that's off.
+    private func showsSearchSuggestions(_ profileID: Profile.ID) -> Bool {
+        allProfiles.first { $0.id == profileID }?.showsSearchSuggestions ?? false
+    }
+
+    /// Whether the bar still shows `query` for the same profile, engine, and switch.
+    private func isStill(_ query: String, profileID: Profile.ID, engine: SearchEngine) -> Bool {
+        guard isCommandBarVisible, commandQuery == query, space?.profileID == profileID, showsSearchSuggestions(profileID) else { return false }
+        let current = SearchSuggestions.request(for: query, search: searchContext)?.engine
+        return current?.id == engine.id && current?.suggestionsTemplate == engine.suggestionsTemplate
     }
 
     /// Adds Axo's own results (history) above any suggestions, which always come last.
     func insertLocalCommandResults(_ results: [CommandResult]) {
         let index = commandResults.firstIndex { if case .suggestion = $0 { true } else { false } } ?? commandResults.endIndex
         commandResults.insert(contentsOf: results, at: index)
+        // The highlighted row stays highlighted when rows arrive above it.
+        if index <= commandSelection, commandSelection < commandResults.count - results.count { commandSelection += results.count }
     }
 
     /// Sets whether a profile shows its engine's suggestions.

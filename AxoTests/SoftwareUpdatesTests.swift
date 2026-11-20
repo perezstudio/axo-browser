@@ -143,3 +143,15 @@ struct SoftwareUpdatesTests {
         #expect(condition())
     }
 }
+
+/// The network suggester's redirects (#132): never off https or to another host.
+struct SearchSuggesterRedirectTests {
+    @Test func redirectsStayOnTheEnginesHostOverHTTPS() {
+        let original = URL(string: "https://suggest.example.com/q?q=pond")
+        #expect(SameHostRedirects.allows(URL(string: "https://SUGGEST.example.com/v2?q=pond"), from: original))
+        #expect(!SameHostRedirects.allows(URL(string: "http://suggest.example.com/q?q=pond"), from: original))
+        #expect(!SameHostRedirects.allows(URL(string: "https://tracker.example.net/q?q=pond"), from: original))
+        #expect(!SameHostRedirects.allows(URL(string: "https://192.168.1.1/q?q=pond"), from: original))
+        #expect(!SameHostRedirects.allows(nil, from: original))
+    }
+}

@@ -53,7 +53,7 @@ final class SearchEngineUITests: XCTestCase {
         app.textFields["searchEngineKeywordField"].typeText("ls")
         let url = app.textFields["searchEngineURLField"]
         app.textFields["searchEngineSuggestionsField"].click()
-        app.textFields["searchEngineSuggestionsField"].typeText("http://127.0.0.1:\(port)/suggest?q=%s")
+        app.textFields["searchEngineSuggestionsField"].typeText("https://127.0.0.1:\(port)/suggest?q=%s")
         url.click()
         url.typeText("http://127.0.0.1:\(port)/find")
         app.buttons["saveSearchEngineButton"].click()
@@ -157,7 +157,11 @@ final class SearchEngineUITests: XCTestCase {
         AxoUITests.selectSettingsPane("profiles", in: app)
         let toggle = app.descendants(matching: .any)["profileSearchSuggestionsToggle"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        XCTAssertEqual(toggle.value as? Int, 1, "On by default")
         toggle.click()
+        let off = NSPredicate(format: "value == 0")
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: off, object: toggle)], timeout: 5), .completed,
+                       "The switch turned off")
         app.typeKey("w", modifierFlags: .command)
 
         app.typeKey("t", modifierFlags: .command)

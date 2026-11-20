@@ -170,7 +170,7 @@ public final class BrowserModel {
     /// The command bar's rows, best first.
     public internal(set) var commandResults: [CommandResult] = []
     /// The highlighted row.
-    public private(set) var commandSelection = 0
+    public internal(set) var commandSelection = 0
     /// Whether the find bar is showing above the page.
     public private(set) var isFindBarVisible = false
     /// The text to find in the selected page.

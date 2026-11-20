@@ -348,7 +348,7 @@ struct ProfileSearchSection: View {
                 Text("Search suggestions")
                 Text(engine.suggestionsTemplate == nil
                      ? "\(engine.name) doesn’t offer suggestions."
-                     : "As you type in the command bar, what you type is sent to \(engine.name) for suggestions. Off, nothing is sent until you press Return.")
+                     : "As you type in the command bar or the address bar, what you type is sent to \(engine.name) (or the engine whose keyword you type) for suggestions. Off, nothing is sent until you press Return.")
             }
             .accessibilityIdentifier("profileSearchSuggestionsToggle")
             Text("Add and edit search engines in Search.")

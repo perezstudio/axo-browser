@@ -21,6 +21,8 @@ struct SearchSuggestionParsingTests {
         #expect(SearchSuggestions.parse(try json(["a"]), query: "a").isEmpty)
         #expect(SearchSuggestions.parse(try json(["a": ["b"]]), query: "a").isEmpty)
         #expect(SearchSuggestions.parse(try json(["a", [1, 2]]), query: "a").isEmpty)
+        #expect(SearchSuggestions.parse(try json(["a", ["line\u{2028}break", "a\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}", "ok"]]), query: "a") == ["ok"],
+                "No separators or piles of combining marks")
         let huge = try json(["a", [String(repeating: "x", count: SearchSuggestions.maximumResponseSize)]])
         #expect(SearchSuggestions.parse(huge, query: "a").isEmpty, "Too large")
     }
@@ -62,8 +64,12 @@ struct SearchSuggestionModelTests {
     final class FakeSuggester: SearchSuggesting, @unchecked Sendable {
         // @unchecked: touched only on the main actor, where the tests and the model run.
         var urls: [URL] = []
+        /// When set, answers wait until the test resumes them.
+        var holdsAnswers = false
+        var heldAnswers: [CheckedContinuation<Void, Never>] = []
         func suggestionsData(from url: URL) async throws -> Data {
             urls.append(url)
+            if holdsAnswers { await withCheckedContinuation { heldAnswers.append($0) } }
             let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "q" }?.value ?? ""
             return try JSONSerialization.data(withJSONObject: [query, ["\(query) life", "\(query) plants"]])
         }
@@ -146,8 +152,7 @@ struct SearchSuggestionModelTests {
     @Test func addressesSendNothing() async throws {
         model.showCommandBar()
         model.setCommandQuery("example.com")
-        try await Task.sleep(for: .milliseconds(50))
-        #expect(pauses.waiting.isEmpty, "No request was even scheduled")
+        #expect(model.searchSuggestionTask == nil, "No request was even scheduled")
         #expect(suggester.urls.isEmpty)
     }
 
@@ -157,10 +162,8 @@ struct SearchSuggestionModelTests {
         await waitUntil { model.allProfiles.first?.showsSearchSuggestions == false }
         model.showCommandBar()
         model.setCommandQuery("pond")
-        try await Task.sleep(for: .milliseconds(50))
-        #expect(pauses.waiting.isEmpty)
+        #expect(model.searchSuggestionTask == nil)
         #expect(suggester.urls.isEmpty)
-        #expect(suggestions.isEmpty)
     }
 
     @Test func theProfilesEngineIsAsked() async throws {
@@ -186,6 +189,67 @@ struct SearchSuggestionModelTests {
         model.searchSuggester = nil
         model.showCommandBar()
         model.setCommandQuery("pond")
-        #expect(pauses.waiting.isEmpty)
+        #expect(model.searchSuggestionTask == nil)
+    }
+
+    @Test func nothingIsSentBeforeTheProfilesAreRead() async throws {
+        model.allProfiles = [] // just after launch, or while the Space moves to another profile
+        model.showCommandBar()
+        model.setCommandQuery("pond")
+        #expect(model.searchSuggestionTask == nil, "An unread switch counts as off")
+    }
+
+    @Test func aLateAnswerAfterTheBarClosesShowsNothing() async throws {
+        suggester.holdsAnswers = true
+        model.showCommandBar()
+        model.setCommandQuery("pond")
+        await pauses.release()
+        await waitUntil { !suggester.heldAnswers.isEmpty }
+        model.hideCommandBar()
+        model.showCommandBar()
+        model.setCommandQuery("pond")
+        suggester.heldAnswers.removeFirst().resume()
+        for _ in 0..<20 { await Task.yield() }
+        #expect(suggestions.isEmpty, "The first bar's answer doesn't reach the second")
+    }
+
+    @Test func anAnswerAfterTheSwitchTurnsOffShowsNothing() async throws {
+        let profileID = try #require(model.space?.profileID)
+        suggester.holdsAnswers = true
+        model.showCommandBar()
+        model.setCommandQuery("pond")
+        await pauses.release()
+        await waitUntil { !suggester.heldAnswers.isEmpty }
+        await model.setShowsSearchSuggestions(false, forProfile: profileID)
+        await waitUntil { model.allProfiles.first?.showsSearchSuggestions == false }
+        suggester.heldAnswers.removeFirst().resume()
+        for _ in 0..<20 { await Task.yield() }
+        #expect(suggestions.isEmpty)
+    }
+
+    @Test func historyArrivingAboveKeepsTheHighlightedRow() async throws {
+        model.showCommandBar()
+        model.setCommandQuery("pond")
+        await pauses.release()
+        await waitUntil { !suggestions.isEmpty }
+        let index = try #require(model.commandResults.firstIndex { $0.title == "pond plants" })
+        model.moveCommandSelection(by: index - model.commandSelection)
+        let page = HistoryItem(profileID: try #require(model.space?.profileID), url: URL(string: "https://example.com/pond")!, title: "Pond", visitCount: 1, lastVisitedAt: .now)
+        model.insertLocalCommandResults([.history(page)])
+        #expect(model.commandResults[model.commandSelection].title == "pond plants")
+    }
+
+    @Test func aSuggestionChosenWhileEditingAnAddressLoadsInThatTab() async throws {
+        await model.openTab(url: URL(string: "https://example.com/")!)
+        let tabID = try #require(model.selectedTabID)
+        let page = try #require(model.pool.livePage(for: tabID) as? FakePage)
+        model.editAddress()
+        model.setCommandQuery("pond")
+        await pauses.release()
+        await waitUntil { !suggestions.isEmpty }
+        let index = try #require(model.commandResults.firstIndex { $0.title == "pond life" })
+        await model.runCommand(at: index)
+        #expect(model.selectedTabID == tabID, "No new tab")
+        #expect(page.loads.last == SearchEngine.google.searchURL(for: "pond life"))
     }
 }
