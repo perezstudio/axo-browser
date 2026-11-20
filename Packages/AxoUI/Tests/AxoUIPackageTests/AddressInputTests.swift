@@ -25,7 +25,7 @@ struct AddressInputTests {
     func everythingElseIsASearch(input: String) throws {
         let url = try #require(AddressInput.url(from: input))
         let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
-        #expect(url.host() == AddressInput.searchURL.host())
+        #expect(url.host() == "www.google.com")
         #expect(components.queryItems == [URLQueryItem(name: "q", value: input)])
     }
 

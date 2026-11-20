@@ -7,12 +7,12 @@ import AppKit
 /// The Settings window's panes and the sidebar's search (#85).
 struct SettingsPaneTests {
     @Test func panesAreInTheBoardsOrder() {
-        #expect(SettingsPane.allCases.map(\.title) == ["General", "Profiles", "Spaces", "Link Routing", "Site Customizations", "iCloud"])
+        #expect(SettingsPane.allCases.map(\.title) == ["General", "Profiles", "Spaces", "Search", "Link Routing", "Site Customizations", "iCloud"])
     }
 
     @Test func rawValuesStayStableForTheRememberedPane() {
         // Settings remembers the last pane by raw value; renaming one would forget it.
-        #expect(SettingsPane.allCases.map(\.rawValue) == ["general", "profiles", "spaces", "linkRouting", "siteCustomizations", "iCloud"])
+        #expect(SettingsPane.allCases.map(\.rawValue) == ["general", "profiles", "spaces", "search", "linkRouting", "siteCustomizations", "iCloud"])
         #expect(SettingsPane.linkRouting.rowIdentifier == "settingsPane.linkRouting")
     }
 

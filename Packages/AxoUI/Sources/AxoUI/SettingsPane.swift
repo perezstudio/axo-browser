@@ -1,14 +1,15 @@
 import Foundation
 
 /// A pane of Axo's Settings window, in the order its sidebar lists them (the Settings board's:
-/// General, Profiles, Spaces, Link Routing, Site Customizations, iCloud). Search (#132) joins
-/// when it's built; Website Permissions (#133) is in each profile's details, as the board draws it.
+/// General, Profiles, Spaces, Search, Link Routing, Site Customizations, iCloud). Website
+/// Permissions (#133) is in each profile's details, as the board draws it.
 ///
 /// The raw value is what Settings remembers as the last pane used, so keep existing ones stable.
 nonisolated public enum SettingsPane: String, CaseIterable, Identifiable, Sendable {
     case general
     case profiles
     case spaces
+    case search
     case linkRouting
     case siteCustomizations
     case iCloud
@@ -21,6 +22,7 @@ nonisolated public enum SettingsPane: String, CaseIterable, Identifiable, Sendab
         case .general: "General"
         case .profiles: "Profiles"
         case .spaces: "Spaces"
+        case .search: "Search"
         case .linkRouting: "Link Routing"
         case .siteCustomizations: "Site Customizations"
         case .iCloud: "iCloud"
@@ -33,6 +35,7 @@ nonisolated public enum SettingsPane: String, CaseIterable, Identifiable, Sendab
         case .general: "gearshape"
         case .profiles: "person.2"
         case .spaces: "square.stack"
+        case .search: "magnifyingglass"
         case .linkRouting: "arrow.triangle.branch"
         case .siteCustomizations: "paintbrush"
         case .iCloud: "icloud"
@@ -55,6 +58,9 @@ nonisolated public enum SettingsPane: String, CaseIterable, Identifiable, Sendab
              "extensions"]
         case .spaces:
             ["space", "add space", "delete space", "rename", "color", "icon", "theme", "background", "profile"]
+        case .search:
+            ["search engine", "google", "bing", "duckduckgo", "keyword", "custom search engine", "search url",
+             "suggestions"]
         case .linkRouting:
             ["links", "rules", "domain", "app", "other apps", "default browser", "mini window", "open in"]
         case .siteCustomizations:

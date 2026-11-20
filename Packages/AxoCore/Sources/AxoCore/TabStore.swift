@@ -218,7 +218,8 @@ public final class TabStore: Sendable {
         try await database.writer.write { db in
             guard var profile = try Profile.fetchOne(db, id: id) else { throw TabStoreError.profileNotFound(id) }
             profile.name = name
-            try profile.update(db)
+            // Only the name: a whole-row write could undo a sync's change to its other columns.
+            try profile.update(db, columns: ["name"])
         }
     }
 

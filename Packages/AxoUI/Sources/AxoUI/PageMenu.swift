@@ -144,7 +144,7 @@ extension BrowserModel {
         case .lookUp:
             menu.lookUpSelection()
         case .search(let text):
-            Task { await openTab(url: AddressInput.searchURL(for: text), at: .after(tabID)) }
+            Task { await openTab(url: searchContext.engine.searchURL(for: text), at: .after(tabID)) }
         case .edit(let edit):
             menu.perform(edit)
         case .replaceMisspelling(let word):

@@ -53,7 +53,7 @@ struct SyncSettings: View {
     @State private var showsDetails = false
 
     /// What syncs through iCloud.
-    static let syncedItems = "Profiles, Spaces and their themes, folders, pinned tabs, and favorites"
+    static let syncedItems = "Profiles, Spaces and their themes, folders, pinned tabs, favorites, and search engines"
     /// What stays on this Mac.
     static let localItems = "Open tabs, history, website data and logins, site permissions, extensions, link rules, site customizations, and settings"
 

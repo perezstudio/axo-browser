@@ -1,20 +1,35 @@
+import AxoCore
 import Foundation
 
 /// Turns what someone types in the address field into a URL to load.
 ///
 /// Text with a scheme loads as is, text that looks like a host gets `https://` (or `http://` for
-/// local hosts), and anything else becomes a search.
+/// local hosts), and anything else becomes a search, with an engine's keyword ("k axolotls") or
+/// the profile's engine (``SearchContext``).
 nonisolated public enum AddressInput {
-    /// The results page searches go to: the default search engine's (Google).
-    public static var searchURL: URL { SearchEngine.default.resultsURL }
 
     private static let schemesWithoutSlashes: Set<String> = ["about", "data", "mailto", "javascript"]
     private static let localHosts: Set<String> = ["localhost", "127.0.0.1", "[::1]"]
 
     /// Returns the URL to load for `text`, or `nil` if the text is empty.
-    public static func url(from text: String) -> URL? {
+    public static func url(from text: String, search: SearchContext = .default) -> URL? {
+        resolve(text, search: search)?.url
+    }
+
+    /// The URL to load for `text` and whether it's a search, or `nil` if the text is empty.
+    public static func resolve(_ text: String, search: SearchContext = .default) -> (url: URL, isSearch: Bool)? {
         let input = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !input.isEmpty else { return nil }
+        // A keyword and a space searches with that engine, before anything else is tried.
+        if let keyword = SearchEngine.keywordSearch(in: input, engines: search.engines) {
+            return (keyword.engine.searchURL(for: keyword.query), true)
+        }
+        guard let url = address(from: input) else { return (search.engine.searchURL(for: input), true) }
+        return (url, false)
+    }
+
+    /// The address `input` names, or `nil` when it's a search.
+    private static func address(from input: String) -> URL? {
 
         if input.contains("://"), !input.contains(where: \.isWhitespace),
            let url = URL(string: input), url.scheme != nil {
@@ -28,12 +43,12 @@ nonisolated public enum AddressInput {
         if !input.contains(where: \.isWhitespace), let url = hostURL(from: input) {
             return url
         }
-        return searchURL(for: input)
+        return nil
     }
 
-    /// Returns the search URL for `query`.
-    public static func searchURL(for query: String) -> URL {
-        SearchEngine.default.searchURL(for: query)
+    /// Returns the search URL for `query`, with `search`'s engine (or a keyword's).
+    public static func searchURL(for query: String, search: SearchContext = .default) -> URL {
+        search.searchURL(for: query)
     }
 
     /// `example.com/path` becomes `https://example.com/path`; `localhost:3000` becomes `http://…`.

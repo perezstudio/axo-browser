@@ -2,6 +2,9 @@ import Foundation
 
 /// The kinds of rows that sync, in the order a parent comes before its children.
 public enum SyncRecordType: String, CaseIterable, Codable, Comparable, Sendable {
+    /// A custom search engine, or a built-in one's changes (#132). Profiles name theirs by ID
+    /// without depending on it, so it has no parent.
+    case searchEngine = "SearchEngine"
     case profile = "Profile"
     case favorite = "Favorite"
     case space = "Space"
@@ -11,6 +14,7 @@ public enum SyncRecordType: String, CaseIterable, Codable, Comparable, Sendable 
     /// The database table the rows live in.
     var table: String {
         switch self {
+        case .searchEngine: "searchEngine"
         case .profile: "profile"
         case .favorite: "favorite"
         case .space: "space"
@@ -56,7 +60,8 @@ public struct SyncRecordID: Hashable, Codable, Sendable, CustomStringConvertible
 ///
 /// | Type | Fields |
 /// | --- | --- |
-/// | Profile | `name` |
+/// | SearchEngine | `name`, `urlTemplate`, `suggestionsTemplate`, `keyword`, `isHidden` (`1` or `0`), `sortKey`; a built-in engine's has no `name` or `urlTemplate` |
+/// | Profile | `name`, `searchEngineID`, `showsSearchSuggestions` (`1` or `0`) |
 /// | Favorite | `profileID`, `url` (its home page), `title`, `sortKey` |
 /// | Space | `profileID`, `name`, `sortKey`, `color`, `icon`, `theme` (JSON) |
 /// | Folder | `spaceID`, `parentID`, `name`, `sortKey` |
@@ -77,7 +82,8 @@ public struct SyncRecord: Equatable, Codable, Sendable {
     /// The field names each type uses.
     public static func fieldNames(for type: SyncRecordType) -> [String] {
         switch type {
-        case .profile: ["name"]
+        case .searchEngine: ["name", "urlTemplate", "suggestionsTemplate", "keyword", "isHidden", "sortKey"]
+        case .profile: ["name", "searchEngineID", "showsSearchSuggestions"]
         case .favorite: ["profileID", "url", "title", "sortKey"]
         case .space: ["profileID", "name", "sortKey", "color", "icon", "theme"]
         case .folder: ["spaceID", "parentID", "name", "sortKey"]

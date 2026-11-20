@@ -175,14 +175,26 @@ public final class SyncStore: Sendable {
 
     // MARK: Engine state and resets
 
-    /// The sync engine's saved state, if any.
+    /// The record types and fields this version syncs. Raise it when ``SyncRecordType`` or
+    /// ``SyncRecord/fieldNames(for:)`` grows: an older Axo skipped what it didn't know, and
+    /// CloudKit's change token moved past it, so a device that updates fetches everything again.
+    static let schemaVersion: UInt8 = 2
+
+    /// The sync engine's saved state, if any, or `nil` when it was saved by a version that synced
+    /// fewer record types or fields, so the engine fetches everything again.
     public func engineState() async throws -> Data? {
-        try await database.writer.read { db in try Self.setting("engineState", db) }
+        try await database.writer.read { db in
+            guard try Self.setting("schemaVersion", db) == Data([Self.schemaVersion]) else { return nil }
+            return try Self.setting("engineState", db)
+        }
     }
 
     /// Saves the sync engine's state.
     public func saveEngineState(_ data: Data) async throws {
-        try await database.writer.write { db in try Self.setSetting("engineState", data, db) }
+        try await database.writer.write { db in
+            try Self.setSetting("engineState", data, db)
+            try Self.setSetting("schemaVersion", Data([Self.schemaVersion]), db)
+        }
     }
 
     /// Whether this Mac has finished its first sync with the current iCloud account: fetched
@@ -265,7 +277,14 @@ public final class SyncStore: Sendable {
 
     static func localRecord(for id: SyncRecordID, modifiedAt: Date, _ db: Database) throws -> SyncRecord? {
         let sql = switch id.type {
-        case .profile: "SELECT name FROM profile WHERE id = ?"
+        case .searchEngine: """
+            SELECT name, urlTemplate, suggestionsTemplate, keyword, CASE WHEN isHidden THEN '1' ELSE '0' END AS isHidden, sortKey
+            FROM searchEngine WHERE id = ?
+            """
+        case .profile: """
+            SELECT name, searchEngineID, CASE WHEN showsSearchSuggestions THEN '1' ELSE '0' END AS showsSearchSuggestions
+            FROM profile WHERE id = ?
+            """
         case .favorite: "SELECT profileID, url, title, sortKey FROM favorite WHERE id = ?"
         case .space: "SELECT profileID, name, sortKey, color, icon, theme FROM space WHERE id = ?"
         case .folder: "SELECT spaceID, parentID, name, sortKey FROM folder WHERE id = ?"
@@ -298,12 +317,24 @@ public final class SyncStore: Sendable {
             record.fields[field] == nil ? true : try exists(table, record.uuid(field))
         }
         switch record.id.type {
+        case .searchEngine:
+            // A custom engine needs its name and address; a built-in one's row holds only changes.
+            guard let sortKey = record.fields["sortKey"] else { return false }
+            try db.execute(sql: """
+                INSERT INTO searchEngine (id, name, urlTemplate, suggestionsTemplate, keyword, isHidden, sortKey) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (id) DO UPDATE SET name = excluded.name, urlTemplate = excluded.urlTemplate,
+                    suggestionsTemplate = excluded.suggestionsTemplate, keyword = excluded.keyword,
+                    isHidden = excluded.isHidden, sortKey = excluded.sortKey
+                """, arguments: [id, record.fields["name"], record.fields["urlTemplate"], record.fields["suggestionsTemplate"],
+                                 record.fields["keyword"], record.fields["isHidden"] == "1", sortKey])
         case .profile:
             guard let name = record.fields["name"] else { return false }
-            try db.execute(
-                sql: "INSERT INTO profile (id, name) VALUES (?, ?) ON CONFLICT (id) DO UPDATE SET name = excluded.name",
-                arguments: [id, name]
-            )
+            // A record from an Axo before search engines has no suggestions field: on, the default.
+            try db.execute(sql: """
+                INSERT INTO profile (id, name, searchEngineID, showsSearchSuggestions) VALUES (?, ?, ?, ?)
+                ON CONFLICT (id) DO UPDATE SET name = excluded.name, searchEngineID = excluded.searchEngineID,
+                    showsSearchSuggestions = excluded.showsSearchSuggestions
+                """, arguments: [id, name, record.uuid("searchEngineID"), record.fields["showsSearchSuggestions"] != "0"])
         case .favorite:
             guard let url = record.fields["url"], let sortKey = record.fields["sortKey"],
                   try exists("profile", record.uuid("profileID")) else { return false }

@@ -12,11 +12,19 @@ public struct Profile: Codable, Hashable, Identifiable, Sendable, FetchableRecor
     public var id: UUID
     /// The name shown in the interface.
     public var name: String
+    /// The search engine its Spaces search with (#132), or `nil` for Google. An ID that isn't a
+    /// visible engine (removed, or not synced yet) also means Google
+    /// (``SearchEngine/engine(for:in:)``).
+    public var searchEngineID: UUID?
+    /// Whether the command bar and address field show its engine's suggestions as you type.
+    public var showsSearchSuggestions: Bool
 
     /// Creates a profile.
-    public init(id: UUID = UUID(), name: String) {
+    public init(id: UUID = UUID(), name: String, searchEngineID: UUID? = nil, showsSearchSuggestions: Bool = true) {
         self.id = id
         self.name = name
+        self.searchEngineID = searchEngineID
+        self.showsSearchSuggestions = showsSearchSuggestions
     }
 }
 

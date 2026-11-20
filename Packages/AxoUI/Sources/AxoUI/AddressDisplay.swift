@@ -1,3 +1,4 @@
+import AxoCore
 import Foundation
 
 /// What the sidebar's address bar shows for a page: the site, not the whole URL, as Arc does.
@@ -69,20 +70,12 @@ nonisolated enum AddressDisplay {
     /// address (a page could link to a search for "paypal.com") don't count, and formatting
     /// characters (such as right-to-left overrides) are taken out, so the bar can't be made to
     /// show what looks like a site's name.
-    static func searchTerms(in url: URL) -> String? {
-        let search = AddressInput.searchURL
-        guard url.host()?.lowercased() == search.host()?.lowercased(),
-              url.path == search.path || (url.path.isEmpty && search.path == "/"),
-              let raw = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-                .queryItems?.first(where: { $0.name == "q" })?.value
-        else { return nil }
+    static func searchTerms(in url: URL, engines: [SearchEngine] = KnownSearchEngines.all) -> String? {
+        guard let raw = engines.lazy.compactMap({ $0.searchTerms(in: url) }).first else { return nil }
         var cleaned = String.UnicodeScalarView()
         cleaned.append(contentsOf: raw.unicodeScalars.filter { $0.properties.generalCategory != .format })
         let terms = String(cleaned).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !terms.isEmpty,
-              let asAddress = AddressInput.url(from: terms),
-              asAddress.host()?.lowercased() == search.host()?.lowercased()
-        else { return nil }
+        guard !terms.isEmpty, AddressInput.resolve(terms)?.isSearch == true else { return nil }
         return terms
     }
 }

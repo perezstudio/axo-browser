@@ -208,6 +208,11 @@ public final class BrowserModel {
     @ObservationIgnored var favoritesProfileID: Profile.ID?
     /// Every profile, by name, kept current for Settings.
     public internal(set) var allProfiles: [Profile] = []
+    /// Every search engine, hidden built-in ones included (#132), in Settings' order.
+    public internal(set) var searchEngines: [SearchEngine] = SearchEngine.builtIns {
+        didSet { KnownSearchEngines.all = searchEngines }
+    }
+    @ObservationIgnored var searchEnginesObservationTask: Task<Void, Never>?
     @ObservationIgnored private var foldersObservationTask: Task<Void, Never>?
     @ObservationIgnored private var splitsObservationTask: Task<Void, Never>?
     /// The pane each split last had focused, so selecting the split's row returns to it.
@@ -521,6 +526,7 @@ public final class BrowserModel {
         profilesObservationTask?.cancel()
         favoritesObservationTask?.cancel()
         linkRoutesObservationTask?.cancel()
+        searchEnginesObservationTask?.cancel()
         siteCustomizationsObservationTask?.cancel()
         foldersObservationTask?.cancel()
         splitsObservationTask?.cancel()
@@ -559,6 +565,7 @@ public final class BrowserModel {
             observeSpaces()
             observeProfiles()
             observeLinkRoutes()
+            observeSearchEngines()
             observeSiteCustomizations()
             await syncLastingPermissions()
             pool.startHibernationTimer()
@@ -1002,7 +1009,7 @@ public final class BrowserModel {
     /// Handles text submitted from the address field: loads it in the selected tab, or opens a
     /// new tab when none is selected.
     public func submitAddress(_ text: String) async {
-        guard let url = AddressInput.url(from: text) else { return }
+        guard let url = AddressInput.url(from: text, search: searchContext) else { return }
         if selectedTabID == nil {
             await openTab(url: url)
         } else if let tabID = selectedTabID {
@@ -1526,7 +1533,7 @@ public final class BrowserModel {
         let favoriteTabs = pendingSplitAnchor == nil ? space.map { space in favorites.map { $0.tab(in: space.id) } } ?? [] : []
         let openTabs = favoriteTabs + tabs
         commandResults = CommandRanking.immediateResults(for: query, tabs: openTabs, availableActions: availableActions,
-                                                         cache: &commandSearchCache)
+                                                         search: searchContext, cache: &commandSearchCache)
         if let menuCommands, !query.trimmingCharacters(in: .whitespaces).isEmpty {
             if indexedMenuCommands == nil { indexedMenuCommands = menuCommands.commands() }
             commandResults += CommandRanking.menuCommandResults(for: query, commands: indexedMenuCommands ?? [], recent: recentMenuCommandIDs)
@@ -1616,7 +1623,7 @@ public final class BrowserModel {
     /// ``persistPageChange(tabID:url:title:)`` counts it as typed and as the query's choice.
     /// A search, including one the bar took for an address, teaches nothing.
     private func learnTypedAddress(_ result: CommandResult, query: String, in tabID: AxoCore.Tab.ID) {
-        guard case .open(let url, let isSearch, _) = result, !isSearch, !SearchEngine.isResultsPage(url),
+        guard case .open(let url, let isSearch, _) = result, !isSearch, !searchContext.isResultsPage(url),
               let profileID = space?.profileID else { return }
         pendingTypedLearning[tabID] = (query, Self.siteHost(of: url), profileID)
     }

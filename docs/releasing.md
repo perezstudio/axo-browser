@@ -13,14 +13,15 @@ Axo ships outside the Mac App Store, as a DMG signed with a Developer ID and not
    ```
 
    It prompts for the Apple ID, team ID, and password and keeps them in the keychain. To use another name, set `AXO_NOTARY_PROFILE`.
-4. **A Sparkle signing key.** Updates carry an EdDSA signature that Axo checks with the public key it ships with. Sparkle's `generate_keys` makes the pair once and keeps the private key in the login keychain (after a build, it's in `DerivedData/Axo-*/SourcePackages/artifacts/sparkle/Sparkle/bin/`):
+4. **CloudKit's production schema.** iCloud sync's record types and fields are made in the development environment as Debug builds send them; deploy them to production in the CloudKit Console (container `iCloud.com.perezstudio.Axo`) before each Release build that adds one ships, or that build's records are refused. #132 added the `SearchEngine` type and the Profile fields `searchEngineID` and `showsSearchSuggestions`.
+5. **A Sparkle signing key.** Updates carry an EdDSA signature that Axo checks with the public key it ships with. Sparkle's `generate_keys` makes the pair once and keeps the private key in the login keychain (after a build, it's in `DerivedData/Axo-*/SourcePackages/artifacts/sparkle/Sparkle/bin/`):
 
    ```bash
    generate_keys
    ```
 
    It prints the public key. Set the Axo target's `AXO_SPARKLE_PUBLIC_KEY` build setting to it (both configurations) and commit that: it's public. Back up the private key (`generate_keys -x <file>`) somewhere safe outside the repo; without it, no copy of Axo already out there can be updated again. Builds without the public key don't update themselves.
-5. **The appcast on GitHub Pages.** Axo checks `https://perezstudio.github.io/axo-browser/appcast.xml` (`SUFeedURL` in `Axo/Info.plist`). Turn on GitHub Pages for the repo from a `gh-pages` branch holding one `appcast.xml`:
+6. **The appcast on GitHub Pages.** Axo checks `https://perezstudio.github.io/axo-browser/appcast.xml` (`SUFeedURL` in `Axo/Info.plist`). Turn on GitHub Pages for the repo from a `gh-pages` branch holding one `appcast.xml`:
 
    ```xml
    <?xml version="1.0" encoding="utf-8"?>
@@ -30,7 +31,7 @@ Axo ships outside the Mac App Store, as a DMG signed with a Developer ID and not
      </channel>
    </rss>
    ```
-6. **The engine**, built from a clean, committed checkout of axo-chromium next to Axo (or at `AXO_CHROMIUM_OUT`), matching this Axo's engine API header.
+7. **The engine**, built from a clean, committed checkout of axo-chromium next to Axo (or at `AXO_CHROMIUM_OUT`), matching this Axo's engine API header.
 
 ## Making a release
 

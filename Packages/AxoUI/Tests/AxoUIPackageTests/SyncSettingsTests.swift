@@ -32,6 +32,7 @@ struct SyncSettingsTests {
     @Test func thePaneListsWhatSyncsAndWhatStays() {
         #expect(SyncSettings.syncedItems.contains("favorites"))
         #expect(SyncSettings.syncedItems.contains("themes"))
+        #expect(SyncSettings.syncedItems.contains("search engines"))
         #expect(SyncSettings.localItems.contains("history") && SyncSettings.localItems.contains("extensions"))
         #expect(SyncSettings.localItems.contains("link rules") && SyncSettings.localItems.contains("settings"))
     }

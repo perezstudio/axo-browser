@@ -105,6 +105,7 @@ public struct SettingsView: View {
         case .general: GeneralSettings(softwareUpdate: model.softwareUpdate)
         case .profiles: ProfileSettings(model: model)
         case .spaces: SpaceSettings(model: model)
+        case .search: SearchSettings(model: model)
         case .linkRouting: LinkRoutingSettings(model: model)
         case .siteCustomizations: SiteCustomizationSettings(model: model)
         case .iCloud:
