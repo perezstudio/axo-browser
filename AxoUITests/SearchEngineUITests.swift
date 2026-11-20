@@ -34,7 +34,8 @@ final class SearchEngineUITests: XCTestCase {
         app.descendants(matching: .any)["sidebarAddressBar"].value as? String ?? ""
     }
 
-    /// Adds "Local Search" (keyword `ls`) searching `http://127.0.0.1:<port>/find?q=%s`.
+    /// Adds "Local Search" (keyword `ls`) searching `http://127.0.0.1:<port>/find?q=%s`, with a
+    /// suggestions address there too (test runs' stand-in answers without reaching it).
     @MainActor
     private func addLocalEngine(in app: XCUIApplication, port: UInt16) {
         app.typeKey(",", modifierFlags: .command)
@@ -51,6 +52,8 @@ final class SearchEngineUITests: XCTestCase {
         app.textFields["searchEngineKeywordField"].click()
         app.textFields["searchEngineKeywordField"].typeText("ls")
         let url = app.textFields["searchEngineURLField"]
+        app.textFields["searchEngineSuggestionsField"].click()
+        app.textFields["searchEngineSuggestionsField"].typeText("http://127.0.0.1:\(port)/suggest?q=%s")
         url.click()
         url.typeText("http://127.0.0.1:\(port)/find")
         app.buttons["saveSearchEngineButton"].click()
@@ -121,5 +124,47 @@ final class SearchEngineUITests: XCTestCase {
         AxoUITests.selectSettingsPane("profiles", in: app)
         XCTAssertTrue(picker.waitForExistence(timeout: 5))
         XCTAssertEqual(picker.value as? String, "Google")
+    }
+
+    /// The profile's engine suggests searches below the command bar's own results, and choosing
+    /// one searches for it; with the profile's switch off, none show (#132). Test runs' stand-in
+    /// answers "pond life" and "pond plants" for "pond".
+    @MainActor
+    func testSuggestionsShowAndTurnOff() throws {
+        let app = launchApp()
+        let port = try AxoUITests.closedPort()
+        addLocalEngine(in: app, port: port)
+        AxoUITests.selectSettingsPane("profiles", in: app)
+        let picker = app.popUpButtons["profileSearchEnginePicker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        picker.click()
+        app.menuItems["Local Search"].click()
+        app.typeKey("w", modifierFlags: .command)
+
+        app.typeKey("t", modifierFlags: .command)
+        let field = app.textFields["commandField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.typeText("pond")
+        let suggestion = app.descendants(matching: .any).matching(identifier: "commandResult")
+            .matching(NSPredicate(format: "label CONTAINS 'pond plants'")).firstMatch
+        XCTAssertTrue(suggestion.waitForExistence(timeout: 5), "The engine's suggestion shows")
+        suggestion.click()
+        let searched = NSPredicate { _, _ in self.shownAddress(in: app).contains("127.0.0.1:\(port)/find?q=pond%20plants") }
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: searched, object: nil)], timeout: 15), .completed,
+                       "Choosing it searched for it: \(shownAddress(in: app))")
+
+        app.typeKey(",", modifierFlags: .command)
+        AxoUITests.selectSettingsPane("profiles", in: app)
+        let toggle = app.descendants(matching: .any)["profileSearchSuggestionsToggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        toggle.click()
+        app.typeKey("w", modifierFlags: .command)
+
+        app.typeKey("t", modifierFlags: .command)
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.typeText("pond")
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "commandResult").firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(suggestion.waitForExistence(timeout: 2), "Off, nothing is suggested")
+        app.typeKey(.escape, modifierFlags: [])
     }
 }

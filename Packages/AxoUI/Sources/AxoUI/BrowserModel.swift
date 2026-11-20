@@ -168,7 +168,7 @@ public final class BrowserModel {
     /// person's clipboard. The app sets one in UI testing mode.
     @ObservationIgnored public var copyLink: ((URL) -> Void)?
     /// The command bar's rows, best first.
-    public private(set) var commandResults: [CommandResult] = []
+    public internal(set) var commandResults: [CommandResult] = []
     /// The highlighted row.
     public private(set) var commandSelection = 0
     /// Whether the find bar is showing above the page.
@@ -239,6 +239,12 @@ public final class BrowserModel {
     @ObservationIgnored let now: () -> Date
     @ObservationIgnored private var archiveTask: Task<Void, Never>?
     @ObservationIgnored private var commandSearchTask: Task<Void, Never>?
+    /// Fetches search suggestions (#132). Set by the app; a stand-in in test runs. Without one,
+    /// no suggestions are asked for.
+    @ObservationIgnored public var searchSuggester: (any SearchSuggesting)?
+    /// The pause before asking for suggestions; tests replace it.
+    @ObservationIgnored public var suggestionSleep: @MainActor (Duration) async -> Void = { try? await Task.sleep(for: $0) }
+    @ObservationIgnored var searchSuggestionTask: Task<Void, Never>?
     /// Axo's menus, which the command bar searches too (#123). Set by the app on the Mac.
     @ObservationIgnored public var menuCommands: (any MenuCommandProviding)?
     /// The menus' commands as they were when the command bar opened.
@@ -1500,6 +1506,7 @@ public final class BrowserModel {
     /// has already gone where the person chose, such as the find field after ⌘F).
     public func hideCommandBar(focusingPage: Bool = true) {
         commandSearchTask?.cancel()
+        searchSuggestionTask?.cancel()
         commandSearchCache = CommandSearchCache()
         let wasVisible = isCommandBarVisible
         isCommandBarVisible = false
@@ -1533,6 +1540,7 @@ public final class BrowserModel {
         }
         commandSelection = 0
         commandSearchTask?.cancel()
+        requestSearchSuggestions(for: query)
         // A very long query (a data: page's address being edited) isn't worth searching history for.
         guard let profileID = space?.profileID, !query.trimmingCharacters(in: .whitespaces).isEmpty,
               query.count <= 512 else { return }
@@ -1540,7 +1548,7 @@ public final class BrowserModel {
         commandSearchTask = Task { [weak self] in
             let items = (try? await history.search(query, profileID: profileID)) ?? []
             guard let self, !Task.isCancelled, self.commandQuery == query else { return }
-            self.commandResults += CommandRanking.historyResults(items, excludingOpen: openTabs)
+            self.insertLocalCommandResults(CommandRanking.historyResults(items, excludingOpen: openTabs))
         }
     }
 
@@ -1574,6 +1582,9 @@ public final class BrowserModel {
             await openTab(url: url)
             if let selectedTabID { learnTypedAddress(result, query: query, in: selectedTabID) }
             await completePendingSplit(with: selectedTabID, anchor: splitAnchor)
+        case .suggestion(_, let url):
+            await openTab(url: url)
+            await completePendingSplit(with: selectedTabID, anchor: splitAnchor)
         case .tab(let tab):
             if splitAnchor != nil {
                 await completePendingSplit(with: tab.id, anchor: splitAnchor)
@@ -1605,7 +1616,7 @@ public final class BrowserModel {
         let chosen: URL? = switch result {
         case .history(let item): item.url
         case .tab(let tab): tab.url
-        case .open, .action, .menuCommand: nil
+        case .open, .suggestion, .action, .menuCommand: nil
         }
         guard let chosen else { return }
         let history = store.history

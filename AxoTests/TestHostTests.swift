@@ -43,6 +43,7 @@ struct TestHostTests {
         let model = try #require(AppEnvironment.browserModel)
         #expect(model.defaultBrowser == nil, "Nothing in a test run offers to change the default browser")
         #expect(model.locationAuthorization == nil, "Test runs never show macOS's location prompt")
+        #expect(model.searchSuggester is StandInSearchSuggester, "Test runs never send what's typed to a search engine")
         #expect(model.onSpaceChange == nil, "Test runs never remember the Space shown")
         #expect(!model.isHandoffEnabled, "Test pages never reach the person's other devices")
         #expect(!model.pool.reportsScreenTimeUsage, "Test pages never count as Screen Time usage")
