@@ -1,10 +1,11 @@
 #!/bin/bash
 # Builds Axo's Release DMG for the Mac (#61): archives Release with the Chromium engine embedded,
 # exports it signed with your Developer ID, checks the engine's signing, notarizes and staples
-# the app, puts it in a DMG, signs, notarizes, and staples that, and writes a manifest naming the
-# engine build it carries. See docs/releasing.md for the one-time setup.
+# the app, puts it in a DMG, signs, notarizes, and staples that, signs the DMG for Sparkle and
+# writes its appcast item (#180), and writes a manifest naming the engine build it carries. See
+# docs/releasing.md for the one-time setup.
 #
-#   scripts/package-release.sh [--skip-notarize] [--allow-dirty]
+#   scripts/package-release.sh [--skip-notarize] [--allow-dirty] [--beta] [--notes <file>]
 #
 # Nothing secret is read from the repo: signing uses your keychain's Developer ID identity
 # through Xcode, and notarization the notarytool keychain profile named by AXO_NOTARY_PROFILE
@@ -14,6 +15,11 @@
 #   this Mac, never to publish (macOS refuses it on any other).
 # --allow-dirty packages with uncommitted changes in Axo or the engine: also never to publish,
 #   since the manifest couldn't name what the DMG was built from.
+# --beta puts the update on the appcast's beta channel, offered only to people who include betas.
+# --notes <file> is the update's release notes, as plain text, for the appcast item.
+#
+# The update's EdDSA signature uses the Sparkle private key in your keychain (made once with
+# Sparkle's generate_keys); its public half is the Axo target's AXO_SPARKLE_PUBLIC_KEY.
 #
 # The DMG, its manifest, and the build's logs go in AXO_RELEASE_DIR (default build/release, which
 # git ignores).
@@ -22,12 +28,18 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 NOTARIZE=1
 ALLOW_DIRTY=0
-for argument in "$@"; do
-  case "$argument" in
+BETA=0
+NOTES=""
+usage() { echo "usage: package-release.sh [--skip-notarize] [--allow-dirty] [--beta] [--notes <file>]"; exit 2; }
+while [[ $# -gt 0 ]]; do
+  case "$1" in
     --skip-notarize) NOTARIZE=0 ;;
     --allow-dirty) ALLOW_DIRTY=1 ;;
-    *) echo "usage: package-release.sh [--skip-notarize] [--allow-dirty]"; exit 2 ;;
+    --beta) BETA=1 ;;
+    --notes) [[ $# -ge 2 ]] || usage; NOTES="$2"; shift ;;
+    *) usage ;;
   esac
+  shift
 done
 PROFILE="${AXO_NOTARY_PROFILE:-axo-notary}"
 RELEASE_DIR="${AXO_RELEASE_DIR:-$ROOT/build/release}"
@@ -52,6 +64,7 @@ git -C "$FORK" rev-parse --git-dir > /dev/null 2>&1 || die "$FORK isn't the axo-
 # MARK: Preflight
 
 step "Checking what's being packaged"
+[[ -z "$NOTES" || -f "$NOTES" ]] || die "No release notes at $NOTES."
 for tool in xcodebuild codesign hdiutil ditto shasum; do
   command -v "$tool" > /dev/null || die "$tool is missing."
 done
@@ -79,6 +92,22 @@ if [[ "$NOTARIZE" == 1 ]]; then
     || die "No notarytool keychain profile named \"$PROFILE\". Make one with: xcrun notarytool store-credentials \"$PROFILE\" (docs/releasing.md)."
 fi
 
+# Sparkle's tools come with the Sparkle package. Resolved into a folder kept between runs, so a
+# release doesn't clone its packages again each time.
+PACKAGES="$RELEASE_DIR/packages"
+xcodebuild -resolvePackageDependencies -workspace "$ROOT/Axo.xcworkspace" -scheme Axo \
+  -clonedSourcePackagesDirPath "$PACKAGES" > /dev/null 2>&1 || die "Couldn't resolve Axo's packages."
+SPARKLE_BIN="$PACKAGES/artifacts/sparkle/Sparkle/bin"
+[[ -x "$SPARKLE_BIN/sign_update" ]] || die "Sparkle's tools aren't at $SPARKLE_BIN."
+# Updates are signed with the private key in your keychain; the app checks them with the public
+# key it carries. If they don't match, every update would be refused, so check before building.
+APP_KEY="$(xcodebuild -showBuildSettings -workspace "$ROOT/Axo.xcworkspace" -scheme Axo -configuration Release 2>/dev/null \
+  | sed -n 's/^ *AXO_SPARKLE_PUBLIC_KEY = //p' | head -1)"
+[[ -n "$APP_KEY" ]] || die "The Axo target's AXO_SPARKLE_PUBLIC_KEY isn't set (docs/releasing.md)."
+KEYCHAIN_KEY="$("$SPARKLE_BIN/generate_keys" -p 2>/dev/null || true)"
+[[ -n "$KEYCHAIN_KEY" ]] || die "No Sparkle signing key in your keychain. Make one with $SPARKLE_BIN/generate_keys (docs/releasing.md)."
+[[ "$APP_KEY" == "$KEYCHAIN_KEY" ]] || die "AXO_SPARKLE_PUBLIC_KEY isn't the public half of the Sparkle key in your keychain."
+
 rm -rf "$WORK"
 mkdir -p "$WORK"
 ARCHIVE="$WORK/Axo.xcarchive"
@@ -91,6 +120,7 @@ step "Archiving Release (the engine is embedded and signed by the build)"
 xcodebuild archive \
   -workspace "$ROOT/Axo.xcworkspace" -scheme Axo -configuration Release \
   -destination 'generic/platform=macOS' -archivePath "$ARCHIVE" \
+  -clonedSourcePackagesDirPath "$PACKAGES" \
   -allowProvisioningUpdates AXO_CHROMIUM_OUT="$OUT" \
   > "$RELEASE_DIR/archive.log" 2>&1 \
   || { grep -E 'error:' "$RELEASE_DIR/archive.log" | head -20 || true; die "The archive failed; see $RELEASE_DIR/archive.log."; }
@@ -120,6 +150,10 @@ xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath "$EXPORT" \
 
 step "Checking the engine's signing"
 "$ROOT/scripts/verify-engine-signing.sh" "$APP" --release
+
+# The built app carries the key that was checked.
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$APP/Contents/Info.plist" 2>/dev/null || true)" == "$KEYCHAIN_KEY" ]] \
+  || die "The exported Axo's SUPublicEDKey isn't your Sparkle key."
 
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
 BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")"
@@ -171,6 +205,17 @@ if [[ "$NOTARIZE" == 1 ]]; then
   spctl --assess --type open --context context:primary-signature --verbose "$DMG"
 fi
 
+# MARK: The appcast item
+
+# The update's entry for the appcast on GitHub Pages: its version, its release notes, and the DMG
+# on GitHub Releases with its EdDSA signature. Publishing adds it to appcast.xml (docs/releasing.md).
+step "Signing the update for Sparkle"
+SIGNATURE="$("$SPARKLE_BIN/sign_update" "$DMG")" || die "Couldn't sign the DMG for Sparkle."
+DOWNLOAD_URL="${AXO_RELEASE_DOWNLOAD_URL:-https://github.com/perezstudio/axo-browser/releases/download/v$VERSION}/$NAME.dmg"
+MINIMUM_SYSTEM="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$APP/Contents/Info.plist")"
+"$ROOT/scripts/appcast-item.sh" "$VERSION" "$BUILD" "$MINIMUM_SYSTEM" "$DOWNLOAD_URL" "$SIGNATURE" \
+  "$([[ "$BETA" == 1 ]] && echo beta || true)" "$NOTES" > "$RELEASE_DIR/$NAME.appcast-item.xml"
+
 # MARK: The manifest
 
 # Each release names the engine build it carries: the fork's commit, the Chromium it's based on,
@@ -186,6 +231,8 @@ DMG SHA-256: $(shasum -a 256 "$DMG" | cut -d' ' -f1)
 Signed by: $IDENTITY
 Notarized: $([[ "$NOTARIZE" == 1 ]] && echo yes || echo "no (not for publishing)")
 Uncommitted changes allowed: $([[ "$ALLOW_DIRTY" == 1 ]] && echo "yes (not for publishing)" || echo no)
+Channel: $([[ "$BETA" == 1 ]] && echo beta || echo release)
+Appcast item: $NAME.appcast-item.xml
 Built: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 EOF
 cat "$RELEASE_DIR/$NAME.txt"

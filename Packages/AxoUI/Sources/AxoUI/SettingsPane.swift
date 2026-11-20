@@ -51,7 +51,8 @@ nonisolated public enum SettingsPane: String, CaseIterable, Identifiable, Sendab
         switch self {
         case .general:
             ["navigation bar", "address bar", "address", "sidebar", "above the page", "toolbar", "tint", "color",
-             "theme color", "full website address", "url", "edit the address", "command bar"]
+             "theme color", "full website address", "url", "edit the address", "command bar", "software update",
+             "updates", "check for updates", "automatic updates", "beta", "version"]
         case .profiles:
             ["profile", "add profile", "delete profile", "rename", "website data", "cookies", "logins", "clear",
              "extensions"]

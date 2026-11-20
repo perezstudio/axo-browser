@@ -232,7 +232,7 @@ Axo has two very different kinds of data: a small, relational sidebar model that
 
 ## Distribution, licensing, and funding
 
-**Distribution.** Axo ships as a notarized DMG with Sparkle for updates, outside the Mac App Store. App Store sandboxing makes the private inspector, becoming the default browser, importing other browsers' data, and native messaging hosts harder, which is why serious third-party Mac browsers distribute directly. Costs stay near zero: the $99 a year Apple Developer Program, update files on GitHub Releases, and CloudKit sync with no servers.
+**Distribution.** Axo ships as a notarized DMG with Sparkle for updates, outside the Mac App Store. App Store sandboxing makes the private inspector, becoming the default browser, importing other browsers' data, and native messaging hosts harder, which is why serious third-party Mac browsers distribute directly. Costs stay near zero: the $99 a year Apple Developer Program, update files on GitHub Releases with the appcast on GitHub Pages (#180), and CloudKit sync with no servers.
 
 **Licensing.** Pick the license now so every dependency stays compatible with the 2028 open source release. MPL-2.0 is the likely fit (Firefox uses it); GPL-3.0 would prevent closed forks; Apache-2.0 is the most permissive, and is what DuckDuckGo chose. Keep secrets and signing configuration out of the repo from day one. Private WebKit APIs are fine in open source code, as DuckDuckGo's public codebase shows.
 

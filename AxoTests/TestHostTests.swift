@@ -55,6 +55,12 @@ struct TestHostTests {
         #expect(!AppEnvironment.extensionsFolder.standardizedFileURL.path.hasPrefix(realExtensions))
     }
 
+    @Test func testRunsNeverCheckForUpdates() throws {
+        let update = try #require(AppEnvironment.softwareUpdate, "Test runs have the stand-in, for Settings and UI tests")
+        #expect(update.updater is StandInSoftwareUpdater, "Never Sparkle, so a test run never checks for updates")
+        #expect(AppEnvironment.browserModel?.softwareUpdate === update)
+    }
+
     @Test func testRunsNeverSyncWithICloud() {
         #expect(AppEnvironment.syncsWithICloud(isTestRun: false, isEntitled: true))
         #expect(!AppEnvironment.syncsWithICloud(isTestRun: true, isEntitled: true), "Even in a build signed for iCloud")
