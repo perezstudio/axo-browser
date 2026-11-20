@@ -102,7 +102,7 @@ public struct SettingsView: View {
     @ViewBuilder
     private func pane(_ pane: SettingsPane) -> some View {
         switch pane {
-        case .general: GeneralSettings()
+        case .general: GeneralSettings(softwareUpdate: model.softwareUpdate)
         case .profiles: ProfileSettings(model: model)
         case .spaces: SpaceSettings(model: model)
         case .search: SearchSettings(model: model)

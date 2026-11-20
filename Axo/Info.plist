@@ -46,5 +46,15 @@
 	<string>Websites you allow can capture audio from your Mac, for things like sharing your screen with sound.</string>
 	<key>NSWebBrowserPublicKeyCredentialUsageDescription</key>
 	<string>Websites can ask to use your passkeys to sign you in.</string>
+	<!-- Software updates through Sparkle (#180, docs/releasing.md). The feed lives on GitHub
+	     Pages; updates must be signed with the private key whose public half is the
+	     AXO_SPARKLE_PUBLIC_KEY build setting (public, so it belongs in the repo). Without it,
+	     the build doesn't update itself. Axo checks once a day on its own; Settings turns it off. -->
+	<key>SUFeedURL</key>
+	<string>https://perezstudio.github.io/axo-browser/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>$(AXO_SPARKLE_PUBLIC_KEY)</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
 </dict>
 </plist>

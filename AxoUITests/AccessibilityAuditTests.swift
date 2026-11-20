@@ -302,6 +302,32 @@ final class AccessibilityAuditTests: XCTestCase {
         try audit(app, "profile search engine")
     }
 
+    /// Software Update's window (#180), with the stand-in updater's offer and its status window,
+    /// and its section in Settings › General.
+    @MainActor
+    func testAuditSoftwareUpdate() throws {
+        let app = AxoUITests.makeApp()
+        app.launchEnvironment["AXO_UI_TESTING_UPDATE"] = "available"
+        app.launch()
+        AxoUITests.bringToFront(app)
+        XCTAssertTrue(app.descendants(matching: .any)["sidebar"].waitForExistence(timeout: 5))
+        app.menuBars.menuBarItems["Axo"].click()
+        app.menuBars.menuItems["Check for Updates…"].click()
+        let update = app.descendants(matching: .any)["softwareUpdate"]
+        XCTAssertTrue(update.buttons["installUpdateButton"].waitForExistence(timeout: 10))
+        try audit(app, "software update offer")
+        update.buttons["installUpdateButton"].click()
+        XCTAssertTrue(update.buttons["installAndRelaunchButton"].waitForExistence(timeout: 10))
+        try audit(app, "software update ready")
+        update.buttons["installAndRelaunchButton"].click()
+        XCTAssertTrue(update.waitForNonExistence(timeout: 5))
+
+        app.typeKey(",", modifierFlags: .command)
+        AxoUITests.selectSettingsPane("general", in: app)
+        XCTAssertTrue(app.buttons["checkForUpdatesButton"].waitForExistence(timeout: 5))
+        try audit(app, "software update settings")
+    }
+
     @MainActor
     func testAuditEveryScreen() throws {
         let app = launchApp()

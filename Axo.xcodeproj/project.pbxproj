@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		11D4C1E230705F800027735E /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C1E130705F800027735E /* Sparkle */; };
 		11D4C12130705F800027735E /* AxoUI in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C12030705F800027735E /* AxoUI */; };
 		11D4C12330705F800027735E /* AxoCore in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C12230705F800027735E /* AxoCore */; };
 		11D4C12530705F800027735E /* AxoWeb in Frameworks */ = {isa = PBXBuildFile; productRef = 11D4C12430705F800027735E /* AxoWeb */; };
@@ -109,6 +110,7 @@
 				11D4C1B330705F800027735E /* AxoSync in Frameworks */,
 				11D4C12330705F800027735E /* AxoCore in Frameworks */,
 				11D4C12530705F800027735E /* AxoWeb in Frameworks */,
+				11D4C1E230705F800027735E /* Sparkle in Frameworks */,
 			);
 		};
 		11D4C06F30705F800027735E /* Frameworks */ = {
@@ -191,6 +193,7 @@
 				11D4C1B230705F800027735E /* AxoSync */,
 				11D4C12230705F800027735E /* AxoCore */,
 				11D4C12430705F800027735E /* AxoWeb */,
+				11D4C1E130705F800027735E /* Sparkle */,
 			);
 			productName = Axo;
 			productReference = 11D4C06130705F7E0027735E /* Axo.app */;
@@ -336,6 +339,7 @@
 				11D4C10630705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoSync" */,
 				11D4C10730705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoIntegration" */,
 				11D4C1A130705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoImport" */,
+				11D4C1E030705F800027735E /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 11D4C06230705F7E0027735E /* Products */;
@@ -454,6 +458,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				AXO_SPARKLE_PUBLIC_KEY = "";
 				CODE_SIGN_ENTITLEMENTS = Axo/Axo.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -490,6 +495,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				AXO_SPARKLE_PUBLIC_KEY = "";
 				CODE_SIGN_ENTITLEMENTS = "Axo/Axo-Release.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -953,6 +959,17 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		11D4C1E030705F800027735E /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.10.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		11D4C12030705F800027735E /* AxoUI */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -1023,6 +1040,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 11D4C10330705F800027735E /* XCLocalSwiftPackageReference "Packages/AxoExtensions" */;
 			productName = AxoExtensionsTestSupport;
+		};
+		11D4C1E130705F800027735E /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 11D4C1E030705F800027735E /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
