@@ -42,11 +42,11 @@ if [[ ! -d "$SOURCE" ]]; then
 fi
 
 # The copy is about 500 MB, so skip it when neither the engine, the signing identity, the build
-# configuration, nor how this script signs changed.
+# configuration, nor how this script signs (itself and the helpers' entitlements) changed.
 IDENTITY="${EXPANDED_CODE_SIGN_IDENTITY:--}"
 STAMP="$DERIVED_FILE_DIR/chromium-engine.stamp"
 BINARY="$SOURCE/Versions/Current/Chromium Framework"
-CURRENT="$(stat -f %m "$BINARY") $IDENTITY ${CONFIGURATION:-} $(shasum "$0" | cut -c1-12)"
+CURRENT="$(stat -f %m "$BINARY") $IDENTITY ${CONFIGURATION:-} $(cat "$0" "$SRCROOT/scripts/engine-entitlements"/*.plist | shasum | cut -c1-12)"
 if [[ -d "$DEST/$FRAMEWORK_NAME" && -f "$STAMP" && "$(cat "$STAMP")" == "$CURRENT" ]]; then
   exit 0
 fi
@@ -79,7 +79,7 @@ sign_helper() {
     *) sign --options restrict,library,kill,runtime "$helper" ;;
   esac
 }
-find "$FRAMEWORK/Libraries" -type f -name '*.dylib' 2>/dev/null | sort | while read -r library; do sign "$library"; done
+[[ -d "$FRAMEWORK/Libraries" ]] && find "$FRAMEWORK/Libraries" -type f -name '*.dylib' | sort | while read -r library; do sign "$library"; done
 for helper in "$FRAMEWORK/Helpers"/*; do sign_helper "$helper"; done
 sign "$DEST/$FRAMEWORK_NAME"
 

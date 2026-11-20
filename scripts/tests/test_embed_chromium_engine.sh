@@ -11,8 +11,25 @@ FAILURES=0
 
 fail() { echo "FAIL: $*"; FAILURES=$((FAILURES + 1)); }
 
-# A stand-in engine with Chrome's helpers and libraries.
-OUT="$WORK/out"
+# A copy of Axo's side (the script, the entitlements, the API header), so the test can change it.
+SRC="$WORK/src"
+HEADER="Packages/AxoChromium/Sources/AxoEngineAPI/include/AxoEngineProtocols.h"
+mkdir -p "$SRC/scripts" "$(dirname "$SRC/$HEADER")"
+cp "$ROOT/scripts/embed-chromium-engine.sh" "$SRC/scripts/"
+cp -R "$ROOT/scripts/engine-entitlements" "$SRC/scripts/"
+cp "$ROOT/$HEADER" "$SRC/$HEADER"
+
+# Chrome's helper entitlements, unchanged: only the JIT entitlement.
+for plist in "$ROOT/scripts/engine-entitlements"/*.plist; do
+  keys="$(plutil -convert json -o - "$plist")"
+  [[ "$keys" == '{"com.apple.security.cs.allow-jit":true}' ]] || fail "$(basename "$plist") isn't Chrome's: $keys"
+done
+
+# A stand-in engine with Chrome's helpers and libraries, in a stand-in fork with its API header.
+FORK="$WORK/fork"
+OUT="$FORK/chromium/src/out/Axo"
+mkdir -p "$FORK/axo/public"
+cp "$ROOT/$HEADER" "$FORK/axo/public/"
 FRAMEWORK="$OUT/Chromium.app/Contents/Frameworks/Chromium Framework.framework"
 VERSION="$FRAMEWORK/Versions/A"
 mkdir -p "$VERSION/Helpers" "$VERSION/Libraries" "$VERSION/Resources"
@@ -44,14 +61,14 @@ embed() {
   local configuration="$1" identity="$2" out="${3:-$OUT}"
   : > "$WORK/codesign.log"
   PATH="$WORK/bin:$PATH" CODESIGN_LOG="$WORK/codesign.log" \
-    SRCROOT="$ROOT" TARGET_BUILD_DIR="$WORK/build" FRAMEWORKS_FOLDER_PATH="Axo.app/Contents/Frameworks" \
+    SRCROOT="$SRC" TARGET_BUILD_DIR="$WORK/build" FRAMEWORKS_FOLDER_PATH="Axo.app/Contents/Frameworks" \
     DERIVED_FILE_DIR="$WORK/derived" AXO_CHROMIUM_OUT="$out" CONFIGURATION="$configuration" \
     EXPANDED_CODE_SIGN_IDENTITY="$identity" \
-    "$ROOT/scripts/embed-chromium-engine.sh" > "$WORK/embed.log" 2>&1
+    "$SRC/scripts/embed-chromium-engine.sh" > "$WORK/embed.log" 2>&1
 }
 
 # The recorded call that signed the item whose path ends with `$1`.
-call_for() { grep -F "/$1|" "$WORK/codesign.log" || grep -E "/$(printf '%s' "$1" | sed 's/[][().]/\\&/g')$" "$WORK/codesign.log" || true; }
+call_for() { grep -E "/$(printf '%s' "$1" | sed 's/[][().]/\\&/g')$" "$WORK/codesign.log" || true; }
 
 expect_call() {
   local item="$1" expected="$2" call
@@ -68,7 +85,7 @@ refuse_call() {
 
 # A team identity, Debug: Chrome's options, no timestamp.
 embed Debug "ABCDEF1234567890"
-RUNTIME_JIT="--options|restrict,kill,runtime|--entitlements|$ROOT/scripts/engine-entitlements"
+RUNTIME_JIT="--options|restrict,kill,runtime|--entitlements|$SRC/scripts/engine-entitlements"
 for helper in "Chromium Helper (Renderer).app" "Chromium Helper (Aperitif Renderer).app"; do
   expect_call "$helper" "$RUNTIME_JIT/helper-renderer.plist"
 done
@@ -93,6 +110,11 @@ grep -q "vk_swiftshader_icd.json" "$WORK/codesign.log" && fail "a non-library fi
 # Unchanged: nothing is copied or signed again.
 embed Debug "ABCDEF1234567890"
 [[ ! -s "$WORK/codesign.log" ]] || fail "an unchanged engine was signed again"
+
+# Changed entitlements: signed again.
+echo "<!-- changed -->" >> "$SRC/scripts/engine-entitlements/helper-gpu.plist"
+embed Debug "ABCDEF1234567890"
+[[ -s "$WORK/codesign.log" ]] || fail "changed entitlements didn't sign the engine again"
 
 # Release: the same options with a secure timestamp, which notarization needs.
 embed Release "ABCDEF1234567890"
@@ -120,6 +142,14 @@ if embed Release "-" "$WORK/missing"; then
   fail "a Release build without an engine succeeded"
 else
   grep -q "error: No Chromium engine" "$WORK/embed.log" || fail "a Release build without an engine didn't say why"
+fi
+
+# An API header that differs from the fork's fails the build.
+echo "// changed" >> "$SRC/$HEADER"
+if embed Debug "-"; then
+  fail "a header that differs from the fork's built"
+else
+  grep -q "differs from the fork's" "$WORK/embed.log" || fail "a differing header didn't say why"
 fi
 
 if [[ "$FAILURES" -gt 0 ]]; then

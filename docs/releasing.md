@@ -21,17 +21,19 @@ Axo ships outside the Mac App Store, as a DMG signed with a Developer ID and not
 scripts/package-release.sh
 ```
 
-It refuses if Axo or the engine checkout has uncommitted changes, if the engine build is older than the fork's last change, or if the API headers differ. Then it:
+It refuses if Axo or the engine checkout has uncommitted changes, if the engine build is older than the fork's last change, or if the API headers differ. Those checks can't prove the engine build came from the checked-out commit. Edits made directly in `chromium/src` (gitignored in the fork) aren't seen, and neither is checking out an older commit after building a newer one. So build the engine from the commit you're releasing, right before packaging. Then it:
 
 1. Archives Release. The embed phase copies the engine in and signs it as Chrome does, with secure timestamps.
 2. Exports the archive with the Developer ID.
-3. Checks the result with `scripts/verify-engine-signing.sh --release`: every helper has Hardened Runtime, the renderer and GPU helpers have Chrome's JIT entitlement, everything is signed by the team with a timestamp, and the app has no `get-task-allow`.
-4. Notarizes and staples `Axo.app`, so a copied app opens offline. Then it builds the DMG (Axo and an Applications link), signs it, and notarizes and staples that too.
-5. Writes the manifest beside the DMG. It records Axo's commit and the engine build the DMG carries: the fork's commit, the Chromium version, and the engine binary's SHA-256.
+3. Checks the result with `scripts/verify-engine-signing.sh --release`: every helper has Hardened Runtime, the renderer and GPU helpers have Chrome's JIT entitlement, every item (app, framework, helpers, and libraries) is signed with the Developer ID and a timestamp, and the app has no `get-task-allow`.
+4. Notarizes and staples `Axo.app`, so a copied app opens offline. Then it builds the DMG (Axo and an Applications link), signs it with the same certificate as the app (by fingerprint, so a renewed certificate beside an expired one can't confuse it), and notarizes and staples that too.
+5. Writes the manifest beside the DMG. It records Axo's commit and what identifies the engine build the DMG carries: the fork's commit, the Chromium version, and the engine binary's SHA-256.
 
 Output goes in `build/release/` (gitignored, or `AXO_RELEASE_DIR`): `Axo-<version>-<build>.dmg`, its `.txt` manifest, and the archive and export logs. Set the version in the Axo target's `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` first.
 
 To try a DMG on this Mac without notarizing, use `--skip-notarize`. With `--allow-dirty` it also packages uncommitted changes. The manifest marks both; never publish those DMGs.
+
+Debug builds signed with your team identity also get Hardened Runtime on the engine's helpers, so a debugger can't attach to renderer or GPU processes. Use an ad hoc build (`CODE_SIGN_IDENTITY=-`) to debug them.
 
 ## Checking a release
 

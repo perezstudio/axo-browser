@@ -5,7 +5,8 @@
 # app's team, and the whole bundle verifies strictly. scripts/package-release.sh runs it on the
 # exported app; run it by hand on any build signed with a team identity:
 #   scripts/verify-engine-signing.sh path/to/Axo.app [--release]
-# With --release it also requires a Developer ID signature and secure timestamps, which
+# With --release it also requires a Developer ID signature and a secure timestamp on every item,
+# which
 # notarization needs.
 set -euo pipefail
 
@@ -39,6 +40,9 @@ check() {
   [[ "$(sed -n 's/^TeamIdentifier=//p' <<<"$info")" == "$TEAM" ]] || fail "$(basename "$item") isn't signed by team $TEAM."
   if [[ "$RELEASE" == 1 ]]; then
     grep -q '^Timestamp=' <<<"$info" || fail "$(basename "$item") has no secure timestamp."
+    # Apple Development and Developer ID certificates share the team, so check the certificate
+    # too: anything the export left signed for development would only fail at notarization.
+    grep -q '^Authority=Developer ID Application' <<<"$info" || fail "$(basename "$item") isn't signed with a Developer ID."
   fi
 }
 
@@ -67,7 +71,6 @@ done < <(find "$FRAMEWORK/Versions/Current/Libraries" -type f -name '*.dylib')
 check "$FRAMEWORK"
 
 if [[ "$RELEASE" == 1 ]]; then
-  details "$APP" | grep -q '^Authority=Developer ID Application' || fail "Axo isn't signed with a Developer ID."
   check "$APP"
   [[ ",$FLAGS," == *",runtime,"* ]] || fail "Axo has no Hardened Runtime."
   entitlements_of "$APP" | grep -q "com.apple.security.get-task-allow" && fail "Axo allows debugging (get-task-allow), which notarization refuses."

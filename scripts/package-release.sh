@@ -56,7 +56,8 @@ for tool in xcodebuild codesign hdiutil ditto shasum; do
   command -v "$tool" > /dev/null || die "$tool is missing."
 done
 AXO_COMMIT="$(git -C "$ROOT" rev-parse HEAD)"
-# The fork's own files only: chromium/src is Chromium's checkout, which the fork's patches change.
+# The fork's own files only: chromium/src is Chromium's checkout (gitignored in the fork), which
+# the fork's patches change, so edits made there directly aren't seen.
 ENGINE_COMMIT="$(git -C "$FORK" rev-parse HEAD)"
 if [[ "$ALLOW_DIRTY" == 0 ]]; then
   [[ -z "$(git -C "$ROOT" status --porcelain)" ]] || die "Axo has uncommitted changes. Commit them, or pass --allow-dirty for a DMG you won't publish."
@@ -64,11 +65,14 @@ if [[ "$ALLOW_DIRTY" == 0 ]]; then
 fi
 cmp -s "$FORK/axo/public/AxoEngineProtocols.h" "$ROOT/Packages/AxoChromium/Sources/AxoEngineAPI/include/AxoEngineProtocols.h" \
   || die "Axo's engine API header differs from the engine's. Use the engine build that matches this Axo."
-# The engine must be built from the commit it's checked out at: a build older than the newest
-# change to the fork's code would carry something else.
+# A build older than the newest change to the fork's code carries something else. This can't
+# catch every mismatch (checking out an older commit after building a newer one passes), so build
+# the engine from the commit you're releasing; the manifest names the checkout's commit.
 NEWEST_CHANGE="$(git -C "$FORK" log -1 --format=%ct -- axo patches)"
 [[ "$(stat -f %m "$ENGINE_BINARY")" -ge "$NEWEST_CHANGE" ]] \
   || die "The engine build at $OUT is older than the engine checkout's last change. Rebuild it."
+# Hashed now, so a rebuild during the run can't change what the manifest names.
+ENGINE_SHA="$(shasum -a 256 "$ENGINE_BINARY" | cut -d' ' -f1)"
 CHROMIUM_VERSION="$(cat "$FORK/CHROMIUM_VERSION" 2>/dev/null || echo unknown)"
 if [[ "$NOTARIZE" == 1 ]]; then
   xcrun notarytool history --keychain-profile "$PROFILE" > /dev/null 2>&1 \
@@ -89,7 +93,7 @@ xcodebuild archive \
   -destination 'generic/platform=macOS' -archivePath "$ARCHIVE" \
   -allowProvisioningUpdates AXO_CHROMIUM_OUT="$OUT" \
   > "$RELEASE_DIR/archive.log" 2>&1 \
-  || { grep -E 'error:' "$RELEASE_DIR/archive.log" | head -20; die "The archive failed; see $RELEASE_DIR/archive.log."; }
+  || { grep -E 'error:' "$RELEASE_DIR/archive.log" | head -20 || true; die "The archive failed; see $RELEASE_DIR/archive.log."; }
 
 step "Exporting with your Developer ID"
 TEAM="$(/usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:Team' "$ARCHIVE/Info.plist" 2>/dev/null \
@@ -112,7 +116,7 @@ EOF
 xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath "$EXPORT" \
   -exportOptionsPlist "$WORK/ExportOptions.plist" -allowProvisioningUpdates \
   > "$RELEASE_DIR/export.log" 2>&1 \
-  || { grep -E 'error' "$RELEASE_DIR/export.log" | head -20; die "The export failed; see $RELEASE_DIR/export.log."; }
+  || { grep -E 'error' "$RELEASE_DIR/export.log" | head -20 || true; die "The export failed; see $RELEASE_DIR/export.log."; }
 
 step "Checking the engine's signing"
 "$ROOT/scripts/verify-engine-signing.sh" "$APP" --release
@@ -121,11 +125,17 @@ VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/
 BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")"
 NAME="Axo-$VERSION-$BUILD"
 IDENTITY="$(codesign -d --verbose=2 "$APP" 2>&1 | sed -n 's/^Authority=//p' | head -1)"
+# The DMG is signed with the very certificate that signed the app, by its SHA-1 fingerprint: a
+# name can match both a renewed certificate and the expired one it replaced.
+( cd "$WORK" && codesign -d --extract-certificates "$APP" 2>/dev/null )
+CERTIFICATE="$(shasum -a 1 "$WORK/codesign0" | cut -d' ' -f1 | tr a-f A-F)"
 
 # Submits a file to Apple's notary service, waits for it, and prints Apple's log if it's refused.
 notarize() {
   local file="$1" result id status
-  result="$(xcrun notarytool submit "$file" --keychain-profile "$PROFILE" --wait --output-format plist)"
+  # notarytool exits non-zero for a refused submission; read its answer anyway, for the log.
+  result="$(xcrun notarytool submit "$file" --keychain-profile "$PROFILE" --wait --output-format plist)" || true
+  [[ -n "$result" ]] || die "Couldn't submit $(basename "$file") for notarization."
   id="$(/usr/libexec/PlistBuddy -c 'Print :id' /dev/stdin <<<"$result")"
   status="$(/usr/libexec/PlistBuddy -c 'Print :status' /dev/stdin <<<"$result")"
   if [[ "$status" != "Accepted" ]]; then
@@ -151,7 +161,7 @@ ln -s /Applications "$STAGE/Applications"
 DMG="$RELEASE_DIR/$NAME.dmg"
 rm -f "$DMG"
 hdiutil create -volname "Axo" -srcfolder "$STAGE" -fs HFS+ -format ULFO "$DMG" > /dev/null
-codesign --sign "$IDENTITY" --timestamp "$DMG"
+codesign --sign "$CERTIFICATE" --timestamp "$DMG"
 
 if [[ "$NOTARIZE" == 1 ]]; then
   step "Notarizing the DMG"
@@ -171,7 +181,7 @@ Axo $VERSION ($BUILD)
 Axo commit: $AXO_COMMIT
 Engine commit (axo-chromium): $ENGINE_COMMIT
 Chromium: $CHROMIUM_VERSION
-Engine binary SHA-256: $(shasum -a 256 "$ENGINE_BINARY" | cut -d' ' -f1)
+Engine binary SHA-256: $ENGINE_SHA
 DMG SHA-256: $(shasum -a 256 "$DMG" | cut -d' ' -f1)
 Signed by: $IDENTITY
 Notarized: $([[ "$NOTARIZE" == 1 ]] && echo yes || echo "no (not for publishing)")
