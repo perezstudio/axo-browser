@@ -135,10 +135,8 @@ final class SearchEngineUITests: XCTestCase {
         let port = try AxoUITests.closedPort()
         addLocalEngine(in: app, port: port)
         AxoUITests.selectSettingsPane("profiles", in: app)
-        let picker = app.popUpButtons["profileSearchEnginePicker"]
-        XCTAssertTrue(picker.waitForExistence(timeout: 5))
-        picker.click()
-        app.menuItems["Local Search"].click()
+        XCTAssertTrue(app.radioButtons["Local Search"].waitForExistence(timeout: 5))
+        app.radioButtons["Local Search"].click()
         app.typeKey("w", modifierFlags: .command)
 
         app.typeKey("t", modifierFlags: .command)
