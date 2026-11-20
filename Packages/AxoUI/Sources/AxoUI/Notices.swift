@@ -19,8 +19,12 @@ public struct Notice: Identifiable, Equatable {
     public let message: String
     /// Where it shows.
     public let placement: Placement
-    /// Undoes the action, when it can be undone; the notice shows an Undo button.
+    /// Undoes the action, when it can be undone; the notice shows a button for it, titled
+    /// ``actionTitle``.
     let undo: (@MainActor () async -> Void)?
+    /// The button's title: Undo, or another action the notice offers (Restart Now for an update
+    /// ready to install, #180).
+    public let actionTitle: String
 
     /// Whether the notice has an Undo button.
     public var canUndo: Bool { undo != nil }
@@ -35,9 +39,11 @@ extension BrowserModel {
     /// Shows `message` as a notice, replacing any notice showing, and announces it for VoiceOver,
     /// so the two always say the same thing. It goes away after a few seconds, unless the pointer
     /// is over it (``holdNotice(_:)``).
-    func postNotice(_ message: String, placement: Notice.Placement = .page, undo: (@MainActor () async -> Void)? = nil) {
-        notice = Notice(message: message, placement: placement, undo: undo)
-        announce(undo == nil ? message : "\(message). Undo is available.")
+    func postNotice(_ message: String, placement: Notice.Placement = .page, actionTitle: String = "Undo",
+                    undo: (@MainActor () async -> Void)? = nil) {
+        notice = Notice(message: message, placement: placement, undo: undo, actionTitle: actionTitle)
+        let sentence = message.hasSuffix(".") ? message : "\(message)."
+        announce(undo == nil ? message : "\(sentence) \(actionTitle) is available.")
         scheduleNoticeDismissal()
     }
 
@@ -123,7 +129,7 @@ struct NoticeView: View {
                 .lineLimit(1)
             if notice.canUndo {
                 // Reachable with Full Keyboard Access (Tab), but never focused on its own.
-                Button("Undo") { Task { await model.undoNotice() } }
+                Button(notice.actionTitle) { Task { await model.undoNotice() } }
                     .buttonStyle(.borderless)
                     .fontWeight(.semibold)
                     .accessibilityIdentifier("noticeUndoButton")
@@ -142,7 +148,7 @@ struct NoticeView: View {
         .accessibilityLabel(notice.message)
         .accessibilityActions {
             if notice.canUndo {
-                Button("Undo") { Task { await model.undoNotice() } }
+                Button(notice.actionTitle) { Task { await model.undoNotice() } }
             }
         }
         .accessibilityIdentifier("notice")

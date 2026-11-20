@@ -5,6 +5,8 @@ import SwiftUI
 /// The General pane in Settings: where the navigation bar goes, whether the toolbar above the page
 /// takes the page's color, and how the sidebar's address bar shows and edits the address.
 struct GeneralSettings: View {
+    /// Software updates, when this build has them (#180).
+    var softwareUpdate: SoftwareUpdate?
     @AppStorage(NavigationBarPlacement.storageKey) private var chosenNavigationBarPlacement = NavigationBarPlacement.sidebar
     @AppStorage(TabsPlacement.storageKey) private var tabsPlacement = TabsPlacement.sidebar
     @AppStorage(AddressBarSettings.showsFullAddressKey) private var showsFullAddress = false
@@ -66,6 +68,9 @@ struct GeneralSettings: View {
             Text("Clicking the address bar or pressing ⌘L opens the command bar over the page, or edits the address right in the sidebar, with suggestions below it.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+            if let softwareUpdate {
+                SoftwareUpdateSettings(update: softwareUpdate)
+            }
         }
         .formStyle(.grouped)
     }

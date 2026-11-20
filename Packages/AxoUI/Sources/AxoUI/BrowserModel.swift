@@ -301,6 +301,13 @@ public final class BrowserModel {
     @ObservationIgnored public var defaultBrowser: (any DefaultBrowserSetting)? {
         didSet { refreshDefaultBrowserStatus() }
     }
+    #if os(macOS)
+    /// Software updates (#180), set by the app on the Mac. Settings › General shows its section,
+    /// and an update that downloaded in the background posts a notice with Restart Now.
+    @ObservationIgnored public var softwareUpdate: SoftwareUpdate? {
+        didSet { connectSoftwareUpdate() }
+    }
+    #endif
     /// Links that arrived before the model finished starting.
     @ObservationIgnored private var pendingExternalURLs: [(url: URL, sourceApp: String?)] = []
     /// Whether the window offers its page to the person's other devices through Handoff. Off in
