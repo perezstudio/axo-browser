@@ -38,18 +38,18 @@ Axo ships outside the Mac App Store, as a DMG signed with a Developer ID and not
 scripts/package-release.sh --notes notes.txt
 ```
 
-`--notes` takes the release notes as plain text, which the update window shows as they are (with bullets as `•` and a blank line between sections). Add `--beta` for a beta: it goes on the appcast's `beta` channel, which only people who turned on Include beta versions are offered.
+`--notes` takes the release notes as plain text (the item marks them `sparkle:format="plain-text"`), which the update window shows as they are; write bullets as `•` and leave a blank line between sections. Add `--beta` for a beta: it goes on the appcast's `beta` channel, which only people who turned on Include beta versions are offered.
 
-It refuses if Axo or the engine checkout has uncommitted changes, if the engine build is older than the fork's last change, or if the API headers differ. Those checks can't prove the engine build came from the checked-out commit. Edits made directly in `chromium/src` (gitignored in the fork) aren't seen, and neither is checking out an older commit after building a newer one. So build the engine from the commit you're releasing, right before packaging. Then it:
+It refuses if `AXO_SPARKLE_PUBLIC_KEY` isn't the public half of the Sparkle key in your keychain (every update would be refused; checked before building), if Axo or the engine checkout has uncommitted changes, if the engine build is older than the fork's last change, or if the API headers differ. Those checks can't prove the engine build came from the checked-out commit. Edits made directly in `chromium/src` (gitignored in the fork) aren't seen, and neither is checking out an older commit after building a newer one. So build the engine from the commit you're releasing, right before packaging. Then it:
 
 1. Archives Release. The embed phase copies the engine in and signs it as Chrome does, with secure timestamps.
 2. Exports the archive with the Developer ID.
 3. Checks the result with `scripts/verify-engine-signing.sh --release`: every helper has Hardened Runtime, the renderer and GPU helpers have Chrome's JIT entitlement, every item (app, framework, helpers, and libraries) is signed with the Developer ID and a timestamp, and the app has no `get-task-allow`.
 4. Notarizes and staples `Axo.app`, so a copied app opens offline. Then it builds the DMG (Axo and an Applications link), signs it with the same certificate as the app (by fingerprint, so a renewed certificate beside an expired one can't confuse it), and notarizes and staples that too.
-5. Checks that `AXO_SPARKLE_PUBLIC_KEY` is the public half of the Sparkle key in your keychain (otherwise every update would be refused), then signs the DMG with it (Sparkle's `sign_update`) and writes the update's appcast `<item>`: its version and build, the minimum macOS, the release notes, the channel, and the DMG's download address on GitHub Releases (`releases/download/v<version>/`, or `AXO_RELEASE_DOWNLOAD_URL`) with its signature and length.
+5. Signs the DMG with it (Sparkle's `sign_update`) and writes the update's appcast `<item>`: its version and build, the minimum macOS, the release notes, the channel, and the DMG's download address on GitHub Releases (`releases/download/v<version>/`, or `AXO_RELEASE_DOWNLOAD_URL`) with its signature and length.
 6. Writes the manifest beside the DMG. It records Axo's commit and what identifies the engine build the DMG carries: the fork's commit, the Chromium version, and the engine binary's SHA-256.
 
-Output goes in `build/release/` (gitignored, or `AXO_RELEASE_DIR`): `Axo-<version>-<build>.dmg`, its `.txt` manifest, its `.appcast-item.xml`, and the archive and export logs. Set the version in the Axo target's `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` first.
+Output goes in `build/release/` (gitignored, or `AXO_RELEASE_DIR`): `Axo-<version>-<build>.dmg`, its `.txt` manifest, its `.appcast-item.xml`, the archive and export logs, and the resolved packages (kept between runs). Set the version in the Axo target's `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` first.
 
 To try a DMG on this Mac without notarizing, use `--skip-notarize`. With `--allow-dirty` it also packages uncommitted changes. The manifest marks both; never publish those DMGs.
 

@@ -8,7 +8,8 @@ import Observation
 /// updates (#180). It reports what happens to the ``SoftwareUpdate`` it's given, which shows it.
 @MainActor
 public protocol SoftwareUpdater: AnyObject {
-    /// Starts a check the person asked for (the menu's Check for Updates…, Settings' Check Now).
+    /// Starts a check the person asked for (the menu's Check for Updates…, Settings' Check Now,
+    /// Try Again), once any session still ending has ended.
     func checkForUpdates()
     /// Whether Axo checks for updates on its own, once a day.
     var automaticallyChecksForUpdates: Bool { get set }
@@ -62,7 +63,8 @@ public final class SoftwareUpdate {
         public var version: String
         /// What's new, as text, once it's known.
         public var releaseNotes: String?
-        /// Whether it's an update Axo needs, which can't be skipped or put off.
+        /// Whether it's an update Axo needs, which can't be skipped (closing the window still puts
+        /// it off, as in Sparkle's own window).
         public var isCritical: Bool
         /// An update that can't be installed from here, only read about at ``infoURL``.
         public var isInformational: Bool
@@ -148,7 +150,8 @@ public final class SoftwareUpdate {
     public private(set) var phase: Phase = .idle
     /// An update waiting for Axo to quit, which Restart to Update Axo installs now.
     public private(set) var pendingRestart: PendingRestart?
-    /// Whether a check can start now (not while one is going). The updater keeps it current.
+    /// Whether the updater can start a check, as it reports it. Sparkle says yes while a check the
+    /// person asked for is showing, so ``checkForUpdates()`` looks at ``phase`` first.
     public var canCheckForUpdates = false
     /// When Axo last checked, for Settings.
     public private(set) var lastUpdateCheckDate: Date?
@@ -207,11 +210,12 @@ public final class SoftwareUpdate {
 
     /// Checks for updates now.
     public func checkForUpdates() {
-        guard canCheckForUpdates else {
-            // A check or update is under way: show it rather than start another.
-            if phase != .idle { presenter?.show(activate: true) }
+        // A check or update is showing: bring it forward rather than start another.
+        guard phase == .idle else {
+            presenter?.show(activate: true)
             return
         }
+        guard canCheckForUpdates else { return }
         updater?.checkForUpdates()
     }
 
@@ -221,7 +225,8 @@ public final class SoftwareUpdate {
         switch phase {
         case .found(let offer):
             if offer.isInformational {
-                if let url = offer.infoURL { openURL?(url) }
+                // The feed isn't signed, so only a web page opens.
+                if let url = offer.infoURL, ["http", "https"].contains(url.scheme?.lowercased()) { openURL?(url) }
                 reply(.later)
             } else {
                 reply(.install)
@@ -229,7 +234,8 @@ public final class SoftwareUpdate {
         case .readyToInstall:
             reply(.install)
         case .installing(canRetry: true):
-            take(&retryTermination)?()
+            // Sparkle allows asking again each time something keeps Axo open.
+            retryTermination?()
         default:
             break
         }
@@ -238,6 +244,8 @@ public final class SoftwareUpdate {
     /// Skip This Version.
     public func skipVersion() {
         guard case .found(let offer) = phase, !offer.isCritical else { return }
+        // Skipping an update that waits to install cancels it.
+        if offer.stage != .notDownloaded { clearPendingRestart() }
         reply(.skip)
     }
 
@@ -245,8 +253,10 @@ public final class SoftwareUpdate {
     /// installs when Axo quits, and Restart to Update Axo installs it sooner.
     public func remindLater() {
         switch phase {
-        case .found:
+        case .found(let offer):
             reply(.later)
+            // One already installing installs on quit.
+            if offer.stage == .installing, pendingRestart == nil { pendingRestart = PendingRestart(version: offer.version) }
         case .readyToInstall:
             reply(.later)
             if let offeredVersion { pendingRestart = PendingRestart(version: offeredVersion) }
@@ -279,11 +289,12 @@ public final class SoftwareUpdate {
         }
     }
 
-    /// Try Again, after something went wrong.
+    /// Try Again, after something went wrong. Sparkle ends the failed session only after the
+    /// acknowledgement, so the updater starts the new check once it has (``SoftwareUpdater``).
     public func tryAgain() {
         guard case .failed = phase else { return }
         acknowledge()
-        checkForUpdates()
+        updater?.checkForUpdates()
     }
 
     /// The person closed the window: whatever its Cancel, Remind Me Later, or OK would do.
@@ -301,9 +312,10 @@ public final class SoftwareUpdate {
     /// version.
     public func restartToUpdate() {
         guard pendingRestart != nil else { return }
-        if let install = take(&installNow) {
-            pendingRestart = nil
-            install()
+        if let installNow {
+            // Kept: Sparkle allows it again if something (a page's "Leave this page?") keeps Axo
+            // open. It goes once the update installs or is skipped.
+            installNow()
         } else {
             // A ready update put off from the window: checking again resumes it, offering Install
             // and Relaunch.
@@ -333,6 +345,8 @@ public final class SoftwareUpdate {
     /// An update is available; `reply` takes the person's choice.
     public func updaterFound(_ offer: Offer, reply: @escaping (Choice) -> Void) {
         dropReplies()
+        // A newer version than the one waiting replaces it.
+        if let waiting = pendingRestart, waiting.version != offer.version { clearPendingRestart() }
         choiceReply = reply
         offeredVersion = offer.version
         lastUpdateCheckDate = updater?.lastUpdateCheckDate ?? lastUpdateCheckDate
@@ -412,7 +426,7 @@ public final class SoftwareUpdate {
     /// The update installed. Nothing more to show: Axo opens in the new version.
     public func updaterInstalled(acknowledgement: @escaping () -> Void) {
         dropReplies()
-        pendingRestart = nil
+        clearPendingRestart()
         finish()
         acknowledgement()
     }
@@ -438,6 +452,11 @@ public final class SoftwareUpdate {
     }
 
     // MARK: Private
+
+    private func clearPendingRestart() {
+        pendingRestart = nil
+        installNow = nil
+    }
 
     private func show(_ phase: Phase, activate: Bool) {
         let wasIdle = self.phase == .idle

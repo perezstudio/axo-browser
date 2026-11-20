@@ -75,10 +75,14 @@ if [[ "$RELEASE" == 1 ]]; then
   # signatures, so they're checked only here).
   SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
   [[ -d "$SPARKLE" ]] || fail "$APP has no Sparkle framework."
+  SPARKLE_HELPERS=0
   while read -r item; do
+    SPARKLE_HELPERS=$((SPARKLE_HELPERS + 1))
     check "$item"
     [[ ",$FLAGS," == *",runtime,"* ]] || fail "$(basename "$item") has no Hardened Runtime (flags: $FLAGS)."
   done < <(find -H "$SPARKLE/Versions/Current" -maxdepth 2 \( -name '*.app' -o -name '*.xpc' -o -name Autoupdate \))
+  # Autoupdate, Updater.app, and the Downloader and Installer services.
+  [[ "$SPARKLE_HELPERS" -ge 4 ]] || fail "Sparkle has $SPARKLE_HELPERS helpers; expected Autoupdate, Updater.app, and its XPC services."
   check "$SPARKLE"
   check "$APP"
   [[ ",$FLAGS," == *",runtime,"* ]] || fail "Axo has no Hardened Runtime."

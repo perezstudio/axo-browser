@@ -89,10 +89,11 @@ struct SoftwareUpdateTests {
 
     @Test func checkingAgainDuringASessionShowsItsWindow() {
         startCheck()
-        update.canCheckForUpdates = false
+        // Sparkle says it can check while a check the person asked for is showing.
+        update.canCheckForUpdates = true
         update.checkForUpdates()
         #expect(window.shows == [true, true])
-        #expect(updater.checks == 0)
+        #expect(updater.checks == 0, "No second check while one shows")
     }
 
     @Test func closingTheWindowWhileCheckingCancels() {
@@ -213,11 +214,11 @@ struct SoftwareUpdateTests {
         #expect(update.phase == .installing(canRetry: true))
         update.install()
         update.install()
-        #expect(replies.retries == 1, "Asks Axo to quit again, once")
+        #expect(replies.retries == 2, "Sparkle allows asking again each time a page keeps Axo open")
 
         update.updaterInstalling(applicationTerminated: true) { replies.retries += 1 }
         update.install()
-        #expect(replies.retries == 1, "Nothing to retry once Axo has quit")
+        #expect(replies.retries == 2, "Nothing to retry once Axo has quit")
 
         update.updaterInstalled { replies.acknowledgements += 1 }
         #expect(replies.acknowledgements == 1)
@@ -270,6 +271,9 @@ struct SoftwareUpdateTests {
         #expect(update.alertTitle == "Couldn’t check for updates")
         #expect(update.alertMessage.contains("Check your internet connection"))
 
+        // Whatever the updater reports while its session ends, Try Again reaches it (it waits for
+        // the session itself).
+        update.canCheckForUpdates = false
         update.tryAgain()
         #expect(replies.acknowledgements == 1)
         #expect(updater.checks == 1)
@@ -381,10 +385,50 @@ struct SoftwareUpdateTests {
 
         await model.undoNotice()
         #expect(replies.installs == 1, "Restart Now installs it")
+        // A page's "Leave this page?" can keep Axo open; Sparkle allows asking again.
+        #expect(update.pendingRestart?.version == "1.1", "Still waiting until it installs")
+        update.restartToUpdate()
+        #expect(replies.installs == 2)
+        #expect(updater.checks == 0)
+
+        update.updaterInstalled {}
         #expect(update.pendingRestart == nil)
         update.restartToUpdate()
-        #expect(replies.installs == 1, "Once")
-        #expect(updater.checks == 0)
+        #expect(replies.installs == 2, "Nothing left to install")
+    }
+
+    @Test func skippingAWaitingUpdateDropsRestartToUpdate() {
+        var installs = 0
+        update.updaterWillInstallOnQuit(version: "1.1") { installs += 1 }
+        offer("1.1", stage: .installing)
+        update.skipVersion()
+        #expect(update.pendingRestart == nil, "Skipping cancels the installation")
+        update.restartToUpdate()
+        #expect(installs == 0)
+    }
+
+    @Test func aNewerOfferReplacesTheWaitingUpdate() {
+        var installs = 0
+        update.updaterWillInstallOnQuit(version: "1.1") { installs += 1 }
+        offer("1.2")
+        #expect(update.pendingRestart == nil)
+        update.restartToUpdate()
+        #expect(installs == 0, "The old version's install isn't run")
+    }
+
+    @Test func puttingOffAnUpdateAlreadyInstallingOffersRestartToUpdate() {
+        offer("1.1", stage: .installing)
+        update.remindLater()
+        #expect(replies.choices == [.later])
+        #expect(update.pendingRestart?.version == "1.1", "It installs on quit")
+    }
+
+    @Test func anInformationalUpdatesPageOpensOnlyOnTheWeb() {
+        var opened: [URL] = []
+        update.openURL = { opened.append($0) }
+        update.updaterFound(.init(version: "1.1", isInformational: true, infoURL: URL(string: "file:///etc/hosts"))) { _ in }
+        update.install()
+        #expect(opened.isEmpty, "The feed isn't signed, so only http and https open")
     }
 }
 #endif

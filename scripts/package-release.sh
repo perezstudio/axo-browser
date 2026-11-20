@@ -92,6 +92,22 @@ if [[ "$NOTARIZE" == 1 ]]; then
     || die "No notarytool keychain profile named \"$PROFILE\". Make one with: xcrun notarytool store-credentials \"$PROFILE\" (docs/releasing.md)."
 fi
 
+# Sparkle's tools come with the Sparkle package. Resolved into a folder kept between runs, so a
+# release doesn't clone its packages again each time.
+PACKAGES="$RELEASE_DIR/packages"
+xcodebuild -resolvePackageDependencies -workspace "$ROOT/Axo.xcworkspace" -scheme Axo \
+  -clonedSourcePackagesDirPath "$PACKAGES" > /dev/null 2>&1 || die "Couldn't resolve Axo's packages."
+SPARKLE_BIN="$PACKAGES/artifacts/sparkle/Sparkle/bin"
+[[ -x "$SPARKLE_BIN/sign_update" ]] || die "Sparkle's tools aren't at $SPARKLE_BIN."
+# Updates are signed with the private key in your keychain; the app checks them with the public
+# key it carries. If they don't match, every update would be refused, so check before building.
+APP_KEY="$(xcodebuild -showBuildSettings -workspace "$ROOT/Axo.xcworkspace" -scheme Axo -configuration Release 2>/dev/null \
+  | sed -n 's/^ *AXO_SPARKLE_PUBLIC_KEY = //p' | head -1)"
+[[ -n "$APP_KEY" ]] || die "The Axo target's AXO_SPARKLE_PUBLIC_KEY isn't set (docs/releasing.md)."
+KEYCHAIN_KEY="$("$SPARKLE_BIN/generate_keys" -p 2>/dev/null || true)"
+[[ -n "$KEYCHAIN_KEY" ]] || die "No Sparkle signing key in your keychain. Make one with $SPARKLE_BIN/generate_keys (docs/releasing.md)."
+[[ "$APP_KEY" == "$KEYCHAIN_KEY" ]] || die "AXO_SPARKLE_PUBLIC_KEY isn't the public half of the Sparkle key in your keychain."
+
 rm -rf "$WORK"
 mkdir -p "$WORK"
 ARCHIVE="$WORK/Axo.xcarchive"
@@ -104,7 +120,7 @@ step "Archiving Release (the engine is embedded and signed by the build)"
 xcodebuild archive \
   -workspace "$ROOT/Axo.xcworkspace" -scheme Axo -configuration Release \
   -destination 'generic/platform=macOS' -archivePath "$ARCHIVE" \
-  -clonedSourcePackagesDirPath "$WORK/packages" \
+  -clonedSourcePackagesDirPath "$PACKAGES" \
   -allowProvisioningUpdates AXO_CHROMIUM_OUT="$OUT" \
   > "$RELEASE_DIR/archive.log" 2>&1 \
   || { grep -E 'error:' "$RELEASE_DIR/archive.log" | head -20 || true; die "The archive failed; see $RELEASE_DIR/archive.log."; }
@@ -135,16 +151,9 @@ xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath "$EXPORT" \
 step "Checking the engine's signing"
 "$ROOT/scripts/verify-engine-signing.sh" "$APP" --release
 
-# Sparkle's tools come with the Sparkle package the archive resolved.
-SPARKLE_BIN="$WORK/packages/artifacts/sparkle/Sparkle/bin"
-[[ -x "$SPARKLE_BIN/sign_update" ]] || die "Sparkle's tools aren't at $SPARKLE_BIN."
-# Updates are signed with the private key in your keychain; the app checks them with the public
-# key it carries. If they don't match, every update would be refused, so check before going on.
-APP_KEY="$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$APP/Contents/Info.plist" 2>/dev/null || true)"
-[[ -n "$APP_KEY" ]] || die "Axo has no SUPublicEDKey: set the Axo target's AXO_SPARKLE_PUBLIC_KEY (docs/releasing.md)."
-KEYCHAIN_KEY="$("$SPARKLE_BIN/generate_keys" -p 2>/dev/null || true)"
-[[ -n "$KEYCHAIN_KEY" ]] || die "No Sparkle signing key in your keychain. Make one with $SPARKLE_BIN/generate_keys (docs/releasing.md)."
-[[ "$APP_KEY" == "$KEYCHAIN_KEY" ]] || die "AXO_SPARKLE_PUBLIC_KEY isn't the public half of the Sparkle key in your keychain."
+# The built app carries the key that was checked.
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$APP/Contents/Info.plist" 2>/dev/null || true)" == "$KEYCHAIN_KEY" ]] \
+  || die "The exported Axo's SUPublicEDKey isn't your Sparkle key."
 
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
 BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")"
@@ -204,21 +213,8 @@ step "Signing the update for Sparkle"
 SIGNATURE="$("$SPARKLE_BIN/sign_update" "$DMG")" || die "Couldn't sign the DMG for Sparkle."
 DOWNLOAD_URL="${AXO_RELEASE_DOWNLOAD_URL:-https://github.com/perezstudio/axo-browser/releases/download/v$VERSION}/$NAME.dmg"
 MINIMUM_SYSTEM="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$APP/Contents/Info.plist")"
-xml_escape() { sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g'; }
-{
-  echo "<item>"
-  echo "  <title>Axo $VERSION</title>"
-  echo "  <pubDate>$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')</pubDate>"
-  echo "  <sparkle:version>$BUILD</sparkle:version>"
-  echo "  <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>"
-  echo "  <sparkle:minimumSystemVersion>$MINIMUM_SYSTEM</sparkle:minimumSystemVersion>"
-  if [[ "$BETA" == 1 ]]; then echo "  <sparkle:channel>beta</sparkle:channel>"; fi
-  if [[ -n "$NOTES" ]]; then
-    echo "  <description sparkle:descriptionFormat=\"plain-text\">$(xml_escape < "$NOTES")</description>"
-  fi
-  echo "  <enclosure url=\"$(printf '%s' "$DOWNLOAD_URL" | xml_escape)\" $SIGNATURE type=\"application/octet-stream\"/>"
-  echo "</item>"
-} > "$RELEASE_DIR/$NAME.appcast-item.xml"
+"$ROOT/scripts/appcast-item.sh" "$VERSION" "$BUILD" "$MINIMUM_SYSTEM" "$DOWNLOAD_URL" "$SIGNATURE" \
+  "$([[ "$BETA" == 1 ]] && echo beta || true)" "$NOTES" > "$RELEASE_DIR/$NAME.appcast-item.xml"
 
 # MARK: The manifest
 

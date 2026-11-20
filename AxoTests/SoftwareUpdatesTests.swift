@@ -54,6 +54,21 @@ struct SoftwareUpdatesTests {
         #expect(SparkleUpdater.feedOverride(nil) == nil)
     }
 
+    @Test func aCheckDuringASessionWaitsForItToEnd() {
+        var gate = CheckAfterSession()
+        let now = gate.request(sessionInProgress: false)
+        #expect(now, "No session: check now")
+        let waited = gate.sessionEnded()
+        #expect(!waited, "Nothing waited")
+        let duringSession = gate.request(sessionInProgress: true)
+        #expect(!duringSession, "Try Again while Sparkle ends the failed session")
+        #expect(gate.isPending)
+        let afterEnd = gate.sessionEnded()
+        #expect(afterEnd, "Checks once it has ended")
+        let again = gate.sessionEnded()
+        #expect(!again, "Only once")
+    }
+
     @Test func choicesMapToSparkles() {
         #expect(SparkleUserDriver.sparkleChoice(.install) == .install)
         #expect(SparkleUserDriver.sparkleChoice(.skip) == .skip)
@@ -70,6 +85,8 @@ struct SoftwareUpdatesTests {
         (SparkleErrors.domain, 4005, .couldNotInstall),
         ("SomeOtherDomain", 1, .other("Described")),
         (SparkleErrors.domain, 9999, .other("Described")),
+        (SparkleErrors.domain, 3, .other("Axo’s update feed isn’t set up correctly, so it couldn’t check for updates.")),
+        (SparkleErrors.domain, 4, .other("Axo’s update feed isn’t set up correctly, so it couldn’t check for updates.")),
     ])
     func errorsMapToFailures(domain: String, code: Int, failure: SoftwareUpdate.Failure) {
         #expect(SparkleErrors.failure(domain: domain, code: code, description: "Described") == failure)
@@ -102,7 +119,7 @@ struct SoftwareUpdatesTests {
         #expect(info["SUEnableAutomaticChecks"] as? Bool == true, "So Sparkle never asks with its own prompt")
     }
 
-    @Test func theStandInNeverReachesTheNetworkAndWalksAnUpdate() async throws {
+    @Test func theStandInWalksAnUpdateWithoutInstallingAnything() async throws {
         let standIn = StandInSoftwareUpdater(offersUpdate: true)
         let update = SoftwareUpdate(currentVersion: "1.0", updater: standIn)
         standIn.update = update

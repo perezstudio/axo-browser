@@ -25,6 +25,8 @@ public final class SoftwareUpdateWindow: NSObject, SoftwareUpdatePresenting, NSW
     public func show(activate: Bool) {
         let window = self.window ?? makeWindow()
         self.window = window
+        // Centered each time it opens, since its size follows the phase.
+        if !window.isVisible { window.center() }
         if activate {
             NSApp.activate()
             window.makeKeyAndOrderFront(nil)
@@ -175,7 +177,9 @@ private struct OfferView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("A new version of Axo is available!")
                     .font(.headline)
-                Text("Axo \(offer.version) is now available—you have \(update.currentVersion). Would you like to download it now?")
+                Text(offer.stage == .notDownloaded
+                     ? "Axo \(offer.version) is now available—you have \(update.currentVersion). Would you like to download it now?"
+                     : "Axo \(offer.version) is downloaded and ready to install—you have \(update.currentVersion).")
                     .font(.callout)
                     .fixedSize(horizontal: false, vertical: true)
                 Text("Release Notes:")
@@ -213,7 +217,7 @@ private struct OfferView: View {
                     }
                     Spacer()
                     if !offer.isCritical {
-                        Button("Remind Me Later") { update.remindLater() }
+                        Button(offer.stage == .installing ? "Install on Quit" : "Remind Me Later") { update.remindLater() }
                             .keyboardShortcut(.cancelAction)
                             .accessibilityIdentifier("remindLaterButton")
                     }
@@ -278,13 +282,23 @@ struct SoftwareUpdateSettings: View {
         @Bindable var update = update
         Section("Software Update") {
             LabeledContent {
-                Button("Check Now") { update.checkForUpdates() }
-                    .disabled(!update.canCheckForUpdates)
-                    .accessibilityIdentifier("checkForUpdatesButton")
+                if update.pendingRestart != nil {
+                    // Sparkle checks nothing more until the waiting update installs.
+                    Button("Restart to Update") { update.restartToUpdate() }
+                        .accessibilityIdentifier("restartToUpdateButton")
+                } else {
+                    Button("Check Now") { update.checkForUpdates() }
+                        .disabled(!update.canCheckForUpdates && update.phase == .idle)
+                        .accessibilityIdentifier("checkForUpdatesButton")
+                }
             } label: {
                 Text("Axo \(update.currentVersion)")
-                Text(Self.lastChecked(update.lastUpdateCheckDate))
-                    .accessibilityIdentifier("lastUpdateCheck")
+                if let waiting = update.pendingRestart {
+                    Text("Axo \(waiting.version) is ready. It installs the next time Axo quits.")
+                } else {
+                    Text(Self.lastChecked(update.lastUpdateCheckDate))
+                        .accessibilityIdentifier("lastUpdateCheck")
+                }
             }
             Toggle(isOn: $update.automaticallyChecksForUpdates) {
                 Text("Check for updates automatically")

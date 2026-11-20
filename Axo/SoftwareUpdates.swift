@@ -23,6 +23,25 @@ enum UpdaterKind: Equatable {
     }
 }
 
+/// A check asked for while Sparkle's session is still ending (Try Again: Sparkle ends a failed
+/// session only after its acknowledgement, on a later turn), started once it has.
+struct CheckAfterSession {
+    private(set) var isPending = false
+
+    /// Whether to check now; otherwise the check waits for ``sessionEnded()``.
+    mutating func request(sessionInProgress: Bool) -> Bool {
+        guard sessionInProgress else { return true }
+        isPending = true
+        return false
+    }
+
+    /// Whether a check waited for the session that just ended.
+    mutating func sessionEnded() -> Bool {
+        defer { isPending = false }
+        return isPending
+    }
+}
+
 /// Sparkle's updater behind Axo's ``SoftwareUpdater``, with Axo's own user driver
 /// (``SparkleUserDriver``), so Axo's wording and windows show rather than Sparkle's.
 final class SparkleUpdater: NSObject, SoftwareUpdater {
@@ -36,6 +55,7 @@ final class SparkleUpdater: NSObject, SoftwareUpdater {
     private let driver = SparkleUserDriver()
     private var updater: SPUUpdater!
     private var canCheckObservation: NSKeyValueObservation?
+    private var checkAfterSession = CheckAfterSession()
 
     init(settings: UserDefaults) {
         self.settings = settings
@@ -71,9 +91,16 @@ final class SparkleUpdater: NSObject, SoftwareUpdater {
         } catch {
             NSLog("Axo couldn't start software updates: %@", error.localizedDescription)
         }
+        // Sparkle reads a feed address from the user defaults before Info.plist's; only Axo's
+        // feed (or the loopback override, through the delegate) counts.
+        _ = updater.clearFeedURLFromUserDefaults()
     }
 
-    func checkForUpdates() { updater.checkForUpdates() }
+    func checkForUpdates() {
+        if checkAfterSession.request(sessionInProgress: updater.sessionInProgress) {
+            updater.checkForUpdates()
+        }
+    }
 
     var automaticallyChecksForUpdates: Bool {
         get { updater.automaticallyChecksForUpdates }
@@ -87,7 +114,11 @@ final class SparkleUpdater: NSObject, SoftwareUpdater {
 
     var includesBetaVersions: Bool {
         get { settings.bool(forKey: Self.includesBetasKey) }
-        set { settings.set(newValue, forKey: Self.includesBetasKey) }
+        set {
+            settings.set(newValue, forKey: Self.includesBetasKey)
+            // So the next check reads the other channel soon, not at the next scheduled one.
+            updater.resetUpdateCycleAfterShortDelay()
+        }
     }
 
     var lastUpdateCheckDate: Date? { updater.lastUpdateCheckDate }
@@ -104,10 +135,18 @@ extension SparkleUpdater: SPUUpdaterDelegate {
 
     func updater(_ updater: SPUUpdater, willInstallUpdateOnQuit item: SUAppcastItem,
                  immediateInstallationBlock immediateInstallHandler: @escaping () -> Void) -> Bool {
-        guard let update = driver.update else { return false }
+        // A critical update is shown right away in a window instead (Sparkle does that when this
+        // says no), and saying yes holds Sparkle's session until Axo quits.
+        guard let update = driver.update, !item.isCriticalUpdate else { return false }
         update.updaterWillInstallOnQuit(version: item.displayVersionString, installNow: immediateInstallHandler)
         // Axo says so itself: the notice and Restart to Update Axo.
         return true
+    }
+
+    func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: (any Error)?) {
+        guard checkAfterSession.sessionEnded() else { return }
+        // On the next turn, once Sparkle has finished ending the session.
+        DispatchQueue.main.async { [weak self] in self?.updater.checkForUpdates() }
     }
 }
 
@@ -247,8 +286,10 @@ nonisolated enum SparkleErrors {
         if domain == NSURLErrorDomain { return .couldNotCheck }
         guard domain == Self.domain else { return .other(description) }
         switch code {
-        case 1000, 1002, 1004, 3, 4: // the feed couldn't be read or reached
+        case 1000, 1002, 1004: // the feed couldn't be read or reached
             return .couldNotCheck
+        case 3, 4: // the feed's address isn't one Sparkle accepts
+            return .other("Axo’s update feed isn’t set up correctly, so it couldn’t check for updates.")
         case 1003, 1005: // running from the disk image, or translocated
             return .other("Axo can’t update itself while it runs from its disk image. Move Axo to your Applications folder, open it from there, then try again.")
         case 2000, 2001:
