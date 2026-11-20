@@ -53,7 +53,7 @@ Set on November 14, 2026. The goal is a Mac build people can test day to day: th
 11. #77, then #78: dragging in the sidebar and to another Space; then what's left of #81.
 12. #122, #121, #123: the command bar; then #112, history menus on Back and Forward.
 13. #85, then #133, #132, #131, #130, #174, #110, #173: Settings in a sidebar layout and the panes and panels that go in it.
-14. #61 and #180: a signed, notarized DMG with the engine, and Sparkle updates. Signing and notarizing need the owner's Developer ID and credentials, which never go in the repo; the work here is the scripts and the updater, and the owner runs the signing. The packaging scripts are in (`scripts/package-release.sh`, `docs/releasing.md`); passkeys and Chrome's keychain groups wait on Apple granting the passkey entitlement and an engine build with Axo's team and bundle ID.
+14. #61 and #180: a signed, notarized DMG with the engine, and Sparkle updates. Signing and notarizing need the owner's Developer ID and credentials, which never go in the repo; the work here is the scripts and the updater, and the owner runs the signing. The packaging scripts and the updater are in (`scripts/package-release.sh`, `docs/releasing.md`, #180); passkeys and Chrome's keychain groups wait on Apple granting the passkey entitlement and an engine build with Axo's team and bundle ID.
 
 After user testing starts: Phase 9 (iPhone and iPad), #177, #179, #83 and #46, #87, and the remaining Phase 2 and Chromium items.
 
@@ -128,7 +128,7 @@ The boards: Downloads and empty states, History and mini windows, First run, New
 The boards: Apple integrations, Software updates.
 
 - [ ] **Apple integrations.** Handoff, Spotlight, App Intents, and Focus filters are built (Milestone 6); keep the Focus switch to an announcement with no notice (decision 2), and check Handoff opening in the Space you're in. Passkeys stay blocked on Apple's entitlement (Milestone 4).
-- [ ] **Software updates (#180).** Sparkle's flow, Settings › General › Software Update, and the update-ready notice. Sparkle is approved for the Mac only (decision 4), with a custom user driver for Axo's wording; waits on packaging (#61).
+- [x] **Software updates (#180).** Sparkle's flow, Settings › General › Software Update, and the update-ready notice. Sparkle is approved for the Mac only (decision 4), with a custom user driver for Axo's wording; waits on packaging (#61). Done: Axo's own windows and wording for every state, Check Now, automatic checks and installs, Include beta versions (the feed's `beta` channel), the notice with Restart Now and Restart to Update Axo, and the release script signing the DMG for Sparkle and writing its appcast item. The feed is on GitHub Pages (decided in #180). Updating a signed build is checked by hand (`docs/releasing.md`).
 
 ## Phase 8: consistency pass on the canvas
 

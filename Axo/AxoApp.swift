@@ -101,12 +101,19 @@ struct AxoApp: App {
                     // Ends the shown page's web content process, as a crash would, for the
                     // crashed page's UI test (#75). WebKit only: UI testing mode never uses
                     // Chromium, whose crashes the engine's scripts/test_page_problems.sh checks.
+                    // Reports an update that downloaded in the background, for the update-ready
+                    // notice and Restart to Update Axo (#180). The stand-in installs nothing.
+                    Button("Download an Update in the Background") {
+                        AppEnvironment.standInUpdater?.downloadInBackground()
+                    }
                     Button("End the Page’s Process") {
                         guard let id = model.shownTab?.id, let webView = model.pool.liveWebView(for: id) else { return }
                         WebContentProcess.end(for: webView)
                     }
                 }
             }
+            // Restart to Update Axo and Check for Updates…, below About Axo (#180).
+            SoftwareUpdateCommands(update: AppEnvironment.softwareUpdate)
             // Show or hide the sidebar from the keyboard (View › Toggle Sidebar, ⌃⌘S).
             SidebarCommands()
             BrowserCommands()
@@ -253,10 +260,49 @@ enum AppEnvironment {
         !isTestRun && isEntitled()
     }
 
+    /// Software updates (#180): Sparkle outside test runs (in builds that can update), a
+    /// stand-in that never checks in test runs, or nothing.
+    static let softwareUpdate: SoftwareUpdate? = makeSoftwareUpdate()
+    /// The stand-in updater, in test runs.
+    private(set) static var standInUpdater: StandInSoftwareUpdater?
+    /// Software Update's window, kept for the app's life.
+    private static var softwareUpdateWindow: SoftwareUpdateWindow?
+
+    private static func makeSoftwareUpdate() -> SoftwareUpdate? {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        #if DEBUG
+        let isDebugBuild = true
+        #else
+        let isDebugBuild = false
+        #endif
+        let kind = UpdaterKind.forLaunch(
+            isTestRun: isTestRun, isDebugBuild: isDebugBuild, hasPublicKey: SparkleUpdater.hasPublicKey,
+            hasLocalFeed: SparkleUpdater.feedOverride(settings.string(forKey: SparkleUpdater.feedOverrideKey)) != nil)
+        let update: SoftwareUpdate
+        switch kind {
+        case .none:
+            return nil
+        case .standIn:
+            let standIn = StandInSoftwareUpdater(
+                offersUpdate: isUITesting && ProcessInfo.processInfo.environment["AXO_UI_TESTING_UPDATE"] == "available")
+            update = SoftwareUpdate(currentVersion: version, updater: standIn)
+            standIn.update = update
+            standInUpdater = standIn
+        case .sparkle:
+            let sparkle = SparkleUpdater(settings: settings)
+            update = SoftwareUpdate(currentVersion: version, updater: sparkle)
+            sparkle.start(reportingTo: update)
+        }
+        softwareUpdateWindow = SoftwareUpdateWindow(update: update)
+        return update
+    }
+
     static func makeBrowserModel() -> BrowserModel {
         let model = makeModel()
         // The command bar searches the main menu's items too (#123).
         model.menuCommands = MainMenuCommands()
+        // Software updates (#180): its notice and pages go through this model.
+        model.softwareUpdate = softwareUpdate
         if !isTestRun {
             model.onSpaceChange = { UserDefaults.standard.set($0.uuidString, forKey: lastSpaceKey) }
             // Not in test runs, so nothing in a test run can offer to change the default browser.

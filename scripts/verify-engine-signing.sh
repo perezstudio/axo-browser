@@ -6,8 +6,7 @@
 # exported app; run it by hand on any build signed with a team identity:
 #   scripts/verify-engine-signing.sh path/to/Axo.app [--release]
 # With --release it also requires a Developer ID signature and a secure timestamp on every item,
-# which
-# notarization needs.
+# Sparkle's helpers included, which notarization needs.
 set -euo pipefail
 
 APP="${1:?usage: verify-engine-signing.sh path/to/Axo.app [--release]}"
@@ -71,6 +70,16 @@ done < <(find "$FRAMEWORK/Versions/Current/Libraries" -type f -name '*.dylib')
 check "$FRAMEWORK"
 
 if [[ "$RELEASE" == 1 ]]; then
+  # Sparkle's helpers (#180) install updates, so they too must carry the Developer ID, a
+  # timestamp, and Hardened Runtime; the export re-signs them (Debug builds keep Sparkle's ad hoc
+  # signatures, so they're checked only here).
+  SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
+  [[ -d "$SPARKLE" ]] || fail "$APP has no Sparkle framework."
+  while read -r item; do
+    check "$item"
+    [[ ",$FLAGS," == *",runtime,"* ]] || fail "$(basename "$item") has no Hardened Runtime (flags: $FLAGS)."
+  done < <(find -H "$SPARKLE/Versions/Current" -maxdepth 2 \( -name '*.app' -o -name '*.xpc' -o -name Autoupdate \))
+  check "$SPARKLE"
   check "$APP"
   [[ ",$FLAGS," == *",runtime,"* ]] || fail "Axo has no Hardened Runtime."
   entitlements_of "$APP" | grep -q "com.apple.security.get-task-allow" && fail "Axo allows debugging (get-task-allow), which notarization refuses."
