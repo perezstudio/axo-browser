@@ -339,6 +339,9 @@ struct ProfileSearchSection: View {
                     Text(engine.name).tag(engine.id)
                 }
             }
+            // Radio buttons, as Settings' other pickers: the menu style's pop-up button in a grouped
+            // form fails the accessibility audit ("Action is missing").
+            .pickerStyle(.radioGroup)
             .accessibilityIdentifier("profileSearchEnginePicker")
             let engine = model.searchEngine(forProfile: profile.id)
             Toggle(isOn: Binding(

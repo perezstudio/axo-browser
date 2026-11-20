@@ -298,7 +298,7 @@ final class AccessibilityAuditTests: XCTestCase {
         try audit(app, "new search engine sheet")
         app.typeKey(.escape, modifierFlags: [])
         AxoUITests.selectSettingsPane("profiles", in: app)
-        XCTAssertTrue(app.popUpButtons["profileSearchEnginePicker"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.radioButtons["Google"].waitForExistence(timeout: 5))
         try audit(app, "profile search engine")
     }
 
