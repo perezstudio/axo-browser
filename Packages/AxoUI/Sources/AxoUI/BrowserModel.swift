@@ -1037,15 +1037,20 @@ public final class BrowserModel {
     }
 
     /// Opens `url` in a new tab and selects it.
-    public func openTab(url: URL, at position: TabPosition = .end) async {
-        guard let space else { return }
+    ///
+    /// - Returns: The new tab's ID, or `nil` if it couldn't be opened.
+    @discardableResult
+    public func openTab(url: URL, at position: TabPosition = .end) async -> AxoCore.Tab.ID? {
+        guard let space else { return nil }
         do {
             let tab = try await store.openTab(url: url, in: space.id, at: position)
             tabs = try await store.tabs(in: space.id)
             onTabEvent?(.opened(tab.id))
             select(tab.id)
+            return tab.id
         } catch {
             report(error, "Axo couldn't open a new tab.")
+            return nil
         }
     }
 

@@ -31,7 +31,7 @@ struct PageMenuTests {
         #expect(entries.first?.shortcut == .command("["))
         #expect(entries.first { $0.title == "Reload Page" }?.shortcut == .command("r"))
         #expect(entries.first { $0.title == "Copy Link" }?.shortcut == .command("c", shift: true))
-        #expect(entries.last?.shortcut == .command("i", option: true))
+        #expect(entries.last?.shortcut == nil, "⌥⌘I toggles DevTools; it isn't Inspect Element's")
         guard case .share(.url(let shared)) = entries.first(where: { $0.title == "Share" })?.kind else {
             Issue.record("Share shares the page")
             return
@@ -110,6 +110,16 @@ struct PageMenuTests {
         #expect(text == "axolotls live in lakes and canals near Mexico City")
     }
 
+    @Test func selectedLinkTextCanStillBeCopied() {
+        let menu = FakeContextMenu()
+        menu.linkURL = URL(string: "https://example.com/next")
+        menu.selectionText = "next page"
+        let titles = titles(PageMenu.entries(for: menu, context: PageMenuContext()))
+        #expect(titles.contains("Copy"))
+        #expect(!titles.contains("Speech"), "Speech is for selections outside links")
+        #expect(titles.filter { $0 == "Share" }.count == 1, "The link's Share only")
+    }
+
     @Test func aTextFieldGetsSpellingAndEditing() {
         let menu = FakeContextMenu()
         menu.isEditable = true
@@ -179,6 +189,43 @@ struct PageMenuTests {
         let split = try #require(model.split(of: tabID))
         #expect(model.panes(of: split.id).map(\.url.path) == ["/", "/next"])
         #expect(!model.pageMenuContext(for: UUID()).canOpenInSplit, "Only from one of the Space's tabs")
+    }
+
+    /// From a pinned tab, whose section new tabs can't join, the link opens at the top of the
+    /// tabs section and then joins the pinned tab's split (which pins it); new tabs open there
+    /// too rather than failing.
+    @Test func linksFromAPinnedTabOpenAndSplitWithoutAnError() async throws {
+        let model = BrowserModel(store: try TabStore.makeInMemory(), pool: WebViewPool(engine: FakeEngine()))
+        model.announce = { _ in }
+        await model.start()
+        await model.openTab(url: URL(string: "https://example.com/")!)
+        let pinnedID = try #require(model.selectedTabID)
+        await model.setPinned(true, tabID: pinnedID)
+        try await waitUntil { model.tabs.first { $0.id == pinnedID }?.isPinned == true }
+        #expect(model.newTabPosition(after: pinnedID) == .start)
+
+        model.perform(.openLinkInNewTab(URL(string: "https://example.com/other")!), menu: FakeContextMenu(), tabID: pinnedID)
+        try await waitUntil { model.tabs.count == 2 }
+        #expect(model.alertMessage == nil)
+
+        model.select(pinnedID)
+        await model.openLinkInSplit(URL(string: "https://example.com/next")!, from: pinnedID)
+        let split = try #require(model.split(of: pinnedID))
+        #expect(model.panes(of: split.id).map(\.url.path) == ["/", "/next"])
+        #expect(model.alertMessage == nil, "No error")
+    }
+
+    /// The page tools act on the selected page, so a page that isn't selected (another pane of a
+    /// split) doesn't offer them.
+    @Test func pageToolsAreOnlyForTheSelectedPage() async throws {
+        let model = BrowserModel(store: try TabStore.makeInMemory(), pool: WebViewPool(engine: FakeEngine()))
+        model.announce = { _ in }
+        await model.start()
+        await model.openTab(url: URL(string: "https://example.com/one")!)
+        let first = try #require(model.selectedTabID)
+        await model.openTab(url: URL(string: "https://example.com/two")!)
+        #expect(!model.pageMenuContext(for: first).canTranslate)
+        #expect(!model.pageMenuContext(for: first).isTranslated)
     }
 
     @Test func speechImagesPeekAndInspectRunFromTheMenu() async throws {

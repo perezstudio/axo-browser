@@ -178,15 +178,19 @@ public enum PageMenu {
                 .action("Paste and Match Style", .edit(.pasteAndMatchStyle), enabled: menu.edits.contains(.paste),
                         shortcut: .command("v", shift: true, option: true)),
             ])
-        } else if !selection.isEmpty, link == nil, image == nil {
-            sections.append([
-                .action("Copy", .edit(.copy), shortcut: .command("c")),
-                .share(.text(selection)),
-                PageMenuEntry(kind: .submenu([
-                    .action("Start Speaking", .startSpeaking(selection), enabled: !context.isSpeaking),
-                    .action("Stop Speaking", .stopSpeaking, enabled: context.isSpeaking),
-                ]), title: "Speech", isEnabled: true, isChecked: false),
-            ])
+        } else if !selection.isEmpty {
+            var copies: [PageMenuEntry] = [.action("Copy", .edit(.copy), shortcut: .command("c"))]
+            // A link or image has its own Share; Speech is for selections outside them.
+            if link == nil, image == nil {
+                copies += [
+                    .share(.text(selection)),
+                    PageMenuEntry(kind: .submenu([
+                        .action("Start Speaking", .startSpeaking(selection), enabled: !context.isSpeaking),
+                        .action("Stop Speaking", .stopSpeaking, enabled: context.isSpeaking),
+                    ]), title: "Speech", isEnabled: true, isChecked: false),
+                ]
+            }
+            sections.append(copies)
         }
         if sections.isEmpty {
             sections.append([
@@ -205,8 +209,8 @@ public enum PageMenu {
                 sections.append([.action("Copy Link", .copyLink(page), shortcut: .command("c", shift: true)), .share(.url(page))])
             }
         }
-        sections.append([.action("Inspect Element", .inspectElement, enabled: menu.canInspectElement,
-                                 shortcut: .command("i", option: true))])
+        // No shortcut: ⌥⌘I is Show Web Inspector, which toggles DevTools rather than inspecting.
+        sections.append([.action("Inspect Element", .inspectElement, enabled: menu.canInspectElement)])
         let extensions = menu.extensionItems.map(entry)
         if !extensions.isEmpty {
             sections.append(extensions)
@@ -238,7 +242,7 @@ extension BrowserModel {
     func perform(_ action: PageMenuAction, menu: any PageContextMenu, tabID: AxoCore.Tab.ID) {
         switch action {
         case .openLinkInNewTab(let url), .openImageInNewTab(let url):
-            Task { await openTab(url: url, at: .after(tabID)) }
+            Task { await openTab(url: url, at: newTabPosition(after: tabID)) }
         case .openLinkInPeek(let url), .openImageInPeek(let url):
             openPeek(url, from: tabID)
         case .openLinkInSplit(let url):
@@ -252,7 +256,7 @@ extension BrowserModel {
         case .lookUp:
             menu.lookUpSelection()
         case .search(let text):
-            Task { await openTab(url: searchContext.engine.searchURL(for: text), at: .after(tabID)) }
+            Task { await openTab(url: searchContext.engine.searchURL(for: text), at: newTabPosition(after: tabID)) }
         case .startSpeaking(let text):
             selectionSpeech.speak(text)
         case .stopSpeaking:
@@ -307,12 +311,18 @@ extension BrowserModel {
         return panes(of: split.id).count < TabSplit.maximumPanes
     }
 
-    /// Opens a link in a new tab beside the page in `tabID`, in a split with it (#173).
+    /// Opens a link in a new tab beside the page in `tabID`, in a split with it (#173). A pinned
+    /// page's split pins the new tab when it joins.
     func openLinkInSplit(_ url: URL, from tabID: AxoCore.Tab.ID) async {
-        guard canOpenInSplit(from: tabID) else { return }
-        await openTab(url: url, at: .after(tabID))
-        guard let opened = selectedTabID, opened != tabID else { return }
+        guard canOpenInSplit(from: tabID),
+              let opened = await openTab(url: url, at: newTabPosition(after: tabID)) else { return }
         await addToSplit(opened, with: tabID)
+    }
+
+    /// Where a tab opened from the page in `tabID` goes: right after it, or for a pinned tab,
+    /// whose section new tabs can't join, at the top of the tabs section.
+    func newTabPosition(after tabID: AxoCore.Tab.ID) -> TabPosition {
+        tabs.first { $0.id == tabID }?.isPinned == true ? .start : .after(tabID)
     }
 
     /// Puts a URL on the pasteboard, as its address and as a URL.
@@ -373,7 +383,11 @@ enum PageMenuPresenter {
             case .url(let url): url as NSURL
             case .text(let text): text as NSString
             }
-            return NSSharingServicePicker(items: [object]).standardShareMenuItem
+            let picker = NSSharingServicePicker(items: [object])
+            let item = picker.standardShareMenuItem
+            // Kept with the item while the menu is open, as its services need it.
+            item.representedObject = picker
+            return item
         case .action(let action):
             let target = MenuAction { run(action) }
             let item = NSMenuItem(title: entry.title, action: #selector(MenuAction.run), keyEquivalent: entry.shortcut?.key ?? "")
