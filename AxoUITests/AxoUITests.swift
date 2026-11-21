@@ -2143,7 +2143,8 @@ final class AxoUITests: XCTestCase {
             Copy Link: \(app.menuBars.menuItems["Copy Link"].isEnabled), address: \(address.value ?? "none"))
             """)
         siteSettings.click()
-        let camera = app.menuButtons["sitePermission-camera"]
+        // The menu button appears twice in the accessibility tree, identical; either answers.
+        let camera = app.menuButtons.matching(identifier: "sitePermission-camera").firstMatch
         XCTAssertTrue(camera.waitForExistence(timeout: 5))
         XCTAssertEqual(camera.value as? String, "Ask")
         XCTAssertTrue(app.menuButtons["sitePermission-microphone"].exists)
