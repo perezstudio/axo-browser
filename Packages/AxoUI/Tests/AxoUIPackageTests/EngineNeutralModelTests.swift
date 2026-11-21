@@ -146,10 +146,37 @@ struct EngineNeutralModelTests {
         await model.clearSiteData(request)
         #expect(engine.clearedSites.map(\.url) == [URL(string: "https://news.example.com:8443")!])
         #expect(engine.clearedSites.map(\.profileID) == [profileID])
-        #expect(model.siteDataClear == nil)
         #expect(model.notice?.message == "Cleared website data for news.example.com:8443")
         #expect(engine.clearedProfiles.isEmpty, "Only the site, never the whole profile")
         #expect(model.sitePermissions[.camera] == .allow, "Its permissions stay")
+    }
+
+    /// The profile asked about is the one cleared, even if the Space moves to another profile
+    /// meanwhile; a profile deleted meanwhile is left alone, and no notice claims otherwise.
+    @Test func clearingASiteUsesTheProfileAskedAbout() async throws {
+        _ = try await openPage(URL(string: "https://news.example.com/today")!)
+        let first = try #require(model.space?.profileID)
+        let spaceID = try #require(model.space?.id)
+        model.confirmClearSiteData()
+        let request = try #require(model.siteDataClear)
+
+        let other = try #require(await model.addProfile(named: "Work"))
+        await model.moveSpace(spaceID, toProfile: other.id)
+        await model.clearSiteData(request)
+        #expect(engine.clearedSites.map(\.profileID) == [first], "The profile it asked about")
+
+        // Asked about Work, which is deleted before the answer.
+        for _ in 0..<200 where model.space?.profileID != other.id { try await Task.sleep(for: .milliseconds(10)) }
+        model.confirmClearSiteData()
+        let late = try #require(model.siteDataClear)
+        #expect(late.profileID == other.id)
+        await model.moveSpace(spaceID, toProfile: first)
+        await model.deleteProfile(other.id, movingSpacesTo: first)
+        for _ in 0..<200 where model.allProfiles.contains(where: { $0.id == other.id }) { try await Task.sleep(for: .milliseconds(10)) }
+        model.notice = nil
+        await model.clearSiteData(late)
+        #expect(engine.clearedSites.count == 1, "Nothing is cleared for a deleted profile")
+        #expect(model.notice == nil)
     }
 
     @Test func pagesWithoutASiteHaveNoDataToClear() async throws {

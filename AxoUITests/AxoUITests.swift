@@ -2208,11 +2208,12 @@ final class AxoUITests: XCTestCase {
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
         // A closed loopback port: nothing loads, but the tab has a web address.
+        let port = try AxoUITests.closedPort()
         app.typeKey("t", modifierFlags: .command)
         let field = app.textFields["commandField"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
-        field.typeText("http://127.0.0.1:9/room")
-        expectation(for: NSPredicate(format: "value == %@", "http://127.0.0.1:9/room"), evaluatedWith: field)
+        field.typeText("http://127.0.0.1:\(port)/room")
+        expectation(for: NSPredicate(format: "value == %@", "http://127.0.0.1:\(port)/room"), evaluatedWith: field)
         waitForExpectations(timeout: 5)
         field.typeText("\n")
         let address = app.descendants(matching: .any)["sidebarAddressBar"]
@@ -2227,7 +2228,7 @@ final class AxoUITests: XCTestCase {
         openSiteSettings()
         let profile = app.descendants(matching: .any)["siteSettingsProfile"]
         XCTAssertTrue(profile.exists)
-        XCTAssertTrue(((profile.value as? String) ?? profile.label).hasPrefix("Choices apply to 127.0.0.1:9 in the "),
+        XCTAssertTrue(((profile.value as? String) ?? profile.label).hasPrefix("Choices apply to 127.0.0.1:\(port) in the "),
                       "\(profile.value ?? profile.label)")
         let shot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
         shot.name = "Site Settings"
@@ -2259,19 +2260,20 @@ final class AxoUITests: XCTestCase {
         app.buttons["clearSiteDataButton"].click()
         let confirm = app.buttons["confirmClearSiteData"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Clear website data for “127.0.0.1:9”?"].exists
-                      || app.staticTexts.containing(NSPredicate(format: "value CONTAINS '127.0.0.1:9'")).firstMatch.exists)
+        XCTAssertTrue(app.staticTexts["Clear website data for “127.0.0.1:\(port)”?"].exists
+                      || app.staticTexts.containing(NSPredicate(format: "value CONTAINS '127.0.0.1:\(port)'")).firstMatch.exists)
         app.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(confirm.waitForNonExistence(timeout: 5), "Return cancels")
         let notice = app.descendants(matching: .any)["notice"]
-        XCTAssertFalse(notice.exists, "Nothing was cleared")
+        // Clearing would post its notice after the engine's round trip, so wait long enough.
+        XCTAssertFalse(notice.waitForExistence(timeout: 3), "Nothing was cleared")
 
         openSiteSettings()
         app.buttons["clearSiteDataButton"].click()
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         confirm.click()
         XCTAssertTrue(notice.waitForExistence(timeout: 5))
-        XCTAssertEqual(notice.label, "Cleared website data for 127.0.0.1:9")
+        XCTAssertEqual(notice.label, "Cleared website data for 127.0.0.1:\(port)")
     }
 
     /// Summarize Page shows a summary of the page's text in a popover. UI tests use a

@@ -145,10 +145,12 @@ extension BrowserModel {
     }
 
     /// Removes a site's cookies, caches, and other website data in the profile the person was
-    /// asked about, then says so. Its permission answers, history, and customizations stay.
+    /// asked about, then says so. Its permission answers, history, and customizations stay. A
+    /// profile deleted while the question showed is left alone: making its data store again would
+    /// bring its storage back.
     public func clearSiteData(_ request: SiteDataClear) async {
-        siteDataClear = nil
-        guard let url = URL(string: request.origin.serialized) else { return }
+        guard allProfiles.contains(where: { $0.id == request.profileID }),
+              let url = URL(string: request.origin.serialized) else { return }
         await pool.clearWebsiteData(forSite: url, profileID: request.profileID)
         postNotice("Cleared website data for \(request.origin.displayName)")
     }
