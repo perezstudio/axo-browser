@@ -353,6 +353,8 @@ struct SiteSettingsView: View {
                     .font(.headline)
                     .lineLimit(1)
                     .truncationMode(.head)
+                    // In words: the audit can't read a bare address (an IP and port) as a label.
+                    .accessibilityLabel("Site Settings for \(siteName)")
                     .accessibilityAddTraits(.isHeader)
                 if let indicator = model.connectionIndicator {
                     Label(Self.connectionTitle(for: indicator), systemImage: indicator == .secure ? "lock.fill" : "lock.slash")
@@ -385,18 +387,7 @@ struct SiteSettingsView: View {
                         .symbolRenderingMode(.hierarchical)
                         .accessibilityHidden(true)
                     Spacer()
-                    Picker(Self.title(for: kind), selection: Binding(
-                        get: { model.sitePermissions[kind] },
-                        set: { decision in Task { await model.setSitePermission(decision, for: kind) } }
-                    )) {
-                        // Without an answer of its own, the profile's default decides (#133).
-                        Text(Self.defaultTitle(model.siteDefaults[kind])).tag(SitePermission.Decision?.none)
-                        Text("Allow").tag(SitePermission.Decision?.some(.allow))
-                        Text("Don't Allow").tag(SitePermission.Decision?.some(.deny))
-                    }
-                    .labelsHidden()
-                    .fixedSize()
-                    .accessibilityIdentifier("sitePermission-\(kind.rawValue)")
+                    permissionMenu(for: kind)
                 }
             }
             if !model.siteExternalApps.isEmpty {
@@ -484,6 +475,32 @@ struct SiteSettingsView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("siteExtensions")
+
+    /// A kind's answer as a menu button holding the choices. A menu-style picker's pop-up button
+    /// fails the accessibility audit ("Action is missing"), as in Settings; a menu button passes.
+    private func permissionMenu(for kind: SitePermission.Kind) -> some View {
+        let selection = model.sitePermissions[kind]
+        let current = selection.map { $0 == .allow ? "Allow" : "Don't Allow" } ?? Self.defaultTitle(model.siteDefaults[kind])
+        return Menu {
+            Picker(Self.title(for: kind), selection: Binding(
+                get: { model.sitePermissions[kind] },
+                set: { decision in Task { await model.setSitePermission(decision, for: kind) } }
+            )) {
+                // Without an answer of its own, the profile's default decides (#133).
+                Text(Self.defaultTitle(model.siteDefaults[kind])).tag(SitePermission.Decision?.none)
+                Text("Allow").tag(SitePermission.Decision?.some(.allow))
+                Text("Don't Allow").tag(SitePermission.Decision?.some(.deny))
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+        } label: {
+            Text(current)
+        }
+        .menuStyle(.button)
+        .fixedSize()
+        .accessibilityLabel(Self.title(for: kind))
+        .accessibilityValue(current)
+        .accessibilityIdentifier("sitePermission-\(kind.rawValue)")
     }
 
     /// The site's own CSS and JavaScript: a switch and Edit for the one that covers it, or a

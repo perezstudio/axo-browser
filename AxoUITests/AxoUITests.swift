@@ -2143,15 +2143,15 @@ final class AxoUITests: XCTestCase {
             Copy Link: \(app.menuBars.menuItems["Copy Link"].isEnabled), address: \(address.value ?? "none"))
             """)
         siteSettings.click()
-        let camera = app.popUpButtons["sitePermission-camera"]
+        let camera = app.menuButtons["sitePermission-camera"]
         XCTAssertTrue(camera.waitForExistence(timeout: 5))
         XCTAssertEqual(camera.value as? String, "Ask")
-        XCTAssertTrue(app.popUpButtons["sitePermission-microphone"].exists)
-        XCTAssertTrue(app.popUpButtons["sitePermission-location"].exists)
+        XCTAssertTrue(app.menuButtons["sitePermission-microphone"].exists)
+        XCTAssertTrue(app.menuButtons["sitePermission-location"].exists)
         // UI tests run on WebKit, which never asks about notifications or the clipboard, so Site
         // Settings doesn't offer them (Chromium's rows are covered by the model's tests).
-        XCTAssertFalse(app.popUpButtons["sitePermission-notifications"].exists)
-        XCTAssertFalse(app.popUpButtons["sitePermission-clipboard"].exists)
+        XCTAssertFalse(app.menuButtons["sitePermission-notifications"].exists)
+        XCTAssertFalse(app.menuButtons["sitePermission-clipboard"].exists)
 
         camera.click()
         app.menuItems["Don't Allow"].click()
