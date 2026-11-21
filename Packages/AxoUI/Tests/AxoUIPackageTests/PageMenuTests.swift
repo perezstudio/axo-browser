@@ -201,8 +201,8 @@ struct PageMenuTests {
         #expect(menu.performed == ["inspect"])
 
         model.perform(.openImageInPeek(URL(string: "https://example.com/photo.jpg")!), menu: menu, tabID: tabID)
-        #expect(model.peekURL?.lastPathComponent == "photo.jpg")
-        #expect(model.pageMenuContext(for: tabID).pageURL == nil || model.pageMenuContext(for: tabID).pageURL?.host() == "example.com")
+        #expect(model.peek?.tab.url.lastPathComponent == "photo.jpg", "The image opens in Peek")
+        #expect(model.peek?.sourceTabID == tabID)
     }
 
     @Test func rightClicksReachTheModelThroughThePool() async throws {
