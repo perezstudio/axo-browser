@@ -417,6 +417,13 @@ public final class ChromiumEngine: WebEngine {
         await profile.clearWebsiteData()
     }
 
+    /// Removes one site's website data in a profile, once the engine is ready: the registrable
+    /// domain of `url` and its subdomains (the engine works out the site).
+    public func clearWebsiteData(forSite url: URL, profileID: Profile.ID) async {
+        guard await whenReady(), let profile = readyProfile(profileID) else { return }
+        await profile.clearWebsiteData(forSite: url)
+    }
+
     /// Deletes a profile's engine data for good, once the engine is ready. The profile is never
     /// loaded again.
     public func removeWebsiteData(for profileID: Profile.ID) async throws {

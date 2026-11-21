@@ -233,6 +233,33 @@ final class AccessibilityAuditTests: XCTestCase {
         try audit(app, "Can't Connect page")
     }
 
+    /// Site Settings (#110): the panel for the current site, with its customization section
+    /// showing a customization's switch and Edit.
+    @MainActor
+    func testAuditSiteSettings() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        AxoUITests.openPage("http://127.0.0.1:\(try AxoUITests.closedPort())/", in: app)
+        XCTAssertTrue(app.descendants(matching: .any)["pageLoadError"].waitForExistence(timeout: 15))
+        app.menuBars.menuBarItems["View"].click()
+        app.menuBars.menuItems["Site Settings…"].click()
+        XCTAssertTrue(app.descendants(matching: .any)["siteSettings"].waitForExistence(timeout: 5))
+        try audit(app, "Site Settings")
+
+        app.buttons["customizeSiteButton"].click()
+        let css = app.textViews["customizationCSSEditor"]
+        XCTAssertTrue(css.waitForExistence(timeout: 5))
+        css.click()
+        css.typeText("p { color: red }")
+        app.buttons["saveCustomizationButton"].click()
+        XCTAssertTrue(css.waitForNonExistence(timeout: 5))
+        app.menuBars.menuBarItems["View"].click()
+        app.menuBars.menuItems["Site Settings…"].click()
+        XCTAssertTrue(app.descendants(matching: .any)["siteCustomizationSwitch"].waitForExistence(timeout: 5))
+        try audit(app, "Site Settings with a customization")
+    }
+
     /// First run's steps (#175): the welcome and setting up the first Space (nothing to import
     /// in UI testing mode's empty folder).
     @MainActor

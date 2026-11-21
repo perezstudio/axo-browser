@@ -78,6 +78,14 @@ public final class FakeProfile: NSObject, AXOProfile {
         completion()
     }
 
+    /// The sites cleared with ``clearWebsiteData(forSite:completion:)``, in order.
+    public private(set) var clearedSites: [URL] = []
+
+    public func clearWebsiteData(forSite url: URL, completion: @escaping () -> Void) {
+        clearedSites.append(url)
+        completion()
+    }
+
     public private(set) var loadedExtensions: [URL] = []
     public private(set) var installedPackages: [URL] = []
 

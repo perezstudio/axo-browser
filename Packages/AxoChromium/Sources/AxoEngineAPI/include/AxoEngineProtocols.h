@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 41
+#define AXO_ENGINE_API_VERSION 42
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -153,6 +153,16 @@ NS_SWIFT_UI_ACTOR
 
 /// Removes cookies, caches, and other website data.
 - (void)clearWebsiteDataWithCompletion:(void (^)(void))completion;
+
+/// Removes one site's cookies, caches, and other website data: the registrable domain of `url`
+/// (`github.com` for `https://gist.github.com/x`) and its subdomains, or the host itself for an IP
+/// address or a host with no registrable domain (`localhost`), including what it stored as a
+/// third party on other sites and what other sites stored inside it. History, permission answers,
+/// and the apps it may open (the host app keeps those) are left alone. Does nothing for a URL that
+/// isn't http or https.
+- (void)clearWebsiteDataForSite:(NSURL*)url
+                     completion:(void (^)(void))completion
+    NS_SWIFT_NAME(clearWebsiteData(forSite:completion:));
 
 /// Loads an unpacked extension (a folder with a manifest.json) into the profile, as Chrome's
 /// developer mode does. `completion` gets the extension's ID, or an error.

@@ -95,6 +95,17 @@ public final class WebKitEngine: WebEngine {
         await dataStore(for: profileID).removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast)
     }
 
+    public func clearWebsiteData(forSite url: URL, profileID: Profile.ID) async {
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              let host = url.host(percentEncoded: false), !host.isEmpty else { return }
+        let store = dataStore(for: profileID)
+        let types = WKWebsiteDataStore.allWebsiteDataTypes()
+        let records = await store.dataRecords(ofTypes: types)
+        // WebKit keeps a record per site, named for its registrable domain.
+        guard let site = WebsiteDataSite.recordName(forHost: host, among: records.map(\.displayName)) else { return }
+        await store.removeData(ofTypes: types, for: records.filter { $0.displayName.lowercased() == site })
+    }
+
     public func removeWebsiteData(for profileID: Profile.ID) async throws {
         dataStores[profileID] = nil
         try await removeDataStore(profileID)

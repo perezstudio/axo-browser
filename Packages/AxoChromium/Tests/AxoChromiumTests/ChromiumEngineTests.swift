@@ -1305,6 +1305,23 @@ struct ChromiumEngineTests {
         await #expect(throws: FakeEngineError.self) { try await engine.removeWebsiteData(for: profileID) }
     }
 
+    /// Clearing one site (#110) hands the engine the site's address; the engine works out the site.
+    @Test func aSitesDataGoesToTheEngine() async throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        let site = URL(string: "https://news.example.com")!
+        await engine.clearWebsiteData(forSite: site, profileID: profileID)
+        #expect(FakeProfile.made.isEmpty, "Nothing to clear when the engine never runs")
+
+        engine.start()
+        let clearing = Task { await engine.clearWebsiteData(forSite: site, profileID: profileID) }
+        await Task.yield()
+        scheduled.run()
+        await clearing.value
+        #expect(FakeProfile.made[profileID]?.clearedSites == [site])
+        #expect(FakeProfile.made[profileID]?.clearCount == 0, "Never the whole profile")
+    }
+
     @Test func aRemovedProfileIsNeverLoadedAgain() async throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)

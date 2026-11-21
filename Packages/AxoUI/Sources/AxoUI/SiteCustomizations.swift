@@ -14,12 +14,16 @@ extension BrowserModel {
     /// a new one for its domain (without "www.").
     public func customizeCurrentSite() {
         guard let host = selectedHost else { return }
-        // The most specific one that covers this host, even if it's turned off, so it can be
-        // edited or turned back on.
-        let existing = siteCustomizations
+        customizationDraft = selectedSiteCustomization ?? SiteCustomization(domain: LinkRoute.normalizedDomain(from: host) ?? host)
+    }
+
+    /// The customization that covers the selected page's host: the most specific one, even if
+    /// it's turned off, so it can be edited or turned back on.
+    public var selectedSiteCustomization: SiteCustomization? {
+        guard let host = selectedHost else { return nil }
+        return siteCustomizations
             .filter { host == $0.domain || host.hasSuffix("." + $0.domain) }
             .max { $0.domain.count < $1.domain.count }
-        customizationDraft = existing ?? SiteCustomization(domain: LinkRoute.normalizedDomain(from: host) ?? host)
     }
 
     /// Saves a customization, optionally reloading the selected page to show it.
