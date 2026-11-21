@@ -35,6 +35,7 @@ No Axo or third-party dependencies.
 - **Tabs and windows for extensions (`chrome.tabs`, `chrome.windows`):** the app implements `ExtensionBrowsing` (the current profile, the window's tabs, the active tab, open, activate, and close). `ExtensionTab` and `ExtensionWindow` adapt it to `WKWebExtensionTab` and `WKWebExtensionWindow`, with one stable object per tab. Clicking a toolbar button grants `activeTab` for that tab. Only the controller of the profile the window shows sees the window.
   - The app reports events with `tabDidOpen`, `tabDidClose`, `tabDidActivate(_:previous:)`, `tabDidChange`, and `windowDidChangeSpace`.
   - A `WKWebExtensionControllerDelegate` opens tabs for extensions, reports the window, and shows popups.
+- **Site access:** `pageAccess(to:profileID:)` says which loaded extensions can (`granted`) or ask to (`requested`, a pattern they request that isn't granted, as with site access "when clicked") read and change a page, for Site Settings.
 - **Toolbar:** `toolbarActions(for:tabID:)` returns each loaded extension's title, icon, badge, and enabled state, and is observable through `actionsRevision`. `performAction(extensionID:profileID:tabID:)` clicks the button, and `onPresentPopup` hands WebKit's ready-made `NSPopover` (`action.popupPopover`) to the app to show.
 
 Known WebKit gap: `runtime.onInstalled` doesn't fire (see `docs/webkit-gaps.md`).

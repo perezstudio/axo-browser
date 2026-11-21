@@ -102,8 +102,15 @@ struct InstallAndAccessTests {
         )
         #expect(try await markOnNewPage() == "marked")
 
+        let site = try #require(URL(string: "https://example.com/page"))
+        #expect(manager.pageAccess(to: site, profileID: profileID) == [record.extensionID: .granted])
+        #expect(manager.pageAccess(to: URL(fileURLWithPath: "/tmp/page.html"), profileID: profileID).isEmpty)
+        #expect(manager.pageAccess(to: site, profileID: UUID()).isEmpty, "Another profile's extensions are its own")
+
         try await manager.setSiteAccess(.click, extensionID: record.extensionID, profileID: profileID)
         #expect(try await markOnNewPage() == nil)
+        #expect(manager.pageAccess(to: site, profileID: profileID) == [record.extensionID: .requested],
+                "When clicked, it asks to run on the site")
         #expect(!manager.grantedDescription(for: record.extensionID, profileID: profileID).contains("Read and change your data on all websites"))
 
         try await manager.setSiteAccess(.all, extensionID: record.extensionID, profileID: profileID)

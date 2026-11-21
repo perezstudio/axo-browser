@@ -217,6 +217,25 @@ public protocol ExtensionToolbarProviding: AnyObject {
     /// Clicks a button and inspects the popup that opens, its own or one the extension opens
     /// itself, keeping the popup open while it's inspected.
     func inspectPopup(extensionID: String, profileID: Profile.ID, tabID: AxoCore.Tab.ID?)
+    /// The profile's turned-on extensions that can, or ask to, read and change `url`'s page, by
+    /// ID, for Site Settings (#110). Extensions with no access aren't listed.
+    func siteAccess(to url: URL, profileID: Profile.ID) -> [String: SiteExtensionAccess]
+}
+
+/// What an extension may do on a site, as Site Settings says it (#110).
+public enum SiteExtensionAccess: Hashable, Sendable {
+    /// It can read and change the site.
+    case granted
+    /// It asks to, and runs there only once allowed (site access "when clicked").
+    case asking
+
+    /// The row's description.
+    public var title: String {
+        switch self {
+        case .granted: "Can read and change this site"
+        case .asking: "Asks to read and change this site"
+        }
+    }
 }
 
 /// An extension waiting for the person to allow its update's new access.
@@ -237,6 +256,8 @@ extension ExtensionToolbarProviding {
     public var canInspectPopups: Bool { false }
     /// Does nothing, for providers whose engine can't inspect popups.
     public func inspectPopup(extensionID: String, profileID: Profile.ID, tabID: AxoCore.Tab.ID?) {}
+    /// None, for providers whose engine can't say.
+    public func siteAccess(to url: URL, profileID: Profile.ID) -> [String: SiteExtensionAccess] { [:] }
     /// No shortcuts, for providers whose engine doesn't have them.
     public func shortcuts(profileID: Profile.ID) -> [ExtensionShortcut] { [] }
     /// Does nothing, for providers whose engine doesn't have shortcuts.

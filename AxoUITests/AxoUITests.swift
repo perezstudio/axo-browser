@@ -2403,6 +2403,44 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Imported from Chrome"].waitForExistence(timeout: 5))
     }
 
+    /// Site Settings lists the extensions that can run on the site (#110), and its pin is the
+    /// toolbar's: unpinning there takes the button out of the address bar.
+    @MainActor
+    func testSiteSettingsListsExtensionsOnTheSiteWithTheirPins() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "AxoUITestExtension-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try """
+        {"name": "Axo Marker", "version": "1.0", "manifest_version": 3, "description": "UI test extension.",
+         "action": {"default_title": "Axo Marker"},
+         "content_scripts": [{"matches": ["http://127.0.0.1/*"], "js": ["mark.js"]}]}
+        """.write(to: folder.appending(path: "manifest.json"), atomically: true, encoding: .utf8)
+        try "document.documentElement.dataset.axo = 'marked';".write(to: folder.appending(path: "mark.js"), atomically: true, encoding: .utf8)
+
+        let app = Self.makeApp()
+        app.launchEnvironment["AXO_UI_TESTING_EXTENSION"] = folder.path
+        app.launch()
+        Self.bringToFront(app)
+        let button = app.buttons.matching(NSPredicate(format: "identifier == 'extensionButton' AND label CONTAINS 'Axo Marker'")).firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 10), "New installs start pinned")
+
+        Self.openPage("http://127.0.0.1:\(try Self.closedPort())/", in: app)
+        let address = app.descendants(matching: .any)["sidebarAddressBar"]
+        expectation(for: NSPredicate(format: "value CONTAINS %@", "127.0.0.1"), evaluatedWith: address)
+        waitForExpectations(timeout: 10)
+        app.menuBars.menuBarItems["View"].click()
+        app.menuBars.menuItems["Site Settings…"].click()
+        let row = app.descendants(matching: .any).matching(identifier: "siteExtension").firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "The extension whose scripts run here is listed")
+        XCTAssertTrue(row.staticTexts.containing(NSPredicate(format: "label CONTAINS 'Can read and change this site' OR value CONTAINS 'Can read and change this site'")).firstMatch.exists
+                      || row.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS 'Can read and change this site'")).firstMatch.exists)
+        let pin = row.buttons["siteExtensionPin"]
+        XCTAssertEqual(pin.label, "Unpin Axo Marker from the Toolbar")
+        pin.click()
+        expectation(for: NSPredicate(format: "label == 'Pin Axo Marker to the Toolbar'"), evaluatedWith: pin)
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(button.waitForNonExistence(timeout: 5), "Unpinned, it has no button")
+    }
+
     /// An installed extension shows a toolbar button with its badge, and clicking it opens its
     /// popup.
     @MainActor

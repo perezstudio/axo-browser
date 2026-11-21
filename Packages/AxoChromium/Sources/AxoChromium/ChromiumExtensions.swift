@@ -19,6 +19,14 @@ public struct ChromiumPermissionRequest: Equatable, Sendable {
 }
 
 /// An installed extension in the Chromium engine.
+/// What an extension may do on a site (`ChromiumEngine.extensionSiteAccess(for:profileID:)`).
+public enum ChromiumSiteAccess: Equatable, Sendable {
+    /// It can read and change the site.
+    case granted
+    /// It asks to, and runs there only once allowed (Chrome's withheld host permissions).
+    case withheld
+}
+
 public struct ChromiumExtension: Equatable, Sendable {
     /// Chrome's extension ID.
     public var id: String
@@ -323,6 +331,20 @@ extension ChromiumEngine {
                     ? ChromiumPermissionRequest(apis: $0.addedAPIPermissions, hosts: $0.addedHostPermissions) : nil,
                 isOffForOtherReason: $0.disableReasons.contains(.other)
             )
+        }
+    }
+
+    /// The profile's turned-on extensions that can (`granted`) or ask to (`withheld`) read and
+    /// change `url`'s page, by ID, as Chrome decides it, without any tab's own grants (activeTab).
+    /// Empty before the engine is ready, and for URLs that aren't http or https.
+    public func extensionSiteAccess(for url: URL, profileID: Profile.ID) -> [String: ChromiumSiteAccess] {
+        guard let profile = readyProfile(profileID) else { return [:] }
+        return profile.extensionSiteAccess(for: url).compactMapValues { value in
+            switch AXOExtensionSiteAccess(rawValue: value.intValue) {
+            case .granted: .granted
+            case .withheld: .withheld
+            default: nil
+            }
         }
     }
 

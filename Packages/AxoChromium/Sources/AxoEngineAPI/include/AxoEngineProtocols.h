@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 42
+#define AXO_ENGINE_API_VERSION 43
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -24,6 +24,16 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol AXOWindow;
 @protocol AXOWindowDelegate;
 @protocol AXOExtension;
+
+/// What an extension may do on a site (`-[AXOProfile extensionSiteAccessForURL:]`).
+typedef NS_ENUM(NSInteger, AXOExtensionSiteAccess) {
+  /// It can't read or change the site.
+  AXOExtensionSiteAccessNone = 0,
+  /// It can read and change the site (its host permissions or content scripts cover it).
+  AXOExtensionSiteAccessGranted,
+  /// It asks to, and runs there only when allowed (Chrome's withheld host permissions).
+  AXOExtensionSiteAccessWithheld,
+};
 
 /// Why an extension is off (`AXOExtension.disableReasons`).
 typedef NS_OPTIONS(NSUInteger, AXOExtensionDisableReason) {
@@ -203,6 +213,14 @@ NS_SWIFT_UI_ACTOR
 /// installed extensions start pinned (Chrome's `ExtensionsPinnedByDefault`); updates don't
 /// change it.
 @property(nonatomic, readonly) NSArray<NSString*>* pinnedExtensionIDs;
+
+/// The profile's turned-on extensions that can, or ask to, read and change `url`'s page, by ID,
+/// each an `AXOExtensionSiteAccess` (never None), as Chrome's puzzle menu and page info decide it
+/// (`PermissionsData::GetPageAccess` and `GetContentScriptAccess`, with no tab's own grants such as
+/// activeTab). Pages no extension may touch (the Chrome Web Store, policy-blocked sites) list none.
+/// Empty for a URL that isn't http or https.
+- (NSDictionary<NSString*, NSNumber*>*)extensionSiteAccessForURL:(NSURL*)url
+    NS_SWIFT_NAME(extensionSiteAccess(for:));
 
 /// Pins an extension to the toolbar, at the end, or unpins it, as Chrome's puzzle menu does.
 - (void)setExtension:(NSString*)extensionID pinned:(BOOL)pinned

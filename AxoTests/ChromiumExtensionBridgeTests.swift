@@ -569,6 +569,29 @@ struct ChromiumExtensionBridgeTests {
         #expect(items.map(\.isPinned) == [true, true, false])
     }
 
+    /// Site Settings' extensions (#110): Chrome's access for the page's address, granted or
+    /// withheld (asking), joined with the toolbar's names and pins.
+    @Test func siteSettingsListChromesAccessForThePage() async throws {
+        let url = URL(string: "https://news.example.com/today")!
+        await model.openTab(url: url)
+        let profile = try #require(FakeProfile.made[profileID])
+        profile.actions = [
+            FakeExtensionAction(extensionIdentifier: "a", title: "Alpha", badgeText: ""),
+            FakeExtensionAction(extensionIdentifier: "b", title: "Beta", badgeText: ""),
+            FakeExtensionAction(extensionIdentifier: "c", title: "Gamma", badgeText: ""),
+        ]
+        profile.pinnedExtensionIDs = ["b"]
+        profile.siteAccess = ["a": NSNumber(value: AXOExtensionSiteAccess.withheld.rawValue),
+                              "b": NSNumber(value: AXOExtensionSiteAccess.granted.rawValue),
+                              "x": NSNumber(value: 99)]
+
+        #expect(bridge.siteAccess(to: url, profileID: profileID) == ["a": .asking, "b": .granted], "An unknown value isn't access")
+        await model.showSiteSettings()
+        #expect(profile.siteAccessURLs.last == url)
+        #expect(model.siteExtensions.map(\.item.id) == ["b", "a"])
+        #expect(model.siteExtensions.map(\.item.isPinned) == [true, false])
+    }
+
     /// An update that asks for more access waits for the person (#130): the window describes
     /// only the new access, the Extensions menu lists it, VoiceOver hears when one starts
     /// waiting, and allowing it goes to the engine.

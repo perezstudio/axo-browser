@@ -285,6 +285,10 @@ final class ChromiumExtensionBridge: ExtensionToolbarProviding, ExtensionManagin
         return ExtensionToolbarItem.arranged(items, pinnedIDs: engine.pinnedExtensionIDs(profileID: profileID))
     }
 
+    func siteAccess(to url: URL, profileID: Profile.ID) -> [String: SiteExtensionAccess] {
+        engine.extensionSiteAccess(for: url, profileID: profileID).mapValues { $0 == .granted ? .granted : .asking }
+    }
+
     func setPinned(_ pinned: Bool, extensionID: String, profileID: Profile.ID) {
         // Chrome keeps pins; the change comes back through onExtensionsChange.
         engine.setExtension(extensionID, pinned: pinned, profileID: profileID)

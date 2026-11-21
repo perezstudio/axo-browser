@@ -78,6 +78,16 @@ public final class FakeProfile: NSObject, AXOProfile {
         completion()
     }
 
+    /// What ``extensionSiteAccess(for:)`` answers (`AXOExtensionSiteAccess` raw values by ID),
+    /// and the URLs it was asked about.
+    public var siteAccess: [String: NSNumber] = [:]
+    public private(set) var siteAccessURLs: [URL] = []
+
+    public func extensionSiteAccess(for url: URL) -> [String: NSNumber] {
+        siteAccessURLs.append(url)
+        return siteAccess
+    }
+
     /// The sites cleared with ``clearWebsiteData(forSite:completion:)``, in order.
     public private(set) var clearedSites: [URL] = []
 

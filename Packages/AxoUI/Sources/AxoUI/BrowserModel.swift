@@ -297,6 +297,8 @@ public final class BrowserModel {
     public internal(set) var siteExternalApps: [String] = []
     /// How Site Settings names each of those: the app and the scheme, looked up when it opens.
     public internal(set) var siteExternalAppTitles: [String: String] = [:]
+    /// What each extension may do on Site Settings' site (#110), read when it opens.
+    public internal(set) var siteExtensionAccess: [String: SiteExtensionAccess] = [:]
     /// Clearing a site's website data that the window's alert is asking about, if any.
     public var siteDataClear: SiteDataClear?
     /// Turns iCloud sync on and off, for the iCloud pane in Settings. Set by the app.

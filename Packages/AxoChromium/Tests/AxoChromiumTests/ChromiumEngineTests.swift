@@ -1322,6 +1322,23 @@ struct ChromiumEngineTests {
         #expect(FakeProfile.made[profileID]?.clearCount == 0, "Never the whole profile")
     }
 
+    /// Extensions' access to a site (#110) is Chrome's, read from the profile once the engine runs.
+    @Test func extensionSiteAccessComesFromTheEngine() async throws {
+        let scheduled = Scheduled()
+        let engine = makeEngine(scheduled: scheduled)
+        let url = URL(string: "https://news.example.com/")!
+        #expect(engine.extensionSiteAccess(for: url, profileID: profileID).isEmpty, "Nothing before the engine runs")
+        engine.start()
+        scheduled.run()
+        _ = engine.extensions(profileID: profileID)
+        let profile = try #require(FakeProfile.made[profileID])
+        profile.siteAccess = ["a": NSNumber(value: AXOExtensionSiteAccess.granted.rawValue),
+                              "b": NSNumber(value: AXOExtensionSiteAccess.withheld.rawValue),
+                              "c": NSNumber(value: AXOExtensionSiteAccess.none.rawValue)]
+        #expect(engine.extensionSiteAccess(for: url, profileID: profileID) == ["a": .granted, "b": .withheld])
+        #expect(profile.siteAccessURLs == [url])
+    }
+
     @Test func aRemovedProfileIsNeverLoadedAgain() async throws {
         let scheduled = Scheduled()
         let engine = makeEngine(scheduled: scheduled)

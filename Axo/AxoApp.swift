@@ -781,6 +781,10 @@ final class ExtensionBridge: ExtensionBrowsing, ExtensionToolbarProviding, Exten
         return ExtensionToolbarItem.arranged(items, pinnedIDs: pins.pinnedIDs(among: items.map(\.id), profileID: profileID))
     }
 
+    func siteAccess(to url: URL, profileID: Profile.ID) -> [String: SiteExtensionAccess] {
+        manager.pageAccess(to: url, profileID: profileID).mapValues { $0 == .granted ? .granted : .asking }
+    }
+
     func setPinned(_ pinned: Bool, extensionID: String, profileID: Profile.ID) {
         let ids = manager.toolbarActions(for: profileID, tabID: nil).map(\.id)
         pins.setPinned(pinned, extensionID: extensionID, among: ids, profileID: profileID)

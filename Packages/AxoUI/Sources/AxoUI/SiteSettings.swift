@@ -89,7 +89,11 @@ extension BrowserModel {
             siteDefaults = [:]
             siteExternalApps = []
             siteExternalAppTitles = [:]
+            siteExtensionAccess = [:]
             return
+        }
+        if let url = selectedPage?.url ?? shownTab?.url {
+            siteExtensionAccess = extensionToolbar?.siteAccess(to: url, profileID: profileID) ?? [:]
         }
         sitePermissions = (try? await store.sitePermissions.decisions(origin: origin.serialized, profileID: profileID)) ?? [:]
         siteDefaults = (try? await store.sitePermissions.defaults(profileID: profileID)) ?? [:]
@@ -128,6 +132,19 @@ extension BrowserModel {
             pool.setLastingPermission(kind, origin: origin, decision: nil, profileID: profileID)
         }
         await refreshSiteSettings()
+    }
+
+    /// The extensions Site Settings lists for its site (#110): the shown Space's profile's
+    /// turned-on extensions that can, or ask to, read and change it, as the toolbar names and
+    /// pins them, those that can first, then by name.
+    public var siteExtensions: [(item: ExtensionToolbarItem, access: SiteExtensionAccess)] {
+        guard !siteExtensionAccess.isEmpty, let profileID = space?.profileID, let toolbar = extensionToolbar else { return [] }
+        return toolbar.toolbarItems(profileID: profileID, tabID: selectedTabID)
+            .compactMap { item in siteExtensionAccess[item.id].map { (item, $0) } }
+            .sorted { lhs, rhs in
+                if lhs.access != rhs.access { return lhs.access == .granted }
+                return lhs.item.label.localizedStandardCompare(rhs.item.label) == .orderedAscending
+            }
     }
 
     /// The name of the profile Site Settings' choices apply to: the shown Space's.
@@ -283,6 +300,11 @@ struct SiteSettingsView: View {
             header
             Divider()
             permissions
+            let extensions = model.siteExtensions
+            if !extensions.isEmpty {
+                Divider()
+                extensionsSection(extensions)
+            }
             Divider()
             customization
             Divider()
@@ -390,6 +412,65 @@ struct SiteSettingsView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    /// The extensions that can, or ask to, read and change the site, each with what it may do and
+    /// a pin for the toolbar, and the Extensions window for the rest.
+    private func extensionsSection(_ extensions: [(item: ExtensionToolbarItem, access: SiteExtensionAccess)]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Extensions on this site")
+                    .font(.subheadline.weight(.semibold))
+                    .accessibilityAddTraits(.isHeader)
+                Spacer()
+                Button("Manage…") {
+                    let profileID = model.space?.profileID
+                    model.isShowingSiteSettings = false
+                    model.showExtensions(profileID: profileID)
+                }
+                .controlSize(.small)
+                .help("Manage this profile's extensions")
+                .accessibilityLabel("Manage Extensions…")
+                .accessibilityIdentifier("siteManageExtensions")
+            }
+            ForEach(extensions, id: \.item.id) { entry in
+                let name = entry.item.label
+                HStack(spacing: 8) {
+                    Group {
+                        if let icon = entry.item.icon {
+                            Image(platformImage: icon).resizable().interpolation(.high)
+                        } else {
+                            Image(systemName: "puzzlepiece.extension").foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(width: 16, height: 16)
+                    .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(name).lineLimit(1)
+                        Text(entry.access.title)
+                            .font(.caption)
+                            .foregroundStyle(entry.access == .granted ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
+                    }
+                    .accessibilityElement(children: .combine)
+                    Spacer()
+                    Button {
+                        guard let profileID = model.space?.profileID else { return }
+                        model.setExtensionPinned(!entry.item.isPinned, extensionID: entry.item.id, name: name, profileID: profileID)
+                    } label: {
+                        Image(systemName: entry.item.isPinned ? "pin.fill" : "pin")
+                            .symbolRenderingMode(.hierarchical)
+                    }
+                    .buttonStyle(.borderless)
+                    .help(entry.item.isPinned ? "Unpin from the Toolbar" : "Pin to the Toolbar")
+                    .accessibilityLabel(entry.item.isPinned ? "Unpin \(name) from the Toolbar" : "Pin \(name) to the Toolbar")
+                    .accessibilityIdentifier("siteExtensionPin")
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("siteExtension")
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("siteExtensions")
     }
 
     /// The site's own CSS and JavaScript: a switch and Edit for the one that covers it, or a
