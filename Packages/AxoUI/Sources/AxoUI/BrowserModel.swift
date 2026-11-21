@@ -299,6 +299,9 @@ public final class BrowserModel {
     public internal(set) var siteExternalAppTitles: [String: String] = [:]
     /// What each extension may do on Site Settings' site (#110), read when it opens.
     public internal(set) var siteExtensionAccess: [String: SiteExtensionAccess] = [:]
+    /// The profile and site ``siteExtensionAccess`` was read for: the list shows nothing once
+    /// the page goes to another site or the Space to another profile.
+    var siteExtensionAccessKey: SiteAccessKey?
     /// Clearing a site's website data that the window's alert is asking about, if any.
     public var siteDataClear: SiteDataClear?
     /// Turns iCloud sync on and off, for the iCloud pane in Settings. Set by the app.
@@ -881,7 +884,11 @@ public final class BrowserModel {
     /// Shows the tab with `id`, or nothing if `id` is `nil`.
     public func select(_ id: AxoCore.Tab.ID?) {
         hideTabPreview()
-        if id != selectedTabID { isShowingConnectionInfo = false }
+        // The connection's details and Site Settings are the tab being left's.
+        if id != selectedTabID {
+            isShowingConnectionInfo = false
+            isShowingSiteSettings = false
+        }
         if id != selectedTabID, isFindBarVisible {
             closeFindBar()
         }

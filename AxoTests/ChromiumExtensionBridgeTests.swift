@@ -587,7 +587,7 @@ struct ChromiumExtensionBridgeTests {
 
         #expect(bridge.siteAccess(to: url, profileID: profileID) == ["a": .asking, "b": .granted], "An unknown value isn't access")
         await model.showSiteSettings()
-        #expect(profile.siteAccessURLs.last == url)
+        #expect(profile.siteAccessURLs.last == URL(string: "https://news.example.com/"), "The site's root")
         #expect(model.siteExtensions.map(\.item.id) == ["b", "a"])
         #expect(model.siteExtensions.map(\.item.isPinned) == [true, false])
     }

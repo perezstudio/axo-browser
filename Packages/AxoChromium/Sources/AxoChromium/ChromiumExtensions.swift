@@ -18,7 +18,6 @@ public struct ChromiumPermissionRequest: Equatable, Sendable {
     }
 }
 
-/// An installed extension in the Chromium engine.
 /// What an extension may do on a site (`ChromiumEngine.extensionSiteAccess(for:profileID:)`).
 public enum ChromiumSiteAccess: Equatable, Sendable {
     /// It can read and change the site.
@@ -27,6 +26,7 @@ public enum ChromiumSiteAccess: Equatable, Sendable {
     case withheld
 }
 
+/// An installed extension in the Chromium engine.
 public struct ChromiumExtension: Equatable, Sendable {
     /// Chrome's extension ID.
     public var id: String

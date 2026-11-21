@@ -367,7 +367,7 @@ struct SiteSettingsExtensionTests {
         toolbar.access = ["z": .granted, "n": .asking, "b": .granted, "gone": .granted]
 
         await model.showSiteSettings()
-        #expect(toolbar.accessURLs.last == url, "Asked about the page's own address")
+        #expect(toolbar.accessURLs.last == URL(string: "https://news.example.com/"), "Asked about the site, not one page")
         #expect(model.siteExtensions.map(\.item.id) == ["b", "z", "n"], "Those that can first, by name; one with no button isn't listed")
         #expect(model.siteExtensions.map(\.access) == [.granted, .granted, .asking])
         #expect(SiteExtensionAccess.asking.title == "Asks to read and change this site")
@@ -380,10 +380,32 @@ struct SiteSettingsExtensionTests {
     }
 
     @Test func pagesWithoutASiteListNone() async throws {
-        await model.openTab(url: URL(string: "about:blank")!)
+        await model.openTab(url: URL(string: "https://news.example.com/")!)
         toolbar.access = ["z": .granted]
+        await model.showSiteSettings()
+        #expect(!model.siteExtensionAccess.isEmpty)
+
+        await model.openTab(url: URL(string: "about:blank")!)
+        #expect(!model.isShowingSiteSettings, "Switching tabs closes Site Settings")
         await model.refreshSiteSettings()
+        #expect(model.siteExtensionAccess.isEmpty, "Reset for a page without a site")
         #expect(model.siteExtensions.isEmpty)
-        #expect(toolbar.accessURLs.isEmpty, "Nothing is asked without a site")
+        #expect(toolbar.accessURLs.count == 1, "Nothing is asked without a site")
+    }
+
+    /// Access read for one site and profile is never shown for another: a page that goes to
+    /// another site (a redirect, an extension) lists nothing until Site Settings reads again.
+    @Test func accessIsShownOnlyForTheSiteItWasReadFor() async throws {
+        await model.openTab(url: URL(string: "https://news.example.com/")!)
+        let tabID = try #require(model.selectedTabID)
+        let page = try #require(model.pool.livePage(for: tabID) as? FakePage)
+        toolbar.access = ["z": .granted]
+        await model.showSiteSettings()
+        #expect(model.siteExtensions.map(\.item.id) == ["z"])
+
+        page.navigate(to: URL(string: "https://other.example.org/")!, title: "Other")
+        #expect(model.siteExtensions.isEmpty, "Another site's access isn't shown")
+        await model.refreshSiteSettings()
+        #expect(model.siteExtensions.map(\.item.id) == ["z"])
     }
 }

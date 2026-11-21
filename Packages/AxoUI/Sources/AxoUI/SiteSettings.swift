@@ -90,10 +90,14 @@ extension BrowserModel {
             siteExternalApps = []
             siteExternalAppTitles = [:]
             siteExtensionAccess = [:]
+            siteExtensionAccessKey = nil
             return
         }
-        if let url = selectedPage?.url ?? shownTab?.url {
-            siteExtensionAccess = extensionToolbar?.siteAccess(to: url, profileID: profileID) ?? [:]
+        // The site's root, so an extension limited to some paths isn't listed for some pages of
+        // the site and not others.
+        if let root = URL(string: origin.serialized + "/") {
+            siteExtensionAccess = extensionToolbar?.siteAccess(to: root, profileID: profileID) ?? [:]
+            siteExtensionAccessKey = SiteAccessKey(profileID: profileID, origin: origin)
         }
         sitePermissions = (try? await store.sitePermissions.decisions(origin: origin.serialized, profileID: profileID)) ?? [:]
         siteDefaults = (try? await store.sitePermissions.defaults(profileID: profileID)) ?? [:]
@@ -136,9 +140,12 @@ extension BrowserModel {
 
     /// The extensions Site Settings lists for its site (#110): the shown Space's profile's
     /// turned-on extensions that can, or ask to, read and change it, as the toolbar names and
-    /// pins them, those that can first, then by name.
+    /// pins them, those that can first, then by name. Empty once the page or Space has moved on
+    /// from the site and profile the access was read for.
     public var siteExtensions: [(item: ExtensionToolbarItem, access: SiteExtensionAccess)] {
-        guard !siteExtensionAccess.isEmpty, let profileID = space?.profileID, let toolbar = extensionToolbar else { return [] }
+        guard !siteExtensionAccess.isEmpty, let profileID = space?.profileID, let toolbar = extensionToolbar,
+              let origin = siteSettingsOrigin, siteExtensionAccessKey == SiteAccessKey(profileID: profileID, origin: origin)
+        else { return [] }
         return toolbar.toolbarItems(profileID: profileID, tabID: selectedTabID)
             .compactMap { item in siteExtensionAccess[item.id].map { (item, $0) } }
             .sorted { lhs, rhs in
@@ -209,6 +216,12 @@ extension BrowserModel {
             return secure && asked.contains(lasting)
         }
     }
+}
+
+/// The profile and site extensions' access was read for (``BrowserModel/siteExtensionAccess``).
+struct SiteAccessKey: Hashable {
+    var profileID: Profile.ID
+    var origin: PageOrigin
 }
 
 /// Clearing one site's website data, which the window asks about first (#110).

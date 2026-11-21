@@ -219,8 +219,8 @@ public final class ExtensionManager {
     }
 
     /// The profile's loaded extensions that can, or ask to, read and change `url`'s page, by ID:
-    /// granted from each one's permission status for the URL, asking when a pattern it requests
-    /// (host permissions or content scripts) matches but isn't granted. Empty for a URL that isn't http or https.
+    /// granted from each one's permission status for the URL, asking when a host permission it
+    /// requests matches but isn't granted. Empty for a URL that isn't http or https.
     public func pageAccess(to url: URL, profileID: Profile.ID) -> [String: PageAccess] {
         guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return [:] }
         var result: [String: PageAccess] = [:]
@@ -229,9 +229,11 @@ public final class ExtensionManager {
             case .grantedExplicitly, .grantedImplicitly:
                 result[id] = .granted
             default:
-                // Site access "when clicked" denies the patterns it asked for (`load`), so one that
-                // asks for this site without access counts as asking.
-                if context.webExtension.allRequestedMatchPatterns.contains(where: { $0.matches(url) }) {
+                // Site access "when clicked" denies the patterns it asked for (`load`), so one whose
+                // host permissions ask for this site counts as asking. Only host permissions:
+                // `allRequestedMatchPatterns` also has sites that may only message it
+                // (`externally_connectable`), which Chrome doesn't count either.
+                if context.webExtension.requestedPermissionMatchPatterns.contains(where: { $0.matches(url) }) {
                     result[id] = .requested
                 }
             }

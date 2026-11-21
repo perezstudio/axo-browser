@@ -239,6 +239,7 @@ final class AccessibilityAuditTests: XCTestCase {
     func testAuditSiteSettings() throws {
         let folder = FileManager.default.temporaryDirectory.appending(path: "AxoAuditExtension-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: folder) }
         try """
         {"name": "Axo Marker", "version": "1.0", "manifest_version": 3, "description": "Audit extension.",
          "action": {"default_title": "Axo Marker"},
