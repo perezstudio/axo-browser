@@ -475,6 +475,7 @@ struct SiteSettingsView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("siteExtensions")
+    }
 
     /// A kind's answer as a menu button holding the choices. A menu-style picker's pop-up button
     /// fails the accessibility audit ("Action is missing"), as in Settings; a menu button passes.
