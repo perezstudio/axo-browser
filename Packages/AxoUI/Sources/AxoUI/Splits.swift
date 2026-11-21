@@ -80,7 +80,7 @@ extension BrowserModel {
         await addToSplit(tabID, with: anchor)
     }
 
-    private func addToSplit(_ tabID: AxoCore.Tab.ID, with anchor: AxoCore.Tab.ID) async {
+    func addToSplit(_ tabID: AxoCore.Tab.ID, with anchor: AxoCore.Tab.ID) async {
         do {
             try await store.addToSplit(tabID, with: anchor)
             try await refreshSidebar()

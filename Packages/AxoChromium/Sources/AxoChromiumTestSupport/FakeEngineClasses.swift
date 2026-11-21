@@ -556,6 +556,9 @@ public final class FakeAXOContextMenu: NSObject, AXOContextMenu {
     public private(set) var downloads: [URL] = []
     public func download(_ url: URL) { downloads.append(url) }
     public func lookUpSelection() {}
+    public var canInspectElement = true
+    public private(set) var inspected = 0
+    public func inspectElement() { inspected += 1 }
     public func performExtensionItem(_ item: any AXOContextMenuItem) { performedItems.append(item) }
     public func closed(followingLink url: URL?) { isClosed = true }
 }

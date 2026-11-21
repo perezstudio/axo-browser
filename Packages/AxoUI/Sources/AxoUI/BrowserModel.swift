@@ -277,6 +277,8 @@ public final class BrowserModel {
     public var pendingExtensionRemoval: ExtensionRemoval?
     /// Bumped when Axo changes an extension (pins, removal), so the Extensions window reads them again.
     public internal(set) var extensionsRevision = 0
+    /// Speaks a selection for the page menu's Speech items; tests replace it.
+    @ObservationIgnored public var selectionSpeech: any SelectionSpeaking = SystemSelectionSpeech()
     /// Extension toolbar buttons. Set by the app.
     @ObservationIgnored public var extensionToolbar: (any ExtensionToolbarProviding)?
     /// Called for tab and window events extensions hear about. Set by the app.
