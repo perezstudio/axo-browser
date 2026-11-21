@@ -495,9 +495,21 @@ struct SiteSettingsView: View {
             .pickerStyle(.inline)
             .labelsHidden()
         } label: {
-            Text(current)
+            HStack(spacing: 4) {
+                Text(current)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(.quaternary, in: .rect(cornerRadius: 6))
         }
+        // As the Extensions menu: a plain button VoiceOver can press, named for itself. The
+        // default menu button style failed the audit too ("Action is missing", no label).
         .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
         .fixedSize()
         .accessibilityLabel(Self.title(for: kind))
         .accessibilityValue(current)
