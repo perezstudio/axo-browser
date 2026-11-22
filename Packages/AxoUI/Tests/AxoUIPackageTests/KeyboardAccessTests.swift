@@ -3,6 +3,7 @@ import AppKit
 #endif
 import AxoCore
 import AxoWeb
+import AxoWebTestSupport
 import Foundation
 import Testing
 @testable import AxoUI
@@ -57,9 +58,16 @@ struct KeyboardAccessTests {
     #if os(macOS)
     /// A page that isn't in the window yet when focus is asked for (a tab clicked whose page is
     /// made or woken, and mounted on SwiftUI's next update) gets focus once it's there.
+    ///
+    /// On a fake engine: a real WebKit page loading under the parallel suite could end the wait
+    /// early (a load error covering it, say) and made this fail now and then in CI.
     @Test func aPageGetsFocusOnceItsInTheWindow() async throws {
-        let tab = try await open("one")
-        let view = try #require(model.pool.livePage(for: tab.id)?.view)
+        let model = BrowserModel(store: try TabStore.makeInMemory(), pool: WebViewPool(engine: FakeEngine()))
+        model.announce = { _ in }
+        await model.start()
+        await model.openTab(url: URL(string: "https://example.com/")!)
+        let tabID = try #require(model.selectedTabID)
+        let view = try #require(model.pool.livePage(for: tabID)?.view)
         #expect(view.window == nil, "Not mounted yet")
         // The suite shares the main thread, so the wait is long here; the window comes at once.
         model.pageFocusWaitLimit = .seconds(30)
@@ -70,12 +78,16 @@ struct KeyboardAccessTests {
         window.isReleasedWhenClosed = false
         defer { window.close() }
         window.contentView?.addSubview(view)
+        func focused() -> Bool { (window.firstResponder as? NSView).map { $0 === view || $0.isDescendant(of: view) } == true }
         let deadline = ContinuousClock.now + .seconds(30)
-        while (window.firstResponder as? NSView).map({ $0 === view || $0.isDescendant(of: view) }) != true,
-              ContinuousClock.now < deadline {
+        while !focused(), ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(20))
         }
-        #expect((window.firstResponder as? NSView).map { $0 === view || $0.isDescendant(of: view) } == true)
+        #expect(focused(), """
+            Focus went to \(String(describing: window.firstResponder)); \
+            selected \(String(describing: model.selectedTabID)) (the tab \(tabID)), \
+            covered \(model.pool.state(for: tabID)?.isCovered ?? false)
+            """)
     }
 
     /// Only a click on a row hands keyboard focus to the page; the arrow keys, VoiceOver, and

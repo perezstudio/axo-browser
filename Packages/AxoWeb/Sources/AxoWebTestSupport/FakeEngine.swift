@@ -105,7 +105,8 @@ public final class FakePage: EnginePage {
     /// The profile the page was made for.
     public let profileID: Profile.ID
     public weak var delegate: (any EnginePageDelegate)?
-    public let view = PlatformView()
+    /// Its view, which takes keyboard focus as a real page's does.
+    public let view: PlatformView = FakePageView()
     /// The sound and devices it reports (#71, #74); ``simulateMedia(_:)`` changes them as an
     /// engine would.
     public private(set) var media = PageMedia()
@@ -468,3 +469,14 @@ extension PageSecurity {
         return SecCertificateCreateWithData(nil, der as CFData)!
     }()
 }
+
+/// A fake page's view: it takes keyboard focus, as a real page's view does, so focus tests can
+/// check where focus went.
+final class FakePageView: PlatformView {
+    #if os(macOS)
+    override var acceptsFirstResponder: Bool { true }
+    #else
+    override var canBecomeFirstResponder: Bool { true }
+    #endif
+}
+
