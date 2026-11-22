@@ -163,9 +163,16 @@ public final class WebKitPage: NSObject, EnginePage {
         #if os(iOS)
         // How far the page is scrolled, for the iPhone's bar shrinking while reading (#182).
         observations.append(webView.scrollView.observe(\.contentOffset) { [weak self] scrollView, _ in
-            let offset = scrollView.contentOffset.y + scrollView.adjustedContentInset.top
             MainActor.assumeIsolated {
                 guard let self else { return }
+                let insets = scrollView.adjustedContentInset
+                // Within the content: a bounce past either end isn't scrolling back.
+                let end = max(0, scrollView.contentSize.height + insets.top + insets.bottom - scrollView.bounds.height)
+                let offset = min(max(scrollView.contentOffset.y + insets.top, 0), end)
+                // Only the person's own scrolling counts (a page scrolling itself, an anchor, or
+                // Back restoring a place doesn't), except reaching the top, which always does.
+                let byPerson = scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating
+                guard byPerson || offset < ChromeCollapse.topZone else { return }
                 self.delegate?.page(self, didScrollTo: offset)
             }
         })

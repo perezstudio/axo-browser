@@ -84,12 +84,12 @@ struct CommandBarView: View {
     @ViewBuilder
     private func results(reversed: Bool) -> some View {
         if !model.commandResults.isEmpty {
-            let indices = reversed ? Array(model.commandResults.indices.reversed()) : Array(model.commandResults.indices)
+            let rows = Array(model.commandResults.enumerated())
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 2) {
-                        ForEach(indices, id: \.self) { index in
-                            let result = model.commandResults[index]
+                        // By result, not position, so a row keeps its identity as rows arrive.
+                        ForEach(reversed ? rows.reversed() : rows, id: \.element.id) { index, result in
                             CommandRow(model: model, result: result, isSelected: index == model.commandSelection)
                                 .id(result.id)
                                 .onTapGesture { Task { await model.runCommand(at: index) } }
@@ -100,7 +100,8 @@ struct CommandBarView: View {
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { rowsHeight = $0 }
                 }
                 .defaultScrollAnchor(reversed ? .bottom : .top)
-                .frame(height: min(rowsHeight, 380))
+                // Shorter above the keyboard, so a small iPhone never runs them under the top.
+                .frame(height: min(rowsHeight, reversed ? 240 : 380))
                 .onChange(of: model.commandSelection) {
                     guard model.commandResults.indices.contains(model.commandSelection) else { return }
                     proxy.scrollTo(model.commandResults[model.commandSelection].id)

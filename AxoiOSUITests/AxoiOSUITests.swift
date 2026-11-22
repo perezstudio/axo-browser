@@ -190,6 +190,7 @@ final class AxoiOSUITests: XCTestCase {
         page.swipeUp(velocity: .slow)
         let pill = app.buttons["compactAddressBar"]
         XCTAssertTrue(pill.waitForExistence(timeout: 5), "Scrolling down shrank the bar")
+        XCTAssertTrue(pill.isHittable)
         XCTAssertFalse(app.buttons["pageMenuButton"].exists)
         pill.tap()
         XCTAssertTrue(app.buttons["pageMenuButton"].waitForExistence(timeout: 5), "The tap brought it back")
@@ -198,6 +199,10 @@ final class AxoiOSUITests: XCTestCase {
         let field = app.textFields["commandField"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         XCTAssertGreaterThan(field.frame.midY, app.windows.firstMatch.frame.midY, "It rises from the bottom, with the bar")
+        let keyboard = app.keyboards.firstMatch
+        if keyboard.waitForExistence(timeout: 3) {
+            XCTAssertLessThanOrEqual(field.frame.maxY, keyboard.frame.minY + 1, "Above the keyboard, not under it")
+        }
         app.buttons["commandCancelButton"].tap()
         XCTAssertTrue(field.waitForNonExistence(timeout: 5))
     }

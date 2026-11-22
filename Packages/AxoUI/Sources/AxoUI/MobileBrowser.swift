@@ -275,7 +275,10 @@ struct MobileBar: View {
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, isCompact ? 2 : 6)
+            .padding(.vertical, 6)
+            // The same height compact or not, so the page's frame never changes (each change
+            // would relayout the page, move `vh` units, and could scroll it).
+            .frame(height: 56, alignment: placement == .bottom ? .bottom : .top)
             if placement == .top { loadingLine }
         }
         .animation(reduceMotion ? nil : .spring(duration: 0.3, bounce: 0.15), value: isCompact)
@@ -291,11 +294,14 @@ struct MobileBar: View {
                 .lineLimit(1)
                 .padding(.horizontal, 14)
                 .frame(height: 26)
+                .glassEffect(.regular.interactive(), in: .capsule)
+                // A 44-point target around the small pill.
+                .frame(minWidth: 88, minHeight: 44)
+                .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .capsule)
         .accessibilityLabel("Address")
-        .accessibilityValue(model.shownPageURL?.absoluteString ?? "")
+        .accessibilityValue((model.connectionIndicator?.addressPrefix ?? "") + (model.shownPageURL?.absoluteString ?? ""))
         .accessibilityHint("Shows the browser's controls")
         .accessibilityIdentifier("compactAddressBar")
     }
@@ -305,7 +311,10 @@ struct MobileBar: View {
     private var spaceSwipe: some Gesture {
         DragGesture(minimumDistance: 20)
             .onChanged { value in
-                guard abs(value.translation.width) > abs(value.translation.height), model.spaces.count > 1 else { return }
+                guard abs(value.translation.width) > abs(value.translation.height), model.spaces.count > 1 else {
+                    swipe = 0
+                    return
+                }
                 swipe = value.translation.width
             }
             .onEnded { value in
