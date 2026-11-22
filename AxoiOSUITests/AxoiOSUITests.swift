@@ -176,6 +176,37 @@ final class AxoiOSUITests: XCTestCase {
         XCTAssertTrue(cards.matching(NSPredicate(format: "label == 'One'")).firstMatch.exists, "The other stays")
     }
 
+    /// The iPhone's bar shrinks to a pill while a page scrolls down, and a tap on the pill
+    /// brings it back (#182); the command bar rises from the bottom with the bar there.
+    @MainActor
+    func testTheBarShrinksOnScrollAndTheCommandBarRises() throws {
+        let app = launchApp()
+        openPage("data:text/html,<title>Long</title><body style='margin:0'><div style='height:6000px;background:linear-gradient(white,gray)'>Top</div></body>", in: app)
+        let address = address(in: app)
+        XCTAssertTrue(address.waitForExistence(timeout: 10))
+        waitUntilLoaded(app)
+
+        let page = app.descendants(matching: .any)["webContent"]
+        page.swipeUp(velocity: .slow)
+        let pill = app.buttons["compactAddressBar"]
+        XCTAssertTrue(pill.waitForExistence(timeout: 5), "Scrolling down shrank the bar")
+        XCTAssertTrue(pill.isHittable)
+        XCTAssertFalse(app.buttons["pageMenuButton"].exists)
+        pill.tap()
+        XCTAssertTrue(app.buttons["pageMenuButton"].waitForExistence(timeout: 5), "The tap brought it back")
+
+        address.tap()
+        let field = app.textFields["commandField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertGreaterThan(field.frame.midY, app.windows.firstMatch.frame.midY, "It rises from the bottom, with the bar")
+        let keyboard = app.keyboards.firstMatch
+        if keyboard.waitForExistence(timeout: 3) {
+            XCTAssertLessThanOrEqual(field.frame.maxY, keyboard.frame.minY + 1, "Above the keyboard, not under it")
+        }
+        app.buttons["commandCancelButton"].tap()
+        XCTAssertTrue(field.waitForNonExistence(timeout: 5))
+    }
+
     @MainActor
     func testClosingATabRemovesItFromTheList() throws {
         let app = launchApp()

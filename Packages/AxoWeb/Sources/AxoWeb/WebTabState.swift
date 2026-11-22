@@ -26,6 +26,10 @@ public final class WebTabState {
     /// Where the link under the pointer, or with keyboard focus, goes, for the status label over
     /// the page; `nil` when there's none, or while the page isn't showing.
     public internal(set) var hoveredLink: URL?
+    /// Whether the person has scrolled down into the page, so the iPhone's bar shrinks to a
+    /// small address pill (#182); scrolling back up, reaching the top, or tapping the pill
+    /// brings it back. Changes only when it flips, not on every scrolled point.
+    public internal(set) var prefersCompactChrome = false
     /// The colors the current page offers for the toolbar (its `theme-color`, or the color at its
     /// top), read each time it finishes loading; `nil` before that, or when a load fails.
     public internal(set) var pageColors: PageColors?

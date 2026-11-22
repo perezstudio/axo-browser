@@ -102,5 +102,33 @@ struct MobileMenuTests {
         await model.selectSpace(work.id)
         #expect(model.selectedTabID != nil, "Elsewhere a Space opens on a tab")
     }
+
+    /// Swiping the iPhone's bar goes to the next or previous Space, wrapping around (#182).
+    @Test func swipingTheBarGoesToTheAdjacentSpace() async throws {
+        let home = try #require(model.space)
+        await model.createSpace(name: "Work")
+        try await waitUntil { model.space?.name == "Work" }
+        await model.selectSpace(home.id)
+        let order = model.spaces.map(\.id)
+        let homeIndex = try #require(order.firstIndex(of: home.id))
+
+        await model.selectAdjacentSpace(by: 1)
+        #expect(model.space?.id == order[(homeIndex + 1) % order.count])
+        await model.selectAdjacentSpace(by: -1)
+        #expect(model.space?.id == home.id)
+        await model.selectAdjacentSpace(by: -1)
+        #expect(model.space?.id == order[(homeIndex - 1 + order.count) % order.count], "It wraps around")
+    }
+
+    /// Tapping the shrunk bar's pill brings the whole bar back (#182).
+    @Test func tappingThePillExpandsTheBar() async throws {
+        await model.openTab(url: URL(string: "https://example.com/")!)
+        let tabID = try #require(model.selectedTabID)
+        let page = try #require(model.pool.livePage(for: tabID) as? FakePage)
+        page.scroll(to: 500)
+        #expect(model.selectedPage?.prefersCompactChrome == true)
+        model.expandChrome()
+        #expect(model.selectedPage?.prefersCompactChrome == false)
+    }
 }
 

@@ -239,6 +239,11 @@ public final class FakePage: EnginePage {
         self.profileID = profileID
     }
 
+    /// Scrolls the page's content to `offset`, as a person's scrolling does.
+    public func scroll(to offset: CGFloat) {
+        delegate?.page(self, didScrollTo: offset)
+    }
+
     /// Commits a navigation to `url` and tells the delegate.
     public func navigate(to url: URL, title: String) {
         // A new page has no security until its engine reports it (#96).

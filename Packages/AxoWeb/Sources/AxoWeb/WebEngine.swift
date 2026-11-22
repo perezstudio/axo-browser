@@ -435,6 +435,9 @@ public protocol EnginePageDelegate: AnyObject {
     /// The page's URL, title, loading state, progress, or history changed. Read the new values
     /// from the page.
     func pageStateDidChange(_ page: any EnginePage)
+    /// The page's content scrolled to `offset` points from its top (#182). A requirement, so
+    /// calls through the delegate reach the implementation, with a default that ignores it.
+    func page(_ page: any EnginePage, didScrollTo offset: CGFloat)
     /// A main-frame load finished successfully.
     func pageDidFinishLoad(_ page: any EnginePage)
     /// A main-frame load failed.
@@ -565,3 +568,10 @@ extension PageSecurity {
 private extension Character {
     var isASCIIDigit: Bool { ("0"..."9").contains(self) }
 }
+
+extension EnginePageDelegate {
+    /// The page's content scrolled to `offset` points from its top (#182), for chrome that
+    /// shrinks while reading. Engines that don't report it never call this.
+    public func page(_ page: any EnginePage, didScrollTo offset: CGFloat) {}
+}
+

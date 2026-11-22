@@ -18,6 +18,7 @@ public struct MobileBrowserView: View {
     @Namespace private var cards
     /// The tab whose page showed last, outlined in the tabs view.
     @State private var lastShownTabID: AxoCore.Tab.ID?
+    @AppStorage(MobileAddressBarPlacement.storageKey) private var barPlacement: MobileAddressBarPlacement = .bottom
 
     /// Creates the browser showing `model`.
     public init(model: BrowserModel) {
@@ -60,7 +61,8 @@ public struct MobileBrowserView: View {
         }
         .overlay {
             if model.isCommandBarVisible {
-                CommandBarView(model: model)
+                // On iPhone with the bar at the bottom it rises from there, with the keyboard (#182).
+                CommandBarView(model: model, risesFromBottom: UIDevice.current.userInterfaceIdiom == .phone && barPlacement == .bottom)
             }
         }
         .pagePrompts(model: model)
@@ -242,24 +244,85 @@ struct MobileBar: View {
     let placement: MobileAddressBarPlacement
     let showTabs: () -> Void
     @AppStorage(MobileAddressBarPlacement.storageKey) private var storedPlacement: MobileAddressBarPlacement = .bottom
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// How far the bar is being dragged sideways, toward the next or previous Space (#182).
+    @State private var swipe: CGFloat = 0
+
+    /// Whether scrolling has shrunk the bar to its pill (#182).
+    private var isCompact: Bool { model.selectedPage?.prefersCompactChrome == true }
 
     var body: some View {
         VStack(spacing: 0) {
             if placement == .bottom { loadingLine }
-            HStack(spacing: 10) {
-                menu
-                address
-                Button("Tabs", systemImage: "square.on.square", action: showTabs)
-                    .labelStyle(.iconOnly)
-                    .font(.system(size: 18, weight: .medium))
-                    .frame(width: 44, height: 44)
-                    .glassEffect(.regular.interactive(), in: .circle)
-                    .accessibilityIdentifier("showTabsButton")
+            Group {
+                if isCompact {
+                    compactPill
+                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                } else {
+                    HStack(spacing: 10) {
+                        menu
+                        address
+                        Button("Tabs", systemImage: "square.on.square", action: showTabs)
+                            .labelStyle(.iconOnly)
+                            .font(.system(size: 18, weight: .medium))
+                            .frame(width: 44, height: 44)
+                            .glassEffect(.regular.interactive(), in: .circle)
+                            .accessibilityIdentifier("showTabsButton")
+                    }
+                    .offset(x: reduceMotion ? 0 : swipe)
+                    .gesture(spaceSwipe)
+                    .transition(.opacity)
+                }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
+            // The same height compact or not, so the page's frame never changes (each change
+            // would relayout the page, move `vh` units, and could scroll it).
+            .frame(height: 56, alignment: placement == .bottom ? .bottom : .top)
             if placement == .top { loadingLine }
         }
+        .animation(reduceMotion ? nil : .spring(duration: 0.3, bounce: 0.15), value: isCompact)
+    }
+
+    /// The shrunk bar: the site alone, small; a tap brings the whole bar back.
+    private var compactPill: some View {
+        Button {
+            model.expandChrome()
+        } label: {
+            Text(model.mobileAddressText ?? "Search or enter address")
+                .font(.system(size: 12, weight: .semibold))
+                .lineLimit(1)
+                .padding(.horizontal, 14)
+                .frame(height: 26)
+                .glassEffect(.regular.interactive(), in: .capsule)
+                // A 44-point target around the small pill.
+                .frame(minWidth: 88, minHeight: 44)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Address")
+        .accessibilityValue((model.connectionIndicator?.addressPrefix ?? "") + (model.shownPageURL?.absoluteString ?? ""))
+        .accessibilityHint("Shows the browser's controls")
+        .accessibilityIdentifier("compactAddressBar")
+    }
+
+    /// Dragging the bar sideways past a third of its width goes to the next or previous Space
+    /// (#182), as the iPhone board draws it; a shorter drag springs back.
+    private var spaceSwipe: some Gesture {
+        DragGesture(minimumDistance: 20)
+            .onChanged { value in
+                guard abs(value.translation.width) > abs(value.translation.height), model.spaces.count > 1 else {
+                    swipe = 0
+                    return
+                }
+                swipe = value.translation.width
+            }
+            .onEnded { value in
+                let distance = value.translation.width
+                withAnimation(reduceMotion ? nil : .spring(duration: 0.3)) { swipe = 0 }
+                guard abs(distance) > 110, abs(distance) > abs(value.translation.height) else { return }
+                Task { await model.selectAdjacentSpace(by: distance < 0 ? 1 : -1) }
+            }
     }
 
     /// A thin line in the Space's tint while the page loads.
@@ -360,7 +423,15 @@ struct MobileBar: View {
         .glassEffect(.regular.interactive(), in: .capsule)
         .accessibilityLabel("Address")
         .accessibilityValue(spaceValue + (model.connectionIndicator?.addressPrefix ?? "") + (model.shownPageURL?.absoluteString ?? "No page"))
-        .accessibilityHint("Edits the address")
+        .accessibilityHint("Edits the address. Swipe up or down to change Spaces.")
+        // VoiceOver's swipe up and down change Spaces, as dragging the bar sideways does.
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: Task { await model.selectAdjacentSpace(by: 1) }
+            case .decrement: Task { await model.selectAdjacentSpace(by: -1) }
+            @unknown default: break
+            }
+        }
         .accessibilityIdentifier("mobileAddressBar")
     }
 
