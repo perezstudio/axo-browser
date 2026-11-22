@@ -168,7 +168,7 @@ struct TabActionTests {
         #expect(model.tabToMove(droppedAs: ["tab:\(a.uuidString)"], to: home.id) == nil, "Its own Space")
         #expect(model.tabToMove(droppedAs: ["tab:\(a.uuidString)"], to: personal.id) == a, "Another profile's too (#81)")
         #expect(model.tabToMove(droppedAs: ["folder:\(UUID().uuidString)"], to: work.id) == nil)
-        #expect(model.tabToMove(droppedAs: [a.uuidString], to: work.id) == nil, "A favorite's bare ID")
+        #expect(model.tabToMove(droppedAs: [SidebarDragPayload.text(forFavorite: a)], to: work.id) == nil, "A favorite")
         #expect(model.tabToMove(droppedAs: ["https://example.com"], to: work.id) == nil)
     }
 
