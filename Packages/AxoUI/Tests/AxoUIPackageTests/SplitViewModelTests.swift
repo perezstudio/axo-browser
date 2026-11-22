@@ -2,6 +2,7 @@ import AxoCore
 import AxoWeb
 import Foundation
 import Testing
+import UniformTypeIdentifiers
 @testable import AxoUI
 
 @MainActor
@@ -146,4 +147,61 @@ struct SplitViewModelTests {
         #expect(names(model.tabs) == ["C", "A", "B"])
         _ = tabs
     }
+
+    // MARK: Dropping a row on the page (#78)
+
+    /// A tab row dropped on the page's edge makes a split with the selected tab, on that side;
+    /// folders, favorites, other text, the selected tab itself, and its own panes don't.
+    @Test func aRowDroppedOnThePagesEdgeSplitsWithTheSelectedTab() async throws {
+        let a = try await add("a"), b = try await add("b"), c = try await add("c")
+        model.select(a.id)
+        #expect(model.tabToSplit(droppedAs: "tab:\(b.id.uuidString)") == b.id)
+        #expect(model.tabToSplit(droppedAs: "tab:\(a.id.uuidString)") == nil, "The selected tab itself")
+        #expect(model.tabToSplit(droppedAs: "folder:\(UUID().uuidString)") == nil)
+        #expect(model.tabToSplit(droppedAs: b.id.uuidString) == nil, "A favorite's bare ID")
+        #expect(model.tabToSplit(droppedAs: "https://example.com") == nil, "A link from a page")
+        #expect(model.tabToSplit(droppedAs: "tab:\(UUID().uuidString)") == nil, "No such tab here")
+
+        await model.splitWithDroppedTab("tab:\(b.id.uuidString)", leading: false)
+        let split = try #require(model.split(of: a.id))
+        #expect(names(model.panes(of: split.id)) == ["a", "b"], "The right edge: after the page")
+        #expect(model.tabToSplit(droppedAs: "tab:\(b.id.uuidString)") == nil, "Already one of its panes")
+
+        model.select(a.id)
+        await model.splitWithDroppedTab("tab:\(c.id.uuidString)", leading: true)
+        #expect(names(model.panes(of: split.id)) == ["c", "a", "b"], "The left edge: before the page")
+    }
+
+    @Test func dropSidesAreThePagesOuterThirds() {
+        #expect(PageSplitDropSide.side(at: 10, width: 900) == .leading)
+        #expect(PageSplitDropSide.side(at: 450, width: 900) == nil, "The middle does nothing")
+        #expect(PageSplitDropSide.side(at: 890, width: 900) == .trailing)
+        #expect(PageSplitDropSide.side(at: 10, width: 0) == nil)
+    }
+
+    /// A dragged row gives Axo its ID and other apps only its web address (#78).
+    @Test func aDraggedRowCarriesItsIDAndItsAddress() async throws {
+        let id = UUID()
+        let url = URL(string: "https://example.com/page")!
+        let provider = SidebarDragPayload.provider(for: .tab(id), url: url, title: "Page")
+        #expect(provider.registeredTypeIdentifiers.contains(UTType.url.identifier))
+        #expect(provider.suggestedName == "Page")
+        let text: String? = await withCheckedContinuation { done in
+            _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.utf8PlainText.identifier) { data, _ in
+                done.resume(returning: data.flatMap { String(data: $0, encoding: .utf8) })
+            }
+        }
+        #expect(text == "tab:\(id.uuidString)")
+        let address: URL? = await withCheckedContinuation { done in
+            _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.url.identifier) { data, _ in
+                done.resume(returning: data.flatMap { URL(dataRepresentation: $0, relativeTo: nil) })
+            }
+        }
+        #expect(address == url)
+
+        let page = SidebarDragPayload.provider(for: .tab(id), url: URL(string: "data:text/html,<p>big</p>"), title: nil)
+        #expect(!page.registeredTypeIdentifiers.contains(UTType.url.identifier), "No data: pages to other apps")
+        #expect(!SidebarDragPayload.provider(for: .folder(id), url: nil, title: nil).registeredTypeIdentifiers.contains(UTType.url.identifier))
+    }
 }
+

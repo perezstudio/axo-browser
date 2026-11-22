@@ -783,6 +783,41 @@ final class AxoUITests: XCTestCase {
         add(shot)
     }
 
+    /// A sidebar row dropped on the page's right third makes a split with the selected tab
+    /// (#78), and one dropped on its left third takes the split's first pane.
+    @MainActor
+    func testDroppingARowOnThePageMakesASplit() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        for name in ["Alpha", "Beta", "Gamma"] {
+            Self.openPage("data:text/html,<title>\(name)</title>", in: app)
+            XCTAssertTrue(sidebar.staticTexts[name].waitForExistence(timeout: 10))
+        }
+        sidebar.staticTexts["Alpha"].click()
+        let window = app.windows.firstMatch
+        func drop(_ name: String, atX x: CGFloat) {
+            app.descendants(matching: .any)["sidebarAddressBar"].hover()
+            let row = sidebar.staticTexts[name]
+            row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                .click(forDuration: 0.6, thenDragTo: window.coordinate(withNormalizedOffset: CGVector(dx: x, dy: 0.55)))
+        }
+
+        drop("Beta", atX: 0.95)
+        let split = sidebar.descendants(matching: .any)["splitRow"]
+        XCTAssertTrue(split.waitForExistence(timeout: 10), "Beta joined Alpha in a split")
+        let shot = XCTAttachment(screenshot: window.screenshot())
+        shot.name = "Split from a drop"
+        shot.lifetime = .keepAlways
+        add(shot)
+
+        // The page column's left third (the sidebar takes the window's first quarter or so).
+        drop("Gamma", atX: 0.4)
+        let gammaRow = sidebar.descendants(matching: .any).matching(identifier: "tabRow").matching(NSPredicate(format: "label == 'Gamma'")).firstMatch
+        XCTAssertTrue(gammaRow.waitForNonExistence(timeout: 10), "Gamma joined the split too, rather than staying a row of its own")
+        XCTAssertEqual(sidebar.descendants(matching: .any).matching(identifier: "splitRow").count, 1)
+    }
+
     @MainActor
     func testDraggingRowsBetweenSections() throws {
         let app = launchApp()

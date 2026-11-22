@@ -364,6 +364,8 @@ public struct BrowserWindow: View {
     private var pageColumn: some View {
         HStack(spacing: 0) {
             content
+                // A sidebar row dropped on the page's left or right third makes a split (#78).
+                .overlay { if model.selectedTab != nil { PageSplitDrop(model: model) } }
             if let panel = model.extensionSidePanel {
                 Divider()
                 ExtensionSidePanelView(model: model, panel: panel)

@@ -1,5 +1,6 @@
 import AxoCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// A list of rows a sidebar drag can land in (#77): the pinned section's top level or one of its
 /// folders, or the tabs section.
@@ -150,11 +151,37 @@ enum SidebarDragPayload {
     }
 }
 
+extension SidebarDragPayload {
+    /// What a dragged row carries: its ID as text (``text(for:)``) for Axo's own drop targets,
+    /// readable only in Axo's process, and for a tab with a web address, that address as a URL
+    /// for other apps (Mail, Notes, Finder), as dragging Safari's tabs gives them (#78). Other
+    /// apps never see the ID.
+    static func provider(for item: PinnedItem, url: URL?, title: String?) -> NSItemProvider {
+        let provider = NSItemProvider()
+        let text = Data(Self.text(for: item).utf8)
+        provider.registerDataRepresentation(forTypeIdentifier: UTType.utf8PlainText.identifier, visibility: .ownProcess) { completion in
+            completion(text, nil)
+            return nil
+        }
+        if let url, ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
+            let data = url.dataRepresentation
+            provider.registerDataRepresentation(forTypeIdentifier: UTType.url.identifier, visibility: .all) { completion in
+                completion(data, nil)
+                return nil
+            }
+            provider.suggestedName = title.flatMap { $0.isEmpty ? nil : $0 } ?? url.host()
+        }
+        return provider
+    }
+}
+
 extension View {
-    /// Makes a sidebar row draggable (#77): it carries its ID as text (``SidebarDragPayload``)
-    /// to the other sections, folders, Favorites, and the Space dots.
-    func sidebarDraggable(_ item: PinnedItem, isEnabled: Bool) -> some View {
-        itemProvider(isEnabled ? { NSItemProvider(object: SidebarDragPayload.text(for: item) as NSString) } : nil)
+    /// Makes a sidebar row draggable (#77): it carries its ID to the other sections, folders,
+    /// Favorites, the Space dots, and the page's edges (a split, #78), and a tab's web address
+    /// to other apps (``SidebarDragPayload/provider(for:url:title:)``).
+    func sidebarDraggable(_ item: PinnedItem, isEnabled: Bool, url: @escaping () -> URL? = { nil },
+                          title: @escaping () -> String? = { nil }) -> some View {
+        itemProvider(isEnabled ? { SidebarDragPayload.provider(for: item, url: url(), title: title()) } : nil)
     }
 }
 
