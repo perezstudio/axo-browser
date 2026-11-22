@@ -232,48 +232,25 @@ struct SidebarDragTests {
     /// The type identifiers a drag's provider offers, and what it gives for each.
     private func registered(_ provider: NSItemProvider) -> [String] { provider.registeredTypeIdentifiers }
 
-    private func load(_ type: UTType, from provider: NSItemProvider) async throws -> Data? {
-        try await withCheckedThrowingContinuation { continuation in
-            _ = provider.loadDataRepresentation(forTypeIdentifier: type.identifier) { data, error in
-                if let error { continuation.resume(throwing: error) } else { continuation.resume(returning: data) }
-            }
-        }
-    }
-
-    @Test func aRowsDragCarriesItsPayloadInAxosTypeAndItsAddressForOtherApps() async throws {
+    @Test func aRowsDragCarriesItsIDFirstAndItsAddressForOtherApps() async throws {
         let id = UUID()
         let provider = SidebarDragPayload.provider(for: SidebarDragPayload.text(for: .tab(id)),
                                                    address: URL(string: "https://example.com/page")!)
         let types = registered(provider)
-        #expect(types.first == UTType.url.identifier, "The URL first, for apps that take the first representation")
-        #expect(types.last == UTType.axoSidebarItem.identifier, "Axo's own type, which its drop targets ask for by name")
-        #expect(types.contains { UTType($0)?.conforms(to: .plainText) == true }, "Text for text fields")
+        #expect(types.first == UTType.utf8PlainText.identifier, "The ID first, as text, for Axo's drop targets")
+        #expect(types.contains(UTType.url.identifier), "A URL for Finder, Mail, and the like")
 
-        let payload = try #require(try await load(.axoSidebarItem, from: provider))
-        #expect(String(decoding: payload, as: UTF8.self) == "tab:\(id.uuidString)")
+        // What Axo's drop targets read (`String`): the ID, never the address.
+        let text: String = try await withCheckedThrowingContinuation { continuation in
+            _ = provider.loadTransferable(type: String.self) { continuation.resume(with: $0) }
+        }
+        #expect(text == "tab:\(id.uuidString)")
         let url: URL? = try await withCheckedThrowingContinuation { continuation in
             _ = provider.loadObject(ofClass: NSURL.self) { object, error in
                 if let error { continuation.resume(throwing: error) } else { continuation.resume(returning: (object as? NSURL) as URL?) }
             }
         }
         #expect(url == URL(string: "https://example.com/page"))
-    }
-
-    @Test func axosDropTargetsReadOnlyAxosType() async throws {
-        let provider = SidebarDragPayload.provider(for: SidebarDragPayload.text(forFavorite: UUID()),
-                                                   address: URL(string: "https://example.com/")!)
-        let item: SidebarDragItem = try await withCheckedThrowingContinuation { continuation in
-            _ = provider.loadTransferable(type: SidebarDragItem.self) { continuation.resume(with: $0) }
-        }
-        #expect(SidebarDragPayload.favorite(from: item.text) != nil, "The payload, not the address")
-
-        // Plain text from elsewhere (a page's text that happens to look like a row) never reads
-        // as a dragged row or favorite.
-        let text = NSItemProvider(object: "tab:\(UUID().uuidString)" as NSString)
-        let fromText: SidebarDragItem? = await withCheckedContinuation { continuation in
-            _ = text.loadTransferable(type: SidebarDragItem.self) { continuation.resume(returning: try? $0.get()) }
-        }
-        #expect(fromText == nil)
     }
 
     @Test func onlyAddressesOtherAppsCanUseAreOffered() {
@@ -290,12 +267,12 @@ struct SidebarDragTests {
         #expect(!offered("about:blank") && !offered("chrome-extension://abc/popup.html"))
         #expect(SidebarDragPayload.addressForOtherApps(nil) == nil)
 
-        // A folder, or a page with no address other apps can use, drags only Axo's type.
+        // A folder, or a page with no address other apps can use, drags only its ID.
         let folder = SidebarDragPayload.provider(for: SidebarDragPayload.text(for: .folder(UUID())), address: nil)
-        #expect(registered(folder) == [UTType.axoSidebarItem.identifier])
+        #expect(registered(folder) == [UTType.utf8PlainText.identifier])
         let file = SidebarDragPayload.provider(for: SidebarDragPayload.text(for: .tab(UUID())),
                                                address: URL(fileURLWithPath: "/tmp/page.html"))
-        #expect(registered(file) == [UTType.axoSidebarItem.identifier])
+        #expect(registered(file) == [UTType.utf8PlainText.identifier])
     }
 
     @Test func aTabDragsTheAddressItsPageIsOn() async throws {
@@ -324,14 +301,11 @@ struct SidebarDragTests {
         let draggingPasteboard: NSPasteboard
         let draggingLocation: NSPoint
 
-        init(axoPayload: String?, plainText: String? = nil, x: CGFloat) {
+        init(text: String?, x: CGFloat) {
             // A pasteboard of the test's own, never the person's clipboard.
             draggingPasteboard = NSPasteboard.withUniqueName()
             draggingPasteboard.clearContents()
-            if let axoPayload {
-                draggingPasteboard.setData(Data(axoPayload.utf8), forType: .init(UTType.axoSidebarItem.identifier))
-            }
-            if let plainText { draggingPasteboard.setString(plainText, forType: .string) }
+            if let text { draggingPasteboard.setString(text, forType: .string) }
             draggingLocation = NSPoint(x: x, y: 50)
         }
 
@@ -360,20 +334,21 @@ struct SidebarDragTests {
         catcher.model = model
         var sides: [PageSplitDropSide?] = []
         catcher.onSideChange = { sides.append($0) }
-        #expect(catcher.registeredDraggedTypes == [.init(UTType.axoSidebarItem.identifier)],
-                "Only Axo's type, so the page gets links, text, and files directly")
+        #expect(catcher.registeredDraggedTypes == [.string])
 
         let row = SidebarDragPayload.text(for: .tab(a.id))
-        #expect(catcher.draggingEntered(Drag(axoPayload: row, x: 150)) == [], "The middle third: nothing")
-        #expect(!catcher.performDragOperation(Drag(axoPayload: row, x: 150)))
-        #expect(catcher.draggingEntered(Drag(axoPayload: SidebarDragPayload.text(for: .folder(UUID())), x: 10)) == [],
+        #expect(catcher.draggingEntered(Drag(text: row, x: 150)) == [], "The middle third: nothing")
+        #expect(!catcher.performDragOperation(Drag(text: row, x: 150)))
+        #expect(catcher.draggingEntered(Drag(text: SidebarDragPayload.text(for: .folder(UUID())), x: 10)) == [],
                 "A folder: kept, and nothing")
-        #expect(catcher.draggingEntered(Drag(axoPayload: SidebarDragPayload.text(forFavorite: UUID()), x: 10)) == [])
-        #expect(catcher.draggingEntered(Drag(axoPayload: nil, plainText: row, x: 10)) == [], "Plain text isn't a row")
+        #expect(catcher.draggingEntered(Drag(text: SidebarDragPayload.text(forFavorite: UUID()), x: 10)) == [])
+        // Other drags (a link, text) go to the page under it; with nothing under it, nowhere.
+        #expect(catcher.draggingEntered(Drag(text: "https://example.com/", x: 10)) == [])
+        #expect(!catcher.performDragOperation(Drag(text: "https://example.com/", x: 10)))
 
-        #expect(catcher.draggingEntered(Drag(axoPayload: row, x: 10)) == .move)
+        #expect(catcher.draggingEntered(Drag(text: row, x: 10)) == .move)
         #expect(sides.last == .leading)
-        #expect(catcher.performDragOperation(Drag(axoPayload: row, x: 10)))
+        #expect(catcher.performDragOperation(Drag(text: row, x: 10)))
         try await waitUntil { model.split(of: a.id) != nil }
         #expect(sides.last == .some(nil), "The highlight goes on the drop")
     }

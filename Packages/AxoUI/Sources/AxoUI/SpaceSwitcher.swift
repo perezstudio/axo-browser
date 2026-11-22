@@ -135,8 +135,8 @@ private struct SpaceDots: View {
                     Task { await model.selectSpace(space.id) }
                 }
                 // A tab row dropped on another of the profile's Spaces moves there (#78).
-                .dropDestination(for: SidebarDragItem.self) { items, _ in
-                    guard let id = model.tabToMove(droppedAs: items.map(\.text), to: space.id) else { return false }
+                .dropDestination(for: String.self) { items, _ in
+                    guard let id = model.tabToMove(droppedAs: items, to: space.id) else { return false }
                     Task { await model.moveTab(id, toSpace: space.id) }
                     return true
                 } isTargeted: { isTargeted in

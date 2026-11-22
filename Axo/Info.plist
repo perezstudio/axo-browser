@@ -34,22 +34,6 @@
 			</array>
 		</dict>
 	</array>
-	<!-- A sidebar row or favorite dragged inside Axo (#77, #78, `UTType.axoSidebarItem`): Axo's
-	     own drop targets take only this type, while the drag also carries the page's address
-	     for other apps. -->
-	<key>UTExportedTypeDeclarations</key>
-	<array>
-		<dict>
-			<key>UTTypeIdentifier</key>
-			<string>com.perezstudio.axo.sidebar-item</string>
-			<key>UTTypeDescription</key>
-			<string>Axo sidebar item</string>
-			<key>UTTypeConformsTo</key>
-			<array>
-				<string>public.data</string>
-			</array>
-		</dict>
-	</array>
 	<!-- Usage descriptions for devices only the Chromium engine reaches (Chrome declares the same
 	     keys). It runs in Axo's process, so macOS kills Axo if one is missing when Chromium asks,
 	     as it does for Bluetooth at startup. Camera, microphone, location, and local network are

@@ -113,13 +113,13 @@ private struct FavoriteTile: View {
         .contextMenu {
             FavoriteContextMenu(model: model, favorite: favorite, hasLeftHome: hasLeftHome, isLive: model.pool.isLive(favorite.id))
         }
-        // Axo's own type for its drop targets, and the favorite's address for other apps (#78).
+        // Its ID for Axo's drop targets, and its address for other apps (#78).
         .itemProvider {
             SidebarDragPayload.provider(for: SidebarDragPayload.text(forFavorite: favorite.id),
                                         address: model.dragAddress(for: favorite.id))
         }
-        .dropDestination(for: SidebarDragItem.self) { items, _ in
-            guard let text = items.first?.text else { return false }
+        .dropDestination(for: String.self) { items, _ in
+            guard let text = items.first else { return false }
             // A sidebar row (#77): its tab becomes a favorite in this tile's place.
             if case .tab(let tabID)? = SidebarDragPayload.item(from: text) {
                 Task { await model.dropTabOnFavorites(tabID, before: favorite.id) }
