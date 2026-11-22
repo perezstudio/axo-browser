@@ -706,6 +706,11 @@ public final class WebViewPool {
         }
     }
 
+    /// Brings a tab's shrunk bar back in full (#182), as tapping its pill does.
+    public func expandChrome(for tabID: Tab.ID) {
+        live[tabID]?.expandChrome()
+    }
+
     /// Forgets a tab entirely, for example when it closes. Its page and saved history are
     /// discarded.
     public func discard(_ tabID: Tab.ID) {

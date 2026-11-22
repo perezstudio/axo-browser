@@ -5,6 +5,9 @@ import SwiftUI
 /// action. ↑ and ↓ move the highlight, Return runs it, Esc closes.
 struct CommandBarView: View {
     let model: BrowserModel
+    /// Whether it rises from the bottom (the iPhone's bar at the bottom, #182): the field nearest
+    /// the thumb and the keyboard, results above it, nearest first.
+    var risesFromBottom = false
     @FocusState private var isFocused: Bool
     /// The field's selection, so an address being edited starts selected and typing replaces it.
     @State private var selection: TextSelection?
@@ -12,13 +15,14 @@ struct CommandBarView: View {
     @State private var rowsHeight: CGFloat = 0
 
     var body: some View {
-        ZStack(alignment: .top) {
+        ZStack(alignment: risesFromBottom ? .bottom : .top) {
             Color.black.opacity(0.12)
                 .ignoresSafeArea()
                 .onTapGesture { model.hideCommandBar() }
                 .accessibilityHidden(true)
 
             VStack(spacing: 0) {
+                if risesFromBottom { results(reversed: true); if !model.commandResults.isEmpty { Divider() } }
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
@@ -38,30 +42,19 @@ struct CommandBarView: View {
                     .onExitCommandIfAvailable { model.hideCommandBar() }
                     .onKeyPress(.downArrow) { model.moveCommandSelection(by: 1); return .handled }
                     .onKeyPress(.upArrow) { model.moveCommandSelection(by: -1); return .handled }
+                    #if os(iOS)
+                    // iOS has no Esc: × closes it.
+                    Button("Cancel", systemImage: "xmark.circle.fill") { model.hideCommandBar() }
+                        .labelStyle(.iconOnly)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("commandCancelButton")
+                    #endif
                 }
                 .padding(14)
 
-                if !model.commandResults.isEmpty {
-                    Divider()
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            LazyVStack(spacing: 2) {
-                                ForEach(Array(model.commandResults.enumerated()), id: \.element.id) { index, result in
-                                    CommandRow(model: model, result: result, isSelected: index == model.commandSelection)
-                                        .id(result.id)
-                                        .onTapGesture { Task { await model.runCommand(at: index) } }
-                                        .accessibilityAction { Task { await model.runCommand(at: index) } }
-                                }
-                            }
-                            .padding(6)
-                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { rowsHeight = $0 }
-                        }
-                        .frame(height: min(rowsHeight, 380))
-                        .onChange(of: model.commandSelection) {
-                            guard model.commandResults.indices.contains(model.commandSelection) else { return }
-                            proxy.scrollTo(model.commandResults[model.commandSelection].id)
-                        }
-                    }
+                if !risesFromBottom {
+                    if !model.commandResults.isEmpty { Divider() }
+                    results(reversed: false)
                 }
             }
             .frame(maxWidth: 620)
@@ -69,7 +62,10 @@ struct CommandBarView: View {
             .background(.regularMaterial, in: .rect(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.separator))
             .shadow(color: .black.opacity(0.2), radius: 24, y: 10)
-            .padding(.top, 90)
+            .padding(.top, risesFromBottom ? 0 : 90)
+            .padding(.bottom, risesFromBottom ? 8 : 0)
+            .padding(.horizontal, risesFromBottom ? 12 : 0)
+            .transition(risesFromBottom ? .move(edge: .bottom).combined(with: .opacity) : .opacity)
             .accessibilityElement(children: .contain)
             // VoiceOver stays in the bar while it's open, like a sheet.
             .accessibilityAddTraits(.isModal)
@@ -82,6 +78,35 @@ struct CommandBarView: View {
             selectAllIfEditingAddress()
         }
         .onChange(of: model.commandQuerySelectionRequest) { selectAllIfEditingAddress() }
+    }
+
+    /// The results, nearest the field first: top down under it, or bottom up above it.
+    @ViewBuilder
+    private func results(reversed: Bool) -> some View {
+        if !model.commandResults.isEmpty {
+            let indices = reversed ? Array(model.commandResults.indices.reversed()) : Array(model.commandResults.indices)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        ForEach(indices, id: \.self) { index in
+                            let result = model.commandResults[index]
+                            CommandRow(model: model, result: result, isSelected: index == model.commandSelection)
+                                .id(result.id)
+                                .onTapGesture { Task { await model.runCommand(at: index) } }
+                                .accessibilityAction { Task { await model.runCommand(at: index) } }
+                        }
+                    }
+                    .padding(6)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { rowsHeight = $0 }
+                }
+                .defaultScrollAnchor(reversed ? .bottom : .top)
+                .frame(height: min(rowsHeight, 380))
+                .onChange(of: model.commandSelection) {
+                    guard model.commandResults.indices.contains(model.commandSelection) else { return }
+                    proxy.scrollTo(model.commandResults[model.commandSelection].id)
+                }
+            }
+        }
     }
 }
 

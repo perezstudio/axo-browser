@@ -160,6 +160,16 @@ public final class WebKitPage: NSObject, EnginePage {
             webView.observe(\.canGoBack) { webView, _ in changed(webView) },
             webView.observe(\.canGoForward) { webView, _ in changed(webView) },
         ]
+        #if os(iOS)
+        // How far the page is scrolled, for the iPhone's bar shrinking while reading (#182).
+        observations.append(webView.scrollView.observe(\.contentOffset) { [weak self] scrollView, _ in
+            let offset = scrollView.contentOffset.y + scrollView.adjustedContentInset.top
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.delegate?.page(self, didScrollTo: offset)
+            }
+        })
+        #endif
         let mediaChanged: @Sendable (WKWebView) -> Void = { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }

@@ -113,4 +113,19 @@ extension BrowserModel {
     var mobileAddressText: String? {
         AddressDisplay.shown(for: shownPageURL)?.text
     }
+
+    /// Brings the iPhone's shrunk bar back in full (#182), as tapping its pill does.
+    func expandChrome() {
+        guard let selectedTabID else { return }
+        pool.expandChrome(for: selectedTabID)
+    }
+
+    /// Shows the next (`step` 1) or previous (-1) Space, in the switcher's order, wrapping
+    /// around, as swiping the iPhone's bar does (#182).
+    func selectAdjacentSpace(by step: Int) async {
+        guard spaces.count > 1, let current = space, let index = spaces.firstIndex(where: { $0.id == current.id }) else { return }
+        let next = (index + step + spaces.count) % spaces.count
+        await selectSpace(spaces[next].id)
+    }
 }
+

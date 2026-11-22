@@ -82,7 +82,22 @@ final class LiveTab: EnginePageDelegate {
         page.close()
     }
 
+    /// Whether scrolling has shrunk the iPhone's bar (#182), and from where.
+    private var chromeCollapse = ChromeCollapse()
+    private var lastScrollOffset: CGFloat = 0
+
+    /// Shows the bar in full again, as a tap on its pill does.
+    func expandChrome() {
+        chromeCollapse.expand(at: lastScrollOffset)
+        state.prefersCompactChrome = false
+    }
+
     // MARK: EnginePageDelegate
+
+    func page(_ page: any EnginePage, didScrollTo offset: CGFloat) {
+        lastScrollOffset = offset
+        if chromeCollapse.scrolled(to: offset) { state.prefersCompactChrome = chromeCollapse.isCompact }
+    }
 
     func pageStateDidChange(_ page: any EnginePage) {
         syncState()
