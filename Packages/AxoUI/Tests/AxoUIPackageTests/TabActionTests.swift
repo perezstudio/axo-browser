@@ -68,6 +68,7 @@ struct TabActionTests {
         await model.selectSpace(home.id)
         #expect(model.spacesToMoveTabsTo.map(\.name) == ["Work", "Personal"], "Every other Space (#81)")
         #expect(model.moveToSpaceGroups.map(\.profileName) == [nil, "Personal"], "The profile's own first, then others' under their names")
+        #expect(model.moveToSpaceGroups.last?.id == model.spaces.first { $0.name == "Personal" }?.profileID, "Groups go by profile")
         #expect(model.moveToSpaceGroups.map { $0.spaces.map(\.name) } == [["Work"], ["Personal"]])
         let work = try #require(model.spacesToMoveTabsTo.first)
         let page = try #require(model.pool.livePage(for: a))
@@ -140,9 +141,14 @@ struct TabActionTests {
         let personal = try #require(model.spaces.first { $0.name == "Personal" })
         model.select(a)
         await model.moveTab(a, toSpace: personal.id)
+        // Read at once: this suite's notices go as soon as anything waits.
         let undo = try #require(model.notice?.undo)
+        // A page it got in the new profile meanwhile.
+        let movedRecord = try #require(try await model.store.tab(id: a))
+        let theirs = try #require(model.pool.page(for: movedRecord, profileID: personal.profileID) as? FakePage)
         await undo()
         #expect(paths == ["a", "b"])
+        #expect(theirs.isClosed, "The new profile's page closes on the way back")
         #expect(model.selectedTabID == a)
         try await waitUntil { model.pool.isLive(a) }
         let back = try #require(model.pool.livePage(for: a) as? FakePage)

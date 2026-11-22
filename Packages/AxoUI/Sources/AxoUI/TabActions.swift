@@ -50,7 +50,10 @@ extension BrowserModel {
     /// profile reloads the page there with that profile's website data (#81), as in Arc.
     public var spacesToMoveTabsTo: [Space] {
         guard let space else { return [] }
-        return spaces.filter { $0.id != space.id }
+        // Another profile's only once its record is read, so the menu can name it.
+        return spaces.filter { other in
+            other.id != space.id && (other.profileID == space.profileID || allProfiles.contains { $0.id == other.profileID })
+        }
     }
 
     /// Move to Space's choices, grouped: the profile's own Spaces first (no heading), then each
@@ -60,10 +63,10 @@ extension BrowserModel {
         let targets = spacesToMoveTabsTo
         var groups: [MoveToSpaceGroup] = []
         let own = targets.filter { $0.profileID == space.profileID }
-        if !own.isEmpty { groups.append(MoveToSpaceGroup(profileName: nil, spaces: own)) }
+        if !own.isEmpty { groups.append(MoveToSpaceGroup(profileID: nil, profileName: nil, spaces: own)) }
         for profile in allProfiles where profile.id != space.profileID {
             let theirs = targets.filter { $0.profileID == profile.id }
-            if !theirs.isEmpty { groups.append(MoveToSpaceGroup(profileName: profile.name, spaces: theirs)) }
+            if !theirs.isEmpty { groups.append(MoveToSpaceGroup(profileID: profile.id, profileName: profile.name, spaces: theirs)) }
         }
         return groups
     }
@@ -92,6 +95,11 @@ extension BrowserModel {
         let order = visibleTabOrder
         let selectedTabIDBeforeMove = selectedTabID
         let changesProfile = destination.profileID != space.profileID
+        // The neighbor first, so nothing shows the tab (and makes its page again with the old
+        // profile) while it moves to another profile.
+        if changesProfile, selectedTabID == id {
+            select(Self.neighbor(of: id, in: order, among: order.filter { $0 != id }))
+        }
         do {
             if changesProfile {
                 // The address it's on now, which its new page loads.
@@ -242,9 +250,12 @@ extension BrowserModel {
 /// A group of Move to Space's choices: the profile's own Spaces (`profileName` nil), or another
 /// profile's, whose tabs reload there.
 public struct MoveToSpaceGroup: Identifiable, Sendable {
+    /// The other profile, or `nil` for the profile's own Spaces.
+    public var profileID: Profile.ID?
     public var profileName: String?
     public var spaces: [Space]
-    public var id: String { profileName ?? "" }
+    /// By profile, since two profiles can share a name.
+    public var id: Profile.ID? { profileID }
 }
 
 

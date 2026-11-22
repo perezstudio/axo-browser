@@ -185,6 +185,33 @@ struct DiscardTests {
         #expect(woken.loads == [tab.url])
     }
 
+    /// A live page of another profile (the tab moved to another profile's Space, #81, here or
+    /// through iCloud) is never handed back: it closes and a page with this profile loads.
+    @Test func aLivePageOfAnotherProfileIsReplaced() throws {
+        let page = try loadedPage()
+        let other = UUID()
+        let replaced = try #require(pool.page(for: tab, profileID: other) as? FakePage)
+        #expect(replaced !== page)
+        #expect(page.isClosed, "Never shown with another profile")
+        #expect(replaced.profileID == other)
+        #expect(replaced.loads == [tab.url])
+        #expect(pool.page(for: tab, profileID: other) === replaced, "Its own profile's page is kept")
+    }
+
+    /// A closed page's saved history and picture belong to its profile's browsing, and don't
+    /// carry over to a page made with another.
+    @Test func anotherProfilesSavedHistoryIsntRestored() async throws {
+        let page = try loadedPage()
+        page.canDiscard = false
+        #expect(await pool.hibernate(tab.id))
+        #expect(page.isClosed, "This engine closes it, keeping its history")
+
+        let other = UUID()
+        let fresh = try #require(pool.page(for: tab, profileID: other) as? FakePage)
+        #expect(fresh.restoredState == nil, "No history from the other profile")
+        #expect(fresh.loads == [tab.url])
+    }
+
     @Test func aKeptPageThatLoadsAgainOnItsOwnIsLiveAgain() async throws {
         let page = try loadedPage()
         #expect(await pool.hibernate(tab.id))
