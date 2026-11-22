@@ -436,9 +436,7 @@ struct TabContextMenu: View {
         Button("Add to Favorites") { Task { await model.addToFavorites(tab.id) } }
         if model.canMoveToSpace(tab.id) {
             Menu("Move to Space") {
-                ForEach(model.spacesToMoveTabsTo) { space in
-                    Button(space.name) { Task { await model.moveTab(tab.id, toSpace: space.id) } }
-                }
+                MoveToSpaceItems(model: model, tabID: tab.id)
             }
         }
         Divider()

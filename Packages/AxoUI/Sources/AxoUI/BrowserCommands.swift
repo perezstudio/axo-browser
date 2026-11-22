@@ -195,9 +195,7 @@ public struct BrowserCommands: Commands {
             .disabled(model?.tabForTabActions == nil)
             if let model, let tab = model.tabForTabActions, model.canMoveToSpace(tab.id) {
                 Menu("Move to Space") {
-                    ForEach(model.spacesToMoveTabsTo) { space in
-                        Button(space.name) { Task { await model.moveTab(tab.id, toSpace: space.id) } }
-                    }
+                    MoveToSpaceItems(model: model, tabID: tab.id)
                 }
             }
             Button("Close Other Tabs") {

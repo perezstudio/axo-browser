@@ -433,7 +433,7 @@ struct TabStoreTests {
         #expect(try await store.tab(id: b.id)?.splitID == nil)
     }
 
-    @Test func aTabDoesntMoveToAnotherProfilesSpace() async throws {
+    @Test func aTabMovesToAnotherProfilesSpaceOnlyWhenAsked() async throws {
         let home = try await store.bootstrap()
         let other = try await store.createProfile(name: "Personal")
         let personal = try await store.createSpace(name: "Personal", profileID: other.id)
@@ -442,6 +442,14 @@ struct TabStoreTests {
         await #expect(throws: TabStoreError.spaceOfAnotherProfile(personal.id)) {
             try await store.moveTab(id: tab.id, toSpace: personal.id)
         }
+        #expect(try await store.tab(id: tab.id)?.spaceID == home.id)
+
+        // A caller that closed the page first may move it (#81), and Undo may bring it back.
+        try await store.moveTab(id: tab.id, toSpace: personal.id, acrossProfiles: true)
+        #expect(try await store.tab(id: tab.id)?.spaceID == personal.id)
+        #expect(try await !store.returnTab(id: tab.id, from: personal.id, to: home.id, folder: nil, sortKey: tab.sortKey, wasPinned: false))
+        #expect(try await store.returnTab(id: tab.id, from: personal.id, to: home.id, folder: nil, sortKey: tab.sortKey,
+                                          wasPinned: false, acrossProfiles: true))
         #expect(try await store.tab(id: tab.id)?.spaceID == home.id)
     }
 

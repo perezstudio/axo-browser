@@ -29,6 +29,31 @@ final class SidebarMenuUITests: XCTestCase {
         return (app, sidebar)
     }
 
+    /// A right-click on the sidebar's empty space offers Reopen Closed Tab (#81), and the rows
+    /// keep their own menus beside that list-wide one.
+    @MainActor
+    func testTheSidebarsEmptySpaceReopensAClosedTab() throws {
+        let (app, sidebar) = launchApp()
+        openTab("Kept", in: app, sidebar: sidebar)
+        openTab("Gone", in: app, sidebar: sidebar)
+        app.typeKey("w", modifierFlags: .command)
+        XCTAssertTrue(sidebar.staticTexts["Gone"].waitForNonExistence(timeout: 5))
+
+        // Below the rows, where nothing is.
+        sidebar.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)).rightClick()
+        let reopen = app.windows.firstMatch.menuItems["Reopen Closed Tab"]
+        XCTAssertTrue(reopen.waitForExistence(timeout: 5), "The empty space's menu")
+        XCTAssertFalse(app.windows.firstMatch.menuItems["Duplicate Tab"].exists, "Not a row's menu")
+        reopen.click()
+        XCTAssertTrue(sidebar.staticTexts["Gone"].waitForExistence(timeout: 10), "The closed tab is back")
+
+        let row = sidebar.staticTexts["Kept"]
+        XCTAssertTrue(isEnabled("Duplicate Tab", on: row, in: app), "A row still has its own menu")
+        row.rightClick()
+        XCTAssertFalse(app.windows.firstMatch.menuItems["Reopen Closed Tab"].exists, "And not the empty space's")
+        app.typeKey(.escape, modifierFlags: [])
+    }
+
     /// Opens a tab on a page with only a title, so tests never touch the network.
     @MainActor
     private func openTab(_ title: String, in app: XCUIApplication, sidebar: XCUIElement) {
