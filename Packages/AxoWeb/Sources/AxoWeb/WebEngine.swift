@@ -24,6 +24,11 @@ public protocol WebEngine: AnyObject {
     /// Removes a profile's cookies, caches, and other website data, signing it out of sites.
     func clearWebsiteData(for profileID: Profile.ID) async
 
+    /// Removes one site's cookies, caches, and other website data in a profile: `url`'s site (its
+    /// registrable domain, such as `github.com` for `gist.github.com`, with its subdomains),
+    /// signing the profile out of it. History and permission answers stay.
+    func clearWebsiteData(forSite url: URL, profileID: Profile.ID) async
+
     /// Deletes a deleted profile's website data for good. The pool closes the profile's pages
     /// first.
     func removeWebsiteData(for profileID: Profile.ID) async throws

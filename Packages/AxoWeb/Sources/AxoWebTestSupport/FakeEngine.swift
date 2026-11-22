@@ -15,6 +15,8 @@ public final class FakeEngine: WebEngine {
     public private(set) var siteCustomizations: [SiteCustomization] = []
     public private(set) var clearedProfiles: [Profile.ID] = []
     public private(set) var removedProfiles: [Profile.ID] = []
+    /// The sites ``clearWebsiteData(forSite:profileID:)`` cleared, in order.
+    public private(set) var clearedSites: [(url: URL, profileID: Profile.ID)] = []
     public weak var delegate: (any WebEngineDelegate)?
     /// The last window pages and active page the pool sent, by profile.
     public private(set) var windowPages: [Profile.ID: (pages: [any EnginePage], active: (any EnginePage)?)] = [:]
@@ -85,6 +87,10 @@ public final class FakeEngine: WebEngine {
 
     public func clearWebsiteData(for profileID: Profile.ID) async {
         clearedProfiles.append(profileID)
+    }
+
+    public func clearWebsiteData(forSite url: URL, profileID: Profile.ID) async {
+        clearedSites.append((url, profileID))
     }
 
     public func removeWebsiteData(for profileID: Profile.ID) async throws {

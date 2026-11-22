@@ -125,6 +125,84 @@ struct EngineNeutralModelTests {
         #expect(engine.lastingPermissions.suffix(2).allSatisfy { $0.decision == nil }, "Reset clears them in the engine too")
     }
 
+    /// Site Settings' Clear Website Data… (#110) asks first, and only a yes clears the site, in
+    /// the profile it asked about, keeping the site's permission answers.
+    @Test func clearingASitesDataAsksFirstThenClearsThatSite() async throws {
+        _ = try await openPage(URL(string: "https://news.example.com:8443/today")!)
+        let profileID = try #require(model.space?.profileID)
+        await model.setSitePermission(.allow, for: .camera)
+        model.isShowingSiteSettings = true
+
+        model.confirmClearSiteData()
+        let request = try #require(model.siteDataClear)
+        #expect(!model.isShowingSiteSettings, "Site Settings closes for the question")
+        #expect(request.origin == PageOrigin(scheme: "https", host: "news.example.com", port: 8443))
+        #expect(request.profileID == profileID)
+        #expect(request.profileName == model.siteSettingsProfileName)
+        #expect(request.title == "Clear website data for “news.example.com:8443”?")
+        #expect(request.message.contains("in the “\(model.siteSettingsProfileName ?? "")” profile"))
+        #expect(engine.clearedSites.isEmpty, "Nothing goes before the answer")
+
+        await model.clearSiteData(request)
+        #expect(engine.clearedSites.map(\.url) == [URL(string: "https://news.example.com:8443")!])
+        #expect(engine.clearedSites.map(\.profileID) == [profileID])
+        #expect(model.notice?.message == "Cleared website data for news.example.com:8443")
+        #expect(engine.clearedProfiles.isEmpty, "Only the site, never the whole profile")
+        #expect(model.sitePermissions[.camera] == .allow, "Its permissions stay")
+    }
+
+    /// The profile asked about is the one cleared, even if the Space moves to another profile
+    /// meanwhile; a profile deleted meanwhile is left alone, and no notice claims otherwise.
+    @Test func clearingASiteUsesTheProfileAskedAbout() async throws {
+        _ = try await openPage(URL(string: "https://news.example.com/today")!)
+        let first = try #require(model.space?.profileID)
+        let spaceID = try #require(model.space?.id)
+        model.confirmClearSiteData()
+        let request = try #require(model.siteDataClear)
+
+        let other = try #require(await model.addProfile(named: "Work"))
+        await model.moveSpace(spaceID, toProfile: other.id)
+        await model.clearSiteData(request)
+        #expect(engine.clearedSites.map(\.profileID) == [first], "The profile it asked about")
+
+        // Asked about Work, which is deleted before the answer.
+        for _ in 0..<200 where model.space?.profileID != other.id { try await Task.sleep(for: .milliseconds(10)) }
+        model.confirmClearSiteData()
+        let late = try #require(model.siteDataClear)
+        #expect(late.profileID == other.id)
+        await model.moveSpace(spaceID, toProfile: first)
+        await model.deleteProfile(other.id, movingSpacesTo: first)
+        for _ in 0..<200 where model.allProfiles.contains(where: { $0.id == other.id }) { try await Task.sleep(for: .milliseconds(10)) }
+        model.notice = nil
+        await model.clearSiteData(late)
+        #expect(engine.clearedSites.count == 1, "Nothing is cleared for a deleted profile")
+        #expect(model.notice == nil)
+    }
+
+    @Test func pagesWithoutASiteHaveNoDataToClear() async throws {
+        _ = try await openPage(URL(string: "about:blank")!)
+        model.confirmClearSiteData()
+        #expect(model.siteDataClear == nil)
+    }
+
+    /// Site Settings' customization section shows the most specific customization covering the
+    /// page, turned off too, so it can be turned back on there.
+    @Test func siteSettingsFindTheSitesCustomizationOnOrOff() async throws {
+        _ = try await openPage(URL(string: "https://docs.example.com/guide")!)
+        #expect(model.selectedSiteCustomization == nil)
+        #expect(await model.saveCustomization(SiteCustomization(domain: "example.com", css: "a {}")) == nil)
+        #expect(await model.saveCustomization(SiteCustomization(domain: "docs.example.com", css: "b {}")) == nil)
+        #expect(await model.saveCustomization(SiteCustomization(domain: "other.com", css: "c {}")) == nil)
+        let docs = try #require(model.selectedSiteCustomization)
+        #expect(docs.domain == "docs.example.com")
+
+        await model.setCustomizationEnabled(false, id: docs.id)
+        #expect(model.selectedSiteCustomization?.domain == "docs.example.com")
+        #expect(model.selectedSiteCustomization?.isEnabled == false)
+        #expect(engine.siteCustomizations.contains { $0.domain == "docs.example.com" && !$0.isEnabled },
+                "The engine hears it's off")
+    }
+
     @Test func savedLastingAnswersReachTheEngineAtLaunch() async throws {
         let profileID = try #require(model.space?.profileID)
         try await model.store.sitePermissions.setDecision(.allow, for: [.notifications], origin: "https://news.example.com", profileID: profileID)

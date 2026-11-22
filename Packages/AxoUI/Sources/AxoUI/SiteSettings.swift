@@ -130,6 +130,31 @@ extension BrowserModel {
         await refreshSiteSettings()
     }
 
+    /// The name of the profile Site Settings' choices apply to: the shown Space's.
+    public var siteSettingsProfileName: String? {
+        guard let profileID = space?.profileID else { return nil }
+        return allProfiles.first { $0.id == profileID }?.name
+    }
+
+    /// Asks before clearing the selected page's site's website data: closes Site Settings, and
+    /// the window's alert asks (``siteDataClear``).
+    public func confirmClearSiteData() {
+        guard let origin = siteSettingsOrigin, let profileID = space?.profileID else { return }
+        isShowingSiteSettings = false
+        siteDataClear = SiteDataClear(origin: origin, profileID: profileID, profileName: siteSettingsProfileName)
+    }
+
+    /// Removes a site's cookies, caches, and other website data in the profile the person was
+    /// asked about, then says so. Its permission answers, history, and customizations stay. A
+    /// profile deleted while the question showed is left alone: making its data store again would
+    /// bring its storage back.
+    public func clearSiteData(_ request: SiteDataClear) async {
+        guard allProfiles.contains(where: { $0.id == request.profileID }),
+              let url = URL(string: request.origin.serialized) else { return }
+        await pool.clearWebsiteData(forSite: url, profileID: request.profileID)
+        postNotice("Cleared website data for \(request.origin.displayName)")
+    }
+
     /// Replaces the answers the engine keeps itself (notifications and the clipboard) with Axo's
     /// saved ones, in every profile or just `profileID`, forgetting any the engine has that Axo
     /// doesn't: at launch, and after clearing a profile's website data, which clears the engine's.
@@ -169,6 +194,56 @@ extension BrowserModel {
     }
 }
 
+/// Clearing one site's website data, which the window asks about first (#110).
+public struct SiteDataClear: Identifiable, Hashable, Sendable {
+    /// The site whose data goes: its registrable domain and subdomains, which the engine works out.
+    public var origin: PageOrigin
+    /// The profile whose data for the site goes; other profiles keep theirs.
+    public var profileID: Profile.ID
+    /// The profile's name, for the question.
+    public var profileName: String?
+
+    public var id: Self { self }
+
+    /// Creates a request.
+    public init(origin: PageOrigin, profileID: Profile.ID, profileName: String?) {
+        self.origin = origin
+        self.profileID = profileID
+        self.profileName = profileName
+    }
+
+    /// The question.
+    public var title: String {
+        "Clear website data for “\(origin.displayName)”?"
+    }
+
+    /// What clearing does, plainly.
+    public var message: String {
+        let profile = profileName.map { " in the “\($0)” profile" } ?? ""
+        return "Cookies, caches, and other data stored by this site and the rest of its domain\(profile) are removed, "
+            + "and you may be signed out. Its permissions and your history stay."
+    }
+}
+
+/// Asks before clearing a site's website data, from Site Settings' Clear Website Data…. Cancel is
+/// the default button, so Return never clears.
+struct SiteDataClearAlert: ViewModifier {
+    let model: BrowserModel
+
+    func body(content: Content) -> some View {
+        content
+            .alert(model.siteDataClear?.title ?? "", item: Binding(get: { model.siteDataClear }, set: { model.siteDataClear = $0 })) { request in
+                Button("Cancel", role: .cancel) {}
+                    .keyboardShortcut(.defaultAction)
+                    .accessibilityIdentifier("cancelClearSiteData")
+                Button("Clear", role: .destructive) { Task { await model.clearSiteData(request) } }
+                    .accessibilityIdentifier("confirmClearSiteData")
+            } message: { request in
+                Text(request.message)
+            }
+    }
+}
+
 /// The button beside the address field that opens Site Settings.
 struct SiteSettingsButton: View {
     let model: BrowserModel
@@ -190,8 +265,10 @@ struct SiteSettingsButton: View {
     }
 }
 
-/// What the selected page's site may use: camera, microphone, location, notifications, and the
-/// clipboard, each Ask, Allow, or Don't Allow; and the apps it may open without asking.
+/// One panel for the selected page's site (#110), as the Prompts board draws it: the site and its
+/// connection, what it can use (camera, microphone, location, notifications, and the clipboard,
+/// each Ask, Allow, or Don't Allow, and the apps it may open without asking), its customization,
+/// and its website data, in the shown Space's profile.
 struct SiteSettingsView: View {
     let model: BrowserModel
     #if os(macOS)
@@ -199,37 +276,98 @@ struct SiteSettingsView: View {
     @AppStorage(SettingsView.paneStorageKey) private var settingsPane: SettingsPane = .general
     #endif
 
+    private var siteName: String { model.siteSettingsOrigin?.displayName ?? "" }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(model.siteSettingsOrigin?.displayName ?? "")
-                .font(.headline)
-                .accessibilityAddTraits(.isHeader)
-            Form {
-                ForEach(model.siteSettingsKinds, id: \.self) { kind in
-                    Picker(Self.title(for: kind), selection: Binding(
-                        get: { model.sitePermissions[kind] },
-                        set: { decision in Task { await model.setSitePermission(decision, for: kind) } }
-                    )) {
-                        // Without an answer of its own, the profile's default decides (#133).
-                        Text(Self.defaultTitle(model.siteDefaults[kind])).tag(SitePermission.Decision?.none)
-                        Text("Allow").tag(SitePermission.Decision?.some(.allow))
-                        Text("Don't Allow").tag(SitePermission.Decision?.some(.deny))
-                    }
-                    .accessibilityIdentifier("sitePermission-\(kind.rawValue)")
+            header
+            Divider()
+            permissions
+            Divider()
+            customization
+            Divider()
+            websiteData
+            if let profile = model.siteSettingsProfileName {
+                Text("Choices apply to \(siteName) in the \(profile) profile.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("siteSettingsProfile")
+            }
+        }
+        .padding(16)
+        .frame(width: 330)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("siteSettings")
+    }
+
+    /// The site's icon and name, and how secure its connection is.
+    private var header: some View {
+        HStack(spacing: 10) {
+            Group {
+                if let url = model.shownPageURL, let icon = model.favicon(for: url) {
+                    Image(platformImage: icon).resizable().interpolation(.high)
+                } else {
+                    Image(systemName: "globe").font(.system(size: 18)).foregroundStyle(.secondary)
                 }
             }
-            .formStyle(.columns)
+            .frame(width: 24, height: 24)
+            .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(siteName)
+                    .font(.headline)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+                    // In words: the audit can't read a bare address (an IP and port) as a label.
+                    .accessibilityLabel("Site Settings for \(siteName)")
+                    .accessibilityAddTraits(.isHeader)
+                if let indicator = model.connectionIndicator {
+                    Label(Self.connectionTitle(for: indicator), systemImage: indicator == .secure ? "lock.fill" : "lock.slash")
+                        .font(.caption)
+                        .foregroundStyle(indicator == .notPrivate ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
+                        .accessibilityIdentifier("siteSettingsConnection")
+                }
+            }
+        }
+    }
+
+    /// What the site can use, and the apps it may open without asking.
+    private var permissions: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("This site can use")
+                    .font(.subheadline.weight(.semibold))
+                    .accessibilityAddTraits(.isHeader)
+                Spacer()
+                Button("Reset") { Task { await model.resetSiteSettings() } }
+                    .controlSize(.small)
+                    .disabled(model.sitePermissions.isEmpty && model.siteExternalApps.isEmpty)
+                    .help("Ask again for everything")
+                    .accessibilityLabel("Reset permissions for \(siteName)")
+                    .accessibilityIdentifier("resetSiteSettings")
+            }
+            ForEach(model.siteSettingsKinds, id: \.self) { kind in
+                HStack {
+                    Label(Self.title(for: kind), systemImage: Self.symbol(for: kind))
+                        .symbolRenderingMode(.hierarchical)
+                        .accessibilityHidden(true)
+                    Spacer()
+                    permissionMenu(for: kind)
+                }
+            }
             if !model.siteExternalApps.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Opens without asking")
-                        .font(.subheadline.weight(.semibold))
+                    Label("Opens Other Apps Without Asking", systemImage: "arrow.up.forward.app")
+                        .symbolRenderingMode(.hierarchical)
                         .accessibilityAddTraits(.isHeader)
                     ForEach(model.siteExternalApps, id: \.self) { scheme in
                         let title = model.siteExternalAppTitles[scheme] ?? "\(scheme):"
                         HStack {
                             Text(title)
+                                .padding(.leading, 26)
                             Spacer()
                             Button("Remove") { Task { await model.forgetSiteExternalApp(scheme) } }
+                                .controlSize(.small)
                                 .accessibilityLabel("Remove \(title)")
                                 .accessibilityIdentifier("forgetExternalApp-\(scheme)")
                         }
@@ -239,34 +377,150 @@ struct SiteSettingsView: View {
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("siteExternalApps")
             }
-            #if os(macOS)
-            Button("Manage Website Permissions…") {
-                model.manageWebsitePermissions()
-                settingsPane = .profiles
-                openSettings()
+            Text("Don't Allow stops the site using it now.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// A kind's answer as a menu button holding the choices. A menu-style picker's pop-up button
+    /// fails the accessibility audit ("Action is missing"), as in Settings; a menu button passes.
+    private func permissionMenu(for kind: SitePermission.Kind) -> some View {
+        let selection = model.sitePermissions[kind]
+        let current = selection.map { $0 == .allow ? "Allow" : "Don't Allow" } ?? Self.defaultTitle(model.siteDefaults[kind])
+        return Menu {
+            Picker(Self.title(for: kind), selection: Binding(
+                get: { model.sitePermissions[kind] },
+                set: { decision in Task { await model.setSitePermission(decision, for: kind) } }
+            )) {
+                // Without an answer of its own, the profile's default decides (#133).
+                Text(Self.defaultTitle(model.siteDefaults[kind])).tag(SitePermission.Decision?.none)
+                Text("Allow").tag(SitePermission.Decision?.some(.allow))
+                Text("Don't Allow").tag(SitePermission.Decision?.some(.deny))
             }
-            .accessibilityIdentifier("manageWebsitePermissions")
-            #endif
-            HStack {
-                Text("Don't Allow stops the site using it now.")
-                    .font(.callout)
+            .pickerStyle(.inline)
+            .labelsHidden()
+        } label: {
+            HStack(spacing: 4) {
+                Text(current)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(.secondary)
-                Spacer()
-                Button("Customize…") {
-                    model.isShowingSiteSettings = false
-                    model.customizeCurrentSite()
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(.quaternary, in: .rect(cornerRadius: 6))
+        }
+        // As the Extensions menu: a plain button VoiceOver can press, named for itself. The
+        // default menu button style failed the audit too ("Action is missing", no label).
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .accessibilityLabel(Self.title(for: kind))
+        .accessibilityValue(current)
+        .accessibilityIdentifier("sitePermission-\(kind.rawValue)")
+    }
+
+    /// The site's own CSS and JavaScript: a switch and Edit for the one that covers it, or a
+    /// button to add one.
+    @ViewBuilder
+    private var customization: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Customization")
+                .font(.subheadline.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
+            if let customization = model.selectedSiteCustomization {
+                HStack {
+                    Toggle(isOn: Binding(
+                        get: { customization.isEnabled },
+                        set: { enabled in Task { await model.setCustomizationEnabled(enabled, id: customization.id) } }
+                    )) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("CSS and JavaScript")
+                            Text(customization.domain)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .accessibilityLabel("Customization for \(customization.domain)")
+                    .accessibilityIdentifier("siteCustomizationSwitch")
+                    Spacer()
+                    Button("Edit…") { customize() }
+                        .controlSize(.small)
+                        .accessibilityLabel("Edit Customization for \(customization.domain)")
+                        .accessibilityIdentifier("customizeSiteButton")
                 }
-                .help("Add your own CSS and JavaScript to this site")
-                .accessibilityIdentifier("customizeSiteButton")
-                Button("Reset") { Task { await model.resetSiteSettings() } }
-                    .disabled(model.sitePermissions.isEmpty && model.siteExternalApps.isEmpty)
-                    .accessibilityIdentifier("resetSiteSettings")
+                Text("Applies to pages loaded after a change.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                HStack {
+                    Text("Add your own CSS and JavaScript to this site.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Button("Customize…") { customize() }
+                        .controlSize(.small)
+                        .accessibilityLabel("Customize \(siteName)")
+                        .accessibilityIdentifier("customizeSiteButton")
+                }
             }
         }
-        .padding(16)
-        .frame(width: 320)
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("siteSettings")
+        .accessibilityIdentifier("siteCustomizationSection")
+    }
+
+    /// Clearing the site's cookies and data, and every site's permissions in Settings.
+    private var websiteData: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Cookies and site data")
+                .font(.subheadline.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
+            HStack {
+                Button("Clear Website Data…") { model.confirmClearSiteData() }
+                    .accessibilityLabel("Clear Website Data for \(siteName)…")
+                    .accessibilityIdentifier("clearSiteDataButton")
+                Spacer()
+                #if os(macOS)
+                Button("All Settings…") {
+                    model.manageWebsitePermissions()
+                    settingsPane = .profiles
+                    openSettings()
+                }
+                .help("Every site's permissions in this profile, in Settings")
+                .accessibilityIdentifier("manageWebsitePermissions")
+                #endif
+            }
+        }
+    }
+
+    private func customize() {
+        model.isShowingSiteSettings = false
+        model.customizeCurrentSite()
+    }
+
+    /// How the header says the connection is.
+    static func connectionTitle(for indicator: ConnectionIndicator) -> String {
+        switch indicator {
+        case .secure: "Connection is secure"
+        case .notSecure: "Connection isn't secure"
+        case .notPrivate: "Connection isn't private"
+        }
+    }
+
+    /// Each kind's symbol.
+    static func symbol(for kind: SitePermission.Kind) -> String {
+        switch kind {
+        case .camera: "video"
+        case .microphone: "mic"
+        case .location: "location"
+        case .notifications: "bell"
+        case .clipboard: "doc.on.clipboard"
+        }
     }
 
     /// What a site without an answer of its own gets, as its row says it.

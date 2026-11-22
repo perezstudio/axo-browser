@@ -2143,15 +2143,16 @@ final class AxoUITests: XCTestCase {
             Copy Link: \(app.menuBars.menuItems["Copy Link"].isEnabled), address: \(address.value ?? "none"))
             """)
         siteSettings.click()
-        let camera = app.popUpButtons["sitePermission-camera"]
+        // The menu button appears twice in the accessibility tree, identical; either answers.
+        let camera = app.menuButtons.matching(identifier: "sitePermission-camera").firstMatch
         XCTAssertTrue(camera.waitForExistence(timeout: 5))
         XCTAssertEqual(camera.value as? String, "Ask")
-        XCTAssertTrue(app.popUpButtons["sitePermission-microphone"].exists)
-        XCTAssertTrue(app.popUpButtons["sitePermission-location"].exists)
+        XCTAssertTrue(app.menuButtons["sitePermission-microphone"].exists)
+        XCTAssertTrue(app.menuButtons["sitePermission-location"].exists)
         // UI tests run on WebKit, which never asks about notifications or the clipboard, so Site
         // Settings doesn't offer them (Chromium's rows are covered by the model's tests).
-        XCTAssertFalse(app.popUpButtons["sitePermission-notifications"].exists)
-        XCTAssertFalse(app.popUpButtons["sitePermission-clipboard"].exists)
+        XCTAssertFalse(app.menuButtons["sitePermission-notifications"].exists)
+        XCTAssertFalse(app.menuButtons["sitePermission-clipboard"].exists)
 
         camera.click()
         app.menuItems["Don't Allow"].click()
@@ -2197,6 +2198,83 @@ final class AxoUITests: XCTestCase {
         newSite.typeText("not a site")
         sheet.buttons["websitePermissionAddAllow"].click()
         XCTAssertTrue(sheet.staticTexts["Enter a website's address, such as meet.example.com."].waitForExistence(timeout: 5))
+    }
+
+    /// Site Settings is one panel for the site (#110): it names the profile its choices apply to,
+    /// turns the site's customization off and on, and clears the site's data after asking, with
+    /// Cancel the default button.
+    @MainActor
+    func testSiteSettingsTogglesACustomizationAndClearsData() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        // A closed loopback port: nothing loads, but the tab has a web address.
+        let port = try AxoUITests.closedPort()
+        app.typeKey("t", modifierFlags: .command)
+        let field = app.textFields["commandField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.typeText("http://127.0.0.1:\(port)/room")
+        expectation(for: NSPredicate(format: "value == %@", "http://127.0.0.1:\(port)/room"), evaluatedWith: field)
+        waitForExpectations(timeout: 5)
+        field.typeText("\n")
+        let address = app.descendants(matching: .any)["sidebarAddressBar"]
+        expectation(for: NSPredicate(format: "value CONTAINS %@", "127.0.0.1"), evaluatedWith: address)
+        waitForExpectations(timeout: 10)
+
+        func openSiteSettings() {
+            app.menuBars.menuBarItems["View"].click()
+            app.menuBars.menuItems["Site Settings…"].click()
+            XCTAssertTrue(app.descendants(matching: .any)["siteSettings"].waitForExistence(timeout: 5))
+        }
+        openSiteSettings()
+        let profile = app.descendants(matching: .any)["siteSettingsProfile"]
+        XCTAssertTrue(profile.exists)
+        XCTAssertTrue(((profile.value as? String) ?? profile.label).hasPrefix("Choices apply to 127.0.0.1:\(port) in the "),
+                      "\(profile.value ?? profile.label)")
+        let shot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        shot.name = "Site Settings"
+        shot.lifetime = .keepAlways
+        add(shot)
+
+        // No customization yet: Customize… adds one for the site.
+        XCTAssertFalse(app.descendants(matching: .any)["siteCustomizationSwitch"].exists)
+        app.buttons["customizeSiteButton"].click()
+        let css = app.textViews["customizationCSSEditor"]
+        XCTAssertTrue(css.waitForExistence(timeout: 5))
+        css.click()
+        css.typeText("p { color: red }")
+        app.buttons["saveCustomizationButton"].click()
+        XCTAssertTrue(css.waitForNonExistence(timeout: 5))
+
+        openSiteSettings()
+        let customization = app.descendants(matching: .any)["siteCustomizationSwitch"]
+        XCTAssertTrue(customization.waitForExistence(timeout: 5), "The site's customization is listed")
+        XCTAssertEqual(customization.value as? Int, 1)
+        customization.click()
+        expectation(for: NSPredicate(format: "value == 0"), evaluatedWith: customization)
+        waitForExpectations(timeout: 5)
+        customization.click()
+        expectation(for: NSPredicate(format: "value == 1"), evaluatedWith: customization)
+        waitForExpectations(timeout: 5)
+
+        // Clear Website Data… asks; Return is Cancel.
+        app.buttons["clearSiteDataButton"].click()
+        let confirm = app.buttons["confirmClearSiteData"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Clear website data for “127.0.0.1:\(port)”?"].exists
+                      || app.staticTexts.containing(NSPredicate(format: "value CONTAINS '127.0.0.1:\(port)'")).firstMatch.exists)
+        app.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(confirm.waitForNonExistence(timeout: 5), "Return cancels")
+        let notice = app.descendants(matching: .any)["notice"]
+        // Clearing would post its notice after the engine's round trip, so wait long enough.
+        XCTAssertFalse(notice.waitForExistence(timeout: 3), "Nothing was cleared")
+
+        openSiteSettings()
+        app.buttons["clearSiteDataButton"].click()
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.click()
+        XCTAssertTrue(notice.waitForExistence(timeout: 5))
+        XCTAssertEqual(notice.label, "Cleared website data for 127.0.0.1:\(port)")
     }
 
     /// Summarize Page shows a summary of the page's text in a popover. UI tests use a

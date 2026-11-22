@@ -864,6 +864,13 @@ public final class WebViewPool {
         await engine.clearWebsiteData(for: profileID)
     }
 
+    /// Removes one site's cookies, caches, and other website data in a profile: `url`'s site (its
+    /// registrable domain and subdomains), signing the profile out of it. Open pages keep what
+    /// they already loaded.
+    public func clearWebsiteData(forSite url: URL, profileID: Profile.ID) async {
+        await engine.clearWebsiteData(forSite: url, profileID: profileID)
+    }
+
     /// Deletes a deleted profile's website data for good, after discarding any page still
     /// using it.
     public func removeWebsiteData(for profileID: Profile.ID) async {

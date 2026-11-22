@@ -189,6 +189,7 @@ public struct BrowserWindow: View {
         // Remove… from an extension's toolbar button (#131), once per window (not per sidebar:
         // the floating sidebar is a second one); the Extensions window asks its own.
         .modifier(ExtensionRemovalAlert(model: model))
+        .modifier(SiteDataClearAlert(model: model))
     }
 
     /// With tabs at the top (#136): the page column alone, its tab bar and control bar above the

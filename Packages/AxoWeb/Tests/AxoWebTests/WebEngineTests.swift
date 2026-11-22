@@ -223,10 +223,12 @@ struct WebEngineTests {
         let theirPage = try livePage(for: theirs)
 
         await pool.clearWebsiteData(for: profileID)
+        await pool.clearWebsiteData(forSite: url, profileID: profileID)
         await pool.removeWebsiteData(for: other)
 
         #expect(engine.clearedProfiles == [profileID])
         #expect(engine.removedProfiles == [other])
+        #expect(engine.clearedSites.map(\.url) == [url] && engine.clearedSites.map(\.profileID) == [profileID])
         #expect(theirPage.isClosed, "A removed profile's pages close first")
         #expect(pool.isLive(mine.id))
     }
