@@ -222,6 +222,13 @@ struct ChromiumEngineTests {
         menu.perform(try #require(menu.extensionItems.first?.children.first))
         #expect(engineMenu.performedEdits == [.pasteAndMatchStyle])
         #expect(engineMenu.performedItems.first === fill, "The engine runs its own item")
+
+        // Inspect Element is the engine's (#173), when the page can dock DevTools.
+        #expect(menu.canInspectElement)
+        menu.inspectElement()
+        #expect(engineMenu.inspected == 1)
+        engineMenu.canInspectElement = false
+        #expect(!menu.canInspectElement)
     }
 
     @Test func aFailedStartReportsWhy() {
