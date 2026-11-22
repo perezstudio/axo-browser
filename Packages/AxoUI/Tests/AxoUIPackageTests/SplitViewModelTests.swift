@@ -178,30 +178,5 @@ struct SplitViewModelTests {
         #expect(PageSplitDropSide.side(at: 890, width: 900) == .trailing)
         #expect(PageSplitDropSide.side(at: 10, width: 0) == nil)
     }
-
-    /// A dragged row gives Axo its ID and other apps only its web address (#78).
-    @Test func aDraggedRowCarriesItsIDAndItsAddress() async throws {
-        let id = UUID()
-        let url = URL(string: "https://example.com/page")!
-        let provider = SidebarDragPayload.provider(for: .tab(id), url: url, title: "Page")
-        #expect(provider.registeredTypeIdentifiers.first == UTType.url.identifier, "The address first, for other apps")
-        #expect(provider.suggestedName == "Page")
-        let text: String? = await withCheckedContinuation { done in
-            _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.utf8PlainText.identifier) { data, _ in
-                done.resume(returning: data.flatMap { String(data: $0, encoding: .utf8) })
-            }
-        }
-        #expect(text == "tab:\(id.uuidString)")
-        let address: URL? = await withCheckedContinuation { done in
-            _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.url.identifier) { data, _ in
-                done.resume(returning: data.flatMap { URL(dataRepresentation: $0, relativeTo: nil) })
-            }
-        }
-        #expect(address == url)
-
-        let page = SidebarDragPayload.provider(for: .tab(id), url: URL(string: "data:text/html,<p>big</p>"), title: nil)
-        #expect(!page.registeredTypeIdentifiers.contains(UTType.url.identifier), "No data: pages to other apps")
-        #expect(!SidebarDragPayload.provider(for: .folder(id), url: nil, title: nil).registeredTypeIdentifiers.contains(UTType.url.identifier))
-    }
 }
 

@@ -1,6 +1,5 @@
 import AxoCore
 import SwiftUI
-import UniformTypeIdentifiers
 
 /// A list of rows a sidebar drag can land in (#77): the pinned section's top level or one of its
 /// folders, or the tabs section.
@@ -151,40 +150,13 @@ enum SidebarDragPayload {
     }
 }
 
-extension SidebarDragPayload {
-    /// What a dragged row carries: for a tab with a web address, that address as a URL first,
-    /// which other apps (Mail, Notes, Finder) take, as dragging Safari's tabs gives them (#78);
-    /// then its ID as text (``text(for:)``), which Axo's own drop targets read. The text stays
-    /// visible to every process: hidden to other apps (`.ownProcess`), the sidebar list's insert
-    /// no longer saw it, and rows stopped dropping into Pinned.
-    static func provider(for item: PinnedItem, url: URL?, title: String?) -> NSItemProvider {
-        let provider = NSItemProvider()
-        if let url, ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
-            let data = url.dataRepresentation
-            provider.registerDataRepresentation(forTypeIdentifier: UTType.url.identifier, visibility: .all) { completion in
-                completion(data, nil)
-                return nil
-            }
-            provider.suggestedName = title.flatMap { $0.isEmpty ? nil : $0 } ?? url.host()
-        }
-        // Plain text only: an `NSString` object also offers itself as a URL, so a folder's ID
-        // would reach other apps as one.
-        let text = Data(Self.text(for: item).utf8)
-        provider.registerDataRepresentation(forTypeIdentifier: UTType.utf8PlainText.identifier, visibility: .all) { completion in
-            completion(text, nil)
-            return nil
-        }
-        return provider
-    }
-}
-
 extension View {
-    /// Makes a sidebar row draggable (#77): it carries its ID to the other sections, folders,
-    /// Favorites, the Space dots, and the page's edges (a split, #78), and a tab's web address
-    /// to other apps (``SidebarDragPayload/provider(for:url:title:)``).
-    func sidebarDraggable(_ item: PinnedItem, isEnabled: Bool, url: @escaping () -> URL? = { nil },
-                          title: @escaping () -> String? = { nil }) -> some View {
-        itemProvider(isEnabled ? { SidebarDragPayload.provider(for: item, url: url(), title: title()) } : nil)
+    /// Makes a sidebar row draggable (#77): it carries its ID as text (``SidebarDragPayload``)
+    /// to the other sections, folders, Favorites, the Space dots, and the page's edges (a split,
+    /// #78). Other apps get that text too; a tab's address for them needs a drag type of Axo's
+    /// own for its drop targets (a URL beside the text stopped rows dropping into Pinned).
+    func sidebarDraggable(_ item: PinnedItem, isEnabled: Bool) -> some View {
+        itemProvider(isEnabled ? { NSItemProvider(object: SidebarDragPayload.text(for: item) as NSString) } : nil)
     }
 }
 
