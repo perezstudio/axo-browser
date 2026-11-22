@@ -32,8 +32,12 @@ final class AxoiOSUITests: XCTestCase {
     private func openPage(_ address: String, in app: XCUIApplication) {
         let newTab = app.buttons["newTabButton"].firstMatch
         XCTAssertTrue(newTab.waitForExistence(timeout: 10))
-        // Wait until the window has loaded its Space; a tap during launch can be lost.
-        XCTAssertTrue(app.descendants(matching: .any)["sidebarNewTabButton"].waitForExistence(timeout: 10))
+        // Wait until the window has loaded its Space; a tap during launch can be lost. The tabs
+        // view's New Tab card on iPhone, the sidebar's New Tab on iPad.
+        let loaded = NSPredicate { _, _ in
+            app.buttons["newTabCard"].exists || app.descendants(matching: .any)["sidebarNewTabButton"].exists
+        }
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: loaded, object: nil)], timeout: 10), .completed)
         let field = app.textFields["commandField"]
         newTab.tap()
         if !field.waitForExistence(timeout: 5) { newTab.tap() }
@@ -41,16 +45,16 @@ final class AxoiOSUITests: XCTestCase {
         field.typeText(address + "\n")
     }
 
-    /// The sidebar, which on iPhone is the first screen and on iPad sits beside the page.
+    /// The Space's tabs: on iPhone the tabs view (#182), which the bar's tabs button goes back
+    /// to; on iPad the sidebar beside the page.
     @MainActor
     private func showSidebar(in app: XCUIApplication) -> XCUIElement {
         let sidebar = app.descendants(matching: .any)["sidebar"]
-        if !sidebar.waitForExistence(timeout: 2) {
-            // iPhone: the list and the page take turns.
-            app.buttons["showTabsButton"].tap()
-        }
-        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
-        return sidebar
+        if sidebar.waitForExistence(timeout: 2) { return sidebar }
+        let tabsView = app.descendants(matching: .any)["tabsView"]
+        if !tabsView.exists { app.buttons["showTabsButton"].tap() }
+        XCTAssertTrue(tabsView.waitForExistence(timeout: 5))
+        return tabsView
     }
 
     /// The iPhone's address (#181), whose value is the shown page's full address.
@@ -136,18 +140,53 @@ final class AxoiOSUITests: XCTestCase {
         waitForExpectations(timeout: 5)
     }
 
+    /// The iPhone's tabs view (#182): the tabs button goes back to it, a card opens its page,
+    /// and a card's × closes its tab while the others stay.
+    @MainActor
+    func testTheTabsViewOpensAndClosesCards() throws {
+        let app = launchApp()
+        openPage("data:text/html,<title>One</title>", in: app)
+        XCTAssertTrue(address(in: app).waitForExistence(timeout: 10))
+        waitUntilLoaded(app)
+        app.buttons["showTabsButton"].tap()
+        openPage("data:text/html,<title>Two</title>", in: app)
+        expectation(for: NSPredicate(format: "value CONTAINS 'Two'"), evaluatedWith: address(in: app))
+        waitForExpectations(timeout: 10)
+        waitUntilLoaded(app)
+
+        app.buttons["showTabsButton"].tap()
+        let tabs = app.descendants(matching: .any)["tabsView"]
+        XCTAssertTrue(tabs.waitForExistence(timeout: 5), "The page zooms back into the tabs view")
+        let cards = tabs.descendants(matching: .any).matching(identifier: "tabCard")
+        XCTAssertEqual(cards.count, 2)
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "Tabs view"
+        shot.lifetime = .keepAlways
+        add(shot)
+
+        cards.matching(NSPredicate(format: "label == 'One'")).firstMatch.tap()
+        expectation(for: NSPredicate(format: "value CONTAINS 'One'"), evaluatedWith: address(in: app))
+        waitForExpectations(timeout: 10)
+
+        app.buttons["showTabsButton"].tap()
+        XCTAssertTrue(tabs.waitForExistence(timeout: 5))
+        app.buttons["Close Two"].tap()
+        expectation(for: NSPredicate(format: "count == 1"), evaluatedWith: cards)
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(cards.matching(NSPredicate(format: "label == 'One'")).firstMatch.exists, "The other stays")
+    }
+
     @MainActor
     func testClosingATabRemovesItFromTheList() throws {
         let app = launchApp()
         openPage("data:text/html,<title>Brief</title>", in: app)
         XCTAssertTrue(app.descendants(matching: .any)["webContent"].waitForExistence(timeout: 10))
 
-        let sidebar = showSidebar(in: app)
-        let row = sidebar.staticTexts["Brief"]
-        XCTAssertTrue(row.waitForExistence(timeout: 10))
-        row.swipeLeft()
-        app.buttons["Close"].tap()
-        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: row)
+        let tabs = showSidebar(in: app)
+        let card = tabs.descendants(matching: .any).matching(identifier: "tabCard").matching(NSPredicate(format: "label == 'Brief'")).firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 10))
+        app.buttons["Close Brief"].tap()
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: card)
         waitForExpectations(timeout: 5)
     }
 }
