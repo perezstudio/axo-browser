@@ -84,4 +84,23 @@ struct MobileMenuTests {
         await model.openTab(url: URL(string: "https://www.example.com/a/b")!)
         #expect(model.mobileAddressText?.contains("example.com") == true)
     }
+
+    /// The iPhone's tabs view switches Spaces without selecting a tab (#182), which would open
+    /// its page at once; elsewhere a Space opens on a tab.
+    @Test func aSpaceChosenFromTheTabsViewSelectsNoTab() async throws {
+        await model.openTab(url: URL(string: "https://example.com/")!)
+        let home = try #require(model.space)
+        await model.createSpace(name: "Work")
+        try await waitUntil { model.space?.name == "Work" }
+        await model.openTab(url: URL(string: "https://example.com/work")!)
+        model.select(nil)
+
+        await model.selectSpace(home.id, selectingTab: false)
+        #expect(model.space?.id == home.id)
+        #expect(model.selectedTabID == nil, "The tabs view keeps showing the Space's cards")
+        let work = try #require(model.spaces.first { $0.name == "Work" })
+        await model.selectSpace(work.id)
+        #expect(model.selectedTabID != nil, "Elsewhere a Space opens on a tab")
+    }
 }
+

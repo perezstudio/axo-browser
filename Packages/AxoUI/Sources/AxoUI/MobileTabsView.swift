@@ -7,7 +7,8 @@ import SwiftUI
 /// tabs, and today's tabs as cards on its theme, each card a picture of its page. Tapping a card
 /// opens its page, which zooms up out of the card (and back into it from the bar's tabs
 /// button); a card's × closes the tab, the cards after it moving into its place; New Tab adds
-/// a card that opens the command bar. With Reduce Motion, pages and cards fade instead.
+/// a card that opens the command bar. With Reduce Motion, the page pushes as the system does,
+/// without the zoom, and cards fade rather than scale or slide.
 struct MobileTabsView: View {
     let model: BrowserModel
     /// The cards' zoom source, shared with the pushed page.
@@ -15,6 +16,10 @@ struct MobileTabsView: View {
     /// The tab whose page showed last, whose card is outlined.
     let highlighted: AxoCore.Tab.ID?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+    /// The system's appearance, read before the theme's own replaces it below.
+    @Environment(\.colorScheme) private var systemScheme
 
     private let columns = [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
 
@@ -36,12 +41,15 @@ struct MobileTabsView: View {
                 }
             }
             .padding(16)
-            .animation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.35, bounce: 0.2), value: model.unpinnedTabs.map(\.id))
+            .animation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.35, bounce: 0.2),
+                       value: model.unpinnedTabs.map(\.id) + Self.flatten(model.pinnedTree).map(\.id))
         }
         .background { themeBackground.ignoresSafeArea() }
+        // The theme's light or dark mode for the text over it, as on the Mac's sidebar.
+        .environment(\.colorScheme, resolvedTheme.map { $0.isDark ? .dark : .light } ?? systemScheme)
         .navigationTitle(model.space?.name ?? "Axo")
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) { MobileSpacesMenu(model: model) }
+            ToolbarItem(placement: .topBarLeading) { MobileSpacesMenu(model: model, selectsTab: false) }
             ToolbarItem(placement: .primaryAction) {
                 Button("New Tab", systemImage: "plus") { model.beginNewTab() }
                     .accessibilityIdentifier("newTabButton")
@@ -50,14 +58,23 @@ struct MobileTabsView: View {
         .accessibilityIdentifier("tabsView")
     }
 
-    /// The Space's theme behind the cards, or the system's grouped background without one.
+    /// The Space's theme, resolved as the Mac's sidebar resolves it (its light or dark mode,
+    /// Reduce Transparency, Increase Contrast), or `nil` without one.
+    private var resolvedTheme: ResolvedSpaceTheme? {
+        model.space?.theme?.resolved(systemIsDark: systemScheme == .dark, reduceTransparency: reduceTransparency,
+                                     increaseContrast: contrast == .increased)
+    }
+
+    /// The theme behind the cards, over the system's grouped background, or that alone.
     @ViewBuilder
     private var themeBackground: some View {
-        if let colors = model.space?.theme?.colors.map(Color.init(themeColor:)), !colors.isEmpty {
-            LinearGradient(colors: colors.count == 1 ? [colors[0], colors[0]] : colors, startPoint: .top, endPoint: .bottom)
-                .opacity(0.85)
-        } else {
+        ZStack {
             Color(uiColor: .systemGroupedBackground)
+            if let theme = resolvedTheme {
+                let colors = theme.colors.map(Color.init(themeColor:))
+                LinearGradient(colors: colors.count == 1 ? [colors[0], colors[0]] : colors, startPoint: .top, endPoint: .bottom)
+                    .opacity(theme.colorOpacity)
+            }
         }
     }
 
@@ -134,6 +151,9 @@ struct MobileTabCard: View {
     let isSelected: Bool
     let closes: Bool
     @State private var picture: UIImage?
+    /// Read again each time the tabs view shows (no tab selected), so a card never keeps an old
+    /// picture of its page, or none for a page that was still loading.
+    private var pictureKey: String { "\(tab.id.uuidString)-\(model.selectedTabID == nil)" }
 
     var body: some View {
         Button { model.select(tab.id) } label: {
@@ -172,17 +192,21 @@ struct MobileTabCard: View {
                     Image(systemName: "xmark").font(.system(size: 11, weight: .bold))
                         .frame(width: 26, height: 26)
                         .background(.ultraThinMaterial, in: .circle)
+                        // A 44-point target around the drawn circle.
+                        .frame(width: 44, height: 44)
+                        .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
-                .padding(6)
                 .accessibilityLabel("Close \(TabRow.displayTitle(for: tab))")
                 .accessibilityIdentifier("closeCardButton")
             }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(TabRow.displayTitle(for: tab))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("tabCard")
-        .task(id: tab.id) {
+        .task(id: pictureKey) {
+            guard model.selectedTabID == nil || picture == nil else { return }
             if let data = await model.pool.previewSnapshot(for: tab.id) { picture = UIImage(data: data) }
         }
     }
@@ -191,12 +215,15 @@ struct MobileTabCard: View {
 /// The Spaces menu: choose which Space shows.
 struct MobileSpacesMenu: View {
     let model: BrowserModel
+    /// Whether choosing a Space selects one of its tabs: the iPad's sidebar does; the iPhone's
+    /// tabs view doesn't, since a selected tab opens its page (#182).
+    var selectsTab = true
 
     var body: some View {
         Menu {
             ForEach(model.spaces) { space in
                 Button {
-                    Task { await model.selectSpace(space.id) }
+                    Task { await model.selectSpace(space.id, selectingTab: selectsTab) }
                 } label: {
                     if space.id == model.space?.id {
                         Label(space.name, systemImage: "checkmark")

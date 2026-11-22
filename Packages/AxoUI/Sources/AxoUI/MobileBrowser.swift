@@ -14,7 +14,6 @@ public struct MobileBrowserView: View {
     @Bindable private var model: BrowserModel
     /// On iPad, whether the tab list or the page is showing in compact width (split screen).
     @State private var compactColumn = NavigationSplitViewColumn.sidebar
-    @Environment(\.horizontalSizeClass) private var sizeClass
     /// The cards' zoom source (#182), shared with the page they open.
     @Namespace private var cards
     /// The tab whose page showed last, outlined in the tabs view.
@@ -27,7 +26,9 @@ public struct MobileBrowserView: View {
 
     public var body: some View {
         Group {
-            if sizeClass == .compact {
+            // By device, not width: a Max iPhone turned sideways is regular width, and an iPad in
+            // split screen compact, and neither should swap layouts mid-use.
+            if UIDevice.current.userInterfaceIdiom == .phone {
                 // iPhone (#182): the tabs view, and the page zooming up out of its card.
                 NavigationStack {
                     MobileTabsView(model: model, namespace: cards, highlighted: lastShownTabID)
@@ -173,7 +174,8 @@ struct MobilePage: View {
     let model: BrowserModel
     /// Shows the tab list (iPhone).
     let showTabs: () -> Void
-    @Environment(\.horizontalSizeClass) private var sizeClass
+    /// The iPhone's bar (#181) on iPhone in any orientation; the iPad's bar on iPad.
+    private var isPhone: Bool { UIDevice.current.userInterfaceIdiom == .phone }
     @AppStorage(MobileAddressBarPlacement.storageKey) private var barPlacement: MobileAddressBarPlacement = .bottom
 
     var body: some View {
@@ -181,7 +183,7 @@ struct MobilePage: View {
             if let tab = model.shownTab, let space = model.space {
                 WebViewHost(tab: tab, profileID: space.profileID, pool: model.pool)
                     // Under the status bar with the bar at the bottom, but never under the find bar.
-                    .ignoresSafeArea(edges: sizeClass == .compact && barPlacement == .bottom && !model.isFindBarVisible ? .top : [])
+                    .ignoresSafeArea(edges: isPhone && barPlacement == .bottom && !model.isFindBarVisible ? .top : [])
                     .accessibilityIdentifier("webContent")
                     .pageProblem(for: tab.id, model: model)
             } else {
@@ -197,14 +199,14 @@ struct MobilePage: View {
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
-            if sizeClass == .compact {
+            if isPhone {
                 if barPlacement == .top { MobileBar(model: model, placement: .top, showTabs: showTabs) }
             } else {
                 MobileAddressBar(model: model, showTabs: nil)
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if sizeClass == .compact, barPlacement == .bottom {
+            if isPhone, barPlacement == .bottom {
                 MobileBar(model: model, placement: .bottom, showTabs: showTabs)
             }
         }
@@ -228,7 +230,7 @@ struct MobilePage: View {
             .presentationDetents([.medium, .large])
         }
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(sizeClass == .compact ? .hidden : .automatic, for: .navigationBar)
+        .toolbar(isPhone ? .hidden : .automatic, for: .navigationBar)
     }
 }
 

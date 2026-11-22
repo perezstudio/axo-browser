@@ -183,10 +183,20 @@ final class AxoiOSUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["webContent"].waitForExistence(timeout: 10))
 
         let tabs = showSidebar(in: app)
-        let card = tabs.descendants(matching: .any).matching(identifier: "tabCard").matching(NSPredicate(format: "label == 'Brief'")).firstMatch
-        XCTAssertTrue(card.waitForExistence(timeout: 10))
-        app.buttons["Close Brief"].tap()
-        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: card)
+        if tabs.identifier == "sidebar" {
+            // iPad: swipe the row to close it.
+            let row = tabs.staticTexts["Brief"]
+            XCTAssertTrue(row.waitForExistence(timeout: 10))
+            row.swipeLeft()
+            app.buttons["Close"].tap()
+            expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: row)
+        } else {
+            // iPhone: the card's ×.
+            let card = tabs.descendants(matching: .any).matching(identifier: "tabCard").matching(NSPredicate(format: "label == 'Brief'")).firstMatch
+            XCTAssertTrue(card.waitForExistence(timeout: 10))
+            app.buttons["Close Brief"].tap()
+            expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: card)
+        }
         waitForExpectations(timeout: 5)
     }
 }
