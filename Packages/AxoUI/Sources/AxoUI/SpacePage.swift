@@ -42,10 +42,12 @@ struct SpacePage: View {
                 SidebarSections(model: model, data: data)
             }
         }
-        // A right-click on the list's empty space (#81): Reopen Closed Tab. Rows keep their own
-        // menus; this one is only for the empty area, where the selection it gets is empty.
-        .contextMenu(forSelectionType: PinnedItem.self) { items in
-            if items.isEmpty, isShown {
+        // A right-click on the list's empty space (#81): New Tab and Reopen Closed Tab. A plain
+        // menu, which rows' own menus override, since the innermost one wins; the list-wide
+        // `contextMenu(forSelectionType:)` changed how the list handled clicks and drags (rows
+        // no longer dropped into Pinned) and didn't open on the empty space.
+        .contextMenu {
+            if isShown {
                 Button("New Tab") { model.showCommandBar() }
                 Button("Reopen Closed Tab") { Task { await model.reopenLastClosedTab() } }
             }
