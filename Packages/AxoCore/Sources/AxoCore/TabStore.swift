@@ -453,15 +453,17 @@ public final class TabStore: Sendable {
     /// Moves a tab to the end of another Space's section (pinned or not), out of any folder or
     /// split. Moving to its own Space does nothing.
     ///
+    /// - Parameter acrossProfiles: Allows a Space of another profile (#81). Only a caller that
+    ///   closed the tab's page first may pass it: a live page keeps the profile it was made with.
     /// - Throws: ``TabStoreError/tabNotFound(_:)``, ``TabStoreError/spaceNotFound(_:)``, or
-    ///   ``TabStoreError/spaceOfAnotherProfile(_:)``: a tab moves only between one profile's
-    ///   Spaces, since its live page keeps the profile it was made with.
-    public func moveTab(id: Tab.ID, toSpace spaceID: Space.ID) async throws {
+    ///   ``TabStoreError/spaceOfAnotherProfile(_:)``: without `acrossProfiles`, a tab moves only
+    ///   between one profile's Spaces.
+    public func moveTab(id: Tab.ID, toSpace spaceID: Space.ID, acrossProfiles: Bool = false) async throws {
         try await database.writer.write { db in
             guard var tab = try Tab.fetchOne(db, id: id) else { throw TabStoreError.tabNotFound(id) }
             guard tab.spaceID != spaceID else { return }
             guard let target = try Space.fetchOne(db, id: spaceID) else { throw TabStoreError.spaceNotFound(spaceID) }
-            guard let source = try Space.fetchOne(db, id: tab.spaceID), source.profileID == target.profileID else {
+            guard let source = try Space.fetchOne(db, id: tab.spaceID), acrossProfiles || source.profileID == target.profileID else {
                 throw TabStoreError.spaceOfAnotherProfile(spaceID)
             }
             try Self.leaveSplit(id, db)
@@ -479,13 +481,14 @@ public final class TabStore: Sendable {
     /// after the tab moved on (or was archived) does nothing; it reports whether the tab moved.
     /// A tab pinned or unpinned meanwhile goes to the end of its section, and one whose old key
     /// another row took meanwhile goes just after that row, so no two rows share a key.
+    /// `acrossProfiles` allows a return from another profile's Space, as for ``moveTab(id:toSpace:acrossProfiles:)``.
     @discardableResult
     public func returnTab(id: Tab.ID, from fromSpaceID: Space.ID, to spaceID: Space.ID, folder folderID: Folder.ID?,
-                          sortKey: String, wasPinned: Bool) async throws -> Bool {
+                          sortKey: String, wasPinned: Bool, acrossProfiles: Bool = false) async throws -> Bool {
         try await database.writer.write { db in
             guard var tab = try Tab.fetchOne(db, id: id), tab.spaceID == fromSpaceID, tab.archivedAt == nil,
                   let target = try Space.fetchOne(db, id: spaceID),
-                  let source = try Space.fetchOne(db, id: fromSpaceID), source.profileID == target.profileID else {
+                  let source = try Space.fetchOne(db, id: fromSpaceID), acrossProfiles || source.profileID == target.profileID else {
                 return false
             }
             try Self.leaveSplit(id, db)
