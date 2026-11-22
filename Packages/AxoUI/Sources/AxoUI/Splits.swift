@@ -155,9 +155,30 @@ extension BrowserModel {
     /// favorite (its bare ID), or other text, such as a link dragged from a page.
     func tabToSplit(droppedAs text: String) -> AxoCore.Tab.ID? {
         guard case .tab(let id) = SidebarDragPayload.item(from: text), let selected = selectedTabID, id != selected,
-              tabs.contains(where: { $0.id == id }), tabs.contains(where: { $0.id == selected }), canAddToSplit else { return nil }
-        if let split = split(of: selected), panes(of: split.id).contains(where: { $0.id == id }) { return nil }
+              tabs.contains(where: { $0.id == id }), tabs.contains(where: { $0.id == selected }), canAddToSplit,
+              // Another split's row stands for all its panes: moving one would break it up.
+              split(of: id) == nil else { return nil }
         return id
+    }
+
+    /// Notes that a sidebar row is being dragged, until the mouse button is let go (#78): a drag
+    /// session ends with the button up, wherever the row was dropped, and nothing reports that
+    /// to the row, so it's checked a few times a second while the drag lasts.
+    func beginSidebarRowDrag() {
+        guard !isDraggingSidebarRow else { return }
+        isDraggingSidebarRow = true
+        #if os(macOS)
+        Task { [weak self] in
+            // Past the press that started it, then until the button is up.
+            try? await Task.sleep(for: .milliseconds(150))
+            while NSEvent.pressedMouseButtons & 1 != 0 {
+                try? await Task.sleep(for: .milliseconds(150))
+            }
+            self?.isDraggingSidebarRow = false
+        }
+        #else
+        isDraggingSidebarRow = false
+        #endif
     }
 
     /// Adds a tab dropped on the page's left (`leading`) or right edge to a split with the

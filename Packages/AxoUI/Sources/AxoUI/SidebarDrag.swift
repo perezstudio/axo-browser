@@ -155,8 +155,12 @@ extension View {
     /// to the other sections, folders, Favorites, the Space dots, and the page's edges (a split,
     /// #78). Other apps get that text too; a tab's address for them needs a drag type of Axo's
     /// own for its drop targets (a URL beside the text stopped rows dropping into Pinned).
-    func sidebarDraggable(_ item: PinnedItem, isEnabled: Bool) -> some View {
-        itemProvider(isEnabled ? { NSItemProvider(object: SidebarDragPayload.text(for: item) as NSString) } : nil)
+    func sidebarDraggable(_ item: PinnedItem, isEnabled: Bool, model: BrowserModel? = nil) -> some View {
+        itemProvider(isEnabled ? {
+            // Called as the drag starts: the page takes drops until it ends (#78).
+            model?.beginSidebarRowDrag()
+            return NSItemProvider(object: SidebarDragPayload.text(for: item) as NSString)
+        } : nil)
     }
 }
 

@@ -170,6 +170,23 @@ struct SplitViewModelTests {
         model.select(a.id)
         await model.splitWithDroppedTab("tab:\(c.id.uuidString)", leading: true)
         #expect(names(model.panes(of: split.id)) == ["c", "a", "b"], "The left edge: before the page")
+
+        // Another split's row isn't taken apart.
+        let d = try await add("d"), e = try await add("e")
+        model.select(d.id)
+        await model.addToSplit(e.id)
+        model.select(a.id)
+        #expect(model.tabToSplit(droppedAs: "tab:\(d.id.uuidString)") == nil, "Another split's row")
+    }
+
+    /// The page takes drops only while a sidebar row is dragged (#78), so a page's own text and
+    /// file drops work the rest of the time.
+    @Test func thePageTakesDropsOnlyDuringARowDrag() async throws {
+        #expect(!model.isDraggingSidebarRow)
+        model.beginSidebarRowDrag()
+        #expect(model.isDraggingSidebarRow)
+        // No button is held in a unit test, so it ends at the first check.
+        try await waitUntil { !model.isDraggingSidebarRow }
     }
 
     @Test func dropSidesAreThePagesOuterThirds() {

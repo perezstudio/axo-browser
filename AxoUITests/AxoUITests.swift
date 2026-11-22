@@ -796,14 +796,17 @@ final class AxoUITests: XCTestCase {
         }
         sidebar.staticTexts["Alpha"].click()
         let window = app.windows.firstMatch
-        func drop(_ name: String, atX x: CGFloat) {
+        /// Drops a row at a fraction across the page column, measured from the sidebar's edge.
+        func drop(_ name: String, atPage fraction: CGFloat) {
             app.descendants(matching: .any)["sidebarAddressBar"].hover()
             let row = sidebar.staticTexts[name]
-            row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-                .click(forDuration: 0.6, thenDragTo: window.coordinate(withNormalizedOffset: CGVector(dx: x, dy: 0.55)))
+            let pageMinX = sidebar.frame.maxX, pageWidth = window.frame.maxX - sidebar.frame.maxX
+            let target = window.coordinate(withNormalizedOffset: .zero)
+                .withOffset(CGVector(dx: pageMinX - window.frame.minX + pageWidth * fraction, dy: window.frame.height * 0.55))
+            row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click(forDuration: 0.6, thenDragTo: target)
         }
 
-        drop("Beta", atX: 0.95)
+        drop("Beta", atPage: 0.9)
         let split = sidebar.descendants(matching: .any)["splitRow"]
         XCTAssertTrue(split.waitForExistence(timeout: 10), "Beta joined Alpha in a split")
         let shot = XCTAttachment(screenshot: window.screenshot())
@@ -811,8 +814,8 @@ final class AxoUITests: XCTestCase {
         shot.lifetime = .keepAlways
         add(shot)
 
-        // The page column's left third (the sidebar takes the window's first quarter or so).
-        drop("Gamma", atX: 0.4)
+        // The page column's left third.
+        drop("Gamma", atPage: 0.12)
         let gammaRow = sidebar.descendants(matching: .any).matching(identifier: "tabRow").matching(NSPredicate(format: "label == 'Gamma'")).firstMatch
         XCTAssertTrue(gammaRow.waitForNonExistence(timeout: 10), "Gamma joined the split too, rather than staying a row of its own")
         XCTAssertEqual(sidebar.descendants(matching: .any).matching(identifier: "splitRow").count, 1)
