@@ -591,10 +591,12 @@ public final class BrowserModel {
     // MARK: Spaces
 
     /// Switches the window to another Space, returning to the tab it had selected.
-    public func selectSpace(_ id: Space.ID) async {
+    /// `selectingTab` false shows the Space with no tab selected, as the iPhone's tabs view does
+    /// (#182): selecting one there would open its page at once.
+    public func selectSpace(_ id: Space.ID, selectingTab: Bool = true) async {
         guard id != space?.id, let target = spaces.first(where: { $0.id == id }) else { return }
         do {
-            try await show(target)
+            try await show(target, selectingTab: selectingTab)
             announce("Switched to \(target.name)")
         } catch {
             report(error, "Axo couldn't open that Space.")
@@ -765,7 +767,7 @@ public final class BrowserModel {
     /// records are read first and then shown together, with no suspension between, so the
     /// sidebar never draws the new Space with the old one's rows (its page slides in already
     /// filled, #84).
-    private func show(_ target: Space) async throws {
+    private func show(_ target: Space, selectingTab: Bool = true) async throws {
         hideTabPreview()
         // The old Space's list may never say its scrolling stopped once it's hidden.
         isSidebarScrolling = false
@@ -814,7 +816,7 @@ public final class BrowserModel {
         let remembered = selectedTabBySpace[target.id].flatMap { id in
             tabs.first { $0.id == id }?.id ?? favorites.first { $0.id == id }?.id
         }
-        select(remembered ?? tabs.first?.id)
+        select(selectingTab ? (remembered ?? tabs.first?.id) : nil)
         observeTabs(in: target.id)
         await loadSavedFavicons()
         onSpaceChange?(target.id)

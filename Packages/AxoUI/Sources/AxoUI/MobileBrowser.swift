@@ -5,15 +5,19 @@ import SwiftUI
 
 /// The browser on iPhone and iPad.
 ///
-/// A sidebar lists the Space's pinned tabs (with folders) and open tabs, with a menu to switch
-/// Spaces. On iPad it sits beside the page, like the Mac; on iPhone it's the first screen, and
-/// choosing a tab shows its page. The page has an address bar (at the bottom on iPhone, at the
-/// top on iPad) with back, forward, and reload. New tabs start in the command bar, as on the
-/// Mac. Everything else comes from the shared ``BrowserModel``.
+/// On iPhone (compact width) the first screen is the tabs view (#182): the Space's favorites,
+/// pinned tabs, and today's tabs as cards, each opening its page with a zoom; the page has the
+/// iPhone's bar (#181). On iPad a sidebar lists the Space's tabs beside the page, like the Mac,
+/// with the address bar at the top. New tabs start in the command bar, as on the Mac.
+/// Everything else comes from the shared ``BrowserModel``.
 public struct MobileBrowserView: View {
     @Bindable private var model: BrowserModel
-    /// On iPhone, whether the tab list or the page is showing.
+    /// On iPad, whether the tab list or the page is showing in compact width (split screen).
     @State private var compactColumn = NavigationSplitViewColumn.sidebar
+    /// The cards' zoom source (#182), shared with the page they open.
+    @Namespace private var cards
+    /// The tab whose page showed last, outlined in the tabs view.
+    @State private var lastShownTabID: AxoCore.Tab.ID?
 
     /// Creates the browser showing `model`.
     public init(model: BrowserModel) {
@@ -21,19 +25,38 @@ public struct MobileBrowserView: View {
     }
 
     public var body: some View {
-        NavigationSplitView(preferredCompactColumn: $compactColumn) {
-            MobileSidebar(model: model)
-        } detail: {
-            MobilePage(model: model, showTabs: {
-                // In compact width the list's selection keeps the page pushed, so going back to
-                // the list clears it. The tab stays open, and choosing it shows it again.
-                compactColumn = .sidebar
-                model.select(nil)
-            })
+        Group {
+            // By device, not width: a Max iPhone turned sideways is regular width, and an iPad in
+            // split screen compact, and neither should swap layouts mid-use.
+            if UIDevice.current.userInterfaceIdiom == .phone {
+                // iPhone (#182): the tabs view, and the page zooming up out of its card.
+                NavigationStack {
+                    MobileTabsView(model: model, namespace: cards, highlighted: lastShownTabID)
+                        .navigationDestination(item: Binding(
+                            get: { model.selectedTabID },
+                            set: { if $0 == nil { model.select(nil) } }
+                        )) { id in
+                            MobilePage(model: model, showTabs: { model.select(nil) })
+                                .modifier(ZoomFromCard(id: id, namespace: cards))
+                                .navigationBarBackButtonHidden()
+                        }
+                }
+            } else {
+                NavigationSplitView(preferredCompactColumn: $compactColumn) {
+                    MobileSidebar(model: model)
+                } detail: {
+                    MobilePage(model: model, showTabs: {
+                        compactColumn = .sidebar
+                        model.select(nil)
+                    })
+                }
+                .onChange(of: model.selectedTabID) {
+                    if model.selectedTabID != nil { compactColumn = .detail }
+                }
+            }
         }
-        // Choosing or opening a tab shows its page on iPhone.
         .onChange(of: model.selectedTabID) {
-            if model.selectedTabID != nil { compactColumn = .detail }
+            if let id = model.selectedTabID { lastShownTabID = id }
         }
         .overlay {
             if model.isCommandBarVisible {
@@ -53,6 +76,22 @@ public struct MobileBrowserView: View {
             Button("OK") { model.alertMessage = nil }
         } message: { message in
             Text(message)
+        }
+    }
+}
+
+/// The page zooming up out of its card and back into it (#182), or the system's push with
+/// Reduce Motion.
+struct ZoomFromCard: ViewModifier {
+    let id: AxoCore.Tab.ID
+    let namespace: Namespace.ID
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        if reduceMotion {
+            content
+        } else {
+            content.navigationTransition(.zoom(sourceID: id, in: namespace))
         }
     }
 }
@@ -98,24 +137,7 @@ struct MobileSidebar: View {
         .navigationTitle(model.space?.name ?? "Axo")
         .accessibilityIdentifier("sidebar")
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Menu {
-                    ForEach(model.spaces) { space in
-                        Button {
-                            Task { await model.selectSpace(space.id) }
-                        } label: {
-                            if space.id == model.space?.id {
-                                Label(space.name, systemImage: "checkmark")
-                            } else {
-                                Text(space.name)
-                            }
-                        }
-                    }
-                } label: {
-                    Label("Spaces", systemImage: "square.stack")
-                }
-                .accessibilityIdentifier("spacesMenu")
-            }
+            ToolbarItem(placement: .topBarLeading) { MobileSpacesMenu(model: model) }
             ToolbarItem(placement: .primaryAction) {
                 Button("New Tab", systemImage: "plus") { model.beginNewTab() }
                     .accessibilityIdentifier("newTabButton")
@@ -152,7 +174,8 @@ struct MobilePage: View {
     let model: BrowserModel
     /// Shows the tab list (iPhone).
     let showTabs: () -> Void
-    @Environment(\.horizontalSizeClass) private var sizeClass
+    /// The iPhone's bar (#181) on iPhone in any orientation; the iPad's bar on iPad.
+    private var isPhone: Bool { UIDevice.current.userInterfaceIdiom == .phone }
     @AppStorage(MobileAddressBarPlacement.storageKey) private var barPlacement: MobileAddressBarPlacement = .bottom
 
     var body: some View {
@@ -160,7 +183,7 @@ struct MobilePage: View {
             if let tab = model.shownTab, let space = model.space {
                 WebViewHost(tab: tab, profileID: space.profileID, pool: model.pool)
                     // Under the status bar with the bar at the bottom, but never under the find bar.
-                    .ignoresSafeArea(edges: sizeClass == .compact && barPlacement == .bottom && !model.isFindBarVisible ? .top : [])
+                    .ignoresSafeArea(edges: isPhone && barPlacement == .bottom && !model.isFindBarVisible ? .top : [])
                     .accessibilityIdentifier("webContent")
                     .pageProblem(for: tab.id, model: model)
             } else {
@@ -176,14 +199,14 @@ struct MobilePage: View {
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
-            if sizeClass == .compact {
+            if isPhone {
                 if barPlacement == .top { MobileBar(model: model, placement: .top, showTabs: showTabs) }
             } else {
                 MobileAddressBar(model: model, showTabs: nil)
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if sizeClass == .compact, barPlacement == .bottom {
+            if isPhone, barPlacement == .bottom {
                 MobileBar(model: model, placement: .bottom, showTabs: showTabs)
             }
         }
@@ -207,7 +230,7 @@ struct MobilePage: View {
             .presentationDetents([.medium, .large])
         }
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(sizeClass == .compact ? .hidden : .automatic, for: .navigationBar)
+        .toolbar(isPhone ? .hidden : .automatic, for: .navigationBar)
     }
 }
 
