@@ -36,8 +36,20 @@ public protocol PageContextMenu: AnyObject {
     func lookUpSelection()
     /// Runs an extension's item.
     func perform(_ item: PageContextMenuItem)
+    /// Whether ``inspectElement()`` works here: DevTools docks only beside a page in the engine's
+    /// window (the Space's tabs), so not in Peek or a mini window.
+    var canInspectElement: Bool { get }
+    /// Opens DevTools on the element that was clicked.
+    func inspectElement()
     /// Tells the page the menu closed, and which link it followed, if any. Call it once.
     func closed(followingLink url: URL?)
+}
+
+extension PageContextMenu {
+    /// No inspector, for engines that can't open one on an element.
+    public var canInspectElement: Bool { false }
+    /// Does nothing, for engines that can't open an inspector on an element.
+    public func inspectElement() {}
 }
 
 /// What a right-click hit, when it's media.

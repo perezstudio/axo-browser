@@ -27,6 +27,15 @@ struct SplitStoreTests {
             .map(\.title)
     }
 
+    /// A tab dropped on the page's left edge (#78) takes the first pane.
+    @Test func aLeadingTabBecomesTheFirstPane() async throws {
+        let a = try await open("A"), b = try await open("B"), c = try await open("C")
+        let split = try await store.addToSplit(b.id, with: a.id, leading: true)
+        #expect(try await panes(split.id) == ["B", "A"])
+        try await store.addToSplit(c.id, with: a.id, leading: true)
+        #expect(try await panes(split.id) == ["C", "B", "A"])
+    }
+
     @Test func addingATabToAnotherMakesASplitWithPanesInOrder() async throws {
         let a = try await open("A"), b = try await open("B"), c = try await open("C"), d = try await open("D")
         let split = try await store.addToSplit(c.id, with: a.id)
