@@ -233,11 +233,26 @@ final class AccessibilityAuditTests: XCTestCase {
         try audit(app, "Can't Connect page")
     }
 
-    /// Site Settings (#110): the panel for the current site, with its customization section
-    /// showing a customization's switch and Edit.
+    /// Site Settings (#110): the panel for the current site, with an extension that runs there
+    /// and, after adding one, its customization's switch and Edit.
     @MainActor
     func testAuditSiteSettings() throws {
-        let app = launchApp()
+        let folder = FileManager.default.temporaryDirectory.appending(path: "AxoAuditExtension-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: folder) }
+        try """
+        {"name": "Axo Marker", "version": "1.0", "manifest_version": 3, "description": "Audit extension.",
+         "action": {"default_title": "Axo Marker"},
+         "content_scripts": [{"matches": ["http://127.0.0.1/*"], "js": ["mark.js"]}]}
+        """.write(to: folder.appending(path: "manifest.json"), atomically: true, encoding: .utf8)
+        try "document.documentElement.dataset.axo = 'marked';".write(to: folder.appending(path: "mark.js"), atomically: true, encoding: .utf8)
+        let app = XCUIApplication()
+        app.launchEnvironment["AXO_UI_TESTING"] = "1"
+        app.launchEnvironment["AXO_UI_TESTING_EXTENSION"] = folder.path
+        app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
+        app.launch()
+        AxoUITests.bringToFront(app)
+        XCTAssertTrue(app.buttons.matching(identifier: "extensionButton").firstMatch.waitForExistence(timeout: 10))
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
         AxoUITests.openPage("http://127.0.0.1:\(try AxoUITests.closedPort())/", in: app)
@@ -245,6 +260,7 @@ final class AccessibilityAuditTests: XCTestCase {
         app.menuBars.menuBarItems["View"].click()
         app.menuBars.menuItems["Site Settings…"].click()
         XCTAssertTrue(app.descendants(matching: .any)["siteSettings"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["siteExtensions"].waitForExistence(timeout: 5))
         try audit(app, "Site Settings")
 
         app.buttons["customizeSiteButton"].click()

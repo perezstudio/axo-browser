@@ -209,6 +209,38 @@ public final class ExtensionManager {
             .sorted { $0.label.localizedStandardCompare($1.label) == .orderedAscending }
     }
 
+    /// What a loaded extension may do on a page (#110).
+    public enum PageAccess: Sendable, Equatable {
+        /// It can read and change the page.
+        case granted
+        /// It asks to, and runs there only once allowed (site access "when clicked", or a match
+        /// pattern it hasn't been granted).
+        case requested
+    }
+
+    /// The profile's loaded extensions that can, or ask to, read and change `url`'s page, by ID:
+    /// granted from each one's permission status for the URL, asking when a host permission it
+    /// requests matches but isn't granted. Empty for a URL that isn't http or https.
+    public func pageAccess(to url: URL, profileID: Profile.ID) -> [String: PageAccess] {
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return [:] }
+        var result: [String: PageAccess] = [:]
+        for (id, context) in contexts[profileID] ?? [:] {
+            switch context.permissionStatus(for: url) {
+            case .grantedExplicitly, .grantedImplicitly:
+                result[id] = .granted
+            default:
+                // Site access "when clicked" denies the patterns it asked for (`load`), so one whose
+                // host permissions ask for this site counts as asking. Only host permissions:
+                // `allRequestedMatchPatterns` also has sites that may only message it
+                // (`externally_connectable`), which Chrome doesn't count either.
+                if context.webExtension.requestedPermissionMatchPatterns.contains(where: { $0.matches(url) }) {
+                    result[id] = .requested
+                }
+            }
+        }
+        return result
+    }
+
     /// Clicks an extension's toolbar button: shows its popup, or sends `action.onClicked`.
     public func performAction(extensionID: String, profileID: Profile.ID, tabID: Tab.ID?) {
         context(for: extensionID, profileID: profileID)?.performAction(for: tabID.map { tabAdapter(for: $0) })

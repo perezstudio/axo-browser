@@ -1,5 +1,6 @@
 import AxoCore
 import AxoWeb
+import AxoWebTestSupport
 import Foundation
 import Testing
 @testable import AxoUI
@@ -52,6 +53,14 @@ final class FakeExtensionToolbar: ExtensionToolbarProviding {
     var items: [ExtensionToolbarItem] = []
     let pins = ExtensionPins()
     var performed: [String] = []
+    /// What ``siteAccess(to:profileID:)`` answers, and the URLs it was asked about.
+    var access: [String: SiteExtensionAccess] = [:]
+    var accessURLs: [URL] = []
+
+    func siteAccess(to url: URL, profileID: Profile.ID) -> [String: SiteExtensionAccess] {
+        accessURLs.append(url)
+        return access
+    }
 
     func toolbarItems(profileID: Profile.ID, tabID: AxoCore.Tab.ID?) -> [ExtensionToolbarItem] {
         ExtensionToolbarItem.arranged(items, pinnedIDs: pins.pinnedIDs(among: items.map(\.id), profileID: profileID))
@@ -327,5 +336,76 @@ struct ExtensionManagementTests {
         try await waitUntil { model.currentPrompt != nil }
         model.answerPermission(.deny)
         #expect(await answer.value == false)
+    }
+}
+
+/// Site Settings' extensions (#110): the turned-on extensions that can, or ask to, run on the
+/// site, with the toolbar's names and pins.
+@MainActor
+struct SiteSettingsExtensionTests {
+    let engine = FakeEngine()
+    let model: BrowserModel
+    let toolbar = FakeExtensionToolbar()
+
+    init() async throws {
+        let pool = WebViewPool(engine: engine)
+        pool.reportsScreenTimeUsage = false
+        model = BrowserModel(store: try TabStore.makeInMemory(), pool: pool)
+        model.extensionToolbar = toolbar
+        model.announce = { _ in }
+        await model.start()
+        toolbar.items = [
+            ExtensionToolbarItem(id: "z", label: "Zap", icon: nil, badge: "", isEnabled: true),
+            ExtensionToolbarItem(id: "b", label: "Blocker", icon: nil, badge: "", isEnabled: true),
+            ExtensionToolbarItem(id: "n", label: "Notes", icon: nil, badge: "", isEnabled: true),
+        ]
+    }
+
+    @Test func listsTheExtensionsWithAccessThoseThatCanFirst() async throws {
+        let url = URL(string: "https://news.example.com/today")!
+        await model.openTab(url: url)
+        toolbar.access = ["z": .granted, "n": .asking, "b": .granted, "gone": .granted]
+
+        await model.showSiteSettings()
+        #expect(toolbar.accessURLs.last == URL(string: "https://news.example.com/"), "Asked about the site, not one page")
+        #expect(model.siteExtensions.map(\.item.id) == ["b", "z", "n"], "Those that can first, by name; one with no button isn't listed")
+        #expect(model.siteExtensions.map(\.access) == [.granted, .granted, .asking])
+        #expect(SiteExtensionAccess.asking.title == "Asks to read and change this site")
+
+        // Pinning from the panel is the toolbar's pin, and the list follows it.
+        let profileID = try #require(model.space?.profileID)
+        model.setExtensionPinned(false, extensionID: "b", name: "Blocker", profileID: profileID)
+        #expect(model.siteExtensions.first { $0.item.id == "b" }?.item.isPinned == false)
+        #expect(toolbar.toolbarItems(profileID: profileID, tabID: nil).first { $0.id == "b" }?.isPinned == false)
+    }
+
+    @Test func pagesWithoutASiteListNone() async throws {
+        await model.openTab(url: URL(string: "https://news.example.com/")!)
+        toolbar.access = ["z": .granted]
+        await model.showSiteSettings()
+        #expect(!model.siteExtensionAccess.isEmpty)
+
+        await model.openTab(url: URL(string: "about:blank")!)
+        #expect(!model.isShowingSiteSettings, "Switching tabs closes Site Settings")
+        await model.refreshSiteSettings()
+        #expect(model.siteExtensionAccess.isEmpty, "Reset for a page without a site")
+        #expect(model.siteExtensions.isEmpty)
+        #expect(toolbar.accessURLs.count == 1, "Nothing is asked without a site")
+    }
+
+    /// Access read for one site and profile is never shown for another: a page that goes to
+    /// another site (a redirect, an extension) lists nothing until Site Settings reads again.
+    @Test func accessIsShownOnlyForTheSiteItWasReadFor() async throws {
+        await model.openTab(url: URL(string: "https://news.example.com/")!)
+        let tabID = try #require(model.selectedTabID)
+        let page = try #require(model.pool.livePage(for: tabID) as? FakePage)
+        toolbar.access = ["z": .granted]
+        await model.showSiteSettings()
+        #expect(model.siteExtensions.map(\.item.id) == ["z"])
+
+        page.navigate(to: URL(string: "https://other.example.org/")!, title: "Other")
+        #expect(model.siteExtensions.isEmpty, "Another site's access isn't shown")
+        await model.refreshSiteSettings()
+        #expect(model.siteExtensions.map(\.item.id) == ["z"])
     }
 }
