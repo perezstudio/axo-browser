@@ -195,6 +195,20 @@ enum SidebarDragPayload {
     }
 }
 
+/// A favorite's tile drag (#77, #78), for `.draggable`: a button's `itemProvider` never started a
+/// drag on the hosted Mac. It exports the ID as text first, for Axo's drop targets, then the
+/// address other apps can use, as a URL, like ``SidebarDragPayload/provider(for:address:)``.
+nonisolated struct FavoriteDrag: Transferable {
+    let text: String
+    let address: URL?
+
+    static var transferRepresentation: some TransferRepresentation {
+        DataRepresentation(exportedContentType: .utf8PlainText) { Data($0.text.utf8) }
+        ProxyRepresentation(exporting: { $0.address ?? URL(string: "about:blank")! })
+            .exportingCondition { $0.address != nil }
+    }
+}
+
 extension View {
     /// Makes a sidebar row draggable (#77): it carries its ID as text (``SidebarDragPayload``)
     /// to the other sections, folders, Favorites, the Space dots, and the

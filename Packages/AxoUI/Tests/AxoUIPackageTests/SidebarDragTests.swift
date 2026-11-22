@@ -253,6 +253,17 @@ struct SidebarDragTests {
         #expect(url == URL(string: "https://example.com/page"))
     }
 
+    @Test func aFavoritesDragExportsItsIDAsTextAndItsAddressAsAURL() async throws {
+        let id = UUID()
+        let drag = FavoriteDrag(text: SidebarDragPayload.text(forFavorite: id), address: URL(string: "https://example.com/")!)
+        #expect(try await drag.exported(as: .utf8PlainText) == Data("favorite:\(id.uuidString)".utf8))
+        let url = try await drag.exported(as: .url)
+        #expect(URL(dataRepresentation: url, relativeTo: nil) == URL(string: "https://example.com/")
+                || String(decoding: url, as: UTF8.self) == "https://example.com/")
+        // Without an address it offers no URL (`exportingCondition`), which only a real drag
+        // honors: `exported(as:)` ignores conditions.
+    }
+
     @Test func onlyAddressesOtherAppsCanUseAreOffered() {
         func offered(_ string: String) -> Bool {
             SidebarDragPayload.addressForOtherApps(URL(string: string)) != nil
