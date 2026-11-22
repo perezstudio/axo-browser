@@ -1,5 +1,7 @@
 #if os(macOS)
 import AppKit
+#elseif os(iOS)
+import UIKit
 #endif
 import AxoCore
 import AxoWeb
@@ -167,6 +169,8 @@ extension BrowserModel {
         pasteboard.clearContents()
         pasteboard.writeObjects([url as NSURL])
         pasteboard.setString(url.absoluteString, forType: .string)
+        #elseif os(iOS)
+        UIPasteboard.general.url = url
         #endif
     }
 

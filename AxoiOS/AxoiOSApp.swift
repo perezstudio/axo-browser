@@ -12,6 +12,7 @@ struct AxoiOSApp: App {
     var body: some Scene {
         WindowGroup {
             MobileBrowserView(model: model)
+                .defaultAppStorage(AppEnvironment.settings)
         }
     }
 }
@@ -21,6 +22,15 @@ enum AppEnvironment {
     /// Set by UI tests: an in-memory database and non-persistent website data, so every launch
     /// starts empty and nothing touches the person's real data.
     static let isUITesting = ProcessInfo.processInfo.environment["AXO_UI_TESTING"] == "1"
+
+    /// The settings views read with `@AppStorage` (such as where the iPhone's address bar sits).
+    /// In UI testing mode a separate store, emptied at launch, so one test's settings never reach
+    /// the next, nor the person's own.
+    static let settings: UserDefaults = {
+        guard isUITesting, let store = UserDefaults(suiteName: "com.perezstudio.Axo.iOS.uitesting") else { return .standard }
+        store.removePersistentDomain(forName: "com.perezstudio.Axo.iOS.uitesting")
+        return store
+    }()
 
     /// Where Axo keeps its database, inside the app's container.
     static var databaseURL: URL {

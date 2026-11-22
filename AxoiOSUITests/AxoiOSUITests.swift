@@ -53,11 +53,26 @@ final class AxoiOSUITests: XCTestCase {
         return sidebar
     }
 
-    /// Waits for the page to finish loading: the reload button stops being Stop.
+    /// The iPhone's address (#181), whose value is the shown page's full address.
+    @MainActor
+    private func address(in app: XCUIApplication) -> XCUIElement {
+        app.buttons["mobileAddressBar"]
+    }
+
+    /// Waits for the page to finish loading: the bar's loading line goes.
     @MainActor
     private func waitUntilLoaded(_ app: XCUIApplication) {
-        expectation(for: NSPredicate(format: "label == 'Reload'"), evaluatedWith: app.buttons["reloadButton"])
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: app.progressIndicators["Loading"])
         waitForExpectations(timeout: 15)
+    }
+
+    /// Picks an item from the ••• menu.
+    @MainActor
+    private func chooseFromMenu(_ title: String, in app: XCUIApplication) {
+        app.buttons["pageMenuButton"].tap()
+        let item = app.buttons[title].firstMatch
+        XCTAssertTrue(item.waitForExistence(timeout: 5), "No \(title) in the menu")
+        item.tap()
     }
 
     @MainActor
@@ -66,34 +81,55 @@ final class AxoiOSUITests: XCTestCase {
         openPage("data:text/html,<title>Pond</title><p>Axolotls</p>", in: app)
 
         XCTAssertTrue(app.descendants(matching: .any)["webContent"].waitForExistence(timeout: 10))
-        let address = app.textFields["addressField"]
+        let address = address(in: app)
         XCTAssertTrue(address.waitForExistence(timeout: 5))
-        XCTAssertTrue((address.value as? String)?.hasPrefix("data:text/html") == true)
-        XCTAssertFalse(app.buttons["backButton"].isEnabled)
+        XCTAssertTrue((address.value as? String)?.hasPrefix("data:text/html") == true, "\(address.value ?? "none")")
 
         let sidebar = showSidebar(in: app)
         XCTAssertTrue(sidebar.staticTexts["Pond"].waitForExistence(timeout: 10))
     }
 
+    /// The iPhone's bar (#181): the address edits in the command bar, the ••• menu goes back
+    /// and forward nearest the thumb, and moves the bar to the top and back.
     @MainActor
-    func testBackAndForwardFollowTheTabsHistory() throws {
+    func testTheMenuGoesBackAndMovesTheAddressBar() throws {
         let app = launchApp()
         openPage("data:text/html,<title>First</title>", in: app)
-        let address = app.textFields["addressField"]
+        let address = address(in: app)
         XCTAssertTrue(address.waitForExistence(timeout: 10))
         // Let the first page finish, or the second replaces it and there's nothing to go back to.
         waitUntilLoaded(app)
 
         address.tap()
-        address.typeText("data:text/html,<title>Second</title>\n")
-        let back = app.buttons["backButton"]
-        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: back)
+        let field = app.textFields["commandField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "The address edits in the command bar")
+        field.typeText("data:text/html,<title>Second</title>\n")
+        expectation(for: NSPredicate(format: "value CONTAINS 'Second'"), evaluatedWith: address)
         waitForExpectations(timeout: 10)
+        waitUntilLoaded(app)
 
-        back.tap()
+        chooseFromMenu("Back", in: app)
         expectation(for: NSPredicate(format: "value CONTAINS 'First'"), evaluatedWith: address)
         waitForExpectations(timeout: 10)
-        XCTAssertTrue(app.buttons["forwardButton"].isEnabled)
+        app.buttons["pageMenuButton"].tap()
+        XCTAssertTrue(app.buttons["Forward"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Forward"].firstMatch.isEnabled, "Forward goes to Second again")
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "iPhone menu"
+        shot.lifetime = .keepAlways
+        add(shot)
+        app.buttons["Forward"].firstMatch.tap()
+        expectation(for: NSPredicate(format: "value CONTAINS 'Second'"), evaluatedWith: address)
+        waitForExpectations(timeout: 10)
+
+        // The address bar moves to the top, and back.
+        let bottomY = address.frame.midY
+        chooseFromMenu("Address Bar at Top", in: app)
+        expectation(for: NSPredicate { _, _ in address.frame.midY < bottomY - 200 }, evaluatedWith: nil)
+        waitForExpectations(timeout: 5)
+        chooseFromMenu("Address Bar at Bottom", in: app)
+        expectation(for: NSPredicate { _, _ in abs(address.frame.midY - bottomY) < 2 }, evaluatedWith: nil)
+        waitForExpectations(timeout: 5)
     }
 
     @MainActor

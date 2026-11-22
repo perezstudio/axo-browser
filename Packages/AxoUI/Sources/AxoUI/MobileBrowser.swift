@@ -153,12 +153,13 @@ struct MobilePage: View {
     /// Shows the tab list (iPhone).
     let showTabs: () -> Void
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @AppStorage(MobileAddressBarPlacement.storageKey) private var barPlacement: MobileAddressBarPlacement = .bottom
 
     var body: some View {
         Group {
             if let tab = model.shownTab, let space = model.space {
                 WebViewHost(tab: tab, profileID: space.profileID, pool: model.pool)
-                    .ignoresSafeArea(edges: sizeClass == .compact ? .top : [])
+                    .ignoresSafeArea(edges: sizeClass == .compact && barPlacement == .bottom ? .top : [])
                     .accessibilityIdentifier("webContent")
                     .pageProblem(for: tab.id, model: model)
             } else {
@@ -173,15 +174,176 @@ struct MobilePage: View {
                 .accessibilityIdentifier("emptyState")
             }
         }
-        .safeAreaInset(edge: sizeClass == .compact ? .bottom : .top, spacing: 0) {
-            MobileAddressBar(model: model, showTabs: sizeClass == .compact ? showTabs : nil)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if sizeClass == .compact {
+                if barPlacement == .top { MobileBar(model: model, placement: .top, showTabs: showTabs) }
+            } else {
+                MobileAddressBar(model: model, showTabs: nil)
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if sizeClass == .compact, barPlacement == .bottom {
+                MobileBar(model: model, placement: .bottom, showTabs: showTabs)
+            }
+        }
+        // Find on Page, from the iPhone's menu, above the page.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if model.isFindBarVisible { FindBar(model: model) }
+        }
+        .sheet(isPresented: Binding(get: { model.isShowingSiteSettings }, set: { model.isShowingSiteSettings = $0 })) {
+            NavigationStack {
+                ScrollView { SiteSettingsView(model: model) }
+                    .navigationTitle("Site Settings")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { model.isShowingSiteSettings = false }
+                        }
+                    }
+            }
+            .presentationDetents([.medium, .large])
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(sizeClass == .compact ? .hidden : .automatic, for: .navigationBar)
     }
 }
 
-/// Back, forward, the address field, and reload.
+/// The iPhone's bar (#181), as the iPhone board draws it: the ••• menu, the address with the
+/// Space's dots under it, and the tabs button, at the bottom near the thumb or at the top, with
+/// the page's loading line in the Space's tint along its edge nearest the page.
+struct MobileBar: View {
+    let model: BrowserModel
+    let placement: MobileAddressBarPlacement
+    let showTabs: () -> Void
+    @AppStorage(MobileAddressBarPlacement.storageKey) private var storedPlacement: MobileAddressBarPlacement = .bottom
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if placement == .bottom { loadingLine }
+            HStack(spacing: 10) {
+                menu
+                address
+                Button("Tabs", systemImage: "square.on.square", action: showTabs)
+                    .labelStyle(.iconOnly)
+                    .font(.system(size: 18, weight: .medium))
+                    .frame(width: 44, height: 44)
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .accessibilityIdentifier("showTabsButton")
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            if placement == .top { loadingLine }
+        }
+    }
+
+    /// A thin line in the Space's tint while the page loads.
+    @ViewBuilder
+    private var loadingLine: some View {
+        if let page = model.selectedPage, page.isLoading {
+            ProgressView(value: page.estimatedProgress)
+                .progressViewStyle(.linear)
+                .tint(model.space?.markerColor ?? .accentColor)
+                .padding(.horizontal, 24)
+                .accessibilityLabel("Loading")
+        }
+    }
+
+    /// The ••• menu, which grows from the button, nearest first (iOS keeps a menu's first items
+    /// nearest the button it opens from).
+    private var menu: some View {
+        Menu {
+            let groups = model.mobileMenu(placement: storedPlacement)
+            ForEach(Array(groups.enumerated()), id: \.offset) { index, group in
+                if index == 0 {
+                    // Back, Forward, Reload, and Share: one row, nearest the thumb.
+                    ControlGroup {
+                        ForEach(group, id: \.item) { entry in item(entry) }
+                    }
+                } else {
+                    Section {
+                        ForEach(group, id: \.item) { entry in item(entry) }
+                    }
+                }
+            }
+        } label: {
+            Label("Menu", systemImage: "ellipsis")
+                .labelStyle(.iconOnly)
+                .font(.system(size: 18, weight: .semibold))
+                .frame(width: 44, height: 44)
+        }
+        .glassEffect(.regular.interactive(), in: .circle)
+        .accessibilityLabel("Menu")
+        .accessibilityIdentifier("pageMenuButton")
+    }
+
+    @ViewBuilder
+    private func item(_ entry: MobileMenuEntry) -> some View {
+        switch entry.item {
+        case .share:
+            if let url = model.shownPageURL, entry.isEnabled {
+                ShareLink(item: url) { Label(entry.item.title, systemImage: entry.item.systemImage) }
+                    .accessibilityIdentifier("menuShare")
+            } else {
+                Label(entry.item.title, systemImage: entry.item.systemImage)
+            }
+        case .addressBarPlacement(let placement):
+            Button(entry.item.title, systemImage: entry.item.systemImage) { storedPlacement = placement }
+                .accessibilityIdentifier("menuAddressBarPlacement")
+        default:
+            Button(entry.item.title, systemImage: entry.item.systemImage) { model.performMobileMenu(entry.item) }
+                .disabled(!entry.isEnabled)
+        }
+    }
+
+    /// The site, with a lock for a secure page, and the Space's dots under it; a tap edits the
+    /// address in the command bar.
+    private var address: some View {
+        Button {
+            if model.shownTab != nil { model.editAddress() } else { model.beginNewTab() }
+        } label: {
+            VStack(spacing: 4) {
+                HStack(spacing: 4) {
+                    if model.connectionIndicator == .secure {
+                        Image(systemName: "lock.fill").font(.system(size: 11)).foregroundStyle(.secondary)
+                    }
+                    Text(model.mobileAddressText ?? "Search or enter address")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(model.mobileAddressText == nil ? .secondary : .primary)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                }
+                if model.spaces.count > 1 {
+                    HStack(spacing: 5) {
+                        ForEach(model.spaces) { space in
+                            Circle()
+                                .frame(width: 5, height: 5)
+                                .opacity(space.id == model.space?.id ? 1 : 0.4)
+                        }
+                    }
+                    .foregroundStyle(.primary)
+                    .accessibilityHidden(true)
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .contentShape(.capsule)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .accessibilityLabel("Address")
+        .accessibilityValue(spaceValue + (model.shownPageURL?.absoluteString ?? "No page"))
+        .accessibilityHint("Edits the address")
+        .accessibilityIdentifier("mobileAddressBar")
+    }
+
+    /// Which Space shows, for VoiceOver, when there's more than one.
+    private var spaceValue: String {
+        guard model.spaces.count > 1, let space = model.space,
+              let index = model.spaces.firstIndex(where: { $0.id == space.id }) else { return "" }
+        return "\(space.name), Space \(index + 1) of \(model.spaces.count), "
+    }
+}
+
+/// Back, forward, the address field, and reload (iPad, until its own layouts, #183).
 struct MobileAddressBar: View {
     let model: BrowserModel
     /// Shows the tab list, on iPhone, where the list and the page take turns.
