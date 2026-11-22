@@ -2287,12 +2287,13 @@ final class AxoUITests: XCTestCase {
         let app = launchApp()
         let sidebar = app.descendants(matching: .any)["sidebar"]
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
-        let window = app.windows.firstMatch
+        // The browser window, never Settings.
+        let window = app.windows.matching(NSPredicate(format: "identifier BEGINSWITH 'browser'")).firstMatch
         Self.openPage("data:text/html,<title>First</title><div style='height:40px;background:red'></div>", in: app)
         XCTAssertTrue(sidebar.staticTexts["First"].waitForExistence(timeout: 10))
 
         func check(_ step: String, toolbar expected: Bool) {
-            let page = app.webViews.firstMatch
+            let page = window.webViews.firstMatch
             XCTAssertTrue(page.waitForExistence(timeout: 10), "\(step): a page shows")
             let toolbar = window.toolbars.firstMatch
             let shows = toolbar.exists && toolbar.frame.height > 1
@@ -2300,6 +2301,8 @@ final class AxoUITests: XCTestCase {
             if shows {
                 XCTAssertGreaterThanOrEqual(page.frame.minY, toolbar.frame.maxY - 1,
                                             "\(step): the page \(page.frame) starts below the toolbar \(toolbar.frame)")
+                XCTAssertLessThanOrEqual(page.frame.minY, toolbar.frame.maxY + 1,
+                                         "\(step): and right below it, with no gap: \(page.frame), \(toolbar.frame)")
             } else {
                 XCTAssertEqual(page.frame.minY, window.frame.minY, accuracy: 1, "\(step): the page reaches the window's top")
             }
@@ -2341,9 +2344,16 @@ final class AxoUITests: XCTestCase {
         Self.selectSettingsPane("general", in: app)
         XCTAssertTrue(app.radioButtons["Above the page"].waitForExistence(timeout: 5))
         app.radioButtons["Above the page"].click()
+        let settings = app.windows.matching(NSPredicate(format: "identifier BEGINSWITH 'com_apple_SwiftUI_Settings'")).firstMatch
+        // Above the page: no toolbar, and the page starts under its control bar.
+        let pageBar = window.descendants(matching: .any)["pageAddressBar"]
+        XCTAssertTrue(pageBar.waitForExistence(timeout: 5))
+        XCTAssertFalse(window.toolbars.firstMatch.exists && window.toolbars.firstMatch.frame.height > 1, "Above the page: no toolbar")
+        XCTAssertGreaterThanOrEqual(window.webViews.firstMatch.frame.minY, pageBar.frame.maxY - 1, "The page starts under the control bar")
         // Show tabs has an "In the sidebar" too: the navigation bar's picker's.
         app.descendants(matching: .any)["navigationBarPlacementPicker"].radioButtons["In the sidebar"].click()
         app.typeKey("w", modifierFlags: .command)
+        if settings.exists { XCTAssertTrue(settings.waitForNonExistence(timeout: 5), "Settings closed") }
         check("After the navigation bar moved above the page and back", toolbar: true)
 
         app.menuBars.menuBarItems["View"].click()

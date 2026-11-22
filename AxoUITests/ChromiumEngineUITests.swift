@@ -486,6 +486,7 @@ final class ChromiumEngineUITests: XCTestCase {
         app.typeKey("t", modifierFlags: .command)
         XCTAssertTrue(app.textFields["commandField"].waitForExistence(timeout: 5))
         app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(app.textFields["commandField"].waitForNonExistence(timeout: 5))
         redBarShowsBelowTheToolbar("After the command bar")
     }
 
