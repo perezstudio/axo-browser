@@ -80,9 +80,9 @@ extension BrowserModel {
         await addToSplit(tabID, with: anchor)
     }
 
-    func addToSplit(_ tabID: AxoCore.Tab.ID, with anchor: AxoCore.Tab.ID) async {
+    func addToSplit(_ tabID: AxoCore.Tab.ID, with anchor: AxoCore.Tab.ID, leading: Bool = false) async {
         do {
-            try await store.addToSplit(tabID, with: anchor)
+            try await store.addToSplit(tabID, with: anchor, leading: leading)
             try await refreshSidebar()
             select(tabID)
             if let tab = selectedTab { announce("Added \(TabRow.displayTitle(for: tab)) to split view") }
@@ -143,5 +143,28 @@ extension BrowserModel {
         } catch {
             report(error, "Axo couldn't rearrange the split view.")
         }
+    }
+}
+
+// MARK: - Dropping a row on the page (#78)
+
+extension BrowserModel {
+    /// The tab a sidebar row dropped on the page's edge adds to a split with the selected tab:
+    /// a tab row (`tab:<id>`) of the shown Space other than the selected tab, not already one of
+    /// its split's panes, while the selected tab can take another pane. Never a folder, a
+    /// favorite (its bare ID), or other text, such as a link dragged from a page.
+    func tabToSplit(droppedAs text: String) -> AxoCore.Tab.ID? {
+        guard case .tab(let id) = SidebarDragPayload.item(from: text), let selected = selectedTabID, id != selected,
+              tabs.contains(where: { $0.id == id }), tabs.contains(where: { $0.id == selected }), canAddToSplit,
+              // Another split's row stands for all its panes: moving one would break it up.
+              split(of: id) == nil else { return nil }
+        return id
+    }
+
+    /// Adds a tab dropped on the page's left (`leading`) or right edge to a split with the
+    /// selected tab, on that side (#78).
+    func splitWithDroppedTab(_ text: String, leading: Bool) async {
+        guard let id = tabToSplit(droppedAs: text), let selected = selectedTabID else { return }
+        await addToSplit(id, with: selected, leading: leading)
     }
 }

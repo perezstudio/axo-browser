@@ -2,6 +2,7 @@ import AxoCore
 import AxoWeb
 import Foundation
 import Testing
+import UniformTypeIdentifiers
 @testable import AxoUI
 
 @MainActor
@@ -146,4 +147,43 @@ struct SplitViewModelTests {
         #expect(names(model.tabs) == ["C", "A", "B"])
         _ = tabs
     }
+
+    // MARK: Dropping a row on the page (#78)
+
+    /// A tab row dropped on the page's edge makes a split with the selected tab, on that side;
+    /// folders, favorites, other text, the selected tab itself, and its own panes don't.
+    @Test func aRowDroppedOnThePagesEdgeSplitsWithTheSelectedTab() async throws {
+        let a = try await add("a"), b = try await add("b"), c = try await add("c")
+        model.select(a.id)
+        #expect(model.tabToSplit(droppedAs: "tab:\(b.id.uuidString)") == b.id)
+        #expect(model.tabToSplit(droppedAs: "tab:\(a.id.uuidString)") == nil, "The selected tab itself")
+        #expect(model.tabToSplit(droppedAs: "folder:\(UUID().uuidString)") == nil)
+        #expect(model.tabToSplit(droppedAs: b.id.uuidString) == nil, "A favorite's bare ID")
+        #expect(model.tabToSplit(droppedAs: "https://example.com") == nil, "A link from a page")
+        #expect(model.tabToSplit(droppedAs: "tab:\(UUID().uuidString)") == nil, "No such tab here")
+
+        await model.splitWithDroppedTab("tab:\(b.id.uuidString)", leading: false)
+        let split = try #require(model.split(of: a.id))
+        #expect(names(model.panes(of: split.id)) == ["a", "b"], "The right edge: after the page")
+        #expect(model.tabToSplit(droppedAs: "tab:\(b.id.uuidString)") == nil, "Already one of its panes")
+
+        model.select(a.id)
+        await model.splitWithDroppedTab("tab:\(c.id.uuidString)", leading: true)
+        #expect(names(model.panes(of: split.id)) == ["c", "a", "b"], "The left edge: before the page")
+
+        // Another split's row isn't taken apart.
+        let d = try await add("d"), e = try await add("e")
+        model.select(d.id)
+        await model.addToSplit(e.id)
+        model.select(a.id)
+        #expect(model.tabToSplit(droppedAs: "tab:\(d.id.uuidString)") == nil, "Another split's row")
+    }
+
+    @Test func dropSidesAreThePagesOuterThirds() {
+        #expect(PageSplitDropSide.side(at: 10, width: 900) == .leading)
+        #expect(PageSplitDropSide.side(at: 450, width: 900) == nil, "The middle does nothing")
+        #expect(PageSplitDropSide.side(at: 890, width: 900) == .trailing)
+        #expect(PageSplitDropSide.side(at: 10, width: 0) == nil)
+    }
 }
+

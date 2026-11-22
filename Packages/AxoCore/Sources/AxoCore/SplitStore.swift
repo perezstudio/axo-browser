@@ -60,8 +60,9 @@ extension TabStore {
     /// - Returns: The split.
     /// - Throws: ``TabStoreError/splitFull(_:)`` if the split has ``TabSplit/maximumPanes`` tabs,
     ///   ``TabStoreError/anchorInDifferentSpace(_:)``, or ``TabStoreError/tabNotFound(_:)``.
+    /// `leading` makes it the first pane instead of the last (a drop on the page's left edge).
     @discardableResult
-    public func addToSplit(_ tabID: Tab.ID, with anchorID: Tab.ID) async throws -> TabSplit {
+    public func addToSplit(_ tabID: Tab.ID, with anchorID: Tab.ID, leading: Bool = false) async throws -> TabSplit {
         try await database.writer.write { db in
             guard tabID != anchorID else { throw TabStoreError.anchorInDifferentSection(anchorID) }
             guard let anchor = try Tab.fetchOne(db, id: anchorID) else { throw TabStoreError.tabNotFound(anchorID) }
@@ -88,9 +89,11 @@ extension TabStore {
                 try Self.leaveSplit(tabID, db)
                 tab = try Tab.fetchOne(db, id: tabID) ?? tab
             }
-            let lastPane = try Self.members(of: split.id, db).last?.splitSortKey
+            let members = try Self.members(of: split.id, db)
             tab.splitID = split.id
-            tab.splitSortKey = try SortKey.between(lastPane, nil)
+            tab.splitSortKey = leading
+                ? try SortKey.between(nil, members.first?.splitSortKey)
+                : try SortKey.between(members.last?.splitSortKey, nil)
             try tab.update(db)
             // The split stays where its row is: at its first tab in sidebar order.
             let row = try Self.members(of: split.id, db).filter { $0.id != tabID }.min { $0.sortKey < $1.sortKey }

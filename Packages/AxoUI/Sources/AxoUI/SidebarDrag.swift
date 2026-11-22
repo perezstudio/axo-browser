@@ -152,7 +152,9 @@ enum SidebarDragPayload {
 
 extension View {
     /// Makes a sidebar row draggable (#77): it carries its ID as text (``SidebarDragPayload``)
-    /// to the other sections, folders, Favorites, and the Space dots.
+    /// to the other sections, folders, Favorites, the Space dots, and the page's edges (a split,
+    /// #78). Other apps get that text too; a tab's address for them needs a drag type of Axo's
+    /// own for its drop targets (a URL beside the text stopped rows dropping into Pinned).
     func sidebarDraggable(_ item: PinnedItem, isEnabled: Bool) -> some View {
         itemProvider(isEnabled ? { NSItemProvider(object: SidebarDragPayload.text(for: item) as NSString) } : nil)
     }
