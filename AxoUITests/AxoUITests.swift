@@ -899,7 +899,7 @@ final class AxoUITests: XCTestCase {
         XCTAssertTrue(tile.waitForExistence(timeout: 5))
 
         // A row onto a favorite's tile becomes a favorite there (#77). Rows' drags carry their
-        // page's address for other apps beside Axo's own type (#78), which these drops ignore.
+        // page's address for other apps before their ID's text (#78), which these drops read.
         func favoriteTile(_ name: String) -> XCUIElement {
             app.buttons.matching(identifier: "favoriteTile").matching(NSPredicate(format: "label == %@", name)).firstMatch
         }

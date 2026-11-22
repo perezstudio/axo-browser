@@ -164,17 +164,22 @@ enum SidebarDragPayload {
 
     /// The address a drag offers other apps (#78): a web page's (`http`, `https`), or a short
     /// `data:` one; never a file's (Finder would copy the file), an extension's, or Axo's own.
+    /// A web address loses any user name and password in it, which go no further than Axo.
     static func addressForOtherApps(_ url: URL?) -> URL? {
         guard let url, let scheme = url.scheme?.lowercased() else { return nil }
         switch scheme {
-        case "http", "https": return url
-        case "data": return url.absoluteString.count <= maxDataAddressLength ? url : nil
+        case "http", "https":
+            guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+            components.user = nil
+            components.password = nil
+            return components.url
+        case "data": return url.absoluteString.utf8.count <= maxDataAddressLength ? url : nil
         default: return nil
         }
     }
 
-    /// The item provider a drag hands out: the payload as text, first, for Axo's drop targets,
-    /// and, for a page with an address other apps can use, that address as a URL, so a row
+    /// The item provider a drag hands out: for a page with an address other apps can use, that
+    /// address as a URL, then the payload as text for Axo's drop targets, so a row
     /// dropped in Finder, Mail, or Notes drops its link, as a tab dragged out of Safari does.
     /// On the hosted Mac, SwiftUI's drop targets took neither a drag type of Axo's own (declared,
     /// or with its conformance in code) nor text visible only to Axo's process, so the text is
@@ -183,29 +188,33 @@ enum SidebarDragPayload {
     /// as a URL with the scheme `tab`), which would take the address's place.
     static func provider(for text: String, address: URL?) -> NSItemProvider {
         let provider = NSItemProvider()
+        // The URL first: it's what other apps should take. Axo's drop targets ask for text by
+        // type (`String`, `.utf8PlainText`), so they still get the ID.
+        if let address = addressForOtherApps(address) {
+            provider.registerObject(address as NSURL, visibility: .all)
+        }
         let data = Data(text.utf8)
         provider.registerDataRepresentation(forTypeIdentifier: UTType.utf8PlainText.identifier, visibility: .all) { completion in
             completion(data, nil)
             return nil
-        }
-        if let address = addressForOtherApps(address) {
-            provider.registerObject(address as NSURL, visibility: .all)
         }
         return provider
     }
 }
 
 /// A favorite's tile drag (#77, #78), for `.draggable`: a button's `itemProvider` never started a
-/// drag on the hosted Mac. It exports the ID as text first, for Axo's drop targets, then the
-/// address other apps can use, as a URL, like ``SidebarDragPayload/provider(for:address:)``.
+/// drag on the hosted Mac. It exports the address other apps can use, as a URL, then the ID as
+/// text for Axo's drop targets, like ``SidebarDragPayload/provider(for:address:)``.
 nonisolated struct FavoriteDrag: Transferable {
     let text: String
     let address: URL?
 
     static var transferRepresentation: some TransferRepresentation {
-        DataRepresentation(exportedContentType: .utf8PlainText) { Data($0.text.utf8) }
+        // The URL first, as in ``SidebarDragPayload/provider(for:address:)``; none without an
+        // address (the placeholder is never offered).
         ProxyRepresentation(exporting: { $0.address ?? URL(string: "about:blank")! })
             .exportingCondition { $0.address != nil }
+        DataRepresentation(exportedContentType: .utf8PlainText) { Data($0.text.utf8) }
     }
 }
 
@@ -272,8 +281,17 @@ extension BrowserModel {
     /// has a live page that's somewhere (a pinned tab away from its page drags where it is), or
     /// its record's (a hibernated tab, or a page still on `about:blank`).
     func dragAddress(for id: AxoCore.Tab.ID) -> URL? {
-        let record = tabs.first { $0.id == id }?.url ?? favorites.first { $0.id == id }?.url
-        guard let live = pool.state(for: id)?.url, live.scheme?.lowercased() != "about" else { return record }
+        liveDragAddress(for: id) ?? tabs.first { $0.id == id }?.url ?? favorites.first { $0.id == id }?.url
+    }
+
+    /// A favorite's drag address: as ``dragAddress(for:)``, without looking through the tabs.
+    func dragAddress(forFavorite favorite: Favorite) -> URL? {
+        liveDragAddress(for: favorite.id) ?? favorite.url
+    }
+
+    /// The live page's address, unless it has none yet or is still on `about:blank`.
+    private func liveDragAddress(for id: AxoCore.Tab.ID) -> URL? {
+        guard let live = pool.state(for: id)?.url, live.scheme?.lowercased() != "about" else { return nil }
         return live
     }
 
