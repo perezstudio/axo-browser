@@ -42,6 +42,14 @@ struct SpacePage: View {
                 SidebarSections(model: model, data: data)
             }
         }
+        // A right-click on the list's empty space (#81): Reopen Closed Tab. Rows keep their own
+        // menus; this one is only for the empty area, where the selection it gets is empty.
+        .contextMenu(forSelectionType: PinnedItem.self) { items in
+            if items.isEmpty, isShown {
+                Button("New Tab") { model.showCommandBar() }
+                Button("Reopen Closed Tab") { Task { await model.reopenLastClosedTab() } }
+            }
+        }
         .focused(focusedList, equals: space.id)
         // No hover card (#76), nor its picture, while the rows move under the pointer.
         .onScrollPhaseChange { _, phase in

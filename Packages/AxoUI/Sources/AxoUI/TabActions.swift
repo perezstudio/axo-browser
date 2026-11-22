@@ -1,5 +1,6 @@
 import AxoCore
 import Foundation
+import SwiftUI
 
 /// Tab actions from a tab's context menu, the Tabs menu (for the selected tab), and the command
 /// bar (#81): Duplicate, Copy Link, Move to Space, Close Other Tabs, and Close Tabs Below.
@@ -45,11 +46,26 @@ extension BrowserModel {
         postNotice("Link copied", placement: id == selectedTabID ? .addressBar : .page)
     }
 
-    /// The Spaces a tab of the shown Space can move to: the profile's others. Another profile's
-    /// Space would need the page reloaded with its website data (#78), so it isn't offered.
+    /// The Spaces a tab of the shown Space can move to: every other Space. One of another
+    /// profile reloads the page there with that profile's website data (#81), as in Arc.
     public var spacesToMoveTabsTo: [Space] {
         guard let space else { return [] }
-        return spaces.filter { $0.profileID == space.profileID && $0.id != space.id }
+        return spaces.filter { $0.id != space.id }
+    }
+
+    /// Move to Space's choices, grouped: the profile's own Spaces first (no heading), then each
+    /// other profile's under its name, in the profiles' order.
+    public var moveToSpaceGroups: [MoveToSpaceGroup] {
+        guard let space else { return [] }
+        let targets = spacesToMoveTabsTo
+        var groups: [MoveToSpaceGroup] = []
+        let own = targets.filter { $0.profileID == space.profileID }
+        if !own.isEmpty { groups.append(MoveToSpaceGroup(profileName: nil, spaces: own)) }
+        for profile in allProfiles where profile.id != space.profileID {
+            let theirs = targets.filter { $0.profileID == profile.id }
+            if !theirs.isEmpty { groups.append(MoveToSpaceGroup(profileName: profile.name, spaces: theirs)) }
+        }
+        return groups
     }
 
     /// Whether Move to Space is offered for the tab: not for a tab in a split, whose row stands
@@ -66,15 +82,35 @@ extension BrowserModel {
         return id
     }
 
-    /// Moves a tab to another of the profile's Spaces, keeping its live page; it leaves any
-    /// folder. If it was selected, the tab next to it is selected.
+    /// Moves a tab to another Space; it leaves any folder. In the profile's own Spaces it keeps its
+    /// live page; in another profile's, its page closes first (it holds the old profile's website
+    /// data, hard rule 6), and it loads its address again there with that profile's, without its
+    /// back and forward history. If it was selected, the tab next to it is selected.
     public func moveTab(_ id: AxoCore.Tab.ID, toSpace target: Space.ID) async {
         guard let space, canMoveToSpace(id), let destination = spacesToMoveTabsTo.first(where: { $0.id == target }),
-              let tab = tabs.first(where: { $0.id == id }) else { return }
+              var tab = tabs.first(where: { $0.id == id }) else { return }
         let order = visibleTabOrder
         let selectedTabIDBeforeMove = selectedTabID
+        let changesProfile = destination.profileID != space.profileID
         do {
-            try await store.moveTab(id: id, toSpace: destination.id)
+            if changesProfile {
+                // The address it's on now, which its new page loads.
+                let current = currentURL(of: tab)
+                if current != tab.url {
+                    let title = pool.state(for: id)?.title ?? tab.title
+                    try await store.updateTab(id: id, url: current, title: title)
+                    tab.url = current
+                    tab.title = title
+                }
+            }
+            if changesProfile {
+                // Its page holds the old profile's data: closed before the move, so nothing can
+                // show it in the new profile's Space.
+                if fullscreenTabID == id { exitPageFullscreen() }
+                prompts.dismissAll(from: id)
+                pool.discard(id)
+            }
+            try await store.moveTab(id: id, toSpace: destination.id, acrossProfiles: changesProfile)
             tabs = try await store.tabs(in: space.id)
             // The neighbor is selected at once, so the engine's window, sent with `tabs`, never
             // goes without a selection while the sidebar's records are read.
@@ -91,7 +127,8 @@ extension BrowserModel {
         // Gone from this Space's window, as for a closed tab (the WebKit extension bridge).
         onTabEvent?(.closed(id))
         let wasSelected = selectedTabIDBeforeMove == id
-        postNotice("Moved \(TabRow.displayTitle(for: tab)) to \(destination.name)") { [weak self] in
+        let profileNote = changesProfile ? allProfiles.first { $0.id == destination.profileID }.map { " in the \($0.name) profile" } ?? "" : ""
+        postNotice("Moved \(TabRow.displayTitle(for: tab)) to \(destination.name)\(profileNote)") { [weak self] in
             await self?.returnMovedTab(tab, from: destination.id, select: wasSelected)
         }
     }
@@ -102,8 +139,11 @@ extension BrowserModel {
     func returnMovedTab(_ tab: AxoCore.Tab, from destination: Space.ID, select: Bool) async {
         guard let space, space.id == tab.spaceID else { return }
         do {
+            // From another profile's Space, any page it got there is closed first, as for the move.
+            let fromAnotherProfile = spaces.first { $0.id == destination }.map { $0.profileID != space.profileID } ?? false
+            if fromAnotherProfile { pool.discard(tab.id) }
             let returned = try await store.returnTab(id: tab.id, from: destination, to: space.id, folder: tab.folderID,
-                                                     sortKey: tab.sortKey, wasPinned: tab.isPinned)
+                                                     sortKey: tab.sortKey, wasPinned: tab.isPinned, acrossProfiles: fromAnotherProfile)
             // The Space may have changed meanwhile: then its own reads show the tab, and this
             // one's sidebar and selection are left alone.
             guard returned, self.space?.id == space.id else { return }
@@ -196,5 +236,37 @@ extension BrowserModel {
         }
         ids.forEach { onTabEvent?(.opened($0)) }
         announce(ids.count == 1 ? "Reopened 1 tab" : "Reopened \(ids.count) tabs")
+    }
+}
+
+/// A group of Move to Space's choices: the profile's own Spaces (`profileName` nil), or another
+/// profile's, whose tabs reload there.
+public struct MoveToSpaceGroup: Identifiable, Sendable {
+    public var profileName: String?
+    public var spaces: [Space]
+    public var id: String { profileName ?? "" }
+}
+
+
+/// Move to Space's items: the profile's own Spaces, then each other profile's in a section under
+/// its name. Moving to another profile's Space reloads the tab there.
+struct MoveToSpaceItems: View {
+    let model: BrowserModel
+    let tabID: AxoCore.Tab.ID
+
+    var body: some View {
+        ForEach(model.moveToSpaceGroups) { group in
+            if let profile = group.profileName {
+                Section(profile) { buttons(group.spaces) }
+            } else {
+                buttons(group.spaces)
+            }
+        }
+    }
+
+    private func buttons(_ spaces: [Space]) -> some View {
+        ForEach(spaces) { space in
+            Button(space.name) { Task { await model.moveTab(tabID, toSpace: space.id) } }
+        }
     }
 }
