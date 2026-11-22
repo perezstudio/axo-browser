@@ -161,6 +161,12 @@ extension BrowserModel {
         return id
     }
 
+    /// Whether the page column catches drags from the sidebar and Favorites (#78): whenever a page
+    /// shows, a favorite's too, so a row or favorite dropped on it never reaches the page as the
+    /// address it carries for other apps and loads there. Only a tab can make a split
+    /// (``tabToSplit(droppedAs:)``); over a favorite's page a drop does nothing.
+    var catchesSidebarDragsOnPage: Bool { shownTab != nil }
+
     /// Adds a tab dropped on the page's left (`leading`) or right edge to a split with the
     /// selected tab, on that side (#78).
     func splitWithDroppedTab(_ text: String, leading: Bool) async {

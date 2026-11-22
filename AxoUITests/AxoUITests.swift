@@ -897,7 +897,20 @@ final class AxoUITests: XCTestCase {
         sidebar.staticTexts["Gamma"].rightClick()
         app.windows.firstMatch.menuItems["Add to Favorites"].click()
         XCTAssertTrue(tile.waitForExistence(timeout: 5))
-        drag(tile, to: folder, "Gamma is pinned") { !tile.exists && isPinned("Gamma") }
+
+        // A row onto a favorite's tile becomes a favorite there (#77). Rows' drags carry their
+        // page's address for other apps beside Axo's own type (#78), which these drops ignore.
+        func favoriteTile(_ name: String) -> XCUIElement {
+            app.buttons.matching(identifier: "favoriteTile").matching(NSPredicate(format: "label == %@", name)).firstMatch
+        }
+        let gammaTile = favoriteTile("Gamma")
+        drag(sidebar.staticTexts["Delta"], to: gammaTile, "Delta is a favorite") {
+            favoriteTile("Delta").exists
+                && !sidebar.descendants(matching: .any).matching(identifier: "tabRow")
+                    .matching(NSPredicate(format: "label == 'Delta'")).firstMatch.exists
+        }
+
+        drag(gammaTile, to: folder, "Gamma is pinned") { !gammaTile.exists && isPinned("Gamma") }
     }
 
     /// A page that can't be reached shows Axo's Can't Connect page in its place, and Go Back

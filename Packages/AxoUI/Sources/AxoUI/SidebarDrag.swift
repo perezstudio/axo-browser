@@ -187,14 +187,16 @@ enum SidebarDragPayload {
     /// its address, as a tab dragged out of Safari does.
     static func provider(for text: String, address: URL?) -> NSItemProvider {
         let provider = NSItemProvider()
+        // The address first: apps that take a drag's first representation get the link, never
+        // Axo's payload. Axo's drop targets ask for Axo's type by name.
+        if let address = addressForOtherApps(address) {
+            provider.registerObject(address as NSURL, visibility: .all)
+            provider.registerObject(address.absoluteString as NSString, visibility: .all)
+        }
         let data = Data(text.utf8)
         provider.registerDataRepresentation(forTypeIdentifier: UTType.axoSidebarItem.identifier, visibility: .all) { completion in
             completion(data, nil)
             return nil
-        }
-        if let address = addressForOtherApps(address) {
-            provider.registerObject(address as NSURL, visibility: .all)
-            provider.registerObject(address.absoluteString as NSString, visibility: .all)
         }
         return provider
     }
@@ -274,9 +276,12 @@ enum SidebarDrop {
 
 extension BrowserModel {
     /// The address a tab's or favorite's drag offers other apps (#78): its page's address when it
-    /// has a live page (a pinned tab away from its page drags where it is), or its record's.
+    /// has a live page that's somewhere (a pinned tab away from its page drags where it is), or
+    /// its record's (a hibernated tab, or a page still on `about:blank`).
     func dragAddress(for id: AxoCore.Tab.ID) -> URL? {
-        pool.livePage(for: id)?.url ?? tabs.first { $0.id == id }?.url ?? favorites.first { $0.id == id }?.url
+        let record = tabs.first { $0.id == id }?.url ?? favorites.first { $0.id == id }?.url
+        guard let live = pool.state(for: id)?.url, live.scheme?.lowercased() != "about" else { return record }
+        return live
     }
 
     /// A drop into a section of the sidebar from elsewhere (#77): a row from another section

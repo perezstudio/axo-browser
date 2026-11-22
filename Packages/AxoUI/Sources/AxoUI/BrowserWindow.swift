@@ -365,8 +365,9 @@ public struct BrowserWindow: View {
         HStack(spacing: 0) {
             content
                 // A sidebar row dropped on the page's left or right third makes a split (#78).
-                // Other drags pass through to the page, which keeps its own text and file drops.
-                .overlay { if model.selectedTab != nil { PageSplitDrop(model: model) } }
+                // The catcher takes only drags from the sidebar and Favorites; the page keeps its
+                // own text, link, and file drops.
+                .overlay { if model.catchesSidebarDragsOnPage { PageSplitDrop(model: model) } }
             if let panel = model.extensionSidePanel {
                 Divider()
                 ExtensionSidePanelView(model: model, panel: panel)
