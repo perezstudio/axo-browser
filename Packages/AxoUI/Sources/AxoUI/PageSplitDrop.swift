@@ -1,7 +1,4 @@
-#if os(macOS)
-import AppKit
-import AxoCore
-import SwiftUI
+import CoreGraphics
 
 /// Where a sidebar row dragged over the page would land (#78): beside the page on the left or
 /// the right, in a split with the selected tab.
@@ -17,6 +14,11 @@ enum PageSplitDropSide: Equatable {
         return nil
     }
 }
+
+#if os(macOS)
+import AppKit
+import AxoCore
+import SwiftUI
 
 /// Lets a sidebar row dropped on the page's left or right third make a split with the selected
 /// tab (#78), showing which side it will take while it's over the page. Drawn over the page
