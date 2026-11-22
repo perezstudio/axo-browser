@@ -55,72 +55,103 @@ struct PageSplitDrop: View {
         @Binding var side: PageSplitDropSide?
 
         func makeNSView(context: Context) -> CatcherView {
-            CatcherView()
+            let view = CatcherView()
+            view.registerForDraggedTypes([.string])
+            return view
         }
 
         func updateNSView(_ view: CatcherView, context: Context) {
+            view.model = model
             view.onSideChange = { side = $0 }
-            if view.model !== model { view.model = model }
         }
     }
 
+    /// Takes a sidebar row's drag, and hands every other drag to the view under it (the page),
+    /// call for call. AppKit picks a drop target by dragged type, not by hit test, so without
+    /// that the page would lose its own text, link, and file drops while the catcher is over it.
     final class CatcherView: NSView {
-        var model: BrowserModel? {
-            didSet { follow() }
-        }
+        var model: BrowserModel?
         var onSideChange: (PageSplitDropSide?) -> Void = { _ in }
-        private var observer: (any NSObjectProtocol)?
-
-        /// Registers for drags only while a sidebar row is dragged, and follows the model's
-        /// notifications, which change nothing SwiftUI draws.
-        private func follow() {
-            observer.map(NotificationCenter.default.removeObserver)
-            observer = NotificationCenter.default.addObserver(forName: .sidebarRowDragChanged, object: model, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.updateRegistration() }
-            }
-            updateRegistration()
-        }
-
-        private func updateRegistration() {
-            if model?.isDraggingSidebarRow == true {
-                registerForDraggedTypes([.string])
-            } else {
-                unregisterDraggedTypes()
-                onSideChange(nil)
-            }
-        }
-
-        isolated deinit {
-            observer.map(NotificationCenter.default.removeObserver)
-        }
+        /// The view under the catcher that's taking the current drag, when it isn't a row's.
+        private var passThrough: NSView?
 
         // Clicks, scrolls, and pointer moves go to the page under it; only drags come here.
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
+        /// Whether a drag is a sidebar tab row's that can make a split now.
+        private func isRow(_ info: any NSDraggingInfo) -> Bool {
+            guard let model, let text = info.draggingPasteboard.string(forType: .string) else { return false }
+            return model.tabToSplit(droppedAs: text) != nil
+        }
+
+        /// The view under the catcher at the drag's point that takes drags: the page.
+        private func viewBeneath(_ info: any NSDraggingInfo) -> NSView? {
+            guard let content = window?.contentView else { return nil }
+            var view = content.hitTest(content.convert(info.draggingLocation, from: nil))
+            // The page's innermost view may not take drags; its nearest ancestor that does.
+            while let candidate = view, candidate !== content {
+                if !candidate.registeredDraggedTypes.isEmpty { return candidate }
+                view = candidate.superview
+            }
+            return nil
+        }
+
         private func side(for info: any NSDraggingInfo) -> PageSplitDropSide? {
-            guard let model, let text = info.draggingPasteboard.string(forType: .string),
-                  model.tabToSplit(droppedAs: text) != nil else { return nil }
+            guard isRow(info) else { return nil }
             let point = convert(info.draggingLocation, from: nil)
             return PageSplitDropSide.side(at: point.x, width: bounds.width)
         }
 
-        private func update(_ info: any NSDraggingInfo) -> NSDragOperation {
-            let side = side(for: info)
+        override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+            guard isRow(sender) else {
+                passThrough = viewBeneath(sender)
+                return passThrough?.draggingEntered(sender) ?? []
+            }
+            passThrough = nil
+            let side = side(for: sender)
             onSideChange(side)
             return side == nil ? [] : .move
         }
 
-        override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation { update(sender) }
-        override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation { update(sender) }
-        override func draggingExited(_ sender: (any NSDraggingInfo)?) { onSideChange(nil) }
-        override func draggingEnded(_ sender: any NSDraggingInfo) { onSideChange(nil) }
+        override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+            if let passThrough { return passThrough.draggingUpdated(sender) }
+            let side = side(for: sender)
+            onSideChange(side)
+            return side == nil ? [] : .move
+        }
+
+        override func draggingExited(_ sender: (any NSDraggingInfo)?) {
+            passThrough?.draggingExited(sender)
+            passThrough = nil
+            onSideChange(nil)
+        }
+
+        override func prepareForDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+            if let passThrough { return passThrough.prepareForDragOperation(sender) }
+            return side(for: sender) != nil
+        }
 
         override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+            if let passThrough { return passThrough.performDragOperation(sender) }
             let side = side(for: sender)
             onSideChange(nil)
             guard let model, let side, let text = sender.draggingPasteboard.string(forType: .string) else { return false }
             Task { await model.splitWithDroppedTab(text, leading: side == .leading) }
             return true
+        }
+
+        override func concludeDragOperation(_ sender: (any NSDraggingInfo)?) {
+            passThrough?.concludeDragOperation(sender)
+        }
+
+        override func draggingEnded(_ sender: any NSDraggingInfo) {
+            passThrough?.draggingEnded(sender)
+            passThrough = nil
+            onSideChange(nil)
+        }
+
+        override func wantsPeriodicDraggingUpdates() -> Bool {
+            passThrough?.wantsPeriodicDraggingUpdates() ?? true
         }
     }
 }

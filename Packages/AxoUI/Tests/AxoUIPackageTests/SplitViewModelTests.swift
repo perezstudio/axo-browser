@@ -179,16 +179,6 @@ struct SplitViewModelTests {
         #expect(model.tabToSplit(droppedAs: "tab:\(d.id.uuidString)") == nil, "Another split's row")
     }
 
-    /// The page takes drops only while a sidebar row is dragged (#78), so a page's own text and
-    /// file drops work the rest of the time.
-    @Test func thePageTakesDropsOnlyDuringARowDrag() async throws {
-        #expect(!model.isDraggingSidebarRow)
-        model.beginSidebarRowDrag()
-        #expect(model.isDraggingSidebarRow)
-        // No button is held in a unit test, so it ends at the first check.
-        try await waitUntil { !model.isDraggingSidebarRow }
-    }
-
     @Test func dropSidesAreThePagesOuterThirds() {
         #expect(PageSplitDropSide.side(at: 10, width: 900) == .leading)
         #expect(PageSplitDropSide.side(at: 450, width: 900) == nil, "The middle does nothing")

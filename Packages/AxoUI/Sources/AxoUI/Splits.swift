@@ -161,29 +161,6 @@ extension BrowserModel {
         return id
     }
 
-    /// Notes that a sidebar row is being dragged, until the mouse button is let go (#78): a drag
-    /// session ends with the button up, wherever the row was dropped, and nothing reports that
-    /// to the row, so it's checked a few times a second while the drag lasts.
-    func beginSidebarRowDrag() {
-        guard !isDraggingSidebarRow else { return }
-        isDraggingSidebarRow = true
-        #if os(macOS)
-        NotificationCenter.default.post(name: .sidebarRowDragChanged, object: self)
-        Task { [weak self] in
-            // Past the press that started it, then until the button is up.
-            try? await Task.sleep(for: .milliseconds(150))
-            while NSEvent.pressedMouseButtons & 1 != 0 {
-                try? await Task.sleep(for: .milliseconds(150))
-            }
-            guard let self else { return }
-            self.isDraggingSidebarRow = false
-            NotificationCenter.default.post(name: .sidebarRowDragChanged, object: self)
-        }
-        #else
-        isDraggingSidebarRow = false
-        #endif
-    }
-
     /// Adds a tab dropped on the page's left (`leading`) or right edge to a split with the
     /// selected tab, on that side (#78).
     func splitWithDroppedTab(_ text: String, leading: Bool) async {
@@ -191,10 +168,3 @@ extension BrowserModel {
         await addToSplit(id, with: selected, leading: leading)
     }
 }
-
-extension Notification.Name {
-    /// A sidebar row's drag started or ended (``BrowserModel/isDraggingSidebarRow``), for the
-    /// page's drop target (#78). The object is the model.
-    static let sidebarRowDragChanged = Notification.Name("AxoSidebarRowDragChanged")
-}
-
