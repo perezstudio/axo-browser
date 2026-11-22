@@ -55,9 +55,7 @@ struct PageSplitDrop: View {
         @Binding var side: PageSplitDropSide?
 
         func makeNSView(context: Context) -> CatcherView {
-            let view = CatcherView()
-            view.registerForDraggedTypes([.string])
-            return view
+            CatcherView()
         }
 
         func updateNSView(_ view: CatcherView, context: Context) {
@@ -75,12 +73,29 @@ struct PageSplitDrop: View {
         /// The view under the catcher that's taking the current drag, when it isn't a row's.
         private var passThrough: NSView?
 
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            registerForDraggedTypes([.string])
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) { fatalError("Not made from a coder") }
+
         // Clicks, scrolls, and pointer moves go to the page under it; only drags come here.
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
+        /// The payload of a drag from Axo's sidebar or Favorites (``SidebarDragPayload``), or nil
+        /// for any other drag (a link, text, or a file).
+        private func payload(_ info: any NSDraggingInfo) -> String? {
+            guard let text = info.draggingPasteboard.string(forType: .string),
+                  SidebarDragPayload.item(from: text) != nil || SidebarDragPayload.favorite(from: text) != nil
+            else { return nil }
+            return text
+        }
+
         /// Whether a drag is a sidebar tab row's that can make a split now.
         private func isRow(_ info: any NSDraggingInfo) -> Bool {
-            guard let model, let text = info.draggingPasteboard.string(forType: .string) else { return false }
+            guard let model, let text = payload(info) else { return false }
             return model.tabToSplit(droppedAs: text) != nil
         }
 
@@ -103,7 +118,10 @@ struct PageSplitDrop: View {
         }
 
         override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
-            guard isRow(sender) else {
+            // Every drag from the sidebar or Favorites stays here, so one that can't make a split
+            // (a folder, a favorite, the selected tab, the middle third) does nothing, rather than
+            // reaching the page as the address it carries for other apps and loading it (#78).
+            guard payload(sender) != nil else {
                 passThrough = viewBeneath(sender)
                 return passThrough?.draggingEntered(sender) ?? []
             }
@@ -135,7 +153,7 @@ struct PageSplitDrop: View {
             if let passThrough { return passThrough.performDragOperation(sender) }
             let side = side(for: sender)
             onSideChange(nil)
-            guard let model, let side, let text = sender.draggingPasteboard.string(forType: .string) else { return false }
+            guard let model, let side, let text = payload(sender) else { return false }
             Task { await model.splitWithDroppedTab(text, leading: side == .leading) }
             return true
         }

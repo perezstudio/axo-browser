@@ -168,7 +168,7 @@ struct SidebarSections: View {
                 SidebarTabRow(model: model, tab: tab, panes: data.splitPanes[tab.id],
                               isSelected: data.holdsSelection(tab.id))
                     .tag(PinnedItem.tab(tab.id))
-                    .sidebarDraggable(.tab(tab.id), isEnabled: isLive)
+                    .sidebarDraggable(.tab(tab.id), isEnabled: isLive) { model.dragAddress(for: tab.id) }
                     .sidebarRowDropTarget(model: model, collection: .tabs, item: .tab(tab.id), isEnabled: isLive)
                     .sidebarMoveActions(model: model, item: .tab(tab.id))
             }
@@ -486,7 +486,7 @@ struct PinnedLevel: View {
                 SidebarTabRow(model: model, tab: tab, panes: splitPanes[tab.id],
                               isSelected: selectedTabID.map { holdsSelection(tab, $0) } ?? false)
                     .tag(PinnedItem.tab(tab.id))
-                    .sidebarDraggable(.tab(tab.id), isEnabled: isLive)
+                    .sidebarDraggable(.tab(tab.id), isEnabled: isLive) { model.dragAddress(for: tab.id) }
                     .sidebarRowDropTarget(model: model, collection: .pinned(parent), item: .tab(tab.id), isEnabled: isLive)
                     .sidebarMoveActions(model: model, item: .tab(tab.id))
             case .folder(let folder, let children):

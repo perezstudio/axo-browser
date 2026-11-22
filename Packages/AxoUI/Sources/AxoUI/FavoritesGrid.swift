@@ -113,7 +113,10 @@ private struct FavoriteTile: View {
         .contextMenu {
             FavoriteContextMenu(model: model, favorite: favorite, hasLeftHome: hasLeftHome, isLive: model.pool.isLive(favorite.id))
         }
-        .draggable(favorite.id.uuidString)
+        // Its ID for Axo's drop targets and its address for other apps (#78). `draggable` reads
+        // its payload when a drag starts, so the body doesn't read the page's address.
+        .draggable(FavoriteDrag(text: SidebarDragPayload.text(forFavorite: favorite.id),
+                                address: SidebarDragPayload.addressForOtherApps(model.dragAddress(forFavorite: favorite))))
         .dropDestination(for: String.self) { items, _ in
             guard let text = items.first else { return false }
             // A sidebar row (#77): its tab becomes a favorite in this tile's place.
@@ -121,7 +124,7 @@ private struct FavoriteTile: View {
                 Task { await model.dropTabOnFavorites(tabID, before: favorite.id) }
                 return true
             }
-            guard let dragged = UUID(uuidString: text), dragged != favorite.id else { return false }
+            guard let dragged = SidebarDragPayload.favorite(from: text), dragged != favorite.id else { return false }
             Task { await drop(dragged) }
             return true
         }

@@ -158,7 +158,7 @@ struct SplitViewModelTests {
         #expect(model.tabToSplit(droppedAs: "tab:\(b.id.uuidString)") == b.id)
         #expect(model.tabToSplit(droppedAs: "tab:\(a.id.uuidString)") == nil, "The selected tab itself")
         #expect(model.tabToSplit(droppedAs: "folder:\(UUID().uuidString)") == nil)
-        #expect(model.tabToSplit(droppedAs: b.id.uuidString) == nil, "A favorite's bare ID")
+        #expect(model.tabToSplit(droppedAs: SidebarDragPayload.text(forFavorite: b.id)) == nil, "A favorite")
         #expect(model.tabToSplit(droppedAs: "https://example.com") == nil, "A link from a page")
         #expect(model.tabToSplit(droppedAs: "tab:\(UUID().uuidString)") == nil, "No such tab here")
 

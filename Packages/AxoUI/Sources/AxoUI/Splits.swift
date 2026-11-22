@@ -152,7 +152,7 @@ extension BrowserModel {
     /// The tab a sidebar row dropped on the page's edge adds to a split with the selected tab:
     /// a tab row (`tab:<id>`) of the shown Space other than the selected tab, not already one of
     /// its split's panes, while the selected tab can take another pane. Never a folder, a
-    /// favorite (its bare ID), or other text, such as a link dragged from a page.
+    /// favorite (`favorite:<id>`), or other text.
     func tabToSplit(droppedAs text: String) -> AxoCore.Tab.ID? {
         guard case .tab(let id) = SidebarDragPayload.item(from: text), let selected = selectedTabID, id != selected,
               tabs.contains(where: { $0.id == id }), tabs.contains(where: { $0.id == selected }), canAddToSplit,
@@ -160,6 +160,12 @@ extension BrowserModel {
               split(of: id) == nil else { return nil }
         return id
     }
+
+    /// Whether the page column catches drags from the sidebar and Favorites (#78): whenever a page
+    /// shows, a favorite's too, so a row or favorite dropped on it never reaches the page as the
+    /// address it carries for other apps and loads there. Only a tab can make a split
+    /// (``tabToSplit(droppedAs:)``); over a favorite's page a drop does nothing.
+    var catchesSidebarDragsOnPage: Bool { shownTab != nil }
 
     /// Adds a tab dropped on the page's left (`leading`) or right edge to a split with the
     /// selected tab, on that side (#78).

@@ -1,5 +1,6 @@
 import AxoCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// A list of rows a sidebar drag can land in (#77): the pinned section's top level or one of its
 /// folders, or the tabs section.
@@ -132,8 +133,9 @@ extension BrowserModel {
     }
 }
 
-/// What a sidebar row's drag carries to other views (Favorites, a folder), as text: `tab:<id>`
-/// or `folder:<id>`. A favorite's tile drags its bare ID.
+/// What a sidebar row's or favorite's drag carries to Axo's drop targets (Favorites, a folder,
+/// a section, a Space's dot, the page's edges), as text: `tab:<id>`, `folder:<id>`, or
+/// `favorite:<id>`.
 enum SidebarDragPayload {
     /// The text a row's drag carries.
     static func text(for item: PinnedItem) -> String {
@@ -143,20 +145,86 @@ enum SidebarDragPayload {
         }
     }
 
+    /// The text a favorite's tile drag carries.
+    static func text(forFavorite id: Favorite.ID) -> String { "favorite:\(id.uuidString)" }
+
     static func item(from string: String) -> PinnedItem? {
         if string.hasPrefix("tab:") { return UUID(uuidString: String(string.dropFirst(4))).map(PinnedItem.tab) }
         if string.hasPrefix("folder:") { return UUID(uuidString: String(string.dropFirst(7))).map(PinnedItem.folder) }
         return nil
     }
+
+    /// The favorite a tile's drag text names, or nil for anything else.
+    static func favorite(from string: String) -> Favorite.ID? {
+        string.hasPrefix("favorite:") ? UUID(uuidString: String(string.dropFirst(9))) : nil
+    }
+
+    /// The longest `data:` address a drag offers other apps; web addresses go at any length.
+    static let maxDataAddressLength = 2048
+
+    /// The address a drag offers other apps (#78): a web page's (`http`, `https`), or a short
+    /// `data:` one; never a file's (Finder would copy the file), an extension's, or Axo's own.
+    /// A web address loses any user name and password in it, which go no further than Axo.
+    static func addressForOtherApps(_ url: URL?) -> URL? {
+        guard let url, let scheme = url.scheme?.lowercased() else { return nil }
+        switch scheme {
+        case "http", "https":
+            guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+            components.user = nil
+            components.password = nil
+            return components.url
+        case "data": return url.absoluteString.utf8.count <= maxDataAddressLength ? url : nil
+        default: return nil
+        }
+    }
+
+    /// The item provider a drag hands out: the payload as text, first, for Axo's drop targets,
+    /// and, for a page with an address other apps can use, that address as a URL, so a row
+    /// dropped in Finder, Mail, or Notes drops its link, as a tab dragged out of Safari does.
+    /// On the hosted Mac, SwiftUI's drop targets took neither a drag type of Axo's own (declared,
+    /// or with its conformance in code) nor text visible only to Axo's process, so the text is
+    /// visible to every app, and a plain text field gets the ID. The text is registered as plain
+    /// text only: an `NSString` object also registers itself as `public.url` (`tab:<id>` reads
+    /// as a URL with the scheme `tab`), which would take the address's place.
+    static func provider(for text: String, address: URL?) -> NSItemProvider {
+        let provider = NSItemProvider()
+        // The ID first: with the URL first, SwiftUI's `dropDestination(for: String.self)` read
+        // the URL as the text (a row stopped dropping on a Space's dot).
+        let data = Data(text.utf8)
+        provider.registerDataRepresentation(forTypeIdentifier: UTType.utf8PlainText.identifier, visibility: .all) { completion in
+            completion(data, nil)
+            return nil
+        }
+        if let address = addressForOtherApps(address) {
+            provider.registerObject(address as NSURL, visibility: .all)
+        }
+        return provider
+    }
+}
+
+/// A favorite's tile drag (#77, #78), for `.draggable`: a button's `itemProvider` never started a
+/// drag on the hosted Mac. It exports the ID as text first, for Axo's drop targets, then the
+/// address other apps can use, as a URL, like ``SidebarDragPayload/provider(for:address:)``.
+nonisolated struct FavoriteDrag: Transferable {
+    let text: String
+    let address: URL?
+
+    static var transferRepresentation: some TransferRepresentation {
+        // The ID first, as in ``SidebarDragPayload/provider(for:address:)``; no URL without an
+        // address (the placeholder is never offered).
+        DataRepresentation(exportedContentType: .utf8PlainText) { Data($0.text.utf8) }
+        ProxyRepresentation(exporting: { $0.address ?? URL(string: "about:blank")! })
+            .exportingCondition { $0.address != nil }
+    }
 }
 
 extension View {
     /// Makes a sidebar row draggable (#77): it carries its ID as text (``SidebarDragPayload``)
-    /// to the other sections, folders, Favorites, the Space dots, and the page's edges (a split,
-    /// #78). Other apps get that text too; a tab's address for them needs a drag type of Axo's
-    /// own for its drop targets (a URL beside the text stopped rows dropping into Pinned).
-    func sidebarDraggable(_ item: PinnedItem, isEnabled: Bool) -> some View {
-        itemProvider(isEnabled ? { NSItemProvider(object: SidebarDragPayload.text(for: item) as NSString) } : nil)
+    /// to the other sections, folders, Favorites, the Space dots, and the
+    /// page's edges (a split, #78), and a tab's page address to other apps (#78). `address` is
+    /// read when the drag starts, so it's the page's address then.
+    func sidebarDraggable(_ item: PinnedItem, isEnabled: Bool, address: @escaping () -> URL? = { nil }) -> some View {
+        itemProvider(isEnabled ? { SidebarDragPayload.provider(for: SidebarDragPayload.text(for: item), address: address()) } : nil)
     }
 }
 
@@ -209,13 +277,31 @@ enum SidebarDrop {
 }
 
 extension BrowserModel {
+    /// The address a tab's or favorite's drag offers other apps (#78): its page's address when it
+    /// has a live page that's somewhere (a pinned tab away from its page drags where it is), or
+    /// its record's (a hibernated tab, or a page still on `about:blank`).
+    func dragAddress(for id: AxoCore.Tab.ID) -> URL? {
+        liveDragAddress(for: id) ?? tabs.first { $0.id == id }?.url ?? favorites.first { $0.id == id }?.url
+    }
+
+    /// A favorite's drag address: as ``dragAddress(for:)``, without looking through the tabs.
+    func dragAddress(forFavorite favorite: Favorite) -> URL? {
+        liveDragAddress(for: favorite.id) ?? favorite.url
+    }
+
+    /// The live page's address, unless it has none yet or is still on `about:blank`.
+    private func liveDragAddress(for id: AxoCore.Tab.ID) -> URL? {
+        guard let live = pool.state(for: id)?.url, live.scheme?.lowercased() != "about" else { return nil }
+        return live
+    }
+
     /// A drop into a section of the sidebar from elsewhere (#77): a row from another section
-    /// (`tab:<id>` or `folder:<id>`) moves there, and a favorite (its bare ID) becomes a tab
+    /// (`tab:<id>` or `folder:<id>`) moves there, and a favorite (`favorite:<id>`) becomes a tab
     /// there. Other text is ignored.
     func receiveSidebarDrop(_ text: String, to collection: SidebarCollection, before target: PinnedItem?) async {
         if let item = SidebarDragPayload.item(from: text) {
             await moveSidebarItems([item], to: collection, before: target)
-        } else if let favorite = UUID(uuidString: text), favorites.contains(where: { $0.id == favorite }) {
+        } else if let favorite = SidebarDragPayload.favorite(from: text), favorites.contains(where: { $0.id == favorite }) {
             await moveFavoriteToSidebar(favorite, to: collection, before: target)
         }
     }
@@ -239,8 +325,8 @@ private struct FolderDropTarget: ViewModifier {
                     .allowsHitTesting(false)
             }
             .dropDestination(for: String.self) { items, _ in
-                // A favorite's tile (its bare ID): it becomes a pinned tab in the folder.
-                if let text = items.first, let favorite = UUID(uuidString: text),
+                // A favorite's tile: it becomes a pinned tab in the folder.
+                if let text = items.first, let favorite = SidebarDragPayload.favorite(from: text),
                    model.favorites.contains(where: { $0.id == favorite }) {
                     Task { await model.moveFavoriteToSidebar(favorite, to: .pinned(folder.id), before: nil) }
                     return true
@@ -285,7 +371,7 @@ private struct PinDropTarget: ViewModifier {
                         .allowsHitTesting(false)
                 }
                 .dropDestination(for: String.self) { items, _ in
-                    if let text = items.first, let favorite = UUID(uuidString: text),
+                    if let text = items.first, let favorite = SidebarDragPayload.favorite(from: text),
                        model.favorites.contains(where: { $0.id == favorite }) {
                         Task { await model.moveFavoriteToSidebar(favorite, to: .pinned(nil), before: nil) }
                         return true

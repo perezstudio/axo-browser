@@ -1,7 +1,11 @@
+#if os(macOS)
+import AppKit
+#endif
 import AxoCore
 import AxoWebTestSupport
 import Foundation
 import Testing
+import UniformTypeIdentifiers
 @testable import AxoUI
 @testable import AxoWeb
 
@@ -56,10 +60,11 @@ struct SidebarDragTests {
 
         let c = try await tab("c")
         await model.addToFavorites(c.id)
-        await model.receiveSidebarDrop(c.id.uuidString, to: .tabs, before: nil)
+        await model.receiveSidebarDrop(SidebarDragPayload.text(forFavorite: c.id), to: .tabs, before: nil)
         #expect(model.unpinnedTabs.map(name) == ["c"], "A favorite's tile becomes a tab there")
 
         await model.receiveSidebarDrop("https://example.com", to: .tabs, before: nil)
+        await model.receiveSidebarDrop("favorite:\(UUID().uuidString)", to: .tabs, before: nil)
         await model.receiveSidebarDrop(UUID().uuidString, to: .tabs, before: nil)
         #expect(model.unpinnedTabs.map(name) == ["c"] && describe(model.pinnedTree) == ["a", "b"], "Other text does nothing")
     }
@@ -221,4 +226,197 @@ struct SidebarDragTests {
         #expect(model.favorites.isEmpty)
         #expect(model.split(of: left.id) != nil, "The split stays whole")
     }
+
+    // MARK: Dragging to other apps (#78)
+
+    /// The type identifiers a drag's provider offers, and what it gives for each.
+    private func registered(_ provider: NSItemProvider) -> [String] { provider.registeredTypeIdentifiers }
+
+    @Test func aRowsDragCarriesItsIDFirstAndItsAddressForOtherApps() async throws {
+        let id = UUID()
+        let provider = SidebarDragPayload.provider(for: SidebarDragPayload.text(for: .tab(id)),
+                                                   address: URL(string: "https://example.com/page")!)
+        let types = registered(provider)
+        #expect(types == [UTType.utf8PlainText.identifier, UTType.url.identifier],
+                "The ID first, as text (never as a URL), for Axo's drop targets; then a URL for other apps")
+
+        // What Axo's drop targets read (`String`): the ID, never the address.
+        let text: String = try await withCheckedThrowingContinuation { continuation in
+            _ = provider.loadTransferable(type: String.self) { continuation.resume(with: $0) }
+        }
+        #expect(text == "tab:\(id.uuidString)")
+        let url: URL? = try await withCheckedThrowingContinuation { continuation in
+            _ = provider.loadObject(ofClass: NSURL.self) { object, error in
+                if let error { continuation.resume(throwing: error) } else { continuation.resume(returning: (object as? NSURL) as URL?) }
+            }
+        }
+        #expect(url == URL(string: "https://example.com/page"))
+    }
+
+    @Test func aFavoritesDragExportsItsIDAsTextAndItsAddressAsAURL() async throws {
+        let id = UUID()
+        let drag = FavoriteDrag(text: SidebarDragPayload.text(forFavorite: id), address: URL(string: "https://example.com/")!)
+        #expect(try await drag.exported(as: .utf8PlainText) == Data("favorite:\(id.uuidString)".utf8))
+        let url = try await drag.exported(as: .url)
+        #expect(URL(dataRepresentation: url, relativeTo: nil) == URL(string: "https://example.com/")
+                || String(decoding: url, as: UTF8.self) == "https://example.com/")
+        // As a drag registers it: the ID first, and no URL without an address (the placeholder
+        // never goes out). `exported(as:)` alone ignores the condition.
+        let withAddress = NSItemProvider()
+        withAddress.register(drag)
+        #expect(withAddress.registeredTypeIdentifiers == [UTType.utf8PlainText.identifier, UTType.url.identifier])
+        let withoutAddress = NSItemProvider()
+        withoutAddress.register(FavoriteDrag(text: "favorite:\(id.uuidString)", address: nil))
+        #expect(withoutAddress.registeredTypeIdentifiers == [UTType.utf8PlainText.identifier])
+    }
+
+    @Test func onlyAddressesOtherAppsCanUseAreOffered() {
+        func offered(_ string: String) -> Bool {
+            SidebarDragPayload.addressForOtherApps(URL(string: string)) != nil
+        }
+        #expect(offered("https://example.com/") && offered("http://example.com/") && offered("HTTPS://example.com/"))
+        let atLimit = "data:text/html," + String(repeating: "a", count: SidebarDragPayload.maxDataAddressLength - 15)
+        #expect(atLimit.count == SidebarDragPayload.maxDataAddressLength && offered(atLimit), "Exactly at the limit")
+        #expect(offered("data:text/html,<title>Hi</title>"), "A short data: address")
+        #expect(!offered("data:text/html," + String(repeating: "a", count: SidebarDragPayload.maxDataAddressLength)),
+                "A long data: address (it can hold a whole file)")
+        #expect(!offered("file:///Users/someone/page.html"), "Finder would copy the file")
+        #expect(!offered("about:blank") && !offered("chrome-extension://abc/popup.html"))
+        #expect(SidebarDragPayload.addressForOtherApps(URL(string: "https://me:secret@example.com/a?b=1"))
+                == URL(string: "https://example.com/a?b=1"), "No user name or password")
+        #expect(SidebarDragPayload.addressForOtherApps(nil) == nil)
+
+        // A folder, or a page with no address other apps can use, drags only its ID.
+        let folder = SidebarDragPayload.provider(for: SidebarDragPayload.text(for: .folder(UUID())), address: nil)
+        #expect(registered(folder) == [UTType.utf8PlainText.identifier], "Never the ID as a URL")
+        let file = SidebarDragPayload.provider(for: SidebarDragPayload.text(for: .tab(UUID())),
+                                               address: URL(fileURLWithPath: "/tmp/page.html"))
+        #expect(registered(file) == [UTType.utf8PlainText.identifier])
+    }
+
+    @Test func aTabDragsTheAddressItsPageIsOn() async throws {
+        let a = try await tab("a")
+        #expect(model.dragAddress(for: a.id) == URL(string: "https://a.example/"))
+        let page = try #require(engine.pages.last)
+        page.navigate(to: URL(string: "https://a.example/elsewhere")!, title: "Elsewhere")
+        #expect(model.dragAddress(for: a.id) == URL(string: "https://a.example/elsewhere"), "Where its page is now")
+        #expect(model.dragAddress(for: UUID()) == nil)
+        page.navigate(to: URL(string: "about:blank")!, title: "")
+        #expect(model.dragAddress(for: a.id) == URL(string: "https://a.example/"), "Still on about:blank: its record's")
+
+        let b = try await tab("b")
+        await model.addToFavorites(b.id)
+        let favoritePage = try #require(engine.pages.last)
+        favoritePage.navigate(to: URL(string: "https://b.example/away")!, title: "Away")
+        #expect(model.dragAddress(for: b.id) == URL(string: "https://b.example/away"), "A favorite's page, where it is")
+        let favorite = try #require(model.favorites.first { $0.id == b.id })
+        #expect(model.dragAddress(forFavorite: favorite) == URL(string: "https://b.example/away"))
+        model.closeFavorite(b.id)
+        #expect(model.dragAddress(for: b.id) == URL(string: "https://b.example/"), "With no page, its record's")
+        #expect(model.dragAddress(forFavorite: favorite) == URL(string: "https://b.example/"))
+    }
+
+    #if os(macOS)
+    // MARK: Drops on the page (#78)
+
+    /// A drag over the page, as AppKit hands one to a drop target.
+    @MainActor
+    private final class Drag: NSObject, @MainActor NSDraggingInfo {
+        let draggingPasteboard: NSPasteboard
+        let draggingLocation: NSPoint
+
+        init(text: String?, x: CGFloat) {
+            // A pasteboard of the test's own, never the person's clipboard.
+            draggingPasteboard = NSPasteboard.withUniqueName()
+            draggingPasteboard.clearContents()
+            if let text { draggingPasteboard.setString(text, forType: .string) }
+            draggingLocation = NSPoint(x: x, y: 50)
+        }
+
+        var draggingDestinationWindow: NSWindow? { nil }
+        var draggingSourceOperationMask: NSDragOperation { .every }
+        var draggedImageLocation: NSPoint { .zero }
+        var draggedImage: NSImage? { nil }
+        var draggingSource: Any? { nil }
+        var draggingSequenceNumber: Int { 1 }
+        func slideDraggedImage(to screenPoint: NSPoint) {}
+        var draggingFormation: NSDraggingFormation = .default
+        var animatesToDestination = false
+        var numberOfValidItemsForDrop = 1
+        func enumerateDraggingItems(options enumOpts: NSDraggingItemEnumerationOptions = [], for view: NSView?,
+                                    classes classArray: [AnyClass],
+                                    searchOptions: [NSPasteboard.ReadingOptionKey: Any] = [:],
+                                    using block: (NSDraggingItem, Int, UnsafeMutablePointer<ObjCBool>) -> Void) {}
+        var springLoadingHighlight: NSSpringLoadingHighlight { .none }
+        func resetSpringLoading() {}
+    }
+
+    /// A page under the catcher: it takes text drags and records the calls that reach it.
+    private final class StandInPage: NSView {
+        var calls: [String] = []
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            registerForDraggedTypes([.string])
+        }
+        required init?(coder: NSCoder) { nil }
+        override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation { calls.append("entered"); return .copy }
+        override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool { calls.append("perform"); return true }
+        override func draggingEnded(_ sender: any NSDraggingInfo) { calls.append("ended") }
+    }
+
+    @Test func thePageKeepsEveryDragFromTheSidebarAndSplitsOnlyAtItsEdges() async throws {
+        let a = try await tab("a"), b = try await tab("b")
+        #expect(model.selectedTabID == b.id)
+        // Over a stand-in page that takes text drags and records what reaches it.
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 200), styleMask: [.titled],
+                              backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let content = try #require(window.contentView)
+        let page = StandInPage(frame: content.bounds)
+        let catcher = PageSplitDrop.CatcherView(frame: content.bounds)
+        content.addSubview(page)
+        content.addSubview(catcher)
+        catcher.model = model
+        var sides: [PageSplitDropSide?] = []
+        catcher.onSideChange = { sides.append($0) }
+        #expect(catcher.registeredDraggedTypes == [.string])
+
+        let row = SidebarDragPayload.text(for: .tab(a.id))
+        for (text, x, what) in [(row, CGFloat(150), "the middle third"),
+                                (SidebarDragPayload.text(for: .tab(b.id)), 10, "the selected tab"),
+                                (SidebarDragPayload.text(for: .folder(UUID())), 10, "a folder"),
+                                (SidebarDragPayload.text(forFavorite: UUID()), 10, "a favorite")] {
+            #expect(catcher.draggingEntered(Drag(text: text, x: x)) == [], "Kept, and nothing: \(what)")
+            #expect(!catcher.performDragOperation(Drag(text: text, x: x)))
+            catcher.draggingEnded(Drag(text: text, x: x))
+        }
+        #expect(page.calls.isEmpty, "The page never gets a drag from the sidebar or Favorites")
+
+        // Other drags (a link, text) go to the page, call for call.
+        let link = Drag(text: "https://example.com/", x: 10)
+        #expect(catcher.draggingEntered(link) == .copy)
+        #expect(catcher.performDragOperation(link))
+        catcher.draggingEnded(link)
+        #expect(page.calls == ["entered", "perform", "ended"])
+
+        #expect(catcher.draggingEntered(Drag(text: row, x: 10)) == .move)
+        #expect(sides.last == .leading)
+        #expect(catcher.performDragOperation(Drag(text: row, x: 10)))
+        try await waitUntil { model.split(of: a.id) != nil }
+        #expect(sides.last == .some(nil), "The highlight goes on the drop")
+    }
+
+    @Test func aFavoritesPageCatchesSidebarDragsButMakesNoSplit() async throws {
+        let a = try await tab("a")
+        #expect(model.catchesSidebarDragsOnPage, "A tab's page")
+        let b = try await tab("b")
+        await model.addToFavorites(b.id)
+        model.select(b.id)
+        try await waitUntil { model.shownTab?.id == b.id && model.selectedTab == nil }
+        #expect(model.catchesSidebarDragsOnPage,
+                "A favorite's page too, so a row dropped on it never loads its address there")
+        #expect(model.tabToSplit(droppedAs: SidebarDragPayload.text(for: .tab(a.id))) == nil)
+    }
+    #endif
 }
