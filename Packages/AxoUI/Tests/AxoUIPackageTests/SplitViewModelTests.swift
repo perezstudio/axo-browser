@@ -184,7 +184,7 @@ struct SplitViewModelTests {
         let id = UUID()
         let url = URL(string: "https://example.com/page")!
         let provider = SidebarDragPayload.provider(for: .tab(id), url: url, title: "Page")
-        #expect(provider.registeredTypeIdentifiers.contains(UTType.url.identifier))
+        #expect(provider.registeredTypeIdentifiers.first == UTType.url.identifier, "The address first, for other apps")
         #expect(provider.suggestedName == "Page")
         let text: String? = await withCheckedContinuation { done in
             _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.utf8PlainText.identifier) { data, _ in

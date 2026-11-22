@@ -152,17 +152,13 @@ enum SidebarDragPayload {
 }
 
 extension SidebarDragPayload {
-    /// What a dragged row carries: its ID as text (``text(for:)``) for Axo's own drop targets,
-    /// readable only in Axo's process, and for a tab with a web address, that address as a URL
-    /// for other apps (Mail, Notes, Finder), as dragging Safari's tabs gives them (#78). Other
-    /// apps never see the ID.
+    /// What a dragged row carries: for a tab with a web address, that address as a URL first,
+    /// which other apps (Mail, Notes, Finder) take, as dragging Safari's tabs gives them (#78);
+    /// then its ID as text (``text(for:)``), which Axo's own drop targets read. The text stays
+    /// visible to every process: hidden to other apps (`.ownProcess`), the sidebar list's insert
+    /// no longer saw it, and rows stopped dropping into Pinned.
     static func provider(for item: PinnedItem, url: URL?, title: String?) -> NSItemProvider {
         let provider = NSItemProvider()
-        let text = Data(Self.text(for: item).utf8)
-        provider.registerDataRepresentation(forTypeIdentifier: UTType.utf8PlainText.identifier, visibility: .ownProcess) { completion in
-            completion(text, nil)
-            return nil
-        }
         if let url, ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
             let data = url.dataRepresentation
             provider.registerDataRepresentation(forTypeIdentifier: UTType.url.identifier, visibility: .all) { completion in
@@ -170,6 +166,13 @@ extension SidebarDragPayload {
                 return nil
             }
             provider.suggestedName = title.flatMap { $0.isEmpty ? nil : $0 } ?? url.host()
+        }
+        // Plain text only: an `NSString` object also offers itself as a URL, so a folder's ID
+        // would reach other apps as one.
+        let text = Data(Self.text(for: item).utf8)
+        provider.registerDataRepresentation(forTypeIdentifier: UTType.utf8PlainText.identifier, visibility: .all) { completion in
+            completion(text, nil)
+            return nil
         }
         return provider
     }
