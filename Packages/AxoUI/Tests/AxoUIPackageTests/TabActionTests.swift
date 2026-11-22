@@ -59,14 +59,17 @@ struct TabActionTests {
         #expect(model.pageNotice?.message == "Link copied", "Not the selected tab's: shown over the page")
     }
 
-    @Test func moveToSpaceKeepsThePageAndOffersOnlyTheProfilesSpaces() async throws {
+    @Test func moveToSpaceKeepsThePageInTheProfilesSpaces() async throws {
         let a = try await open("a")
         try await open("b")
         let home = try #require(model.space)
         await model.createSpace(name: "Work")
         await model.createSpace(name: "Personal", newProfileName: "Personal")
         await model.selectSpace(home.id)
-        #expect(model.spacesToMoveTabsTo.map(\.name) == ["Work"], "Another profile's Space isn't offered")
+        #expect(model.spacesToMoveTabsTo.map(\.name) == ["Work", "Personal"], "Every other Space (#81)")
+        #expect(model.moveToSpaceGroups.map(\.profileName) == [nil, "Personal"], "The profile's own first, then others' under their names")
+        #expect(model.moveToSpaceGroups.last?.id == model.spaces.first { $0.name == "Personal" }?.profileID, "Groups go by profile")
+        #expect(model.moveToSpaceGroups.map { $0.spaces.map(\.name) } == [["Work"], ["Personal"]])
         let work = try #require(model.spacesToMoveTabsTo.first)
         let page = try #require(model.pool.livePage(for: a))
 
@@ -103,6 +106,55 @@ struct TabActionTests {
         #expect(paths.isEmpty, "Gone from Work")
     }
 
+    /// Moving to another profile's Space (#81) closes the page, which holds the old profile's
+    /// website data, and the tab loads the address it was on again there, in that profile.
+    @Test func moveToAnotherProfilesSpaceReloadsTheTabThere() async throws {
+        let a = try await open("a")
+        try await open("b")
+        let home = try #require(model.space)
+        await model.createSpace(name: "Personal", newProfileName: "Personal")
+        await model.selectSpace(home.id)
+        let personal = try #require(model.spaces.first { $0.name == "Personal" })
+        let page = try #require(model.pool.livePage(for: a) as? FakePage)
+        page.navigate(to: URL(string: "https://example.com/a2")!, title: "A2")
+
+        model.select(a)
+        await model.moveTab(a, toSpace: personal.id)
+        #expect(paths == ["b"])
+        #expect(page.isClosed, "The old profile's page closes")
+        #expect(!model.pool.isLive(a))
+        #expect(model.pageNotice?.message == "Moved A2 to Personal in the Personal profile")
+
+        await model.selectSpace(personal.id)
+        try await waitUntil { model.pool.isLive(a) }
+        let moved = try #require(model.pool.livePage(for: a) as? FakePage)
+        #expect(moved.profileID == personal.profileID, "Its new page uses the new profile's data")
+        #expect(moved.loads == [URL(string: "https://example.com/a2")!], "At the address it was on")
+    }
+
+    @Test func undoingAMoveToAnotherProfileBringsItBackToLoadAgain() async throws {
+        let a = try await open("a")
+        try await open("b")
+        let home = try #require(model.space)
+        await model.createSpace(name: "Personal", newProfileName: "Personal")
+        await model.selectSpace(home.id)
+        let personal = try #require(model.spaces.first { $0.name == "Personal" })
+        model.select(a)
+        await model.moveTab(a, toSpace: personal.id)
+        // Read at once: this suite's notices go as soon as anything waits.
+        let undo = try #require(model.notice?.undo)
+        // A page it got in the new profile meanwhile.
+        let movedRecord = try #require(try await model.store.tab(id: a))
+        let theirs = try #require(model.pool.page(for: movedRecord, profileID: personal.profileID) as? FakePage)
+        await undo()
+        #expect(paths == ["a", "b"])
+        #expect(theirs.isClosed, "The new profile's page closes on the way back")
+        #expect(model.selectedTabID == a)
+        try await waitUntil { model.pool.isLive(a) }
+        let back = try #require(model.pool.livePage(for: a) as? FakePage)
+        #expect(back.profileID == home.profileID, "Back in its own profile, loading again")
+    }
+
     @Test func onlyATabRowDropsOnAnotherOfTheProfilesSpaces() async throws {
         let a = try await open("a")
         let home = try #require(model.space)
@@ -114,7 +166,7 @@ struct TabActionTests {
 
         #expect(model.tabToMove(droppedAs: ["tab:\(a.uuidString)"], to: work.id) == a)
         #expect(model.tabToMove(droppedAs: ["tab:\(a.uuidString)"], to: home.id) == nil, "Its own Space")
-        #expect(model.tabToMove(droppedAs: ["tab:\(a.uuidString)"], to: personal.id) == nil, "Another profile's")
+        #expect(model.tabToMove(droppedAs: ["tab:\(a.uuidString)"], to: personal.id) == a, "Another profile's too (#81)")
         #expect(model.tabToMove(droppedAs: ["folder:\(UUID().uuidString)"], to: work.id) == nil)
         #expect(model.tabToMove(droppedAs: [a.uuidString], to: work.id) == nil, "A favorite's bare ID")
         #expect(model.tabToMove(droppedAs: ["https://example.com"], to: work.id) == nil)

@@ -2,6 +2,7 @@ import AxoCore
 import AxoUI
 import AxoWeb
 import SwiftUI
+import UIKit
 import WebKit
 
 /// Axo for iPhone and iPad.
@@ -12,6 +13,7 @@ struct AxoiOSApp: App {
     var body: some Scene {
         WindowGroup {
             MobileBrowserView(model: model)
+                .defaultAppStorage(AppEnvironment.settings)
         }
     }
 }
@@ -21,6 +23,15 @@ enum AppEnvironment {
     /// Set by UI tests: an in-memory database and non-persistent website data, so every launch
     /// starts empty and nothing touches the person's real data.
     static let isUITesting = ProcessInfo.processInfo.environment["AXO_UI_TESTING"] == "1"
+
+    /// The settings views read with `@AppStorage` (such as where the iPhone's address bar sits).
+    /// In UI testing mode a separate store, emptied at launch, so one test's settings never reach
+    /// the next, nor the person's own.
+    static let settings: UserDefaults = {
+        guard isUITesting, let store = UserDefaults(suiteName: "com.perezstudio.Axo.iOS.uitesting") else { return .standard }
+        store.removePersistentDomain(forName: "com.perezstudio.Axo.iOS.uitesting")
+        return store
+    }()
 
     /// Where Axo keeps its database, inside the app's container.
     static var databaseURL: URL {
@@ -33,7 +44,14 @@ enum AppEnvironment {
         if isUITesting { pool.reportsScreenTimeUsage = false }
         do {
             let store = isUITesting ? try TabStore.makeInMemory() : try TabStore.openOnDisk(at: databaseURL)
-            return BrowserModel(store: store, pool: pool)
+            let model = BrowserModel(store: store, pool: pool)
+            // UI tests' Copy Link goes to a pasteboard of their own, never the clipboard (which the
+            // Simulator can share with the Mac).
+            if isUITesting {
+                let pasteboard = UIPasteboard(name: UIPasteboard.Name("com.perezstudio.Axo.iOS.uitesting"), create: true)
+                model.copyLink = { pasteboard?.url = $0 }
+            }
+            return model
         } catch {
             // Keep the browser usable for this session and say plainly that nothing will be saved.
             return BrowserModel(

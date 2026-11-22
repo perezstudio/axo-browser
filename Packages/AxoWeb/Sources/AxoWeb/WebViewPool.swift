@@ -219,6 +219,13 @@ public final class WebViewPool {
     @discardableResult
     public func page(for tab: Tab, profileID: Profile.ID) -> any EnginePage {
         if let existing = live[tab.id] {
+            // A page of another profile (the tab moved to another profile's Space, here or on
+            // another device through iCloud) is never shown with this one: it closes, and a new
+            // page loads with this profile's website data (hard rule 6).
+            guard existing.profileID == profileID else {
+                discard(tab.id)
+                return page(for: tab, profileID: profileID)
+            }
             existing.lastUsed = now()
             return existing.page
         }
@@ -227,6 +234,10 @@ public final class WebViewPool {
         // profile's website data: a new page loads instead.
         if let kept = saved?.kept, kept.profileID != profileID {
             kept.tearDown()
+            saved = nil
+        }
+        // Nor does another profile's history or picture of the tab carry over.
+        if let other = saved?.profileID, other != profileID {
             saved = nil
         }
         if let kept = saved?.kept {
@@ -364,7 +375,8 @@ public final class WebViewPool {
         } else {
             hibernated[sourceID]?.snapshot
         }
-        hibernated[tabID] = HibernatedTab(kept: nil, interactionState: state, snapshot: snapshot)
+        hibernated[tabID] = HibernatedTab(kept: nil, interactionState: state, snapshot: snapshot,
+                                          profileID: source?.profileID ?? hibernated[sourceID]?.profileID)
         return true
     }
 
@@ -593,12 +605,13 @@ public final class WebViewPool {
         live[tabID] = nil
         // An engine that can discard the page keeps it, with its history and its place in the
         // engine's window. Hibernated first, so the engine reporting the discard finds it so.
-        hibernated[tabID] = HibernatedTab(kept: liveTab, interactionState: nil, snapshot: snapshot)
+        hibernated[tabID] = HibernatedTab(kept: liveTab, interactionState: nil, snapshot: snapshot, profileID: liveTab.profileID)
         liveTab.isBeingDiscarded = true
         let discarded = liveTab.page.discard()
         liveTab.isBeingDiscarded = false
         if discarded { return true }
-        hibernated[tabID] = HibernatedTab(kept: nil, interactionState: liveTab.page.interactionState, snapshot: snapshot)
+        hibernated[tabID] = HibernatedTab(kept: nil, interactionState: liveTab.page.interactionState, snapshot: snapshot,
+                                          profileID: liveTab.profileID)
         liveTab.tearDown()
         return true
     }
@@ -628,7 +641,7 @@ public final class WebViewPool {
         live[liveTab.tabID] = nil
         // A snapshot from before the page last changed would show another page.
         let snapshot = liveTab.snapshotVersion == liveTab.contentVersion ? liveTab.snapshot : nil
-        hibernated[liveTab.tabID] = HibernatedTab(kept: liveTab, interactionState: nil, snapshot: snapshot)
+        hibernated[liveTab.tabID] = HibernatedTab(kept: liveTab, interactionState: nil, snapshot: snapshot, profileID: liveTab.profileID)
     }
 
     /// Hibernates every hidden tab that has been idle longer than the timeout, except tabs whose
@@ -987,6 +1000,8 @@ private struct HibernatedTab {
     var interactionState: Any?
     /// A JPEG of the page from when it was last hidden, or when it hibernated.
     var snapshot: Data?
+    /// The profile its page was made with: its history and picture are that profile's browsing.
+    var profileID: Profile.ID?
 }
 
 /// A link the person clicked in a tab's page.
