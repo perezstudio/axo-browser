@@ -67,6 +67,18 @@ struct MobileMenuTests {
         try await waitUntil { model.isShowingSiteSettings }
     }
 
+    @Test func aLoadingPageOffersStopAndANonWebPageNoShare() async throws {
+        await model.openTab(url: URL(string: "data:text/html,<p>hi</p>")!)
+        let tabID = try #require(model.selectedTabID)
+        let page = try #require(model.pool.livePage(for: tabID) as? FakePage)
+        page.isLoading = true
+        page.delegate?.pageStateDidChange(page)
+        let menu = model.mobileMenu(placement: .bottom)
+        #expect(menu[0].map(\.item) == [.back, .forward, .stop, .share])
+        #expect(menu[0].last?.isEnabled == false, "Nothing to share from a data: page")
+        #expect(menu[1].first { $0.item == .siteSettings }?.isEnabled == false)
+    }
+
     @Test func theAddressNamesTheSite() async throws {
         #expect(model.mobileAddressText == nil, "No page: the placeholder")
         await model.openTab(url: URL(string: "https://www.example.com/a/b")!)

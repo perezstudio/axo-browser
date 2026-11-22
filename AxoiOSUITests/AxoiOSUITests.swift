@@ -59,11 +59,15 @@ final class AxoiOSUITests: XCTestCase {
         app.buttons["mobileAddressBar"]
     }
 
-    /// Waits for the page to finish loading: the bar's loading line goes.
+    /// Waits for the page to finish loading: the bar's loading line shows (a page can finish
+    /// before it's seen, so that wait is short and may end without it), then goes.
     @MainActor
     private func waitUntilLoaded(_ app: XCUIApplication) {
-        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: app.progressIndicators["Loading"])
+        let line = app.progressIndicators["Loading"]
+        _ = line.waitForExistence(timeout: 2)
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: line)
         waitForExpectations(timeout: 15)
+        XCTAssertTrue(app.descendants(matching: .any)["webContent"].exists)
     }
 
     /// Picks an item from the ••• menu.

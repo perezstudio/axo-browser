@@ -159,7 +159,8 @@ struct MobilePage: View {
         Group {
             if let tab = model.shownTab, let space = model.space {
                 WebViewHost(tab: tab, profileID: space.profileID, pool: model.pool)
-                    .ignoresSafeArea(edges: sizeClass == .compact && barPlacement == .bottom ? .top : [])
+                    // Under the status bar with the bar at the bottom, but never under the find bar.
+                    .ignoresSafeArea(edges: sizeClass == .compact && barPlacement == .bottom && !model.isFindBarVisible ? .top : [])
                     .accessibilityIdentifier("webContent")
                     .pageProblem(for: tab.id, model: model)
             } else {
@@ -186,6 +187,8 @@ struct MobilePage: View {
                 MobileBar(model: model, placement: .bottom, showTabs: showTabs)
             }
         }
+        // Notices (Link copied, a closed tab with Undo) just above the page's bottom edge.
+        .overlay(alignment: .bottom) { MobileNoticeView(model: model) }
         // Find on Page, from the iPhone's menu, above the page.
         .safeAreaInset(edge: .top, spacing: 0) {
             if model.isFindBarVisible { FindBar(model: model) }
@@ -259,6 +262,8 @@ struct MobileBar: View {
                     ControlGroup {
                         ForEach(group, id: \.item) { entry in item(entry) }
                     }
+                    // A row of icons, which fits all four (the default style fits three).
+                    .controlGroupStyle(.palette)
                 } else {
                     Section {
                         ForEach(group, id: \.item) { entry in item(entry) }
@@ -284,7 +289,8 @@ struct MobileBar: View {
                 ShareLink(item: url) { Label(entry.item.title, systemImage: entry.item.systemImage) }
                     .accessibilityIdentifier("menuShare")
             } else {
-                Label(entry.item.title, systemImage: entry.item.systemImage)
+                Button(entry.item.title, systemImage: entry.item.systemImage) {}
+                    .disabled(true)
             }
         case .addressBarPlacement(let placement):
             Button(entry.item.title, systemImage: entry.item.systemImage) { storedPlacement = placement }
@@ -330,7 +336,7 @@ struct MobileBar: View {
         .buttonStyle(.plain)
         .glassEffect(.regular.interactive(), in: .capsule)
         .accessibilityLabel("Address")
-        .accessibilityValue(spaceValue + (model.shownPageURL?.absoluteString ?? "No page"))
+        .accessibilityValue(spaceValue + (model.connectionIndicator?.addressPrefix ?? "") + (model.shownPageURL?.absoluteString ?? "No page"))
         .accessibilityHint("Edits the address")
         .accessibilityIdentifier("mobileAddressBar")
     }
@@ -340,6 +346,32 @@ struct MobileBar: View {
         guard model.spaces.count > 1, let space = model.space,
               let index = model.spaces.firstIndex(where: { $0.id == space.id }) else { return "" }
         return "\(space.name), Space \(index + 1) of \(model.spaces.count), "
+    }
+}
+
+/// A brief notice over the page's bottom edge, with Undo (or its action) when it has one, as the
+/// Mac's notice shows them.
+struct MobileNoticeView: View {
+    let model: BrowserModel
+
+    var body: some View {
+        if let notice = model.notice {
+            HStack(spacing: 12) {
+                Text(notice.message).font(.subheadline).lineLimit(2)
+                if notice.undo != nil {
+                    Button(notice.actionTitle) { Task { await model.undoNotice() } }
+                        .font(.subheadline.weight(.semibold))
+                        .accessibilityIdentifier("noticeUndoButton")
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .glassEffect(.regular, in: .capsule)
+            .padding(.bottom, 8)
+            .transition(.opacity)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("notice")
+        }
     }
 }
 

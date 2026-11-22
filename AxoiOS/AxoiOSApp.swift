@@ -2,6 +2,7 @@ import AxoCore
 import AxoUI
 import AxoWeb
 import SwiftUI
+import UIKit
 import WebKit
 
 /// Axo for iPhone and iPad.
@@ -43,7 +44,14 @@ enum AppEnvironment {
         if isUITesting { pool.reportsScreenTimeUsage = false }
         do {
             let store = isUITesting ? try TabStore.makeInMemory() : try TabStore.openOnDisk(at: databaseURL)
-            return BrowserModel(store: store, pool: pool)
+            let model = BrowserModel(store: store, pool: pool)
+            // UI tests' Copy Link goes to a pasteboard of their own, never the clipboard (which the
+            // Simulator can share with the Mac).
+            if isUITesting {
+                let pasteboard = UIPasteboard(name: UIPasteboard.Name("com.perezstudio.Axo.iOS.uitesting"), create: true)
+                model.copyLink = { pasteboard?.url = $0 }
+            }
+            return model
         } catch {
             // Keep the browser usable for this session and say plainly that nothing will be saved.
             return BrowserModel(

@@ -331,7 +331,12 @@ struct SiteSettingsView: View {
             }
         }
         .padding(16)
+        #if os(macOS)
         .frame(width: 330)
+        #else
+        // The sheet's whole width on iPhone and iPad.
+        .frame(maxWidth: .infinity, alignment: .leading)
+        #endif
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("siteSettings")
     }
