@@ -55,20 +55,44 @@ struct PageSplitDrop: View {
         @Binding var side: PageSplitDropSide?
 
         func makeNSView(context: Context) -> CatcherView {
-            let view = CatcherView()
-            view.registerForDraggedTypes([.string])
-            return view
+            CatcherView()
         }
 
         func updateNSView(_ view: CatcherView, context: Context) {
-            view.model = model
             view.onSideChange = { side = $0 }
+            if view.model !== model { view.model = model }
         }
     }
 
     final class CatcherView: NSView {
-        var model: BrowserModel?
+        var model: BrowserModel? {
+            didSet { follow() }
+        }
         var onSideChange: (PageSplitDropSide?) -> Void = { _ in }
+        private var observer: (any NSObjectProtocol)?
+
+        /// Registers for drags only while a sidebar row is dragged, and follows the model's
+        /// notifications, which change nothing SwiftUI draws.
+        private func follow() {
+            observer.map(NotificationCenter.default.removeObserver)
+            observer = NotificationCenter.default.addObserver(forName: .sidebarRowDragChanged, object: model, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.updateRegistration() }
+            }
+            updateRegistration()
+        }
+
+        private func updateRegistration() {
+            if model?.isDraggingSidebarRow == true {
+                registerForDraggedTypes([.string])
+            } else {
+                unregisterDraggedTypes()
+                onSideChange(nil)
+            }
+        }
+
+        isolated deinit {
+            observer.map(NotificationCenter.default.removeObserver)
+        }
 
         // Clicks, scrolls, and pointer moves go to the page under it; only drags come here.
         override func hitTest(_ point: NSPoint) -> NSView? { nil }

@@ -304,7 +304,9 @@ public final class BrowserModel {
     var siteExtensionAccessKey: SiteAccessKey?
     /// Whether a sidebar row is being dragged now (#78): only then does the page take drops
     /// (``PageSplitDrop``), so pages keep their own text, link, and file drops the rest of the time.
-    public internal(set) var isDraggingSidebarRow = false
+    /// Not observed: a redraw as the drag starts broke the sidebar list's own drag (rows stopped
+    /// dropping into Pinned), so the page's drop target hears of it through a notification.
+    @ObservationIgnored public internal(set) var isDraggingSidebarRow = false
     /// Clearing a site's website data that the window's alert is asking about, if any.
     public var siteDataClear: SiteDataClear?
     /// Turns iCloud sync on and off, for the iCloud pane in Settings. Set by the app.

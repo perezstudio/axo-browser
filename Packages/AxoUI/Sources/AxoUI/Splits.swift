@@ -168,13 +168,16 @@ extension BrowserModel {
         guard !isDraggingSidebarRow else { return }
         isDraggingSidebarRow = true
         #if os(macOS)
+        NotificationCenter.default.post(name: .sidebarRowDragChanged, object: self)
         Task { [weak self] in
             // Past the press that started it, then until the button is up.
             try? await Task.sleep(for: .milliseconds(150))
             while NSEvent.pressedMouseButtons & 1 != 0 {
                 try? await Task.sleep(for: .milliseconds(150))
             }
-            self?.isDraggingSidebarRow = false
+            guard let self else { return }
+            self.isDraggingSidebarRow = false
+            NotificationCenter.default.post(name: .sidebarRowDragChanged, object: self)
         }
         #else
         isDraggingSidebarRow = false
@@ -187,5 +190,11 @@ extension BrowserModel {
         guard let id = tabToSplit(droppedAs: text), let selected = selectedTabID else { return }
         await addToSplit(id, with: selected, leading: leading)
     }
+}
+
+extension Notification.Name {
+    /// A sidebar row's drag started or ended (``BrowserModel/isDraggingSidebarRow``), for the
+    /// page's drop target (#78). The object is the model.
+    static let sidebarRowDragChanged = Notification.Name("AxoSidebarRowDragChanged")
 }
 
