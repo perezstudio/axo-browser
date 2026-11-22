@@ -178,9 +178,16 @@ enum SidebarDragPayload {
     /// dropped in Finder, Mail, or Notes drops its link, as a tab dragged out of Safari does.
     /// On the hosted Mac, SwiftUI's drop targets took neither a drag type of Axo's own (declared,
     /// or with its conformance in code) nor text visible only to Axo's process, so the text is
-    /// visible to every app, and a plain text field gets the ID.
+    /// visible to every app, and a plain text field gets the ID. The text is registered as plain
+    /// text only: an `NSString` object also registers itself as `public.url` (`tab:<id>` reads
+    /// as a URL with the scheme `tab`), which would take the address's place.
     static func provider(for text: String, address: URL?) -> NSItemProvider {
-        let provider = NSItemProvider(object: text as NSString)
+        let provider = NSItemProvider()
+        let data = Data(text.utf8)
+        provider.registerDataRepresentation(forTypeIdentifier: UTType.utf8PlainText.identifier, visibility: .all) { completion in
+            completion(data, nil)
+            return nil
+        }
         if let address = addressForOtherApps(address) {
             provider.registerObject(address as NSURL, visibility: .all)
         }

@@ -238,7 +238,7 @@ struct SidebarDragTests {
                                                    address: URL(string: "https://example.com/page")!)
         let types = registered(provider)
         #expect(types.first.flatMap(UTType.init)?.conforms(to: .plainText) == true, "The ID first, as text, for Axo's drop targets")
-        #expect(types.contains(UTType.url.identifier), "A URL for Finder, Mail, and the like")
+        #expect(types == [UTType.utf8PlainText.identifier, UTType.url.identifier], "A URL for Finder, Mail, and the like")
 
         // What Axo's drop targets read (`String`): the ID, never the address.
         let text: String = try await withCheckedThrowingContinuation { continuation in
@@ -269,10 +269,10 @@ struct SidebarDragTests {
 
         // A folder, or a page with no address other apps can use, drags only its ID.
         let folder = SidebarDragPayload.provider(for: SidebarDragPayload.text(for: .folder(UUID())), address: nil)
-        #expect(!registered(folder).contains(UTType.url.identifier))
+        #expect(registered(folder) == [UTType.utf8PlainText.identifier], "Never the ID as a URL")
         let file = SidebarDragPayload.provider(for: SidebarDragPayload.text(for: .tab(UUID())),
                                                address: URL(fileURLWithPath: "/tmp/page.html"))
-        #expect(!registered(file).contains(UTType.url.identifier) && !registered(file).contains(UTType.fileURL.identifier))
+        #expect(registered(file) == [UTType.utf8PlainText.identifier])
     }
 
     @Test func aTabDragsTheAddressItsPageIsOn() async throws {
