@@ -441,6 +441,54 @@ final class ChromiumEngineUITests: XCTestCase {
         XCTAssertTrue(sidebar.staticTexts["Back"].waitForExistence(timeout: 15), "The page left full screen, and the sidebar is back")
     }
 
+    /// Chromium pages stay below the window toolbar whenever it shows (#167, first seen on
+    /// Chromium): a red bar at the page's very top shows just under the toolbar, through hiding and
+    /// showing the sidebar, a Space switch, and the command bar. Pixels, since Chromium draws here.
+    @MainActor
+    func testPagesStayBelowTheToolbar() throws {
+        let app = launchChromiumApp()
+        let sidebar = openPage("<title>Bar</title><body style='margin:0'><div style='height:30px;background:rgb(255,0,0)'></div></body>",
+                               titled: "Bar", in: app)
+        let window = app.windows.firstMatch
+        app.menuBars.menuBarItems["View"].click()
+        app.menuBars.menuItems["Hide Address Bar in Sidebar"].click()
+
+        func redBarShowsBelowTheToolbar(_ step: String) {
+            let toolbar = window.toolbars.firstMatch
+            XCTAssertTrue(toolbar.waitForExistence(timeout: 5), "\(step): the toolbar shows")
+            sleep(1)
+            let shot = window.screenshot()
+            let attachment = XCTAttachment(screenshot: shot)
+            attachment.name = step
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            guard let image = shot.image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return XCTFail("No picture") }
+            let scale = CGFloat(image.width) / window.frame.width
+            // The page column's middle, a few points under the toolbar's bottom edge.
+            let pageMidX = (max(sidebar.exists ? sidebar.frame.maxX : window.frame.minX, window.frame.minX) + window.frame.maxX) / 2
+            let point = CGPoint(x: (pageMidX - window.frame.minX) * scale, y: (toolbar.frame.maxY - window.frame.minY + 6) * scale)
+            var pixel = [UInt8](repeating: 0, count: 4)
+            let space = CGColorSpace(name: CGColorSpace.sRGB)!
+            let context = CGContext(data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4, space: space,
+                                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            context.draw(image, in: CGRect(x: -point.x, y: point.y - CGFloat(image.height) + 1, width: CGFloat(image.width), height: CGFloat(image.height)))
+            XCTAssertTrue(pixel[0] > 200 && pixel[1] < 80 && pixel[2] < 80,
+                          "\(step): the page's red top bar shows under the toolbar, got \(pixel.prefix(3))")
+        }
+
+        redBarShowsBelowTheToolbar("With the address bar hidden")
+        app.typeKey("s", modifierFlags: [.control, .command])
+        XCTAssertTrue(sidebar.waitForNonExistence(timeout: 5))
+        redBarShowsBelowTheToolbar("Sidebar hidden")
+        app.typeKey("s", modifierFlags: [.control, .command])
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        redBarShowsBelowTheToolbar("Sidebar shown again")
+        app.typeKey("t", modifierFlags: .command)
+        XCTAssertTrue(app.textFields["commandField"].waitForExistence(timeout: 5))
+        app.typeKey(.escape, modifierFlags: [])
+        redBarShowsBelowTheToolbar("After the command bar")
+    }
+
     /// window.open keeps the new page connected to its opener: it's a sidebar tab whose page can
     /// reach window.opener.
     @MainActor
