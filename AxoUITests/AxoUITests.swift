@@ -847,15 +847,17 @@ final class AxoUITests: XCTestCase {
         // Before each drag the pointer leaves the rows and the dragged row must take clicks: the
         // previous drag leaves the pointer on a row, whose hover card (#76) can show meanwhile.
         // XCUITest's synthetic drag now and then never starts a drag session (the press ends up a
-        // click), so a drag that changed nothing is tried again, up to three times; the condition
-        // is checked before each try, so a drop that did land is never repeated.
+        // click), so a drag that changed nothing in 10 seconds is tried again, up to three times,
+        // and each extra try is logged in the result bundle (so a drop the app lost, rather than a
+        // drag that never started, shows up there). The condition is checked before each try.
         func drag(_ source: XCUIElement, to target: XCUIElement, _ what: String, until condition: @escaping () -> Bool) {
-            for _ in 0..<3 where !condition() {
+            for attempt in 1...3 where !condition() {
+                if attempt > 1 { XCTContext.runActivity(named: "Drag tried again (\(attempt)) for: \(what)") { _ in } }
                 app.descendants(matching: .any)["sidebarAddressBar"].hover()
                 let deadline = Date().addingTimeInterval(5)
                 while !(source.isHittable && target.isHittable), Date() < deadline { usleep(100_000) }
                 source.click(forDuration: 0.6, thenDragTo: target)
-                let landed = Date().addingTimeInterval(5)
+                let landed = Date().addingTimeInterval(10)
                 while !condition(), Date() < landed { usleep(100_000) }
             }
             XCTAssertTrue(condition(), what)

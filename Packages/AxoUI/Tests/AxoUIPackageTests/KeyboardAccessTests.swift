@@ -59,14 +59,15 @@ struct KeyboardAccessTests {
     /// A page that isn't in the window yet when focus is asked for (a tab clicked whose page is
     /// made or woken, and mounted on SwiftUI's next update) gets focus once it's there.
     ///
-    /// On a fake engine: a real WebKit page loading under the parallel suite could end the wait
-    /// early (a load error covering it, say) and made this fail now and then in CI.
+    /// On a fake engine: with a real WebKit page loading under the parallel suite, this failed now
+    /// and then in CI (the cause wasn't pinned down; if it fails again, its message says where
+    /// focus went, what was selected, and whether the page was covered).
     @Test func aPageGetsFocusOnceItsInTheWindow() async throws {
         let model = BrowserModel(store: try TabStore.makeInMemory(), pool: WebViewPool(engine: FakeEngine()))
         model.announce = { _ in }
         await model.start()
-        await model.openTab(url: URL(string: "https://example.com/")!)
-        let tabID = try #require(model.selectedTabID)
+        let tabID = try #require(await model.openTab(url: URL(string: "https://example.com/")!))
+        #expect(model.selectedTabID == tabID)
         let view = try #require(model.pool.livePage(for: tabID)?.view)
         #expect(view.window == nil, "Not mounted yet")
         // The suite shares the main thread, so the wait is long here; the window comes at once.
