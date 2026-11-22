@@ -15,7 +15,7 @@
 
 #import <AppKit/AppKit.h>
 
-#define AXO_ENGINE_API_VERSION 43
+#define AXO_ENGINE_API_VERSION 44
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -948,6 +948,13 @@ NS_SWIFT_UI_ACTOR
 - (void)download:(NSURL*)url;
 /// Shows the selection's definition (Look Up).
 - (void)lookUpSelection;
+/// Whether `inspectElement` works: only for a page that's a tab in one of the host app's normal
+/// engine windows (a Space's tabs), not a page outside one (Peek) or in an extension's popup window.
+@property(nonatomic, readonly) BOOL canInspectElement;
+/// Opens DevTools on the element that was right-clicked, as Chrome's Inspect does
+/// (`DevToolsWindow::InspectElement`): docked beside the page, or in the host app's DevTools window
+/// if DevTools was last undocked.
+- (void)inspectElement;
 /// Runs an extension's item, one of `extensionItems` or their children.
 - (void)performExtensionItem:(id<AXOContextMenuItem>)item;
 /// Tells the page the menu closed, and which link it followed, if any. Call it once.

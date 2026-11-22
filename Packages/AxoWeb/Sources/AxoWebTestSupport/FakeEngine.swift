@@ -437,6 +437,7 @@ public final class FakeContextMenu: PageContextMenu {
     public var suggestions: [String] = []
     public var location = CGPoint(x: 10, y: 10)
     public var extensionItems: [PageContextMenuItem] = []
+    public var canInspectElement = false
 
     /// What the menu did, in order, such as "copy", "replace teh", or "item Mark".
     public private(set) var performed: [String] = []
@@ -449,6 +450,7 @@ public final class FakeContextMenu: PageContextMenu {
     public func copyImage() { performed.append("copy image") }
     public func download(_ url: URL) { performed.append("download \(url.absoluteString)") }
     public func lookUpSelection() { performed.append("look up") }
+    public func inspectElement() { performed.append("inspect") }
     public func perform(_ item: PageContextMenuItem) { performed.append("item \(item.title)") }
     public func closed(followingLink url: URL?) { closedLink = .some(url) }
 }

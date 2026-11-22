@@ -67,6 +67,8 @@ final class ChromiumContextMenu: PageContextMenu {
     func copyImage() { menu.copyImage() }
     func download(_ url: URL) { menu.download(url) }
     func lookUpSelection() { menu.lookUpSelection() }
+    var canInspectElement: Bool { menu.canInspectElement }
+    func inspectElement() { menu.inspectElement() }
     func closed(followingLink url: URL?) { menu.closed(followingLink: url) }
 
     func perform(_ item: PageContextMenuItem) {
