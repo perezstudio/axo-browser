@@ -2351,7 +2351,7 @@ final class AxoUITests: XCTestCase {
         check("With the address bar shown again", toolbar: false)
     }
 
- UI tests use a
+    /// Summarize Page shows a summary of the page's text in a popover. UI tests use a
     /// predictable stand-in for the on-device model. Translation isn't run here, since it can
     /// show macOS's language download sheet; the model tests cover it with a fake session.
     @MainActor
