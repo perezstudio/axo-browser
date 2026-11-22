@@ -2315,6 +2315,90 @@ final class AxoUITests: XCTestCase {
         XCTAssertEqual(notice.label, "Cleared website data for 127.0.0.1:\(port)")
     }
 
+    /// Pages stay below the window toolbar whenever it shows (#167), through what a session
+    /// does: hiding and showing the sidebar, a Space switch, the command bar, a new tab, and the
+    /// navigation bar moving above the page and back. Frames come from the accessibility tree,
+    /// so this holds on the hosted Mac, where pages don't draw. Without a toolbar the page
+    /// reaches the window's top edge, as #67 intends.
+    @MainActor
+    func testPagesStayBelowTheToolbarThroughASession() throws {
+        let app = launchApp()
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        // The browser window, never Settings.
+        let window = app.windows.matching(NSPredicate(format: "identifier BEGINSWITH 'browser'")).firstMatch
+        Self.openPage("data:text/html,<title>First</title><div style='height:40px;background:red'></div>", in: app)
+        XCTAssertTrue(sidebar.staticTexts["First"].waitForExistence(timeout: 10))
+
+        func check(_ step: String, toolbar expected: Bool) {
+            let page = window.webViews.firstMatch
+            XCTAssertTrue(page.waitForExistence(timeout: 10), "\(step): a page shows")
+            let toolbar = window.toolbars.firstMatch
+            let shows = toolbar.exists && toolbar.frame.height > 1
+            XCTAssertEqual(shows, expected, "\(step): the toolbar \(expected ? "shows" : "is hidden")")
+            if shows {
+                XCTAssertGreaterThanOrEqual(page.frame.minY, toolbar.frame.maxY - 1,
+                                            "\(step): the page \(page.frame) starts below the toolbar \(toolbar.frame)")
+                XCTAssertLessThanOrEqual(page.frame.minY, toolbar.frame.maxY + 1,
+                                         "\(step): and right below it, with no gap: \(page.frame), \(toolbar.frame)")
+            } else {
+                XCTAssertEqual(page.frame.minY, window.frame.minY, accuracy: 1, "\(step): the page reaches the window's top")
+            }
+        }
+
+        check("With the sidebar's address bar", toolbar: false)
+        app.menuBars.menuBarItems["View"].click()
+        app.menuBars.menuItems["Hide Address Bar in Sidebar"].click()
+        check("With the address bar hidden", toolbar: true)
+
+        app.typeKey("s", modifierFlags: [.control, .command])
+        XCTAssertTrue(sidebar.waitForNonExistence(timeout: 5))
+        check("Sidebar hidden", toolbar: true)
+        app.typeKey("s", modifierFlags: [.control, .command])
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        check("Sidebar shown again", toolbar: true)
+
+        app.buttons["newSpaceButton"].click()
+        let spaceName = app.textFields["spaceNameField"]
+        XCTAssertTrue(spaceName.waitForExistence(timeout: 5))
+        spaceName.typeText("Work")
+        app.buttons["createSpaceButton"].click()
+        XCTAssertTrue(sidebar.staticTexts["Work"].waitForExistence(timeout: 5))
+        app.typeKey("1", modifierFlags: .control)
+        XCTAssertTrue(sidebar.staticTexts["First"].waitForExistence(timeout: 5))
+        check("After a Space switch", toolbar: true)
+
+        app.typeKey("t", modifierFlags: .command)
+        XCTAssertTrue(app.textFields["commandField"].waitForExistence(timeout: 5))
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(app.textFields["commandField"].waitForNonExistence(timeout: 5))
+        check("After the command bar", toolbar: true)
+
+        Self.openPage("data:text/html,<title>Second</title><div style='height:40px;background:red'></div>", in: app)
+        XCTAssertTrue(sidebar.staticTexts["Second"].waitForExistence(timeout: 10))
+        check("A new tab", toolbar: true)
+
+        app.typeKey(",", modifierFlags: .command)
+        Self.selectSettingsPane("general", in: app)
+        XCTAssertTrue(app.radioButtons["Above the page"].waitForExistence(timeout: 5))
+        app.radioButtons["Above the page"].click()
+        let settings = app.windows.matching(NSPredicate(format: "identifier BEGINSWITH 'com_apple_SwiftUI_Settings'")).firstMatch
+        // Above the page: no toolbar, and the page starts under its control bar.
+        let pageBar = window.descendants(matching: .any)["pageAddressBar"]
+        XCTAssertTrue(pageBar.waitForExistence(timeout: 5))
+        XCTAssertFalse(window.toolbars.firstMatch.exists && window.toolbars.firstMatch.frame.height > 1, "Above the page: no toolbar")
+        XCTAssertGreaterThanOrEqual(window.webViews.firstMatch.frame.minY, pageBar.frame.maxY - 1, "The page starts under the control bar")
+        // Show tabs has an "In the sidebar" too: the navigation bar's picker's.
+        app.descendants(matching: .any)["navigationBarPlacementPicker"].radioButtons["In the sidebar"].click()
+        app.typeKey("w", modifierFlags: .command)
+        if settings.exists { XCTAssertTrue(settings.waitForNonExistence(timeout: 5), "Settings closed") }
+        check("After the navigation bar moved above the page and back", toolbar: true)
+
+        app.menuBars.menuBarItems["View"].click()
+        app.menuBars.menuItems["Show Address Bar in Sidebar"].click()
+        check("With the address bar shown again", toolbar: false)
+    }
+
     /// Summarize Page shows a summary of the page's text in a popover. UI tests use a
     /// predictable stand-in for the on-device model. Translation isn't run here, since it can
     /// show macOS's language download sheet; the model tests cover it with a fake session.
