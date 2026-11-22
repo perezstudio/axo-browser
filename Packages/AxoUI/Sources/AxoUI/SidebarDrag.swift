@@ -178,8 +178,8 @@ enum SidebarDragPayload {
         }
     }
 
-    /// The item provider a drag hands out: for a page with an address other apps can use, that
-    /// address as a URL, then the payload as text for Axo's drop targets, so a row
+    /// The item provider a drag hands out: the payload as text, first, for Axo's drop targets,
+    /// and, for a page with an address other apps can use, that address as a URL, so a row
     /// dropped in Finder, Mail, or Notes drops its link, as a tab dragged out of Safari does.
     /// On the hosted Mac, SwiftUI's drop targets took neither a drag type of Axo's own (declared,
     /// or with its conformance in code) nor text visible only to Axo's process, so the text is
@@ -188,33 +188,33 @@ enum SidebarDragPayload {
     /// as a URL with the scheme `tab`), which would take the address's place.
     static func provider(for text: String, address: URL?) -> NSItemProvider {
         let provider = NSItemProvider()
-        // The URL first: it's what other apps should take. Axo's drop targets ask for text by
-        // type (`String`, `.utf8PlainText`), so they still get the ID.
-        if let address = addressForOtherApps(address) {
-            provider.registerObject(address as NSURL, visibility: .all)
-        }
+        // The ID first: with the URL first, SwiftUI's `dropDestination(for: String.self)` read
+        // the URL as the text (a row stopped dropping on a Space's dot).
         let data = Data(text.utf8)
         provider.registerDataRepresentation(forTypeIdentifier: UTType.utf8PlainText.identifier, visibility: .all) { completion in
             completion(data, nil)
             return nil
+        }
+        if let address = addressForOtherApps(address) {
+            provider.registerObject(address as NSURL, visibility: .all)
         }
         return provider
     }
 }
 
 /// A favorite's tile drag (#77, #78), for `.draggable`: a button's `itemProvider` never started a
-/// drag on the hosted Mac. It exports the address other apps can use, as a URL, then the ID as
-/// text for Axo's drop targets, like ``SidebarDragPayload/provider(for:address:)``.
+/// drag on the hosted Mac. It exports the ID as text first, for Axo's drop targets, then the
+/// address other apps can use, as a URL, like ``SidebarDragPayload/provider(for:address:)``.
 nonisolated struct FavoriteDrag: Transferable {
     let text: String
     let address: URL?
 
     static var transferRepresentation: some TransferRepresentation {
-        // The URL first, as in ``SidebarDragPayload/provider(for:address:)``; none without an
+        // The ID first, as in ``SidebarDragPayload/provider(for:address:)``; no URL without an
         // address (the placeholder is never offered).
+        DataRepresentation(exportedContentType: .utf8PlainText) { Data($0.text.utf8) }
         ProxyRepresentation(exporting: { $0.address ?? URL(string: "about:blank")! })
             .exportingCondition { $0.address != nil }
-        DataRepresentation(exportedContentType: .utf8PlainText) { Data($0.text.utf8) }
     }
 }
 

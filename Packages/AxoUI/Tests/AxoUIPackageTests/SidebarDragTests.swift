@@ -237,8 +237,8 @@ struct SidebarDragTests {
         let provider = SidebarDragPayload.provider(for: SidebarDragPayload.text(for: .tab(id)),
                                                    address: URL(string: "https://example.com/page")!)
         let types = registered(provider)
-        #expect(types == [UTType.url.identifier, UTType.utf8PlainText.identifier],
-                "The URL first, for Finder, Mail, and the like; then the ID as text, never as a URL")
+        #expect(types == [UTType.utf8PlainText.identifier, UTType.url.identifier],
+                "The ID first, as text (never as a URL), for Axo's drop targets; then a URL for other apps")
 
         // What Axo's drop targets read (`String`): the ID, never the address.
         let text: String = try await withCheckedThrowingContinuation { continuation in
@@ -260,11 +260,11 @@ struct SidebarDragTests {
         let url = try await drag.exported(as: .url)
         #expect(URL(dataRepresentation: url, relativeTo: nil) == URL(string: "https://example.com/")
                 || String(decoding: url, as: UTF8.self) == "https://example.com/")
-        // As a drag registers it: the URL first, and none without an address (the placeholder
+        // As a drag registers it: the ID first, and no URL without an address (the placeholder
         // never goes out). `exported(as:)` alone ignores the condition.
         let withAddress = NSItemProvider()
         withAddress.register(drag)
-        #expect(withAddress.registeredTypeIdentifiers == [UTType.url.identifier, UTType.utf8PlainText.identifier])
+        #expect(withAddress.registeredTypeIdentifiers == [UTType.utf8PlainText.identifier, UTType.url.identifier])
         let withoutAddress = NSItemProvider()
         withoutAddress.register(FavoriteDrag(text: "favorite:\(id.uuidString)", address: nil))
         #expect(withoutAddress.registeredTypeIdentifiers == [UTType.utf8PlainText.identifier])
